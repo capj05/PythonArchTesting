@@ -1,0 +1,65 @@
+{
+  "exit_code": 1,
+  "framework_version": "test",
+  "generated_at": "2026-02-12T00:00:00Z",
+  "matching": {
+    "matches": []
+  },
+  "results": [
+    {
+      "category": "arch",
+      "check_type": "arch/forbidden_dependency",
+      "confidence": 0.5,
+      "details": {},
+      "evidence": [
+        {
+          "location": {
+            "file": "a.py",
+            "line": 7
+          },
+          "payload": {
+            "module": "x|y"
+          },
+          "type": "ast_import_graph"
+        }
+      ],
+      "fix_hints": [
+        "Remove dep"
+      ],
+      "match_status": "matched",
+      "message": "Bad <dep> | use safe",
+      "project_id": "proj-a",
+      "result_id": "abc123",
+      "rule_id": "arch/forbidden_dependency",
+      "severity": "error",
+      "source": {
+        "file": "a.py",
+        "line": 7,
+        "module": "pkg.mod",
+        "qualname": "Cls.fn"
+      },
+      "source_entity_id": "s1",
+      "status": "FAILED",
+      "target": {
+        "file": "b.py",
+        "line": 8,
+        "module": "pkg.t",
+        "qualname": "T.fn"
+      },
+      "target_entity_id": "t1"
+    }
+  ],
+  "schema_version": "2",
+  "summary": {
+    "category_counts": {
+      "arch": 1
+    },
+    "results_total": 1,
+    "severity_counts": {
+      "error": 1
+    },
+    "status_counts": {
+      "FAILED": 1
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+    "project": {
+        "name": "strict_config",
+        "version": "2.0.0",
+        "description": "Strict validation configuration"
+    },
+    "validation": {
+        "rules": [
+            {
+                "name": "no_circular_imports",
+                "type": "import_analysis",
+                "enabled": true
+            },
+            {
+                "name": "max_complexity",
+                "type": "complexity_analysis",
+                "enabled": true,
+                "threshold": 5
+            },
+            {
+                "name": "naming_convention",
+                "type": "naming_analysis",
+                "enabled": true,
+                "pattern": "^[a-z_][a-z0-9_]*$"
+            },
+            {
+                "name": "max_file_length",
+                "type": "file_analysis",
+                "enabled": true,
+                "max_length": 200
+            }
+        ]
+    },
+    "reporting": {
+        "format": "json",
+        "output": "strict_validation_report.json"
+    }
+}

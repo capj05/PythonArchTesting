@@ -1,0 +1,253 @@
+{
+  "exit_code": 1,
+  "framework_version": "test",
+  "generated_at": "2026-02-22T10:00:00Z",
+  "run": {
+    "config_fingerprint": null,
+    "config_snapshot": null,
+    "generated_at": "2026-02-22T10:00:00Z",
+    "mode": "static-only",
+    "reference_modules": [],
+    "source_path": "/source",
+    "tool_version": "test"
+  },
+  "schema_version": "2",
+  "summary": {
+    "results": {
+      "category_counts": {
+        "arch": 2
+      },
+      "results_total": 2,
+      "severity_counts": {
+        "error": 1,
+        "info": 1
+      },
+      "status_counts": {
+        "FAILED": 1,
+        "OK": 1
+      },
+      "timings": null,
+      "top_rules": [
+        {
+          "count": 1,
+          "name": "arch/fail"
+        },
+        {
+          "count": 1,
+          "name": "arch/ok"
+        }
+      ],
+      "top_source_files": [
+        {
+          "count": 2,
+          "name": "<unknown>"
+        }
+      ]
+    },
+    "targets_failed": 1,
+    "targets_passed": 1,
+    "targets_total": 2
+  },
+  "targets": [
+    {
+      "artifacts": [],
+      "display_name": "a",
+      "exit_code": 0,
+      "matching": {
+        "matches": [],
+        "matching_config": {
+          "delta": 0.03,
+          "max_fuzzy_candidates": 5,
+          "max_stage2_candidates": 0,
+          "max_stage3_candidates": 0,
+          "min_candidate": 0.5,
+          "threshold": 0.8,
+          "top_n": 5
+        }
+      },
+      "mode": "static-only",
+      "results": [
+        {
+          "category": "arch",
+          "check_type": "arch/ok",
+          "confidence": null,
+          "details": {},
+          "evidence": [],
+          "fix_hints": [],
+          "locations": {
+            "source": {
+              "class": null,
+              "file": null,
+              "function": "fn",
+              "line": null,
+              "module": "pkg",
+              "qualname": "fn"
+            },
+            "target": {
+              "class": null,
+              "file": null,
+              "function": null,
+              "line": null,
+              "module": null,
+              "qualname": null
+            }
+          },
+          "match_status": null,
+          "message": "arch/ok desc",
+          "project_id": "a",
+          "result_id": "c04a68592ef9e4d3",
+          "rule_id": "arch/ok",
+          "rule_type": "arch/ok",
+          "severity": "info",
+          "source": {
+            "file": null,
+            "line": null,
+            "module": "pkg",
+            "qualname": "fn"
+          },
+          "source_entity_id": null,
+          "status": "OK",
+          "tags": [],
+          "target": {
+            "file": null,
+            "line": null,
+            "module": null,
+            "qualname": null
+          },
+          "target_entity_id": null,
+          "timestamp": 1700000000.0,
+          "timing_seconds": null
+        }
+      ],
+      "source_root": "/source",
+      "summary": {
+        "category_counts": {
+          "arch": 1
+        },
+        "results_total": 1,
+        "severity_counts": {
+          "info": 1
+        },
+        "status_counts": {
+          "OK": 1
+        },
+        "timings": null,
+        "top_rules": [
+          {
+            "count": 1,
+            "name": "arch/ok"
+          }
+        ],
+        "top_source_files": [
+          {
+            "count": 1,
+            "name": "<unknown>"
+          }
+        ]
+      },
+      "tags": [],
+      "target_id": "a",
+      "target_path": "/targets/a"
+    },
+    {
+      "artifacts": [],
+      "display_name": "b",
+      "exit_code": 1,
+      "matching": {
+        "matches": [],
+        "matching_config": {
+          "delta": 0.03,
+          "max_fuzzy_candidates": 5,
+          "max_stage2_candidates": 0,
+          "max_stage3_candidates": 0,
+          "min_candidate": 0.5,
+          "threshold": 0.8,
+          "top_n": 5
+        }
+      },
+      "mode": "static-only",
+      "results": [
+        {
+          "category": "arch",
+          "check_type": "arch/fail",
+          "confidence": null,
+          "details": {},
+          "evidence": [],
+          "fix_hints": [],
+          "locations": {
+            "source": {
+              "class": null,
+              "file": null,
+              "function": "fn",
+              "line": null,
+              "module": "pkg",
+              "qualname": "fn"
+            },
+            "target": {
+              "class": null,
+              "file": null,
+              "function": null,
+              "line": null,
+              "module": null,
+              "qualname": null
+            }
+          },
+          "match_status": null,
+          "message": "arch/fail desc",
+          "project_id": "b",
+          "result_id": "6b0b155cdc66a93e",
+          "rule_id": "arch/fail",
+          "rule_type": "arch/fail",
+          "severity": "error",
+          "source": {
+            "file": null,
+            "line": null,
+            "module": "pkg",
+            "qualname": "fn"
+          },
+          "source_entity_id": null,
+          "status": "FAILED",
+          "tags": [],
+          "target": {
+            "file": null,
+            "line": null,
+            "module": null,
+            "qualname": null
+          },
+          "target_entity_id": null,
+          "timestamp": 1700000000.0,
+          "timing_seconds": null
+        }
+      ],
+      "source_root": "/source",
+      "summary": {
+        "category_counts": {
+          "arch": 1
+        },
+        "results_total": 1,
+        "severity_counts": {
+          "error": 1
+        },
+        "status_counts": {
+          "FAILED": 1
+        },
+        "timings": null,
+        "top_rules": [
+          {
+            "count": 1,
+            "name": "arch/fail"
+          }
+        ],
+        "top_source_files": [
+          {
+            "count": 1,
+            "name": "<unknown>"
+          }
+        ]
+      },
+      "tags": [],
+      "target_id": "b",
+      "target_path": "/targets/b"
+    }
+  ]
+}

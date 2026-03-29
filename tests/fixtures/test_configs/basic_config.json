@@ -1,0 +1,26 @@
+{
+    "project": {
+        "name": "basic_test_project",
+        "version": "1.0.0",
+        "description": "Basic configuration for testing"
+    },
+    "validation": {
+        "rules": [
+            {
+                "name": "no_circular_imports",
+                "type": "import_analysis",
+                "enabled": true
+            },
+            {
+                "name": "max_complexity",
+                "type": "complexity_analysis",
+                "enabled": true,
+                "threshold": 10
+            }
+        ]
+    },
+    "reporting": {
+        "format": "json",
+        "output": "validation_report.json"
+    }
+}

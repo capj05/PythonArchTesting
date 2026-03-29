@@ -1,0 +1,38 @@
+{
+    "project": {
+        "name": "performance_config",
+        "version": "1.5.0",
+        "description": "Performance-focused configuration"
+    },
+    "validation": {
+        "rules": [
+            {
+                "name": "no_circular_imports",
+                "type": "import_analysis",
+                "enabled": true
+            },
+            {
+                "name": "max_complexity",
+                "type": "complexity_analysis",
+                "enabled": true,
+                "threshold": 15
+            },
+            {
+                "name": "performance_analysis",
+                "type": "performance_analysis",
+                "enabled": true,
+                "max_time": 5.0
+            },
+            {
+                "name": "memory_analysis",
+                "type": "memory_analysis",
+                "enabled": true,
+                "max_memory": "50000000"
+            }
+        ]
+    },
+    "reporting": {
+        "format": "json",
+        "output": "performance_report.json"
+    }
+}

@@ -1,0 +1,22 @@
+# Validation Report
+
+**Generated:** 2026-02-12T00:00:00Z
+**Framework:** test
+**Exit Code:** 1
+
+## Summary
+
+- Total Results: 1
+- Status Counts: {'FAILED': 1}
+- Severity Counts: {'error': 1}
+- Category Counts: {'arch': 1}
+
+## Matching Candidates (Debug)
+
+No matching data available.
+
+## Results
+
+| Project | Result ID | Category | Severity | Status | Rule | Source | Target | Location | Message |
+|---|---|---|---|---|---|---|---|---|---|
+| proj-a | abc123 | arch | error | FAILED | arch/forbidden_dependency | pkg.mod:Cls.fn | pkg.t:T.fn | a.py:7 | Bad <dep> \| use safe |

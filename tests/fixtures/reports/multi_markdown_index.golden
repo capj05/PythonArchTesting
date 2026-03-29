@@ -1,0 +1,22 @@
+# Validation Run Report
+
+**Generated:** 2026-02-22T10:00:00Z
+**Framework:** test
+**Source:** /source
+**Exit Code:** 1
+
+## Run Summary
+
+- Targets total: 2
+- Targets passed: 1
+- Targets failed: 1
+
+## Targets
+
+| Target | Path | Exit | Results | Failed |
+|---|---|---|---|---|
+| a | /targets/a | 0 | 1 | 0 |
+| b | /targets/b | 1 | 1 | 1 |
+
+- [a](targets/a.md)
+- [b](targets/b.md)
