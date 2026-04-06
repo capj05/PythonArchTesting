@@ -21,7 +21,9 @@ def _function_node(entity: Entity) -> ast.FunctionDef | ast.AsyncFunctionDef | N
 def _param_model(entity: Entity) -> Dict[str, Any]:
     node = _function_node(entity)
     annotations = entity.extras.get("annotations", {}) or {}
-    annotation_args = list(annotations.get("args") or []) if isinstance(annotations, dict) else []
+    annotation_args = (
+        list(annotations.get("args") or []) if isinstance(annotations, dict) else []
+    )
 
     def _param_annotation(param_index: int) -> str | None:
         if 0 <= param_index < len(annotation_args):
@@ -263,20 +265,21 @@ def _compatible_compare(
 
     for exp in expected:
         name = str(exp.get("name"))
-        got = found_by_name.get(name)
-        if got is None:
+        found_param = found_by_name.get(name)
+        if found_param is None:
             errors.append(f"missing parameter '{name}'")
             continue
-        if exp.get("kind") != got.get("kind"):
-            errors.append(f"parameter kind mismatch for '{name}': expected {
-                exp.get('kind')}, found {
-                got.get('kind')}")
-        if not exp.get("required") and got.get("required"):
+        if exp.get("kind") != found_param.get("kind"):
+            errors.append(
+                f"parameter kind mismatch for '{name}': "
+                f"expected {exp.get('kind')}, found {found_param.get('kind')}"
+            )
+        if not exp.get("required") and found_param.get("required"):
             errors.append(f"optional parameter became required: '{name}'")
         if exp.get("annotation") is not None:
             comparison = compare_annotation_text(
                 expected=exp.get("annotation"),
-                found=got.get("annotation"),
+                found=found_param.get("annotation"),
                 expected_entity=source,
                 found_entity=target,
                 ctx=ctx,

@@ -4,9 +4,9 @@ import ast
 import fnmatch
 from typing import Any, Dict, List
 
+from src.core.models import EvalContext, Rule, RuleResult, RuleStatus
 from src.entities import Entity
 from src.matching import MatchResult
-from src.core.models import EvalContext, Rule, RuleResult, RuleStatus
 
 
 def _resolve_relative_module(

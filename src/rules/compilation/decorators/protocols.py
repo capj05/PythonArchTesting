@@ -96,8 +96,9 @@ def _resolve_protocol_entity(
             "issue": "compiler_invalid_protocol_reference",
             "reason": resolution.reason or "ambiguous_or_missing",
             "protocol": protocol_expr,
-            "normalized": resolution.normalized,
         }
+        if resolution.normalized is not None:
+            payload["normalized"] = resolution.normalized
         return (
             None,
             None,
@@ -117,8 +118,9 @@ def _resolve_protocol_entity(
             "issue": "compiler_invalid_protocol_reference",
             "reason": "not_typing_protocol",
             "protocol": protocol_expr,
-            "normalized": resolution.normalized,
         }
+        if resolution.normalized is not None:
+            payload["normalized"] = resolution.normalized
         return (
             None,
             None,

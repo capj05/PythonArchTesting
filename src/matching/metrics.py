@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import List, Mapping
 
 from src.entities import Entity
 
@@ -37,18 +37,32 @@ def module_distance(source_module: str, target_module: str) -> int:
 
 
 def ast_similarity(source: Entity, target: Entity) -> float:
-    bag_a = source.extras.get("ast_tokens_bag")
-    bag_b = target.extras.get("ast_tokens_bag")
+    bag_a = _token_bag(source.extras.get("ast_tokens_bag"))
+    bag_b = _token_bag(target.extras.get("ast_tokens_bag"))
     if not bag_a or not bag_b:
         return 0.0
     keys = set(bag_a.keys()) | set(bag_b.keys())
     if not keys:
         return 1.0
-    intersect = sum(min(bag_a[k], bag_b[k]) for k in keys)
-    union = sum(max(bag_a[k], bag_b[k]) for k in keys)
+    intersect = sum(min(bag_a.get(k, 0), bag_b.get(k, 0)) for k in keys)
+    union = sum(max(bag_a.get(k, 0), bag_b.get(k, 0)) for k in keys)
     if union == 0:
         return 1.0
     return intersect / union
+
+
+def _token_bag(value: object) -> dict[str, int] | None:
+    if not isinstance(value, Mapping):
+        return None
+    normalized: dict[str, int] = {}
+    for key, count in value.items():
+        if not isinstance(key, str):
+            continue
+        try:
+            normalized[key] = int(count)
+        except (TypeError, ValueError):
+            continue
+    return normalized
 
 
 def levenshtein_distance(a: str, b: str) -> int:

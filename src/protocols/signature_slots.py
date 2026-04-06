@@ -109,10 +109,7 @@ def signature_subject_annotation(
 ) -> str | None:
     annotations = entity.extras.get("annotations") or {}
     for slot in _annotation_slots(annotations):
-        if (
-            slot.subject_kind == subject_kind
-            and slot.subject_index == subject_index
-        ):
+        if slot.subject_kind == subject_kind and slot.subject_index == subject_index:
             return slot.annotation_text
     return None
 

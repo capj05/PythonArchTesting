@@ -208,7 +208,7 @@ def get_section(config: Any, section: str) -> dict[str, Any]:
     section_obj = getattr(config, _section_name(section), None)
     if section_obj is not None:
         raw = _raw_section()
-        if is_dataclass(section_obj):
+        if is_dataclass(section_obj) and not isinstance(section_obj, type):
             typed = asdict(section_obj)
             raw.update(typed)
             return raw
@@ -224,27 +224,27 @@ def get_section(config: Any, section: str) -> dict[str, Any]:
             return raw
 
     if isinstance(config, Mapping):
-        raw = config.get(section)
-        if isinstance(raw, Mapping):
-            return dict(raw)
-        alt = config.get(_section_name(section))
-        if isinstance(alt, Mapping):
-            return dict(alt)
+        raw_value = config.get(section)
+        if isinstance(raw_value, Mapping):
+            return dict(raw_value)
+        alt_value = config.get(_section_name(section))
+        if isinstance(alt_value, Mapping):
+            return dict(alt_value)
         return {}
 
     get_section_fn = getattr(config, "get_section", None)
     if callable(get_section_fn):
-        raw = get_section_fn(section)
-        if isinstance(raw, Mapping):
-            return dict(raw)
+        raw_value = get_section_fn(section)
+        if isinstance(raw_value, Mapping):
+            return dict(raw_value)
 
     get_all_fn = getattr(config, "get_all", None)
     if callable(get_all_fn):
         raw_all = get_all_fn()
         if isinstance(raw_all, Mapping):
-            raw = raw_all.get(section)
-            if isinstance(raw, Mapping):
-                return dict(raw)
+            raw_value = raw_all.get(section)
+            if isinstance(raw_value, Mapping):
+                return dict(raw_value)
 
     return {}
 

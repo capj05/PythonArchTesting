@@ -157,9 +157,9 @@ def _stage3_candidates(
     target_lookup = {e.canonical_id: e for e in target_index.all_sorted}
     selected_targets: list[Entity] = []
     for target_id in selected_ids:
-        target = target_lookup.get(target_id)
-        if target is not None:
-            selected_targets.append(target)
+        selected_target: Entity | None = target_lookup.get(target_id)
+        if selected_target is not None:
+            selected_targets.append(selected_target)
 
     selected_targets = sorted(
         selected_targets,

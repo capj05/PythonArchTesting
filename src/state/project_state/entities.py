@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from src.config.accessors import get_bool
 from src.config.data import create_config_from_dict
@@ -68,11 +68,8 @@ class ProjectStateEntitiesMixin:
             raw_config = deepcopy(config.raw or {})
             discovery = raw_config.setdefault("discovery", {})
             discovery["included_file_patterns"] = ["*.py"]
-            return cast(
-                list[Path],
-                discover_python_files(root_path, create_config_from_dict(raw_config)),
-            )
-        return cast(list[Path], discover_python_files(root_path, config))
+            return discover_python_files(root_path, create_config_from_dict(raw_config))
+        return discover_python_files(root_path, config)
 
     def _resolve_source_module_files(
         self: "ProjectStateLike", module_path: str
@@ -95,10 +92,10 @@ class ProjectStateEntitiesMixin:
                 if resolved_module_path == module_path:
                     files.append(candidate)
         if files:
-            return cast(list[Path], files)
+            return files
         for error in errors:
             self.add_validation_result(error)
-        return cast(list[Path], files)
+        return files
 
     def build_entity_indexes(self: "ProjectStateLike") -> None:
         if not self.target_project_path:

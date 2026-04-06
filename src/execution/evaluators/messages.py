@@ -4,9 +4,9 @@ from string import Formatter
 from types import SimpleNamespace
 from typing import Any, Dict, Tuple
 
+from src.core.models import Evidence, Rule, RuleResult, RuleStatus
 from src.entities import Entity
 from src.matching import MatchResult
-from src.core.models import Evidence, Rule, RuleResult, RuleStatus
 
 
 def _entity_mapping(entity: Entity | None) -> Dict[str, Any]:

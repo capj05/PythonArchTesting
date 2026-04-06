@@ -55,7 +55,7 @@ def compile_rules(
     cfg: Config,
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     """Compile entity-scoped rules from annotation declarations."""
-    declaration_compilers = {
+    declaration_compilers: dict[str, Any] = {
         "required_entity_signature": compile_required_entity_signature,
         "required_method": compile_required_method,
         "enforce_flow": compile_enforce_flow,

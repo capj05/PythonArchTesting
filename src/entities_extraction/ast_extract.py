@@ -14,6 +14,7 @@ from src.entities import (
     normalize_docstring,
     signature_key_from_info,
 )
+from src.protocols.reference_resolution import normalize_reference
 
 from .annotations import (
     extract_annotation_declarations,
@@ -22,7 +23,6 @@ from .annotations import (
 )
 from .fingerprint import ast_fingerprint_from_body, source_hash_from_segment
 from .paths import module_path_from_file
-from src.protocols.reference_resolution import normalize_reference
 from .signature import (
     _annotation_strings,
     _line_text_from_source,

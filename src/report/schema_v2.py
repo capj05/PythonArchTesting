@@ -4,7 +4,7 @@ Lightweight validation helpers for report schema v2.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, List
 
 
 def _expect(condition: bool, message: str, errors: List[str]) -> None:
@@ -12,7 +12,7 @@ def _expect(condition: bool, message: str, errors: List[str]) -> None:
         errors.append(message)
 
 
-def validate_report_schema_v2(report: Dict[str, Any]) -> List[str]:
+def validate_report_schema_v2(report: Any) -> List[str]:
     errors: List[str] = []
     if not isinstance(report, dict):
         return ["report must be a dict"]

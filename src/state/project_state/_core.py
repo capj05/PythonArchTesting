@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional
 
 from src.config import Config
 from src.constants import ValidationConstants
@@ -19,9 +19,9 @@ from .imports import ProjectStateImportsMixin
 from .rules_engine import ProjectStateRulesMixin
 
 if TYPE_CHECKING:
+    from src.core.models import Rule, RuleResult
     from src.entities import Entity, EntityIndex
     from src.matching import MatchResult
-    from src.core.models import Rule, RuleResult
     from src.state.validation import ValidationResult
 
 ValidationStatus = ValidationConstants.ValidationStatus
@@ -113,7 +113,8 @@ class ProjectState(
         """Reset mutable runtime state while preserving configured target context."""
         target_path = self.target_project_path or "."
         target_module_name = self.target_module_name
-        return cast("ProjectState", self.initialize(target_path, target_module_name))
+        self.initialize(target_path, target_module_name)
+        return self
 
     def get_validation_results(
         self,
@@ -150,7 +151,7 @@ class ProjectState(
         """Delegate to module discovery component."""
         if self.target_project_path:
             self.module_discovery.set_target_path(self.target_project_path)
-        modules = cast(list[str], self.module_discovery.discover_modules())
+        modules = self.module_discovery.discover_modules()
         self._set_import_order(modules)
         return modules
 
@@ -158,7 +159,7 @@ class ProjectState(
         """Return discovery settings for the configured target project."""
         if self.target_project_path:
             self.module_discovery.set_target_path(self.target_project_path)
-        return cast(dict[str, Any], self.module_discovery.get_discovery_config())
+        return self.module_discovery.get_discovery_config()
 
     def _get_module_file_path(
         self, module_name: str, target_path: Optional[str] = None
@@ -166,11 +167,8 @@ class ProjectState(
         """Resolve a discovered module name to a file path."""
         active_target_path = target_path or self.target_project_path
         if active_target_path:
-            return cast(
-                Optional[str],
-                self.module_discovery.get_module_file_path(
-                    module_name, Path(active_target_path)
-                ),
+            return self.module_discovery.get_module_file_path(
+                module_name, Path(active_target_path)
             )
         return None
 
@@ -178,20 +176,14 @@ class ProjectState(
         self, min_usage: int = 0, max_age_hours: float = 24.0
     ) -> int:
         """Delegate unused module cleanup to the memory manager."""
-        return cast(
-            int,
-            self.memory_manager.cleanup_unused_modules(
-                self.imported_modules, self.target_functions, min_usage, max_age_hours
-            ),
+        return self.memory_manager.cleanup_unused_modules(
+            self.imported_modules, self.target_functions, min_usage, max_age_hours
         )
 
     def cleanup_old_results(self, max_results: Optional[int] = None) -> int:
         """Delegate validation result cleanup to the memory manager."""
-        return cast(
-            int,
-            self.memory_manager.cleanup_old_results(
-                self.validation_results, max_results
-            ),
+        return self.memory_manager.cleanup_old_results(
+            self.validation_results, max_results
         )
 
     def clear_validation_results(self) -> None:
@@ -201,11 +193,8 @@ class ProjectState(
 
     def get_memory_stats(self) -> dict[str, Any]:
         """Return memory statistics for the current state."""
-        return cast(
-            dict[str, Any],
-            self.memory_manager.get_memory_stats(
-                self.imported_modules, self.target_functions, self.validation_results
-            ),
+        return self.memory_manager.get_memory_stats(
+            self.imported_modules, self.target_functions, self.validation_results
         )
 
 

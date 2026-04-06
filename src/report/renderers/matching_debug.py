@@ -61,7 +61,7 @@ def _identity_from_entity(entity: Any) -> Optional[Dict[str, str]]:
         "id": str(entity_id),
         "name": str(qualname or name or entity_id),
         "type": str(kind or ""),
-        "location": location,
+        "location": location or "",
     }
 
 

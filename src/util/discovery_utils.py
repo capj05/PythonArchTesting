@@ -30,7 +30,9 @@ def _get_config_bool(config: Config, section: str, key: str, default: bool) -> b
 
         section_config = section_map[section]
         if hasattr(section_config, key):
-            return getattr(section_config, key)
+            value = getattr(section_config, key)
+            if isinstance(value, bool):
+                return value
 
         # Fallback to raw config if available
         if config.raw and section in config.raw and key in config.raw[section]:
@@ -66,7 +68,9 @@ def _get_config_int(config: Config, section: str, key: str, default: int) -> int
 
         section_config = section_map[section]
         if hasattr(section_config, key):
-            return getattr(section_config, key)
+            value = getattr(section_config, key)
+            if isinstance(value, int):
+                return value
 
         # Fallback to raw config if available
         if config.raw and section in config.raw and key in config.raw[section]:
@@ -105,7 +109,9 @@ def _get_config_list(
 
         section_config = section_map[section]
         if hasattr(section_config, key):
-            return getattr(section_config, key)
+            value = getattr(section_config, key)
+            if isinstance(value, list) and all(isinstance(item, str) for item in value):
+                return value
 
         # Fallback to raw config if available
         if config.raw and section in config.raw and key in config.raw[section]:

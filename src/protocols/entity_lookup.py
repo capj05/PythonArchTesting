@@ -55,9 +55,9 @@ class ProtocolEntityLookup:
         module_entity = self.module_entity(module_path)
         module_node = module_entity.extras.get("ast_node") if module_entity else None
         if not isinstance(module_node, ast.Module):
-            aliases: dict[str, str] = {}
-            self._alias_cache[module_path] = aliases
-            return aliases
+            empty_aliases: dict[str, str] = {}
+            self._alias_cache[module_path] = empty_aliases
+            return empty_aliases
 
         aliases: dict[str, str] = {}
         for stmt in module_node.body:

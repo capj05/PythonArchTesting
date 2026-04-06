@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,7 +176,7 @@ class Config:
     raw: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
-def _convert_value(value: Any, field_info) -> Any:
+def _convert_value(value: Any, field_info: Any) -> Any:
     """Convert a value to target type, handling string inputs from ConfigParser."""
     if value is None:
         return None
@@ -204,7 +204,7 @@ def _convert_value(value: Any, field_info) -> Any:
 
     # If already the right type, return as-is
     try:
-        if isinstance(value, target_type):
+        if isinstance(target_type, type) and isinstance(value, target_type):
             return value
     except TypeError:
         # target_type might not be a real type (e.g., string representation)
@@ -248,13 +248,16 @@ def create_config_from_dict(config_dict: Dict[str, Dict[str, Any]]) -> Config:
         Config instance with all sections populated
     """
 
-    def _get_section(section_name: str, default_factory, **kwargs):
+    def _get_section(
+        section_name: str, default_factory: Callable[..., Any], **kwargs: Any
+    ) -> Any:
         # Use config_dict parameter from outer scope
         section_data = config_dict.get(section_name, {})
         if not section_data:
             return default_factory(**kwargs)
 
-        fields = {f.name: f for f in default_factory.__dataclass_fields__.values()}
+        dataclass_fields = getattr(default_factory, "__dataclass_fields__", {})
+        fields = {f.name: f for f in dataclass_fields.values()}
 
         kwargs = {}
         for field_name, field_info in fields.items():

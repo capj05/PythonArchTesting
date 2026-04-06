@@ -236,7 +236,7 @@ def _type_display_name(tp: Any) -> str:
     if tp is type(None):
         return "None"
     if hasattr(tp, "__name__"):
-        return tp.__name__
+        return str(tp.__name__)
     return str(tp)
 
 
@@ -250,12 +250,12 @@ def get_type_name(tp: Any) -> str:
     origin = get_origin(tp)
     if origin is not None:
         if origin is Union or origin is UnionType:
-            args = get_type_args(tp)
-            if args:
-                arg_names = ", ".join(_type_display_name(a) for a in args)
+            union_args = list(get_type_args(tp))
+            if union_args:
+                arg_names = ", ".join(_type_display_name(a) for a in union_args)
                 return f"Union[{arg_names}]"
             return "Union"
-        args = get_type_args(tp)
+        origin_args = list(get_type_args(tp))
         origin_map = {
             list: "List",
             dict: "Dict",
@@ -263,15 +263,15 @@ def get_type_name(tp: Any) -> str:
             tuple: "Tuple",
         }
         name = origin_map.get(origin, _type_display_name(origin))
-        if args:
-            arg_names = ", ".join(_type_display_name(a) for a in args)
+        if origin_args:
+            arg_names = ", ".join(_type_display_name(a) for a in origin_args)
             return f"{name}[{arg_names}]"
         return name
 
     if is_union_type(tp):
-        args = get_type_args(tp)
-        if args:
-            arg_names = ", ".join(_type_display_name(a) for a in args)
+        union_args = list(get_type_args(tp))
+        if union_args:
+            arg_names = ", ".join(_type_display_name(a) for a in union_args)
             return f"Union[{arg_names}]"
         return "Union"
 
@@ -301,7 +301,7 @@ def check_function_types(
     """
     import inspect
 
-    violations = []
+    violations: list[str] = []
 
     if not hasattr(func, "__annotations__") or not func.__annotations__:
         return violations

@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Literal, Tuple
 
 from src.core.models import EvalContext, Evidence
 from src.entities import Entity
+
+EvidenceRole = Literal["source", "target"]
 
 
 def canonicalize_payload(value: Any) -> Any:
@@ -69,7 +71,7 @@ def _store_evidence(
 
 
 def _entity_for_role(
-    ctx: EvalContext, entity_id: str | None, role: str
+    ctx: EvalContext, entity_id: str | None, role: EvidenceRole
 ) -> Entity | None:
     """Get entity by ID and role."""
     if entity_id is None:
@@ -89,7 +91,7 @@ def _location_from_entity(entity: Entity | None) -> Dict[str, Any] | None:
 def get_source_location(
     ctx: EvalContext,
     entity_id: str,
-    role: str,
+    role: EvidenceRole,
 ) -> Evidence:
     """Get source location evidence for an entity."""
     key = ("source_location", entity_id, role)
@@ -118,7 +120,7 @@ def get_source_location(
 def get_ast_signature(
     ctx: EvalContext,
     entity_id: str,
-    role: str,
+    role: EvidenceRole,
 ) -> Evidence:
     """Get AST signature evidence for an entity."""
     key = ("ast_signature", entity_id, role)
@@ -154,7 +156,7 @@ def get_ast_signature(
 def get_ast_annotations(
     ctx: EvalContext,
     entity_id: str,
-    role: str,
+    role: EvidenceRole,
 ) -> Evidence:
     """Get AST annotation evidence for an entity."""
     key = ("ast_annotations", entity_id, role)

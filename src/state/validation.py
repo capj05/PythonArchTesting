@@ -9,8 +9,8 @@ from textwrap import dedent
 from typing import Any, Dict, Optional
 
 from src.constants import ValidationConstants
-from src.entities import Entity
 from src.core.models import Evidence, Rule, RuleResult
+from src.entities import Entity
 
 
 @dataclass

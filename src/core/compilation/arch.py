@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Literal, Tuple
 
 
 def create_arch_rule(
@@ -10,7 +10,7 @@ def create_arch_rule(
     message_template: str,
     fix_hints: Tuple[str, ...],
     evidence_types: Tuple[str, ...],
-    severity: str = "error",
+    severity: Literal["info", "warning", "error"] = "error",
     min_runtime_mode: str = "static-only",
 ) -> Any:
     """

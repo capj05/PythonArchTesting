@@ -175,8 +175,10 @@ def collect_dynamic_import_call_sites(
             elif getattr(ast, "Str", None) is not None and isinstance(
                 first_arg, ast.Str
             ):
-                literal_target = first_arg.s
-                unknown_dynamic_target = False
+                legacy_literal = getattr(first_arg, "s", None)
+                if isinstance(legacy_literal, str):
+                    literal_target = legacy_literal
+                    unknown_dynamic_target = False
 
         sites.append(
             DynamicImportCallSite(
@@ -195,14 +197,14 @@ def _normalize_base_class(base: ast.AST) -> Optional[str]:
     """Normalize base class to string representation."""
     if isinstance(base, ast.Name):
         return base.id
-    elif isinstance(base, ast.Attribute):
+    if isinstance(base, ast.Attribute):
         parts = []
-        cur = base
-        while isinstance(cur, ast.Attribute):
-            parts.append(cur.attr)
-            cur = cur.value
-        if isinstance(cur, ast.Name):
-            parts.append(cur.id)
+        current: ast.AST = base
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
             return ".".join(reversed(parts))
     return None
 
@@ -316,7 +318,7 @@ def collect_instantiation_sites(tree: ast.AST) -> List[InstantiationSite]:
 
     # Walk the tree with proper scope tracking
     class ScopeVisitor(ast.NodeVisitor):
-        def generic_visit(self, node):
+        def generic_visit(self, node: ast.AST) -> None:
             # Update scope before visiting children
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 scope_stack.append(("function", node))
@@ -331,7 +333,7 @@ def collect_instantiation_sites(tree: ast.AST) -> List[InstantiationSite]:
                 if len(scope_stack) > 1:  # Keep root module scope
                     scope_stack.pop()
 
-        def visit_Call(self, node):
+        def visit_Call(self, node: ast.Call) -> None:
             callee = _normalize_callee(node.func)
             if callee:
                 # Check if this looks like a class instantiation

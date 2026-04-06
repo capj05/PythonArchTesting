@@ -6,7 +6,7 @@ from src.entities import Entity, EntityIndex
 
 from .candidates import _explicit_target_match, _stage2_candidates, _stage3_candidates
 from .metrics import ast_similarity, module_distance, module_similarity, name_similarity
-from .models import MatchingConfig, MatchResult, MatchStatus
+from .models import Candidate, MatchingConfig, MatchResult, MatchStatus
 
 
 def run_matching(
@@ -73,10 +73,10 @@ def run_matching(
             explicit_distance = _cached_module_distance(
                 source.module_path, explicit_target.module_path
             )
-            candidate = {
-                "target_id": explicit_target.canonical_id,
-                "confidence": 1.0,
-                "breakdown": {
+            candidate = Candidate(
+                target_id=explicit_target.canonical_id,
+                confidence=1.0,
+                breakdown={
                     "ast": 1.0,
                     "mod": 1.0,
                     "name": explicit_name,
@@ -84,9 +84,8 @@ def run_matching(
                     "penalty": 0.0,
                     "module_distance": float(explicit_distance),
                 },
-                "tie_break": (-1.0, -1.0, 0, explicit_target.canonical_id),
-            }
-            from .models import Candidate
+                tie_break=(-1.0, -1.0, 0, explicit_target.canonical_id),
+            )
 
             match = MatchResult(
                 source_id=source.canonical_id,
@@ -94,7 +93,7 @@ def run_matching(
                 target_id=explicit_target.canonical_id,
                 confidence=1.0,
                 reasons=reasons,
-                candidates=[Candidate(**candidate)],
+                candidates=[candidate],
             )
             results.append(match)
             by_source[match.source_id] = match
@@ -108,7 +107,6 @@ def run_matching(
         stage1_candidates = target_index.by_core.get(core_key, [])
         if len(stage1_candidates) == 1:
             target = stage1_candidates[0]
-            from .models import Candidate
 
             stage1_name = _cached_name_similarity(source.name, target.name)
             stage1_distance = _cached_module_distance(
@@ -191,6 +189,7 @@ def run_matching(
         if stage2_ambiguous and len(stage2_candidates) <= config.max_fuzzy_candidates:
             run_stage3 = True
 
+        final_candidates: List[Candidate]
         if run_stage3:
             stage3_candidates = _stage3_candidates(
                 source,

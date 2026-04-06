@@ -12,9 +12,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from src.config import Config
+    from src.core.models import Rule, RuleResult
     from src.entities import Entity, EntityIndex
     from src.matching import MatchResult
-    from src.core.models import Rule, RuleResult
 
 FunctionLike = Callable[..., Any]
 FunctionRegistry = dict[str, list[FunctionLike]]

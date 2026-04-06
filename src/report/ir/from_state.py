@@ -5,7 +5,7 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 from hashlib import sha1
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from src.config import load_config
 from src.config.accessors import (
@@ -138,12 +138,28 @@ def _maybe_config_snapshot(
         return None
     raw = getattr(config, "raw", None)
     if isinstance(raw, dict) and raw:
-        return raw
+        raw_snapshot: Dict[str, Dict[str, str]] = {}
+        for section_name, section_values in raw.items():
+            if not isinstance(section_values, dict):
+                continue
+            raw_snapshot[str(section_name)] = {
+                str(key): str(value) for key, value in section_values.items()
+            }
+        if raw_snapshot:
+            return raw_snapshot
     get_all_fn = getattr(config, "get_all", None)
     if callable(get_all_fn):
-        snapshot = get_all_fn()
-        if isinstance(snapshot, dict):
-            return snapshot
+        snapshot_data = get_all_fn()
+        if isinstance(snapshot_data, dict):
+            normalized_snapshot: Dict[str, Dict[str, str]] = {}
+            for section_name, section_values in snapshot_data.items():
+                if not isinstance(section_values, dict):
+                    continue
+                normalized_snapshot[str(section_name)] = {
+                    str(key): str(value) for key, value in section_values.items()
+                }
+            if normalized_snapshot:
+                return normalized_snapshot
     sections = (
         "discovery",
         "reporting",
@@ -158,12 +174,14 @@ def _maybe_config_snapshot(
         "projects",
         "matching",
     )
-    snapshot: Dict[str, Dict[str, str]] = {}
+    snapshot_by_section: Dict[str, Dict[str, str]] = {}
     for section in sections:
         section_data = get_section(config, section)
         if section_data:
-            snapshot[section] = {str(k): str(v) for k, v in section_data.items()}
-    return snapshot
+            snapshot_by_section[section] = {
+                str(key): str(value) for key, value in section_data.items()
+            }
+    return snapshot_by_section or None
 
 
 def _severity_from_status(status: str) -> str:
@@ -308,8 +326,8 @@ def _sort_results(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(
         items,
         key=lambda r: (
-            SEV_RANK.get(r.get("severity"), 9),
-            STAT_RANK.get(r.get("status"), 9),
+            SEV_RANK.get(str(r.get("severity") or ""), 9),
+            STAT_RANK.get(str(r.get("status") or ""), 9),
             r.get("rule_id") or "",
             r.get("source_entity_id") or "",
             r.get("target_entity_id") or "",
@@ -399,7 +417,7 @@ def _should_suppress_target_display(match_status: Any) -> bool:
 
 
 def _build_run_section(
-    state_obj: ProjectState, config: Any, *, now_utc_z_fn
+    state_obj: ProjectState, config: Any, *, now_utc_z_fn: Callable[[], str]
 ) -> Dict[str, Any]:
     target_path = state_obj.target_project_path
     return {
@@ -575,10 +593,9 @@ def _build_results(
         severity = _severity_from_status(status)
         confidence_value = None
         if details.get("confidence") is not None:
-            try:
-                confidence_value = round(float(details.get("confidence")), 6)
-            except (TypeError, ValueError):
-                confidence_value = None
+            parsed_confidence = _as_float(details.get("confidence"))
+            if parsed_confidence is not None:
+                confidence_value = round(parsed_confidence, 6)
 
         results.append(
             {
@@ -766,8 +783,8 @@ def _build_single_report_dict(
     state_obj: ProjectState,
     config: Optional[Any],
     *,
-    now_utc_z_fn,
-    validate_report_schema_v2_fn,
+    now_utc_z_fn: Callable[[], str],
+    validate_report_schema_v2_fn: Callable[[Any], List[str]],
 ) -> Dict[str, Any]:
     cfg = config or getattr(state_obj, "config", None) or load_config()
     run = _build_run_section(state_obj, cfg, now_utc_z_fn=now_utc_z_fn)
@@ -803,7 +820,7 @@ def _build_multi_target_report_dict(
     target_states: List[TargetRunState],
     config: Optional[Any],
     *,
-    validate_report_schema_v2_fn,
+    validate_report_schema_v2_fn: Callable[[Any], List[str]],
 ) -> Dict[str, Any]:
     cfg = config or run_state.config or load_config()
     generated_at = _format_datetime_z(run_state.run_generated_at)
@@ -874,8 +891,10 @@ def build_report_document(
     state_obj: ProjectState,
     config: Optional[Any] = None,
     *,
-    now_utc_z_fn=now_utc_z,
-    validate_report_schema_v2_fn=validate_report_schema_v2,
+    now_utc_z_fn: Callable[[], str] = now_utc_z,
+    validate_report_schema_v2_fn: Callable[[Any], List[str]] = (
+        validate_report_schema_v2
+    ),
 ) -> ReportDocument:
     """Build typed IR document for a single-target run."""
     report = _build_single_report_dict(
@@ -892,7 +911,9 @@ def build_multi_target_report_document(
     target_states: List[TargetRunState],
     config: Optional[Any] = None,
     *,
-    validate_report_schema_v2_fn=validate_report_schema_v2,
+    validate_report_schema_v2_fn: Callable[[Any], List[str]] = (
+        validate_report_schema_v2
+    ),
 ) -> ReportDocument:
     """Build typed IR document for a multi-target run."""
     report = _build_multi_target_report_dict(
