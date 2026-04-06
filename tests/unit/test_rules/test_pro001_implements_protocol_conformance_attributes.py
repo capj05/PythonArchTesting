@@ -240,7 +240,9 @@ class SqlRepository:
     assert results[0].details["missing_attributes"] == ["name"]
 
 
-def test_pro001_evaluation_rejects_read_only_property_for_writable_attribute_protocol() -> None:
+def test_pro001_evaluation_rejects_read_only_property_for_writable_attribute_protocol() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -274,7 +276,9 @@ class SqlRepository:
     assert results[0].details["attribute_errors"] == [
         {
             "attribute": "name",
-            "errors": ["attribute mutability mismatch: protocol requires writable member"],
+            "errors": [
+                "attribute mutability mismatch: protocol requires writable member"
+            ],
         }
     ]
 
@@ -324,7 +328,9 @@ class SqlRepository:
     assert [result.status for result in results] == ["OK"]
 
 
-def test_pro001_evaluation_accepts_plain_attribute_for_read_only_property_protocol() -> None:
+def test_pro001_evaluation_accepts_plain_attribute_for_read_only_property_protocol() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -357,7 +363,9 @@ class SqlRepository:
     assert [result.status for result in results] == ["OK"]
 
 
-def test_pro001_evaluation_rejects_read_only_property_for_writable_property_protocol() -> None:
+def test_pro001_evaluation_rejects_read_only_property_for_writable_property_protocol() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -397,13 +405,16 @@ class SqlRepository:
     assert results[0].details["attribute_errors"] == [
         {
             "attribute": "name",
-            "errors": ["attribute mutability mismatch: protocol requires writable member"],
+            "errors": [
+                "attribute mutability mismatch: protocol requires writable member"
+            ],
         }
     ]
 
 
-def test_pro001_evaluation_accepts_writable_property_protocol_through_inherited_target_base(
-) -> None:
+def test_pro001_evaluation_accepts_writable_property_protocol_through_inherited_target_base() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -485,8 +496,7 @@ class SqlRepository:
     assert [result.status for result in results] == ["OK"]
 
 
-def test_pro001_evaluation_accepts_plain_attribute_for_deferred_classvar_protocol(
-) -> (
+def test_pro001_evaluation_accepts_plain_attribute_for_deferred_classvar_protocol() -> (
     None
 ):
     source = """
@@ -517,8 +527,7 @@ class SqlRepository:
     assert [result.status for result in results] == ["OK"]
 
 
-def test_pro001_evaluation_accepts_classvar_attribute_for_deferred_classvar_protocol(
-) -> (
+def test_pro001_evaluation_accepts_classvar_attribute_for_deferred_classvar_protocol() -> (
     None
 ):
     source = """
@@ -551,8 +560,7 @@ class SqlRepository:
     assert [result.status for result in results] == ["OK"]
 
 
-def test_pro001_evaluation_rejects_mismatched_inner_type_for_deferred_classvar_protocol(
-) -> (
+def test_pro001_evaluation_rejects_mismatched_inner_type_for_deferred_classvar_protocol() -> (
     None
 ):
     source = """

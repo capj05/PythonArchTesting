@@ -263,7 +263,9 @@ class Repository(Protocol):
     ] == [("name", "property", "str", True)]
 
 
-def test_pro001_is_protocol_entity_walks_multilevel_protocol_bases_consistently() -> None:
+def test_pro001_is_protocol_entity_walks_multilevel_protocol_bases_consistently() -> (
+    None
+):
     source = """
 from typing import Protocol
 

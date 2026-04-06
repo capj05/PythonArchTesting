@@ -1,4 +1,5 @@
 from typing import Annotated
+
 from src.rules import required_entity_signature
 
 

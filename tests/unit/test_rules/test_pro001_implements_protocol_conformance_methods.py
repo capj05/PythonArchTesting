@@ -189,9 +189,9 @@ class SqlRepository(BaseSqlRepository):
         if entity.kind == "class" and entity.name == "SqlRepository"
     )
 
-    assert [method.name for method in class_methods(target_entity, target_entities)] == [
-        "get"
-    ]
+    assert [
+        method.name for method in class_methods(target_entity, target_entities)
+    ] == ["get"]
 
     results, errors, _ = evaluate_single_rule(
         source_text=source,

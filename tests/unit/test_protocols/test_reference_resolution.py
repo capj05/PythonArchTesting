@@ -281,7 +281,9 @@ def second(repo: object) -> None:
     return None
 """
     target_entities = _extract_entities(target, role="target")
-    first_context = _extract_entity(target, role="target", kind="function", name="first")
+    first_context = _extract_entity(
+        target, role="target", kind="function", name="first"
+    )
     second_context = _extract_entity(
         target, role="target", kind="function", name="second"
     )

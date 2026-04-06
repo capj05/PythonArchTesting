@@ -28,6 +28,7 @@ def test_public_docs_are_annotation_only() -> None:
         root / "docs" / "api-reference.md",
         root / "docs" / "architecture.md",
         root / "docs" / "core-components.md",
+        root / "example" / "project_1" / "README.md",
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in files)
 
@@ -44,7 +45,11 @@ def test_public_docs_are_annotation_only() -> None:
     assert "decorated reference project" not in combined
     assert "preferred import-free syntax" not in combined.lower()
     assert "preferred import-free metadata" not in combined.lower()
-    assert "preferred fully static style is import-free tuple metadata" not in combined.lower()
+    assert (
+        "preferred fully static style is import-free tuple metadata"
+        not in combined.lower()
+    )
+    assert "python -m python_arch_testing" not in combined
 
 
 def test_public_examples_and_default_reference_fixtures_are_annotation_first() -> None:
@@ -57,6 +62,9 @@ def test_public_examples_and_default_reference_fixtures_are_annotation_first() -
         root / "docs" / "api-reference.md",
         root / "docs" / "architecture.md",
         root / "docs" / "core-components.md",
+        root / "example" / "project_1" / "README.md",
+        root / "example" / "project_1" / "reference" / "calculator.py",
+        root / "example" / "project_1" / "reference" / "data_processor.py",
         root / "tests" / "fixtures" / "smoke" / "source" / "reference.py",
         root
         / "tests"
@@ -76,6 +84,19 @@ def test_public_examples_and_default_reference_fixtures_are_annotation_first() -
 
     for path in files:
         _assert_no_decorator_syntax(path)
+
+
+def test_example_project_readme_uses_current_cli_surface() -> None:
+    root = _repo_root()
+    text = (root / "example" / "project_1" / "README.md").read_text(encoding="utf-8")
+
+    assert "python -m src.cli" in text
+    assert "--validate-declarations" in text
+    assert "--targets-dir" in text
+    assert "--format json" in text
+    assert "--format markdown" in text
+    assert "python -m python_arch_testing" not in text
+    assert "Decorator syntax remains supported" not in text
 
 
 def test_annotation_switch_notes_are_labeled_historical() -> None:

@@ -290,7 +290,9 @@ def process(repo: BadRepository) -> None:
     assert results[0].details["missing_attributes"] == ["endpoint"]
 
 
-def test_pro002_parameter_role_rejects_read_only_property_for_writable_attribute_protocol() -> None:
+def test_pro002_parameter_role_rejects_read_only_property_for_writable_attribute_protocol() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -327,7 +329,9 @@ def process(repo: SqlRepository) -> None:
     assert results[0].details["attribute_errors"] == [
         {
             "attribute": "endpoint",
-            "errors": ["attribute mutability mismatch: protocol requires writable member"],
+            "errors": [
+                "attribute mutability mismatch: protocol requires writable member"
+            ],
         }
     ]
 
@@ -380,7 +384,9 @@ def build() -> SqlService:
     assert [result.status for result in results] == ["OK"]
 
 
-def test_pro002_return_role_accepts_plain_attribute_for_read_only_property_protocol() -> None:
+def test_pro002_return_role_accepts_plain_attribute_for_read_only_property_protocol() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -415,7 +421,9 @@ def build() -> SqlService:
     assert [result.status for result in results] == ["OK"]
 
 
-def test_pro002_return_role_rejects_read_only_property_for_writable_property_protocol() -> None:
+def test_pro002_return_role_rejects_read_only_property_for_writable_property_protocol() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -458,12 +466,16 @@ def build() -> SqlService:
     assert results[0].details["attribute_errors"] == [
         {
             "attribute": "status",
-            "errors": ["attribute mutability mismatch: protocol requires writable member"],
+            "errors": [
+                "attribute mutability mismatch: protocol requires writable member"
+            ],
         }
     ]
 
 
-def test_pro002_return_role_accepts_writable_property_protocol_through_inherited_target_base() -> None:
+def test_pro002_return_role_accepts_writable_property_protocol_through_inherited_target_base() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol

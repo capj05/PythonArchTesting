@@ -200,7 +200,10 @@ def process(
     declarations = extract_signature_annotation_declarations(function, source)
 
     subject_map = {
-        (declaration.subject_kind, declaration.subject_index): declaration.base_annotation
+        (
+            declaration.subject_kind,
+            declaration.subject_index,
+        ): declaration.base_annotation
         for declaration in declarations
     }
 

@@ -3,9 +3,9 @@ Fixtures specific to integration tests.
 """
 
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Generator, List
+from uuid import uuid4
 
 import pytest
 
@@ -15,7 +15,10 @@ from src.state import ProjectState
 @pytest.fixture
 def temp_project_dir() -> Generator[Path, None, None]:
     """Create a temporary project for integration testing."""
-    temp_dir = Path(tempfile.mkdtemp())
+    temp_root = Path(__file__).resolve().parents[2] / ".tmp_pytest_integration"
+    temp_root.mkdir(exist_ok=True)
+    temp_dir = temp_root / f"project-{uuid4().hex}"
+    temp_dir.mkdir(parents=True)
 
     # Create project structure
     (temp_dir / "src").mkdir()

@@ -20,6 +20,14 @@ def _fixture_source_targets() -> tuple[Path, Path]:
     )
 
 
+def _real_example_source_targets() -> tuple[Path, Path]:
+    root = _repo_root() / "example" / "project_1"
+    return (
+        root / "reference",
+        root / "assignments",
+    )
+
+
 def _write_static_only_config(tmp_path: Path) -> Path:
     config_path = tmp_path / "annotation_e2e.conf"
     config_path.write_text(
@@ -77,7 +85,7 @@ def _write_signature_annotation_fixture(base: Path) -> tuple[Path, Path]:
             "\n"
             "def normalize(\n"
             '    value: Annotated[str, required_entity_signature(mode="exact")],\n'
-            ") -> Annotated[str, required_entity_signature(mode=\"exact\")]:\n"
+            ') -> Annotated[str, required_entity_signature(mode="exact")]:\n'
             "    return value.strip()\n"
         ),
         encoding="utf-8",
@@ -353,3 +361,144 @@ def test_protocol_signature_annotation_fixture_emits_protocol_signature_results(
         "PRO002/implements_protocol_signature/v1/d0",
         "PRO002/implements_protocol_signature/v1/d1",
     ]
+
+
+def test_real_example_reference_passes_declaration_validation(monkeypatch) -> None:
+    monkeypatch.chdir(_repo_root())
+    source, _ = _real_example_source_targets()
+
+    exit_code, output = _run_cli(
+        [
+            "--validate-declarations",
+            "--source",
+            str(source),
+            "--format",
+            "json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(output)
+    assert payload["summary"]["invalid_declarations"] == 0
+    assert payload["summary"]["errors_total"] == 0
+    assert payload["diagnostics"] == []
+
+
+def test_real_example_multi_target_json_report_is_accurate(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(_repo_root())
+    source, targets_dir = _real_example_source_targets()
+    config_path = _write_static_only_config(tmp_path)
+    json_out = tmp_path / "real_example_report.json"
+
+    exit_code, _ = _run_cli(
+        [
+            "--config",
+            str(config_path),
+            "--source",
+            str(source),
+            "--targets-dir",
+            str(targets_dir),
+            "--format",
+            "json",
+            "--output",
+            str(json_out),
+        ]
+    )
+
+    assert exit_code == 1
+
+    report = json.loads(json_out.read_text(encoding="utf-8"))
+    targets = {target["display_name"]: target for target in report.get("targets") or []}
+
+    assert set(targets) == {"target1", "target2", "target3", "target4", "target5"}
+    assert report["summary"]["targets_total"] == 5
+    assert report["summary"]["targets_passed"] == 1
+    assert report["summary"]["targets_failed"] == 4
+
+    for target in targets.values():
+        assert all(
+            item.get("rule_id") != "compiler_invalid_declaration"
+            for item in target.get("results") or []
+        )
+
+    target1 = targets["target1"]
+    assert target1["exit_code"] == 0
+    assert target1["summary"]["status_counts"] == {"OK": 5}
+
+    target2 = targets["target2"]
+    assert target2["exit_code"] == 1
+    assert any(
+        item["rule_id"] == "API002/required_method/v1"
+        and item["status"] == "FAILED"
+        and "parameter annotation mismatch" in item["message"]
+        for item in target2["results"]
+    )
+
+    target3 = targets["target3"]
+    assert target3["exit_code"] == 1
+    assert any(
+        item["rule_id"] == "DEP001/forbid_imports/v1"
+        and item["status"] == "FAILED"
+        and "statistics" in item["message"]
+        for item in target3["results"]
+    )
+    assert any(
+        item["rule_id"] == "API001/required_entity_signature_return/v1"
+        and item["status"] == "FAILED"
+        and "return annotation mismatch" in item["message"]
+        for item in target3["results"]
+    )
+
+    for name in ("target4", "target5"):
+        assert any(
+            item["rule_id"] == "DEP001/forbid_imports/v1" and item["status"] == "OK"
+            for item in targets[name]["results"]
+        )
+        assert any(
+            item["rule_id"] == "API001/required_entity_signature/v1"
+            and item["status"] == "FAILED"
+            and item["details"]["match_status"] == "unmatched"
+            for item in targets[name]["results"]
+        )
+        assert any(
+            item["rule_id"] == "API002/required_method/v1"
+            and item["status"] == "FAILED"
+            and item["details"].get("match_status") in {"low_confidence", "unmatched"}
+            for item in targets[name]["results"]
+        )
+        assert any(
+            item["rule_id"] == "API001/required_entity_signature_return/v1"
+            and item["status"] == "SKIPPED"
+            for item in targets[name]["results"]
+        )
+
+
+def test_real_example_multi_target_markdown_bundle_is_written(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(_repo_root())
+    source, targets_dir = _real_example_source_targets()
+    config_path = _write_static_only_config(tmp_path)
+    markdown_out = tmp_path / "real_example_markdown"
+
+    exit_code, _ = _run_cli(
+        [
+            "--config",
+            str(config_path),
+            "--source",
+            str(source),
+            "--targets-dir",
+            str(targets_dir),
+            "--format",
+            "markdown",
+            "--output",
+            str(markdown_out),
+        ]
+    )
+
+    assert exit_code == 1
+    assert (markdown_out / "report.md").is_file()
+    for target_name in ("target1", "target2", "target3", "target4", "target5"):
+        assert (markdown_out / "targets" / f"{target_name}.md").is_file()

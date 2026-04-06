@@ -177,7 +177,10 @@ def process(repo: Annotated[RepoImpl | None, "target-role"]) -> None:
 
     assert errors == []
     assert [result.status for result in results] == ["OK"]
-    assert results[0].details["resolved_target_annotation"] == "target_module.SqlRepository"
+    assert (
+        results[0].details["resolved_target_annotation"]
+        == "target_module.SqlRepository"
+    )
 
 
 def test_pro002_evaluation_passes_for_container_parameter_annotation() -> None:
@@ -213,7 +216,10 @@ def process(repo: list[SqlRepository]) -> None:
 
     assert errors == []
     assert [result.status for result in results] == ["OK"]
-    assert results[0].details["resolved_target_annotation"] == "target_module.SqlRepository"
+    assert (
+        results[0].details["resolved_target_annotation"]
+        == "target_module.SqlRepository"
+    )
 
 
 def test_pro002_evaluation_passes_for_container_return_annotation() -> None:
@@ -251,7 +257,9 @@ def build() -> Sequence[SqlService]:
 
     assert errors == []
     assert [result.status for result in results] == ["OK"]
-    assert results[0].details["resolved_target_annotation"] == "target_module.SqlService"
+    assert (
+        results[0].details["resolved_target_annotation"] == "target_module.SqlService"
+    )
 
 
 def test_pro002_evaluation_rejects_multi_class_container_target_annotation() -> None:

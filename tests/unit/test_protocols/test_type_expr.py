@@ -84,8 +84,12 @@ def test_annotated_details_returns_shared_container_base_and_metadata() -> None:
     assert [ast.unparse(item) for item in metadata] == ["'marker'", "flag()"]
 
 
-def test_unwrap_annotated_annotation_text_recursively_strips_supported_wrappers() -> None:
-    node = ast.parse('Annotated[typing.Annotated[Repo | None, "inner"], "outer"]', mode="eval").body
+def test_unwrap_annotated_annotation_text_recursively_strips_supported_wrappers() -> (
+    None
+):
+    node = ast.parse(
+        'Annotated[typing.Annotated[Repo | None, "inner"], "outer"]', mode="eval"
+    ).body
 
     assert unwrap_annotated_annotation_text(node) == "Repo | None"
 

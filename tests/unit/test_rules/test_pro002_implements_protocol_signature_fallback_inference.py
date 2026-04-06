@@ -41,7 +41,7 @@ def build():
     assert results[0].details["inferred_target_reference"] == "SqlService"
 
 
-def test_pro002_evaluation_fails_for_unannotated_return_assigned_constructor() -> None:
+def test_pro002_evaluation_passes_for_unannotated_return_assigned_constructor() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -74,11 +74,15 @@ def build():
     )
 
     assert errors == []
-    assert [result.status for result in results] == ["FAILED"]
-    assert results[0].details["failure_reason"] == "missing_target_annotation"
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["resolution_source"] == "local_ast_fallback"
+    assert results[0].details["inference_kind"] == "return_assigned_local_constructor"
+    assert results[0].details["inferred_target_reference"] == "SqlService"
 
 
-def test_pro002_evaluation_passes_for_unannotated_parameter_default_constructor() -> None:
+def test_pro002_evaluation_passes_for_unannotated_parameter_default_constructor() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -116,7 +120,9 @@ def process(repo=SqlRepository()) -> None:
     assert results[0].details["inferred_target_reference"] == "SqlRepository"
 
 
-def test_pro002_evaluation_fails_for_unannotated_return_conflicting_local_classes() -> None:
+def test_pro002_evaluation_fails_for_unannotated_return_conflicting_local_classes() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -155,10 +161,16 @@ def build(flag: bool):
 
     assert errors == []
     assert [result.status for result in results] == ["FAILED"]
-    assert results[0].details["failure_reason"] == "missing_target_annotation"
+    assert results[0].details["resolution_source"] == "local_ast_fallback"
+    assert (
+        results[0].details["inference_kind"] == "return_conflicting_local_constructors"
+    )
+    assert results[0].details["failure_reason"] == "ambiguous_or_missing"
 
 
-def test_pro002_fails_for_return_same_module_helper_direct_constructor() -> None:
+def test_pro002_evaluation_passes_for_return_same_module_helper_direct_constructor() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -193,11 +205,17 @@ def build():
     )
 
     assert errors == []
-    assert [result.status for result in results] == ["FAILED"]
-    assert results[0].details["failure_reason"] == "missing_target_annotation"
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["resolution_source"] == "local_ast_fallback"
+    assert (
+        results[0].details["inference_kind"] == "return_same_module_helper_constructor"
+    )
+    assert results[0].details["inferred_target_reference"] == "SqlService"
 
 
-def test_pro002_fails_for_return_same_module_helper_assigned_constructor() -> None:
+def test_pro002_evaluation_passes_for_return_same_module_helper_assigned_constructor() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -233,11 +251,17 @@ def build():
     )
 
     assert errors == []
-    assert [result.status for result in results] == ["FAILED"]
-    assert results[0].details["failure_reason"] == "missing_target_annotation"
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["resolution_source"] == "local_ast_fallback"
+    assert (
+        results[0].details["inference_kind"] == "return_same_module_helper_constructor"
+    )
+    assert results[0].details["inferred_target_reference"] == "SqlService"
 
 
-def test_pro002_fails_for_return_same_module_helper_conflicting_classes() -> None:
+def test_pro002_evaluation_fails_for_return_same_module_helper_conflicting_classes() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -279,7 +303,11 @@ def build():
 
     assert errors == []
     assert [result.status for result in results] == ["FAILED"]
-    assert results[0].details["failure_reason"] == "missing_target_annotation"
+    assert results[0].details["resolution_source"] == "local_ast_fallback"
+    assert (
+        results[0].details["inference_kind"] == "return_conflicting_local_constructors"
+    )
+    assert results[0].details["failure_reason"] == "ambiguous_or_missing"
 
 
 def test_pro002_fails_for_return_same_module_helper_nested_helper_call() -> None:
@@ -366,7 +394,9 @@ def build():
     assert results[0].details["failure_reason"] == "missing_target_annotation"
 
 
-def test_pro002_evaluation_fails_for_unannotated_return_same_module_helper_cycle() -> None:
+def test_pro002_evaluation_fails_for_unannotated_return_same_module_helper_cycle() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing import Protocol
@@ -398,4 +428,6 @@ def make_service():
 
     assert errors == []
     assert [result.status for result in results] == ["FAILED"]
-    assert results[0].details["failure_reason"] == "missing_target_annotation"
+    assert results[0].details["resolution_source"] == "local_ast_fallback"
+    assert results[0].details["inference_kind"] == "return_same_module_helper_cycle"
+    assert results[0].details["failure_reason"] == "ambiguous_or_missing"

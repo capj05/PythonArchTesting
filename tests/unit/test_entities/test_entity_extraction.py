@@ -102,7 +102,9 @@ def test_class_extraction_preserves_normalized_bases() -> None:
     )
 
     repository = next(
-        entity for entity in entities if entity.kind == "class" and entity.name == "Repository"
+        entity
+        for entity in entities
+        if entity.kind == "class" and entity.name == "Repository"
     )
 
     assert repository.extras["bases"] == ["typing.Protocol"]
@@ -126,7 +128,9 @@ def test_class_extraction_preserves_typing_extensions_protocol_base() -> None:
     )
 
     repository = next(
-        entity for entity in entities if entity.kind == "class" and entity.name == "Repository"
+        entity
+        for entity in entities
+        if entity.kind == "class" and entity.name == "Repository"
     )
 
     assert repository.extras["bases"] == ["typing_extensions.Protocol"]

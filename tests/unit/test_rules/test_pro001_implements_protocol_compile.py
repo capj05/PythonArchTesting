@@ -214,7 +214,9 @@ class SqlRepository:
     assert rules[0].params["protocol"] == "source_module.Repository"
 
 
-def test_pro001_compile_accepts_typing_extensions_protocol_alias_and_indirect_base() -> None:
+def test_pro001_compile_accepts_typing_extensions_protocol_alias_and_indirect_base() -> (
+    None
+):
     source = """
 from typing import Annotated
 from typing_extensions import Protocol as ExtProtocol
