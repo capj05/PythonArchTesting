@@ -1,39 +1,50 @@
 # PythonArchTesting
 
-PythonArchTesting compares target projects against a reference project with rule declarations and reports only the supported rule families:
+PythonArchTesting compares one or more target Python projects against a
+reference project that declares architectural expectations in code. The tool
+reads passive annotations from the reference project, matches source entities to
+target entities, and reports where a target satisfies or violates those rules.
 
-- `required_entity_signature`
-- `required_method`
-- `forbid_imports`
-- `implements_protocol`
+## What It Can Check
 
-Use annotation-based declarations to declare rule targets. Function and method entity rules can use signature-level `Annotated[...]` metadata, while module, class, and body-only rules still use `__archtest__: Annotated[...]`. The primary style uses marker factories from `src.rules`, and strict tuple metadata remains supported as an optional compatibility form.
+- Required function signatures with `required_entity_signature`
+- Required methods with `required_method`
+- Forbidden imports with `forbid_imports`
+- Protocol conformance with `implements_protocol`
+- Ordered variable-flow checks with `flow` and `enforce_flow`
+- Reference declaration validity with `--validate-declarations`
 
-The project no longer supports `list_comprehension`, config-driven `arch_rules`, or `structural_check`. Config files that still use `[arch_rules]` or `[structural_check]` now fail validation.
+## Core Concepts
 
-## Installation
+- Reference project: the source of truth that contains rule declarations
+- Target project: the codebase being checked against the reference project
+- Declarations: passive `Annotated[...]` metadata read by the CLI, not executed
+  at import time
+- Reports: JSON or Markdown output that summarizes matching, rule results, and
+  exit status
 
-Runtime use:
+## Install And Run
+
+Install the package for normal use:
 
 ```bash
-pip install -r requirements.txt
+pip install .
 ```
 
-Development and docs tooling:
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-Package contributors can also install the project with dev extras:
+Editable development install:
 
 ```bash
 pip install -e .[dev]
 ```
 
-## Quick Start
+CLI entrypoints:
 
-Reference code:
+- `python-arch-test` for most users
+- `python -m src.cli` when working from a source checkout during development
+
+## Quick Example
+
+Reference declarations:
 
 ```python
 from typing import Annotated
@@ -54,64 +65,43 @@ def normalize(
     return value.strip().lower()
 ```
 
-CLI:
+Validate the reference declarations before comparing targets:
 
 ```bash
-python -m src.cli --source example/project_1/reference --targets-dir example/project_1/assignments --format json
+python-arch-test --validate-declarations --source example/project_1/reference --format json
 ```
 
-Declaration validation:
+Analyze a batch of targets and print a JSON report:
 
 ```bash
-python -m src.cli --validate-declarations --source example/project_1/reference --format json
+python-arch-test --source example/project_1/reference --targets-dir example/project_1/assignments --format json
 ```
 
-Stub-only reference projects:
+Generate a Markdown bundle for the same run:
 
-```ini
-[discovery]
-included_file_patterns = *.pyi
+```bash
+python-arch-test --source example/project_1/reference --targets-dir example/project_1/assignments --format markdown --output reports/project_1_markdown
 ```
 
-```python
-from typing import Annotated
-from src.rules import required_entity_signature
+## How To Interpret Results
 
-def add(
-    a: int,
-    b: int,
-) -> Annotated[int, required_entity_signature(mode="exact")]: ...
-```
+Read reports in this order:
 
-## Declarations
+1. `exit_code` and `summary`
+2. `targets[*].summary` for multi-target runs
+3. `results[*].status`, `results[*].severity`, and `results[*].message`
+4. `fix_hints`, `locations`, and `evidence` for remediation details
 
-- Preferred syntax is direct marker metadata such as `Annotated[..., required_method(...)]`.
-- `src.rules` is the public import path for marker factories.
-- Use signature-level `Annotated[...]` metadata for function and method `required_entity_signature` declarations.
-- Use `__archtest__: Annotated[...]` for module/class declarations and for rule kinds that are not supported in signatures.
-- `implements_protocol` is a class-level declaration and must use `__archtest__: Annotated[...]`.
-- Tuple metadata remains supported as a compatibility form and is strict in v1: exactly `(kind, params_dict)`.
-- Invalid declarations remain non-fatal during normal analysis runs and are reported as compiler evidence.
-- Use `--validate-declarations` as a focused source-only check for reference projects and CI.
-- Declaration-only reference projects can use `.pyi` files when `[discovery].included_file_patterns` is set to `*.pyi`.
-- Stub support is v1-only for dedicated `.pyi` reference trees; mixed `.py` and `.pyi` siblings are intentionally out of scope.
+Matching data explains whether a source entity was confidently paired with a
+target entity. The main matching states are `matched`, `low_confidence`,
+`ambiguous`, and `unmatched`.
 
-## Configuration
+## Where To Go Next
 
-Supported top-level config sections include:
-
-- `[discovery]`
-- `[import]`
-- `[logging]`
-- `[error_handling]`
-- `[files]`
-- `[performance]`
-- `[memory]`
-- `[reporting]`
-- `[matching]`
-- `[output]`
-- `[report]`
-- `[reference]`
-- `[projects]`
-
-See [docs/usage-guide.md](docs/usage-guide.md), [docs/configuration.md](docs/configuration.md), and [docs/api-reference.md](docs/api-reference.md) for the supported surface.
+- [Documentation index](docs/README.md)
+- [Overview](docs/overview.md)
+- [Usage guide](docs/usage-guide.md)
+- [Configuration](docs/configuration.md)
+- [Reporting](docs/reporting.md)
+- [Architecture](docs/architecture.md)
+- [API reference](docs/api-reference.md)
