@@ -1,10 +1,19 @@
 # Usage Guide
 
-Rule declarations are metadata only. They do not enforce rules at import time; the CLI reads them from the reference project and evaluates them against one or more targets.
+This guide walks through the normal user flow:
 
-## Preferred Reference Style
+1. write declarations in the reference project
+2. validate those declarations
+3. run one target or many targets
+4. read the report in the right order
 
-Use annotation markers with `Annotated`. Preferred examples use direct marker calls from `src.rules`:
+For most users, install the package and use `python-arch-test`. The
+`python -m src.cli` entrypoint is mainly useful when working from a source
+checkout during development.
+
+## 1. Write Reference Declarations
+
+Example reference code:
 
 ```python
 from typing import Annotated
@@ -16,109 +25,195 @@ __archtest__: Annotated[
 ]
 
 
-def normalize_name(
-    value: str,
+def normalize_operands(
+    a: float,
+    b: float = 0.0,
 ) -> Annotated[
-    str,
-    required_entity_signature(mode="compatible", return_annotation="warning"),
+    tuple[float, float],
+    required_entity_signature(mode="compatible"),
 ]:
-    return value.strip().title()
+    return (float(a), float(b))
 
 
 class Calculator:
-    def add(self, a: int, b: int) -> int:
-        __archtest__: Annotated[
-            None,
-            required_method(signature_mode="compatible"),
-        ]
+    def add(self, a: float, b: float) -> float:
+        __archtest__: Annotated[None, required_method(signature_mode="compatible")]
         return a + b
 ```
 
-This example covers:
-
-- module-level `forbid_imports`
-- function-level signature `required_entity_signature`
-- method-level `required_method`
-- class-level `implements_protocol`
-
-## CLI
-
-```bash
-python -m src.cli --source example/project_1/reference --targets-dir example/project_1/assignments --format json
-```
-
-To validate reference declarations without analyzing targets:
-
-```bash
-python -m src.cli --validate-declarations --source example/project_1/reference --format json
-```
-
-For a declaration-only stub reference project, configure discovery to scan `.pyi` files:
-
-```ini
-[discovery]
-included_file_patterns = *.pyi
-```
-
-You can also target specific projects:
-
-```bash
-python -m src.cli --source example/project_1/reference --target path/to/target_a --target path/to/target_b
-```
-
-## Validation Notes
-
-- Invalid annotation declarations produce compiler evidence instead of crashing extraction or compilation.
-- `python -m src.cli --validate-declarations` is the focused authoring and CI check for reference declarations.
-- Declaration validation is source-only: it scans the reference/source project and does not analyze targets.
-- Declaration validation returns a non-zero exit code for invalid declarations or source parsing/resolution errors.
-- Reference code can declare `required_entity_signature` and `implements_protocol` in function or method signatures with `Annotated[...]`.
-- Use `__archtest__: Annotated[...]` for module/class declarations and for body markers such as `forbid_imports` or `required_method`.
-- Preferred metadata is direct marker calls imported from `src.rules`.
-- Strict tuple metadata remains supported for compatibility or import-free authoring.
-
-Example:
+Other supported declaration shapes:
 
 ```python
 from typing import Annotated
-from src.rules import required_entity_signature
+from src.rules import enforce_flow, flow, implements_protocol
 
-def normalize(
-) -> Annotated[str, required_entity_signature(mode="compatible")]:
-    return value.strip()
+
+class RepositoryAdapter:
+    __archtest__: Annotated[None, implements_protocol("reference.Repository")]
+
+
+def build(repo: Annotated[object, implements_protocol("reference.Repository")]) -> None:
+    value = repo
+    __archtest__: Annotated[None, flow("raw", variable="value")]
+    value = repo
+    __archtest__: Annotated[None, flow("validated", variable="value")]
+    __archtest__: Annotated[
+        None,
+        enforce_flow(["raw", "validated"], variable="value"),
+    ]
 ```
 
-Stub-only example:
+## 2. Validate Declarations First
 
-```python
-from typing import Annotated
-from src.rules import required_entity_signature
+Use declaration validation to catch invalid metadata before comparing targets:
 
-def add(
-    a: int,
-    b: int,
-) -> Annotated[int, required_entity_signature(mode="exact")]: ...
+```bash
+python-arch-test --validate-declarations --source example/project_1/reference --format json
 ```
 
-## Placement And Limits
+What this does:
 
-- Supported annotation containers are `Annotated`, `typing.Annotated`, and `typing_extensions.Annotated`.
-- Signature declarations are supported only on function and method parameters or return annotations.
-- Signature declarations support `required_entity_signature` and `implements_protocol` in v1.
-- `implements_protocol` supports fully-qualified string references, symbol-style references such as `implements_protocol(Repository)`, parameterized references such as `implements_protocol(Repository[str])`, transparent wrappers such as `implements_protocol(Optional[Repository])` or `implements_protocol(Repository | None)`, and single-class containers such as `implements_protocol(list[Repository])` or `implements_protocol(dict[str, Repository])`.
-- Signature-level target annotations for `implements_protocol` may also use transparent wrappers such as `Optional[RepoImpl]`, `RepoImpl | None`, `Annotated[RepoImpl, ...]`, or `type[RepoImpl]`, plus single-class containers such as `list[RepoImpl]`, `Sequence[RepoImpl]`, or `dict[str, RepoImpl]`, when they still reduce to one target-side class.
-- Containers or unions that reduce to multiple distinct class candidates remain unsupported for protocol resolution in v1.
-- `forbid_imports` and `required_method` still require existing non-signature declaration surfaces.
-- Body markers must be simple top-level `__archtest__` annotated statements in the relevant module, class, function, or method body.
-- Signature and body declarations are tracked independently when they appear on the same entity.
-- Metadata entries must be either supported marker-factory expressions with AST-literal arguments/keyword values or strict literal tuples shaped as `(kind, params_dict)`.
-- `required_method` is a method rule. It should be attached to methods, not classes.
-- Prefer signature syntax for compact function or method entity rules. Prefer `__archtest__` when signatures would become noisy or when you need module/class/body-only rules.
-- Declaration-only `.pyi` reference trees are supported when discovery is explicitly configured with `included_file_patterns = *.pyi`.
-- Mixed `.py` and `.pyi` reference modules are not merged in v1. Use either a normal `.py` reference tree or a dedicated stub-only `.pyi` tree.
+- scans the reference project only
+- reports invalid declarations, syntax errors, and source-resolution errors
+- exits non-zero when declaration validation finds an error
 
-## Notes
+The JSON shape starts with:
 
-- `list_comprehension` is removed.
-- `[arch_rules]` and `[structural_check]` are removed.
-- Reports should contain only the supported rule IDs.
+```json
+{
+  "mode": "validate-declarations",
+  "summary": {
+    "diagnostics_total": 0,
+    "errors_total": 0,
+    "files_scanned": 3,
+    "invalid_declarations": 0
+  },
+  "diagnostics": []
+}
+```
+
+## 3. Run A Single Target
+
+```bash
+python-arch-test --source example/project_1/reference --target example/project_1/assignments/target1 --format json
+```
+
+Use a single-target run when you are investigating one project in detail or
+iterating on a specific submission.
+
+Single-target Markdown can go to stdout or a file:
+
+```bash
+python-arch-test --source example/project_1/reference --target example/project_1/assignments/target1 --format markdown --output reports/target1.md
+```
+
+## 4. Run Multiple Targets
+
+Batch analysis from a directory:
+
+```bash
+python-arch-test --source example/project_1/reference --targets-dir example/project_1/assignments --format json
+```
+
+Explicit target list:
+
+```bash
+python-arch-test --source example/project_1/reference --target path/to/target_a --target path/to/target_b --format json
+```
+
+Target discovery controls:
+
+- `--targets-dir` scans subdirectories
+- `--project-pattern` filters those subdirectories
+- `--exclude-patterns` removes unwanted matches
+
+## 5. Generate A Markdown Bundle
+
+Multi-target Markdown requires an output directory:
+
+```bash
+python-arch-test --source example/project_1/reference --targets-dir example/project_1/assignments --format markdown --output reports/project_1_markdown
+```
+
+The bundle contains:
+
+- `report.md`: run-level summary and links to targets
+- `targets/<target_id>.md`: one page per target
+
+## 6. Use `--validation-scope` Only When You Mean It
+
+The default scope is `all`.
+
+Use `--validation-scope logical-views` only when you intentionally want the run
+limited to template-style logical view functions detected from calls such as:
+
+- `render_template(...)`
+- `TemplateResponse(...)`
+- `render(..., "template.html")`
+
+For most projects, keep the default:
+
+```bash
+python-arch-test --validate-declarations --source path/to/reference --validation-scope all --format json
+```
+
+## 7. Read Results In This Order
+
+For multi-target JSON, start with:
+
+```json
+{
+  "exit_code": 1,
+  "summary": {
+    "targets_total": 5,
+    "targets_failed": 4,
+    "targets_passed": 1,
+    "results": {
+      "results_total": 25,
+      "status_counts": {
+        "FAILED": 14,
+        "OK": 8,
+        "SKIPPED": 3
+      }
+    }
+  }
+}
+```
+
+Then inspect the failing target summary and one failing result:
+
+```json
+{
+  "target_id": "target5",
+  "summary": {
+    "status_counts": {
+      "FAILED": 3,
+      "OK": 1,
+      "SKIPPED": 1
+    }
+  },
+  "results": [
+    {
+      "rule_id": "API001/required_entity_signature/v1",
+      "status": "FAILED",
+      "severity": "error",
+      "message": "Required target entity missing or not matchable (status=unmatched, confidence=0.0).",
+      "fix_hints": [
+        "Match the required parameter names, kinds, and required/optional shape."
+      ]
+    }
+  ]
+}
+```
+
+Read the fields in this order:
+
+1. `summary`
+2. `targets[*].summary`
+3. `results[*].status`
+4. `results[*].severity`
+5. `results[*].message`
+6. `fix_hints`, `locations`, and `evidence`
+
+Use `matching` when the failure might be caused by a bad or uncertain entity
+match rather than by the rule itself.

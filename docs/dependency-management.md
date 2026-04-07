@@ -1,6 +1,7 @@
 # Dependency Management
 
-This project uses two plain requirements files:
+This project uses package installation for normal CLI usage and keeps two plain
+requirements files for dependency management:
 
 - `requirements.txt` for runtime dependencies
 - `requirements-dev.txt` for optional development, test, and documentation dependencies
@@ -13,13 +14,19 @@ This project uses two plain requirements files:
 
 ## Install dependencies
 
-Core runtime:
+Preferred runtime install:
+
+```powershell
+pip install .
+```
+
+Runtime dependencies only:
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-Development:
+Development tools only:
 
 ```powershell
 pip install -r requirements-dev.txt

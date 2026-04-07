@@ -1,55 +1,42 @@
 # Configuration
 
-Configuration is INI-based and validated against the supported schema.
+Configuration is INI-based. For most users, the important settings are the ones
+that choose the reference and targets, shape discovery, tune matching, and
+control reporting.
 
-## Supported Sections
+Use the default config files in the repo or point the CLI at a custom file:
 
-- `[discovery]`
-- `[type_check]`
-- `[import]`
-- `[logging]`
-- `[error_handling]`
-- `[files]`
-- `[performance]`
-- `[memory]`
-- `[reporting]`
-- `[matching]`
-- `[output]`
-- `[report]`
-- `[reference]`
-- `[projects]`
-
-## Removed Sections
-
-These sections are no longer accepted:
-
-- `[arch_rules]`
-- `[runtime]`
-- `[structural_check]`
-
-If either section appears in a config file, configuration loading fails with an unknown-section validation error.
-
-## Example
-
-```ini
-[discovery]
-included_file_patterns = *.py
-
-[type_check]
-enabled = true
-strict = true
-check_arguments = true
-check_return_values = true
-show_annotation_warnings = true
-
-[report]
-include_config_snapshot = true
-validate_schema_v2 = true
+```bash
+python-arch-test --config path/to/custom.conf ...
 ```
 
-## Stub-Only Reference Projects
+## Common Sections
 
-Use a dedicated `.pyi` reference tree when you want declaration-only source files:
+### `[projects]`
+
+Use this section when you want defaults for repeated runs.
+
+Common fields:
+
+- `source_path`
+- `target_path`
+- `targets`
+- `targets_dir`
+- `project_pattern`
+- `exclude_patterns`
+
+### `[discovery]`
+
+Controls which files are scanned.
+
+Common fields:
+
+- `included_file_patterns`
+- `include_init_files`
+- `excluded_dirs`
+- `follow_symlinks`
+
+Stub-only reference projects can opt into `.pyi` discovery:
 
 ```ini
 [discovery]
@@ -57,8 +44,89 @@ included_file_patterns = *.pyi
 include_init_files = true
 ```
 
-Notes:
+### `[matching]`
 
-- This affects source/reference discovery, including declaration validation and source-side module resolution for `--reference-modules`.
-- `.pyi` package files such as `pkg/__init__.pyi` are supported.
-- Mixed `.py` and `.pyi` siblings for the same reference module are intentionally out of scope in v1; prefer one style per reference tree.
+Controls how source entities are paired with target entities.
+
+Common fields:
+
+- `threshold`
+- `delta`
+- `min_candidate`
+- `top_n`
+- `max_fuzzy_candidates`
+
+Most users should keep the defaults unless matching is too strict or too loose
+for their project layout.
+
+### `[reporting]`
+
+Controls the output formats and detail level.
+
+Common fields:
+
+- `output_formats`
+- `error_detail_level`
+- `include_traceback`
+
+### `[report]`
+
+Controls exit behavior and report payload options.
+
+Common fields:
+
+- `warnings_as_fail`
+- `multi_target_exit_policy`
+- `fail_threshold`
+- `include_config_snapshot`
+- `validate_schema_v2`
+
+`multi_target_exit_policy` supports:
+
+- `any_fail`: the run fails if any target fails
+- `all_fail`: the run fails only if every target fails
+- `threshold`: the run fails when failed targets reach `fail_threshold`
+
+## Example
+
+```ini
+[projects]
+source_path = example/project_1/reference
+targets_dir = example/project_1/assignments
+project_pattern = target*
+
+[discovery]
+included_file_patterns = *.py
+include_init_files = true
+
+[matching]
+threshold = 0.80
+delta = 0.03
+
+[reporting]
+output_formats = json, markdown
+error_detail_level = standard
+
+[report]
+warnings_as_fail = false
+multi_target_exit_policy = any_fail
+include_config_snapshot = false
+```
+
+## Advanced Sections
+
+These sections are part of the supported schema but are usually secondary for
+user onboarding:
+
+- `[import]`
+- `[logging]`
+- `[error_handling]`
+- `[files]`
+- `[performance]`
+- `[memory]`
+
+## Compatibility Notes
+
+- `[type_check]` still exists in the config schema for compatibility, but it is
+  not part of the active user-facing annotation-first pipeline documented here.
+  Most users should ignore it.

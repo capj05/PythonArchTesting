@@ -1,17 +1,19 @@
 # Documentation
 
-The supported rule surface is intentionally small:
+Use the docs in one of these paths.
 
-- `required_entity_signature`
-- `required_method`
-- `forbid_imports`
+## New User
 
-Use annotation-based declarations with `Annotated[...]`. Preferred examples use direct marker calls from `src.rules`, while strict tuple metadata remains supported as a compatibility form. Signature-level `Annotated[...]` metadata is supported for function and method `required_entity_signature` rules, while `__archtest__: Annotated[...]` remains the public surface for module/class and body-only rules.
+- [overview.md](overview.md): what the tool is, what it checks, and what it does
+  not do
+- [usage-guide.md](usage-guide.md): one worked example from reference
+  declarations to report reading
+- [configuration.md](configuration.md): the config sections that matter for real
+  runs
+- [reporting.md](reporting.md): how to read JSON and Markdown output
 
-Recommended entry points:
+## Developer
 
-1. [overview.md](overview.md)
-2. [usage-guide.md](usage-guide.md)
-3. [configuration.md](configuration.md)
-4. [api-reference.md](api-reference.md)
-5. [architecture.md](architecture.md)
+- [architecture.md](architecture.md): pipeline map and extension points
+- [api-reference.md](api-reference.md): public CLI surface, marker factories,
+  and placement rules

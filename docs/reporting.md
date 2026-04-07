@@ -1,65 +1,140 @@
-# Reporting System
+# Reporting
 
-## Overview
+Reports answer two questions:
 
-Reporting uses dispatcher-based lazy loading. The selected sink is resolved in
-`src/report/dispatcher.py`, and only that generator module is imported.
+1. did the run fail
+2. which rules or targets caused that failure
 
-This keeps CLI startup lightweight and makes the supported reporting surface
-small and explicit.
+The CLI supports `json` and `markdown`.
 
-## Core Components
+## Exit Code Meaning
 
-1. Dispatcher: `src/report/dispatcher.py`
-2. Typed IR: `src/report/ir/`
-3. Rendering primitives: `src/report/renderers/`
-4. API facade: `src/report/api.py`
-5. Core compatibility shim: `src/report/core.py`
-6. Lazy wrapper module: `src/report/lazy.py`
+### Single-target runs
 
-## Sink Registry
+- exit code `0`: no `FAILED` or `ERROR` result triggered failure
+- exit code `1`: at least one result failed
 
-`src/report/dispatcher.py` defines `_SINK_REGISTRY`:
+`SKIPPED` does not fail the run by itself.
 
-- `json`
-- `markdown`
+Warnings fail the run only when `[report].warnings_as_fail = true`.
 
-Each entry maps sink name -> `(module_path, class_name)`.
+### Multi-target runs
 
-## Runtime Flow
+Each target gets its own `exit_code`, and the top-level run also gets an
+aggregate `exit_code`.
 
-1. `src/report/api.py` is the canonical report ownership boundary.
-2. API builds typed IR from execution state via `src/report/ir/from_state.py`.
-3. IR is serialized to schema-v2 payload (`src/report/ir/serialize.py`) for compatibility.
-4. `create_reporter(sink, report_data, **kwargs)` imports only the sink module.
-5. Sink classes use shared renderer utilities from `src/report/renderers/`.
+The aggregate policy comes from `[report].multi_target_exit_policy`:
 
-## Public Reporting Functions
+- `any_fail`
+- `all_fail`
+- `threshold`
 
-From `src/report/api.py`:
+When you use `threshold`, `fail_threshold` decides how many failed targets are
+required before the full run exits with `1`.
 
-- `build_report(state_obj, config=None) -> dict`
-- `generate_validation_report(state_obj, output_format="json", ...) -> str`
-- `build_multi_target_report(run_state, target_states, config=None) -> dict`
-- `generate_multi_target_report(run_state, target_states, output_format="json", ...) -> str`
-- `get_multi_exit_code(run_state, target_states, config=None) -> int`
+## Read JSON In This Order
 
-Supported sinks are:
+### Single-target
 
-- `json` (single artifact or stdout)
-- `markdown` (directory bundle with `report.md` + `targets/*.md`)
+Start with:
 
-`src/report/lazy.py` provides lazy wrappers with the same surface for CLI usage.
+- `exit_code`
+- `summary`
+- `results`
 
-## Extending with a New Sink
+### Multi-target
 
-1. Implement a new generator class deriving from `BaseReportGenerator`.
-2. Add sink mapping to `_SINK_REGISTRY` in `src/report/dispatcher.py`.
-3. Use the sink via CLI `--format <name>` or `create_reporter("<name>", ...)`.
+Start with:
 
-## Notes
+- `exit_code`
+- `summary.targets_total`
+- `summary.targets_failed`
+- `summary.results`
+- `targets[*].summary`
 
-- There is no `src/report/registry.py`; dispatcher is the active extension point.
-- `src/report/core.py` is a compatibility wrapper that delegates to `src/report/api.py`.
-- `src/report/api.py` delegates format-specific rendering to dispatcher sinks.
-- For multi-target `markdown`, CLI `--output` must point to an output directory.
+These fields matter first:
+
+- `summary`
+- `targets[*].summary`
+- `results[*].message`
+- `results[*].fix_hints`
+- `results[*].evidence`
+- `results[*].locations`
+
+## Status vs Severity
+
+These fields mean different things:
+
+- `status`: what happened to the check result
+- `severity`: how serious that result is meant to be
+
+Common statuses:
+
+- `OK`: the rule passed
+- `FAILED`: the rule failed
+- `SKIPPED`: the rule was not evaluated, usually because matching did not
+  produce a usable target
+
+Common severities:
+
+- `error`
+- `warning`
+- `info`
+
+If a result is `SKIPPED`, read `match_status`, `message`, and `details` before
+assuming the rule logic is wrong.
+
+## Matching States
+
+The `matching` section explains how the tool paired source entities with target
+entities.
+
+Common matching states:
+
+- `matched`: a usable target entity was found
+- `low_confidence`: the best candidate was weak
+- `ambiguous`: several candidates competed too closely
+- `unmatched`: no usable target entity was found
+
+Matching data is most useful when a result says a required target is missing or
+when a failure looks surprising.
+
+## Result Rows
+
+For each result row, focus on:
+
+- `rule_id`: which rule fired
+- `status`: pass, fail, or skipped
+- `severity`: error, warning, or info
+- `message`: short explanation
+- `fix_hints`: actionable next steps
+- `locations`: source and target file/line references
+- `evidence`: structured supporting data
+
+Typical workflow:
+
+1. use `summary` to find the failing target
+2. open that target's failed rows
+3. read `message`
+4. use `fix_hints`
+5. inspect `evidence` only if the message is not enough
+
+## Markdown Output
+
+### Single-target Markdown
+
+Single-target Markdown is one report document. If `--output` is omitted, the CLI
+prints it to stdout. If `--output` is provided, it writes the report to that
+file.
+
+### Multi-target Markdown
+
+Multi-target Markdown writes a bundle and requires `--output` to point to a
+directory.
+
+Bundle structure:
+
+- `report.md`: run-level summary and target index
+- `targets/<target_id>.md`: one page per target
+
+This is the easiest format for sharing batch results with humans.

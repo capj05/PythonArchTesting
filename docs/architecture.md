@@ -1,23 +1,92 @@
 # Architecture
 
-The active pipeline is:
+This is the current high-level pipeline for PythonArchTesting.
 
-1. Parse reference entities and declaration metadata.
-2. Normalize annotation declarations into a shared declaration model.
-3. Compile supported declarations into rules.
-4. Match source entities to target entities.
-5. Evaluate compiled rules against each target.
-6. Build reports from `RunState` and per-target results.
+## Pipeline
 
-## Important Simplifications
+1. CLI orchestration starts in `src.cli`.
+2. Source entities and declaration metadata are extracted from the reference
+   project in `src.entities_extraction`.
+3. Declaration entries are normalized and compiled into rules in
+   `src.rules.compilation`.
+4. Source entities are matched to target entities in `src.matching`.
+5. Compiled rules are evaluated in `src.execution.evaluators`.
+6. Reports are built and rendered in `src.report`.
 
-- There is no config-driven architecture-rule compilation anymore.
-- There is no structural evaluator anymore.
-- Rule targets are declared with annotation metadata, using direct marker-factory metadata as the recommended style and strict literal tuples as an optional compatibility form inside `Annotated[...]`. Signature-level `Annotated[...]` is supported for function or method entity rules, and `__archtest__: Annotated[...]` remains the surface for module/class/body-only declarations.
-- `src.rules.compilation` is the canonical compilation namespace; older `src.core.compilation` imports are compatibility-only.
+For multi-target runs, `src.runner_multi` prepares the shared source state once
+and evaluates each target separately.
 
-## Supported Evaluation Families
+## Key Modules
 
-- `api_signature`
-- `import_policy`
-- `protocol_conformance`
+### Declaration Surface
+
+- `src.rules`
+- `src.rules.declaration.core`
+
+`src.rules` is the public import surface for marker factories. Add or change
+user-facing declaration helpers here.
+
+### Extraction And Normalization
+
+- `src.entities_extraction.annotations`
+- `src.rules.compilation.declarations`
+
+This layer parses annotation metadata, validates supported shapes, and
+normalizes them into shared declaration entries.
+
+### Rule Compilation
+
+- `src.rules.compilation.orchestrator`
+- `src.rules.compilation.decorators.api_signature`
+- `src.rules.compilation.decorators.import_policy`
+- `src.rules.compilation.decorators.protocols`
+- `src.rules.compilation.decorators.flow`
+
+Compilation turns normalized declarations into rule objects, compiler evidence,
+and compiler-side results.
+
+### Matching
+
+- `src.matching.engine`
+- `src.matching.candidates`
+- `src.matching.models`
+
+Matching chooses the best target entity for each source entity and records
+confidence and candidate details for reporting.
+
+### Evaluation
+
+- `src.execution.evaluators.api_signature`
+- `src.execution.evaluators.import_policy`
+- `src.execution.evaluators.protocol_conformance`
+- `src.execution.evaluators.variable_flow`
+- `src.execution.evaluators.registry`
+
+Each evaluator owns one rule family and produces result rows with messages, fix
+hints, evidence, and status.
+
+### Reporting
+
+- `src.report.api`
+- `src.report.ir`
+- `src.report.renderers`
+
+Reporting converts run state into a stable report structure, then renders JSON
+or Markdown.
+
+## Where To Extend Features
+
+To add a new declaration-driven rule:
+
+1. expose a marker in `src.rules` and `src.rules.declaration.core`
+2. teach extraction and normalization to accept it
+3. add a compiler in `src.rules.compilation`
+4. add an evaluator and register it in
+   `src.execution.evaluators.registry`
+5. verify report output and docs
+
+To change reporting behavior:
+
+1. update report assembly in `src.report.api` or `src.report.ir`
+2. update renderers in `src.report.renderers`
+3. keep JSON and Markdown expectations aligned

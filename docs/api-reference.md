@@ -1,64 +1,53 @@
 # API Reference
 
-## Annotation Syntax
+## CLI Entrypoints
 
-Preferred syntax is annotation-first. Use direct marker calls from `src.rules` inside `Annotated[...]`. Strict tuple metadata remains supported as an optional compatibility form. Signature-level metadata is supported for function and method rule declarations, and `__archtest__` markers remain the surface for module/class declarations, body-only rule kinds, and statement-level `flow(...)` markers:
+- `python-arch-test`: preferred installed-package command for most users
+- `python -m src.cli`: developer-oriented module entrypoint for source checkouts
+
+## CLI Flags
+
+- `--config`
+- `--source`
+- `--target`
+- `--targets`
+- `--targets-dir`
+- `--reference-modules`
+- `--project-pattern`
+- `--exclude-patterns`
+- `--format {json,markdown}`
+- `--output`
+- `--validate-declarations`
+- `--validation-scope {all,logical-views}`
+
+## Supported Annotation Containers
+
+The declaration reader supports:
+
+- `Annotated`
+- `typing.Annotated`
+- `typing_extensions.Annotated`
+
+Strict tuple metadata also remains supported as a compatibility form:
 
 ```python
-from typing import Annotated
-from src.rules import enforce_flow, flow, forbid_imports, required_entity_signature
-
-__archtest__: Annotated[
-    None,
-    forbid_imports("statistics", scope="package"),
-]
-
-
-def normalize(
-    value: str,
-) -> Annotated[
-    str,
-    required_entity_signature(mode="compatible", return_annotation="warning"),
-]:
-    value = value.strip()
-    __archtest__: Annotated[None, flow("validated")]
-    __archtest__: Annotated[None, enforce_flow(["validated"], variable="value")]
-    return value
+("required_entity_signature", {"mode": "compatible"})
 ```
 
-Placement and parsing rules:
+## Marker Factories From `src.rules`
 
-- Supported containers are `Annotated`, `typing.Annotated`, and `typing_extensions.Annotated`.
-- Signature declarations are supported only on function and method parameters or return annotations.
-- Signature declarations support `required_entity_signature` and `implements_protocol`.
-- `forbid_imports`, `required_method`, and `implements_protocol` still require their existing non-signature declaration surfaces.
-- Body markers must be simple top-level `__archtest__` annotated statements in the relevant body.
-- Statement-level `flow(...)` markers must appear immediately after the statement they annotate.
-- If the same rule kind is declared in both places on one entity, the body marker takes precedence.
-- Metadata entries must be either marker-factory expressions with AST-literal arguments/keyword values or strict literal tuples shaped as `(kind, params_dict)`.
-- Invalid annotation declarations produce compiler evidence instead of crashing the pipeline.
+### Placement Summary
 
-## CLI Commands
-
-- Normal analysis: `python -m src.cli --source <reference_root> --target <target_root>`
-- Declaration validation: `python -m src.cli --validate-declarations --source <reference_root> [--reference-modules ...] [--format json]`
-
-Declaration validation is source-only. It scans reference declarations, reports unsupported or invalid declaration issues, and exits non-zero when it finds invalid declarations or source parsing/resolution errors. Normal analysis remains unchanged: invalid declarations stay non-fatal and show up as compiler evidence in the usual pipeline.
-
-Declaration-only reference stubs are supported in `.pyi` and `__init__.pyi` files when the source project is configured with:
-
-```ini
-[discovery]
-included_file_patterns = *.pyi
-```
-
-This v1 support is intended for dedicated stub-only reference trees. Mixed `.py` and `.pyi` siblings for the same reference module are not merged.
-
-## Rule Markers
+| Marker | Purpose | Valid placement |
+| --- | --- | --- |
+| `required_entity_signature(...)` | Require a compatible function or method signature | Signature-level `Annotated[...]` on parameters or return annotations |
+| `required_method(...)` | Require a method with a compatible signature | `__archtest__: Annotated[...]` inside a method body |
+| `forbid_imports(...)` | Forbid imports in a declared scope | `__archtest__: Annotated[...]`, commonly at module level |
+| `implements_protocol(...)` | Require structural protocol conformance | Class-level `__archtest__: Annotated[...]` or signature-level `Annotated[...]` |
+| `flow(...)` | Mark a statement as a named flow stage | Statement-level `__archtest__: Annotated[...]` immediately after the statement |
+| `enforce_flow(...)` | Require ordered flow stages for a variable | `__archtest__: Annotated[...]` in a function or method body |
 
 ### `required_entity_signature(...)`
-
-Declares a required top-level signature on a matching target entity.
 
 Common options:
 
@@ -67,79 +56,172 @@ Common options:
 - `allow_param_rename`
 - `return_annotation`
 - `severity`
+- `message`
+
+Example:
+
+```python
+from typing import Annotated
+from src.rules import required_entity_signature
+
+
+def normalize(
+    value: str,
+) -> Annotated[
+    str,
+    required_entity_signature(mode="compatible", return_annotation="warning"),
+]:
+    return value.strip()
+```
 
 ### `required_method(...)`
-
-Declares a required compatible method.
 
 Common options:
 
 - `signature_mode`
 - `enforce_method_kind`
 - `severity`
+- `message`
 
-Use this marker on methods, not on classes.
+Example:
 
-### `forbid_imports(*forbidden, **options)`
+```python
+from typing import Annotated
+from src.rules import required_method
 
-Declares a static import policy.
+
+class Calculator:
+    def add(self, a: int, b: int) -> int:
+        __archtest__: Annotated[None, required_method(signature_mode="compatible")]
+        return a + b
+```
+
+### `forbid_imports(...)`
 
 Common options:
 
 - `scope`
 - `package`
+- `ignore_type_checking`
 - `allow`
 - `ignore_globs`
-- `ignore_type_checking`
 - `severity`
+- `message`
 
-### `implements_protocol(protocol, **options)`
+Example:
 
-Declares protocol requirements for either:
+```python
+from typing import Annotated
+from src.rules import forbid_imports
 
-- class-level structural conformance against a source-side protocol class
-- function or method signature roles annotated with `Annotated[..., implements_protocol(...)]`
+__archtest__: Annotated[
+    None,
+    forbid_imports("statistics", scope="package", package="data_processor"),
+]
+```
+
+### `implements_protocol(...)`
 
 Common options:
 
+- `protocol`
 - `signature_mode`
 - `enforce_method_kind`
 - `return_annotation`
 - `severity`
+- `message`
 
-`protocol` may be either a fully-qualified string reference or a symbol-style reference such as `implements_protocol(Repository)`.
+Examples:
 
-### `flow(stage, **options)`
+```python
+from typing import Annotated
+from src.rules import implements_protocol
 
-Declares a statement-level stage marker for a tracked variable in a function or method body.
+
+class RepositoryAdapter:
+    __archtest__: Annotated[None, implements_protocol("reference.Repository")]
+```
+
+```python
+from typing import Annotated
+from src.rules import implements_protocol
+
+
+def build(
+    repo: Annotated[object, implements_protocol("reference.Repository")],
+) -> Annotated[object, implements_protocol("reference.Repository")]:
+    return repo
+```
+
+### `flow(...)`
 
 Common options:
 
+- `stage`
 - `variable`
+- `message`
 
-### `enforce_flow(stages, **options)`
+Example:
 
-Declares an ordered variable-flow requirement on a function or method.
+```python
+from typing import Annotated
+from src.rules import flow
+
+
+def process(value: str) -> str:
+    cleaned = value.strip()
+    __archtest__: Annotated[None, flow("cleaned", variable="cleaned")]
+    return cleaned
+```
+
+### `enforce_flow(...)`
 
 Common options:
 
+- `stages`
 - `variable`
 - `severity`
+- `message`
 
-## Public Modules
+Example:
 
-- `src.rules`: public import path for annotation markers.
+```python
+from typing import Annotated
+from src.rules import enforce_flow, flow
 
-## Notes
 
-- Unsupported annotation containers or metadata expressions are reported as compiler evidence.
-- Prefer direct marker calls from `src.rules` for reference code; tuple metadata remains supported when you need compatibility or import-free declarations.
-- Treat `src.rules.compilation` as the canonical compilation namespace for the supported annotation-first pipeline.
+def process(value: str) -> str:
+    value = value.strip()
+    __archtest__: Annotated[None, flow("raw", variable="value")]
+    value = value.lower()
+    __archtest__: Annotated[None, flow("normalized", variable="value")]
+    __archtest__: Annotated[
+        None,
+        enforce_flow(["raw", "normalized"], variable="value"),
+    ]
+    return value
+```
 
-## Removed APIs
+## Placement Rules
 
-These names are no longer part of the public API:
+- Signature-level declarations are supported for
+  `required_entity_signature` and `implements_protocol`.
+- Use `__archtest__: Annotated[...]` for module, class, and body declarations.
+- `flow(...)` must appear immediately after the statement it annotates.
+- Signature and body declarations on the same entity are tracked separately.
+- Invalid declarations remain non-fatal in normal analysis and are reported as
+  compiler evidence.
+- `--validate-declarations` is the focused source-only check for declaration
+  authoring and CI.
 
-- `list_comprehension`
-- pattern decorators such as `detect_singleton`
-- architecture decorators such as `forbid_dependencies` or `no_god_class`
+## Stub-Only Reference Trees
+
+Declaration-only reference trees are supported with `.pyi` files when discovery
+is configured with:
+
+```ini
+[discovery]
+included_file_patterns = *.pyi
+```
+
+Mixed `.py` and `.pyi` siblings for the same reference module are not merged.
