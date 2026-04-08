@@ -21,6 +21,13 @@ def test_schema_payload_still_contains_expected_sections() -> None:
     assert "runtime" not in CONFIGURATION_SCHEMA
     assert "arch_rules" not in CONFIGURATION_SCHEMA
     assert "structural_check" not in CONFIGURATION_SCHEMA
+    assert "type_check" not in CONFIGURATION_SCHEMA
+
+
+def test_files_schema_does_not_include_bootstrap_filename_keys() -> None:
+    files_schema = CONFIGURATION_SCHEMA["files"]
+    assert "config_default" not in files_schema
+    assert "config_custom" not in files_schema
 
 
 def test_parallel_performance_keys_are_not_in_schema() -> None:
