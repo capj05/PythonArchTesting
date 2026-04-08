@@ -8,7 +8,7 @@ This guide walks through the normal user flow:
 4. read the report in the right order
 
 For most users, install the package and use `python-arch-test`. The
-`python -m src.cli` entrypoint is mainly useful when working from a source
+`python -m pythonarchtesting.cli` entrypoint is mainly useful when working from a source
 checkout during development.
 
 ## 1. Write Reference Declarations
@@ -17,7 +17,7 @@ Example reference code:
 
 ```python
 from typing import Annotated
-from src.rules import forbid_imports, required_entity_signature, required_method
+from pythonarchtesting.rules import forbid_imports, required_entity_signature, required_method
 
 __archtest__: Annotated[
     None,
@@ -45,7 +45,7 @@ Other supported declaration shapes:
 
 ```python
 from typing import Annotated
-from src.rules import enforce_flow, flow, implements_protocol
+from pythonarchtesting.rules import enforce_flow, flow, implements_protocol
 
 
 class RepositoryAdapter:

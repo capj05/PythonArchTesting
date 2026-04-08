@@ -15,7 +15,7 @@ it does not execute application behavior to decide whether a rule passed.
 
 ## Supported Checks
 
-The current public marker surface from `src.rules` is:
+The current public marker surface from `pythonarchtesting.rules` is:
 
 - `required_entity_signature`: require a compatible function or method
   signature

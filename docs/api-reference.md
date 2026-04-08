@@ -3,7 +3,7 @@
 ## CLI Entrypoints
 
 - `python-arch-test`: preferred installed-package command for most users
-- `python -m src.cli`: developer-oriented module entrypoint for source checkouts
+- `python -m pythonarchtesting.cli`: developer-oriented module entrypoint for source checkouts
 
 ## CLI Flags
 
@@ -34,7 +34,7 @@ Strict tuple metadata also remains supported as a compatibility form:
 ("required_entity_signature", {"mode": "compatible"})
 ```
 
-## Marker Factories From `src.rules`
+## Marker Factories From `pythonarchtesting.rules`
 
 ### Placement Summary
 
@@ -62,7 +62,7 @@ Example:
 
 ```python
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 
 def normalize(
@@ -87,7 +87,7 @@ Example:
 
 ```python
 from typing import Annotated
-from src.rules import required_method
+from pythonarchtesting.rules import required_method
 
 
 class Calculator:
@@ -112,7 +112,7 @@ Example:
 
 ```python
 from typing import Annotated
-from src.rules import forbid_imports
+from pythonarchtesting.rules import forbid_imports
 
 __archtest__: Annotated[
     None,
@@ -135,7 +135,7 @@ Examples:
 
 ```python
 from typing import Annotated
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 
 class RepositoryAdapter:
@@ -144,7 +144,7 @@ class RepositoryAdapter:
 
 ```python
 from typing import Annotated
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 
 def build(
@@ -165,7 +165,7 @@ Example:
 
 ```python
 from typing import Annotated
-from src.rules import flow
+from pythonarchtesting.rules import flow
 
 
 def process(value: str) -> str:
@@ -187,7 +187,7 @@ Example:
 
 ```python
 from typing import Annotated
-from src.rules import enforce_flow, flow
+from pythonarchtesting.rules import enforce_flow, flow
 
 
 def process(value: str) -> str:

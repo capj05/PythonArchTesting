@@ -40,7 +40,7 @@ pip install -e .[dev]
 CLI entrypoints:
 
 - `python-arch-test` for most users
-- `python -m src.cli` when working from a source checkout during development
+- `python -m pythonarchtesting.cli` when working from a source checkout during development
 
 ## Quick Example
 
@@ -48,7 +48,7 @@ Reference declarations:
 
 ```python
 from typing import Annotated
-from src.rules import forbid_imports, required_entity_signature
+from pythonarchtesting.rules import forbid_imports, required_entity_signature
 
 __archtest__: Annotated[
     None,

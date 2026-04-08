@@ -35,14 +35,14 @@ pytest tests/ -v -n auto
 pytest tests/unit/test_parallel_isolation.py -q -k "derive_target_seed_is_stable_across_python_hash_seed or derive_target_seed_differs_by_target_id" -o addopts=''
 
 # Local CI-parity coverage gate
-pytest tests/ -v -n auto --cov=src --cov-fail-under=80
+pytest tests/ -v -n auto --cov=pythonarchtesting --cov-fail-under=80
 ```
 
 ## Quality Gates
 
 `check_standard.ps1` runs fail-fast gates in order:
 
-1. `pytest tests/ -v -n auto --cov=src --cov-fail-under=80`
+1. `pytest tests/ -v -n auto --cov=pythonarchtesting --cov-fail-under=80`
 2. `flake8 src/ tests/`
 3. `black --check src/ tests/`
 4. `isort --check-only src/ tests/`
@@ -56,7 +56,7 @@ pytest tests/ -v -n auto --cov=src --cov-fail-under=80
 
 CI is defined in `.github/workflows/ci.yml`. It runs:
 
-1. `pytest tests/ -v -n auto --cov=src --cov-fail-under=80`
+1. `pytest tests/ -v -n auto --cov=pythonarchtesting --cov-fail-under=80`
 2. `python tools/diagrams/check_freshness.py --profile ci`
 3. `flake8 src/ tests/`
 4. `black --check src/ tests/`
@@ -68,41 +68,41 @@ CI is defined in `.github/workflows/ci.yml`. It runs:
 
 Phase 0 (bootstrap):
 
-- `src/constants`
-- `src/__init__.py`
-- `src/exceptions.py`
-- `src/state_multi.py`
+- `src/pythonarchtesting/constants`
+- `src/pythonarchtesting/__init__.py`
+- `src/pythonarchtesting/exceptions.py`
+- `src/pythonarchtesting/state_multi.py`
 
 Phase 1 (quick wins):
 
-- `src/cli.py`
-- `src/matching`
-- `src/execution`
-- `src/entities.py`
-- `src/entities_extraction`
-- `src/runner_multi`
-- `src/evidence`
-- `src/wrappers`
+- `src/pythonarchtesting/cli.py`
+- `src/pythonarchtesting/matching`
+- `src/pythonarchtesting/execution`
+- `src/pythonarchtesting/entities.py`
+- `src/pythonarchtesting/entities_extraction`
+- `src/pythonarchtesting/runner_multi`
+- `src/pythonarchtesting/evidence`
+- `src/pythonarchtesting/wrappers`
 
 Phase 2 (foundation modules):
 
-- `src/config`
-- `src/util`
-- `src/core`
-- `src/infrastructure`
+- `src/pythonarchtesting/config`
+- `src/pythonarchtesting/util`
+- `src/pythonarchtesting/core`
+- `src/pythonarchtesting/infrastructure`
 
 Phase 3 (integration):
 
-- `src/runtime`
-- `src/report`
+- `src/pythonarchtesting/runtime`
+- `src/pythonarchtesting/report`
 
 Phase 4:
 
-- `src/rules`
+- `src/pythonarchtesting/rules`
 
 Phase 5:
 
-- `src/state`
+- `src/pythonarchtesting/state`
 
 Phase 6 (convergence):
 
