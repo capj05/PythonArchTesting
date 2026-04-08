@@ -9,14 +9,52 @@ from __future__ import annotations
 import configparser
 import os
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from pythonarchtesting.constants import FileConstants
 from pythonarchtesting.exceptions import ConfigurationError, ErrorContext
 
 from .data import Config, create_config_from_dict
 from .validator import validate_configuration
+
+
+@dataclass(frozen=True, slots=True)
+class ConfigLoadWarning:
+    """Structured warning emitted during configuration loading."""
+
+    code: str
+    message: str
+    path: str | None = None
+    section: str | None = None
+    key: str | None = None
+    fallback_value: str | None = None
+
+
+def _emit_warning(
+    warning_sink: Callable[[ConfigLoadWarning], None] | None,
+    *,
+    code: str,
+    message: str,
+    path: str | None = None,
+    section: str | None = None,
+    key: str | None = None,
+    fallback_value: str | None = None,
+) -> None:
+    """Emit a structured loader warning when a sink is provided."""
+    if warning_sink is None:
+        return
+    warning_sink(
+        ConfigLoadWarning(
+            code=code,
+            message=message,
+            path=path,
+            section=section,
+            key=key,
+            fallback_value=fallback_value,
+        )
+    )
 
 
 def _serialize_config_value(value: Any) -> str:
@@ -185,6 +223,7 @@ def _convert_value_by_rule(value: Any, rule: Any) -> Any:
 
 def _apply_defaults_and_validate(
     config_dict: Dict[str, Dict[str, Any]],
+    warning_sink: Callable[[ConfigLoadWarning], None] | None = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Apply defaults and validate configuration.
@@ -212,9 +251,13 @@ def _apply_defaults_and_validate(
             error_code="CONFIG_VALIDATION_FAILED",
         )
 
-    # Log warnings
+    # Capture warnings
     for warning in validation_result.warnings:
-        print(f"Configuration warning: {warning}")
+        _emit_warning(
+            warning_sink,
+            code="config_validation_warning",
+            message=warning,
+        )
 
     # Apply defaults
     result = {section: dict(items) for section, items in config_dict.items()}
@@ -249,7 +292,10 @@ def _normalize_logging_section(config_dict: Dict[str, Dict[str, Any]]) -> None:
         log_section["filename"] = filename
 
 
-def _normalize_report_section(config_dict: Dict[str, Dict[str, Any]]) -> None:
+def _normalize_report_section(
+    config_dict: Dict[str, Dict[str, Any]],
+    warning_sink: Callable[[ConfigLoadWarning], None] | None = None,
+) -> None:
     """Normalize report configuration (schema_version)."""
     if "report" not in config_dict:
         config_dict["report"] = {}
@@ -257,8 +303,17 @@ def _normalize_report_section(config_dict: Dict[str, Dict[str, Any]]) -> None:
     report_section = config_dict["report"]
     schema_version = str(report_section.get("schema_version") or "2").strip()
     if schema_version != "2":
-        print(f"Configuration warning: Invalid report.schema_version={
-            schema_version!r}; " "falling back to '2'")
+        _emit_warning(
+            warning_sink,
+            code="invalid_report_schema_version",
+            message=(
+                f"Invalid report.schema_version={schema_version!r}; "
+                "falling back to '2'"
+            ),
+            section="report",
+            key="schema_version",
+            fallback_value="2",
+        )
         schema_version = "2"
     report_section["schema_version"] = schema_version
 
@@ -288,17 +343,25 @@ def load_config(
     *,
     config_path: Optional[str] = None,
     cli_args: Optional[Dict[str, Any]] = None,
+    discover_from_cwd: bool = False,
+    cwd: str | Path | None = None,
+    warning_sink: Callable[[ConfigLoadWarning], None] | None = None,
 ) -> Config:
     """
     Load configuration from files and CLI arguments.
 
     This function performs explicit configuration loading without any
     import-time side effects. It can be called multiple times with
-    different parameters.
+    different parameters. Current-directory config discovery is disabled
+    by default and must be enabled explicitly.
 
     Args:
         config_path: Optional path to custom configuration file
         cli_args: Optional CLI arguments dictionary
+        discover_from_cwd: Enable config auto-discovery from the current
+            working directory or the provided ``cwd``
+        cwd: Directory to search when ``discover_from_cwd`` is enabled
+        warning_sink: Optional callback receiving structured load warnings
 
     Returns:
         Fully validated Config object
@@ -318,7 +381,12 @@ def load_config(
         default_config = _load_config_file(default_config_path)
         _merge_config_dicts(config_dict, default_config)
     else:
-        print(f"Warning: Default configuration file '{default_config_path}' not found")
+        _emit_warning(
+            warning_sink,
+            code="default_config_missing",
+            message=f"Default configuration file '{default_config_path}' not found",
+            path=default_config_path,
+        )
 
     # Load custom configuration
     if config_path:
@@ -329,8 +397,10 @@ def load_config(
             )
         custom_config = _load_config_file(config_path)
         _merge_config_dicts(config_dict, custom_config)
-    else:
-        auto_config_path = _resolve_auto_config_path(Path.cwd())
+    elif discover_from_cwd:
+        auto_config_path = _resolve_auto_config_path(
+            Path(cwd) if cwd is not None else Path.cwd()
+        )
         if auto_config_path is not None:
             custom_config = _load_config_file(str(auto_config_path))
             _merge_config_dicts(config_dict, custom_config)
@@ -340,11 +410,14 @@ def load_config(
         _apply_cli_args(config_dict, cli_args)
 
     # Apply defaults and validate
-    validated_config = _apply_defaults_and_validate(config_dict)
+    validated_config = _apply_defaults_and_validate(
+        config_dict,
+        warning_sink=warning_sink,
+    )
 
     # Normalize special sections
     _normalize_logging_section(validated_config)
-    _normalize_report_section(validated_config)
+    _normalize_report_section(validated_config, warning_sink=warning_sink)
 
     # Create Config object
     return create_config_from_dict(validated_config)

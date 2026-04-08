@@ -2,10 +2,12 @@
 Tests for configuration validation functionality.
 """
 
+import builtins
 from dataclasses import replace
 
 import pytest
 
+import pythonarchtesting.config.loader as config_loader
 from pythonarchtesting.config import (
     load_config,
     validate_configuration,
@@ -120,7 +122,7 @@ def test_load_config_no_longer_exposes_parallel_performance_fields(tmp_path) -> 
         assert not hasattr(config.performance, attr)
 
 
-def test_load_config_autodiscovers_python_arch_testing_conf(
+def test_load_config_does_not_autodiscover_python_arch_testing_conf_by_default(
     tmp_path, monkeypatch
 ) -> None:
     config_path = tmp_path / "python_arch_testing.conf"
@@ -130,50 +132,59 @@ def test_load_config_autodiscovers_python_arch_testing_conf(
 
     config = load_config()
 
+    assert config.performance.default_timeout == 30
+
+
+def test_load_config_can_autodiscover_python_arch_testing_conf_when_enabled(
+    tmp_path,
+) -> None:
+    config_path = tmp_path / "python_arch_testing.conf"
+    config_path.write_text("[performance]\ndefault_timeout = 45\n", encoding="utf-8")
+
+    config = load_config(discover_from_cwd=True, cwd=tmp_path)
+
     assert config.performance.default_timeout == 45
 
 
 def test_load_config_uses_explicit_config_over_autodiscovery(
-    tmp_path, monkeypatch
+    tmp_path,
 ) -> None:
     autodiscovered = tmp_path / "python_arch_testing.conf"
     explicit = tmp_path / "explicit.conf"
     autodiscovered.write_text("[performance]\ndefault_timeout = 11\n", encoding="utf-8")
     explicit.write_text("[performance]\ndefault_timeout = 62\n", encoding="utf-8")
 
-    monkeypatch.chdir(tmp_path)
-
-    config = load_config(config_path=str(explicit))
+    config = load_config(
+        config_path=str(explicit),
+        discover_from_cwd=True,
+        cwd=tmp_path,
+    )
 
     assert config.performance.default_timeout == 62
 
 
 def test_load_config_falls_back_to_custom_config_conf_with_deprecation_warning(
-    tmp_path, monkeypatch
+    tmp_path,
 ) -> None:
     config_path = tmp_path / "custom_config.conf"
     config_path.write_text("[performance]\ndefault_timeout = 52\n", encoding="utf-8")
 
-    monkeypatch.chdir(tmp_path)
-
     with pytest.deprecated_call(match="custom_config\\.conf"):
-        config = load_config()
+        config = load_config(discover_from_cwd=True, cwd=tmp_path)
 
     assert config.performance.default_timeout == 52
 
 
 def test_load_config_prefers_python_arch_testing_conf_when_both_exist(
-    tmp_path, monkeypatch
+    tmp_path,
 ) -> None:
     canonical = tmp_path / "python_arch_testing.conf"
     legacy = tmp_path / "custom_config.conf"
     canonical.write_text("[performance]\ndefault_timeout = 31\n", encoding="utf-8")
     legacy.write_text("[performance]\ndefault_timeout = 99\n", encoding="utf-8")
 
-    monkeypatch.chdir(tmp_path)
-
     with pytest.deprecated_call(match="custom_config\\.conf"):
-        config = load_config()
+        config = load_config(discover_from_cwd=True, cwd=tmp_path)
 
     assert config.performance.default_timeout == 31
 
@@ -181,6 +192,78 @@ def test_load_config_prefers_python_arch_testing_conf_when_both_exist(
 def test_load_config_signature_no_longer_accepts_env() -> None:
     with pytest.raises(TypeError, match="env"):
         load_config(env={})  # type: ignore[call-arg]
+
+
+def test_load_config_validation_warnings_use_warning_sink_not_print(
+    tmp_path, monkeypatch
+) -> None:
+    config_path = tmp_path / "config.ini"
+    config_path.write_text("[unknown]\nfoo = bar\n", encoding="utf-8")
+    captured_warnings = []
+
+    def _fail_print(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("print should not be called")
+
+    monkeypatch.setattr(builtins, "print", _fail_print)
+
+    load_config(
+        config_path=str(config_path),
+        warning_sink=captured_warnings.append,
+    )
+
+    assert captured_warnings
+    assert captured_warnings[0].code == "config_validation_warning"
+    assert "Unknown configuration section" in captured_warnings[0].message
+
+
+def test_load_config_invalid_report_schema_uses_warning_sink_not_print(
+    tmp_path, monkeypatch
+) -> None:
+    config_path = tmp_path / "config.ini"
+    config_path.write_text("[report]\nschema_version = 3\n", encoding="utf-8")
+    captured_warnings = []
+
+    def _fail_print(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("print should not be called")
+
+    monkeypatch.setattr(builtins, "print", _fail_print)
+
+    config = load_config(
+        config_path=str(config_path),
+        warning_sink=captured_warnings.append,
+    )
+
+    assert config.report.schema_version == "2"
+    assert captured_warnings
+    assert captured_warnings[0].code == "invalid_report_schema_version"
+    assert captured_warnings[0].section == "report"
+    assert captured_warnings[0].key == "schema_version"
+    assert captured_warnings[0].fallback_value == "2"
+    assert "falling back to '2'" in captured_warnings[0].message
+
+
+def test_load_config_missing_default_config_uses_warning_sink_not_print(
+    tmp_path, monkeypatch
+) -> None:
+    missing_default = tmp_path / "missing-defaults.conf"
+    captured_warnings = []
+
+    def _fail_print(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("print should not be called")
+
+    monkeypatch.setattr(builtins, "print", _fail_print)
+    monkeypatch.setattr(
+        config_loader,
+        "_default_config_path",
+        lambda: str(missing_default),
+    )
+
+    load_config(warning_sink=captured_warnings.append)
+
+    assert captured_warnings
+    assert captured_warnings[0].code == "default_config_missing"
+    assert captured_warnings[0].path == str(missing_default)
+    assert str(missing_default) in captured_warnings[0].message
 
 
 def test_files_section_config_filename_keys_now_warn_as_unknown() -> None:

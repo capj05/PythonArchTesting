@@ -5,6 +5,7 @@ Command-line interface for Python Architecture Testing.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
@@ -157,12 +158,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    config_warnings: List[Any] = []
     config = load_config(
         config_path=args.config,
         cli_args={"output_format": getattr(args, "format", None)},
+        discover_from_cwd=args.config is None,
+        cwd=os.getcwd(),
+        warning_sink=config_warnings.append,
     )
 
     configure_logging(config)
+    for warning in config_warnings:
+        logging.warning("%s: %s", warning.code, warning.message)
 
     explicit_targets: List[str] = []
     if args.target:
