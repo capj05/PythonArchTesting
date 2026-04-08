@@ -1,5 +1,30 @@
 # API Reference
 
+## Supported Public API
+
+The supported module entrypoints are:
+
+- `pythonarchtesting.state`
+- `pythonarchtesting.runner_multi`
+
+Supported symbols under `pythonarchtesting.state`:
+
+- `ValidationStatus`
+- `ValidationResult`
+- `rule_result_to_validation`
+- `MemoryManager`
+- `ModuleDiscovery`
+- `ProjectState`
+
+Supported symbols under `pythonarchtesting.runner_multi`:
+
+- `prepare_source`
+- `evaluate_target`
+- `run_multi`
+
+Deep import paths and historical compatibility aliases are not part of the
+supported public API.
+
 ## CLI Entrypoints
 
 - `python-arch-test`: preferred installed-package command for most users
