@@ -4,7 +4,16 @@ Configuration is INI-based. For most users, the important settings are the ones
 that choose the reference and targets, shape discovery, tune matching, and
 control reporting.
 
-Use the default config files in the repo or point the CLI at a custom file:
+The bundled default configuration is loaded internally from the package.
+User configuration precedence is:
+
+- `--config path/to/file.conf`
+- auto-discovered `python_arch_testing.conf`
+- deprecated auto-discovered `custom_config.conf`
+
+Environment-variable overlays are not supported by `load_config()`.
+
+Point the CLI at a custom file when you need an explicit override:
 
 ```bash
 python-arch-test --config path/to/custom.conf ...
@@ -125,8 +134,7 @@ user onboarding:
 - `[performance]`
 - `[memory]`
 
-## Compatibility Notes
+## Removed Sections
 
-- `[type_check]` still exists in the config schema for compatibility, but it is
-  not part of the active user-facing annotation-first pipeline documented here.
-  Most users should ignore it.
+- `[type_check]` is no longer supported. Validation now fails if it appears in
+  a user config file.
