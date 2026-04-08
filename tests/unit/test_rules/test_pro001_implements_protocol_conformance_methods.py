@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.protocols.introspection import class_methods
+from pythonarchtesting.protocols.introspection import class_methods
 from tests.unit.test_rules.protocol_rule_test_helpers import (
     evaluate_single_rule,
     extract_entities,
@@ -11,7 +11,7 @@ def test_pro001_evaluation_passes_for_compatible_protocol() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -52,7 +52,7 @@ def test_pro001_evaluation_fails_for_missing_protocol_method() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -85,7 +85,7 @@ def test_pro001_evaluation_fails_for_method_signature_mismatch() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     @classmethod
@@ -120,7 +120,7 @@ def test_pro001_evaluation_fails_for_missing_inherited_protocol_method() -> None
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class BaseRepository(Protocol):
     def get(self, item_id: str) -> str:
@@ -159,7 +159,7 @@ def test_pro001_evaluation_passes_for_method_inherited_from_target_base_class() 
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class BaseRepository(Protocol):
     def get(self, item_id: str) -> str:
@@ -210,7 +210,7 @@ class SqlRepository(BaseSqlRepository):
 def test_pro001_evaluation_accepts_contravariant_parameter_annotation() -> None:
     source = """
 from typing import Annotated, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Animal:
     pass
@@ -253,7 +253,7 @@ class SqlRepository:
 def test_pro001_evaluation_rejects_narrower_parameter_annotation() -> None:
     source = """
 from typing import Annotated, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Animal:
     pass
@@ -297,7 +297,7 @@ class SqlRepository:
 def test_pro001_evaluation_accepts_covariant_return_annotation() -> None:
     source = """
 from typing import Annotated, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class BaseResult:
     pass

@@ -10,12 +10,14 @@ from pathlib import Path
 
 import pytest
 
-from src.config.data import create_config_from_dict
-from src.entities import build_entity_index, sort_entities
-from src.entities_extraction import extract_entities_from_ast_with_nonmatchable
-from src.evidence.collection import parse_python_modules
-from src.matching import MatchingConfig, run_matching
-from src.util.discovery_utils import discover_python_files
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.entities import build_entity_index, sort_entities
+from pythonarchtesting.entities_extraction import (
+    extract_entities_from_ast_with_nonmatchable,
+)
+from pythonarchtesting.evidence.collection import parse_python_modules
+from pythonarchtesting.matching import MatchingConfig, run_matching
+from pythonarchtesting.util.discovery_utils import discover_python_files
 
 
 def _median_runtime(fn, runs: int = 3) -> float:

@@ -5,11 +5,11 @@ Tests for matching pipeline behaviors.
 import textwrap
 from pathlib import Path
 
-from src.entities import build_entity_index
-from src.entities_extraction import extract_entities_from_source
-from src.matching import MatchingConfig, MatchStatus, run_matching
-from src.matching.metrics import module_distance, name_similarity
-from src.state import ProjectState
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.matching import MatchingConfig, MatchStatus, run_matching
+from pythonarchtesting.matching.metrics import module_distance, name_similarity
+from pythonarchtesting.state import ProjectState
 
 
 def _extract(source: str, file_path: Path, root_path: Path, role: str) -> list:
@@ -164,7 +164,7 @@ def test_stage2_breakdown_includes_real_name_similarity() -> None:
         def parse_data(x):
             return x
         """,
-        root_source / "pkg" / "src.py",
+        root_source / "pkg" / "pythonarchtesting.py",
         root_source,
         "source",
     )
@@ -209,7 +209,7 @@ def test_legacy_fallback_audit() -> None:
         def f(x):
             return x
         """,
-        root_source / "legacy_src.py",
+        root_source / "legacy_pythonarchtesting.py",
         root_source,
         "source",
     )

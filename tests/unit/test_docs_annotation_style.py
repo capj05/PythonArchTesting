@@ -35,12 +35,12 @@ def test_public_docs_are_annotation_only() -> None:
     assert "__archtest__" in combined
     assert "Annotated[" in combined
     assert "signature" in combined.lower()
-    assert "src.rules" in combined
+    assert "pythonarchtesting.rules" in combined
     assert "required_method(" in combined
     assert "forbid_imports(" in combined
-    assert "src.rules.compilation" in combined
-    assert "src.wrappers" not in combined
-    assert "src.core.compilation.decorators" not in combined
+    assert "pythonarchtesting.rules.compilation" in combined
+    assert "pythonarchtesting.wrappers" not in combined
+    assert "pythonarchtesting.core.compilation.decorators" not in combined
     assert "decorator-first" not in combined
     assert "decorated reference project" not in combined
     assert "preferred import-free syntax" not in combined.lower()
@@ -49,7 +49,7 @@ def test_public_docs_are_annotation_only() -> None:
         "preferred fully static style is import-free tuple metadata"
         not in combined.lower()
     )
-    assert "python -m python_arch_testing" not in combined
+    assert "python -m pythonarchtesting.cli" in combined
 
 
 def test_public_examples_and_default_reference_fixtures_are_annotation_first() -> None:
@@ -90,12 +90,12 @@ def test_example_project_readme_uses_current_cli_surface() -> None:
     root = _repo_root()
     text = (root / "example" / "project_1" / "README.md").read_text(encoding="utf-8")
 
-    assert "python -m src.cli" in text
+    assert "python -m pythonarchtesting.cli" in text
     assert "--validate-declarations" in text
     assert "--targets-dir" in text
     assert "--format json" in text
     assert "--format markdown" in text
-    assert "python -m python_arch_testing" not in text
+    assert "python -m pythonarchtesting --help" not in text
     assert "Decorator syntax remains supported" not in text
 
 

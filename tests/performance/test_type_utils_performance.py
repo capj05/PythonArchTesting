@@ -5,7 +5,7 @@ Performance tests for type utilities.
 import time
 from typing import Dict, List, Optional
 
-from src.util.type_utils import get_origin_type, get_type_args
+from pythonarchtesting.util.type_utils import get_origin_type, get_type_args
 
 
 def test_type_utils_performance():

@@ -14,7 +14,7 @@ given = hypothesis.given
 st = hypothesis.strategies
 
 try:
-    from src.state import ProjectState, ValidationStatus
+    from pythonarchtesting.state import ProjectState, ValidationStatus
 except ImportError:
     ProjectState = None
     ValidationStatus = None

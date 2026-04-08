@@ -4,9 +4,9 @@ Tests for source module resolution handling.
 
 from pathlib import Path
 
-from src.config.data import create_config_from_dict
-from src.state import ProjectState
-from src.state.source_resolution import resolve_source_module_files
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.state import ProjectState
+from pythonarchtesting.state.source_resolution import resolve_source_module_files
 
 
 def test_resolve_source_module_files_finds_stub_module_from_source_root(

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.core.models import EvalContext
-from src.entities import Entity, build_entity_index
-from src.entities_extraction import extract_entities_from_source
-from src.execution.evaluators.annotation_compatibility import (
+from pythonarchtesting.core.models import EvalContext
+from pythonarchtesting.entities import Entity, build_entity_index
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.execution.evaluators.annotation_compatibility import (
     compare_annotation_text,
     normalize_annotation_text,
 )

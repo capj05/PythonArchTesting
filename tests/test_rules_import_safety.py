@@ -11,13 +11,13 @@ import json
 import sys
 
 before = set(sys.modules)
-import src.rules
+import pythonarchtesting.rules
 after = set(sys.modules)
 
 forbidden = {
-    "src.execution",
-    "src.report",
-    "src.runtime",
+    "pythonarchtesting.execution",
+    "pythonarchtesting.report",
+    "pythonarchtesting.runtime",
     "sqlalchemy",
 }
 loaded = sorted(name for name in (after - before) if name in forbidden)
@@ -34,7 +34,7 @@ print(json.dumps({"loaded": loaded}))
 
 
 def test_rules_public_surface_is_core_only() -> None:
-    rules = importlib.import_module("src.rules")
+    rules = importlib.import_module("pythonarchtesting.rules")
 
     expected = {
         "required_entity_signature",

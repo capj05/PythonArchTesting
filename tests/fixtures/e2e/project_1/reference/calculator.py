@@ -6,7 +6,7 @@ This module demonstrates basic arithmetic operations with proper error handling.
 import numbers
 from typing import Annotated, List, Union
 
-from src.rules import required_entity_signature, required_method
+from pythonarchtesting.rules import required_entity_signature, required_method
 
 # Type annotations for better type checking
 Number = Union[int, float]

@@ -5,8 +5,8 @@ Tests for entity extraction and determinism.
 import textwrap
 from pathlib import Path
 
-from src.entities_extraction import extract_entities_from_source
-from src.state import ProjectState
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.state import ProjectState
 
 
 def test_entity_extraction_deterministic(tmp_path: Path) -> None:

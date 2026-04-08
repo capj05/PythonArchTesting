@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from src.config.data import create_config_from_dict
-from src.config.projects import resolve_projects_config
-from src.runner_multi import run_multi
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.config.projects import resolve_projects_config
+from pythonarchtesting.runner_multi import run_multi
 
 
 def _median_runtime(fn, runs: int = 3) -> float:

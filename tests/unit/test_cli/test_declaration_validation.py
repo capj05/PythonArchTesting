@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-import src.cli as cli
-from src.config.data import create_config_from_dict
-from src.declaration_validation import collect_declaration_diagnostics
-from src.runner_multi.source_prep import prepare_source
+import pythonarchtesting.cli as cli
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.declaration_validation import collect_declaration_diagnostics
+from pythonarchtesting.runner_multi.source_prep import prepare_source
 
 
 def _write_source_file(root: Path, body: str, filename: str = "rules.py") -> Path:
@@ -29,7 +29,7 @@ def test_collect_declaration_diagnostics_covers_warning_and_invalid_cases(tmp_pa
         source_dir,
         """
         from typing import Annotated
-        from src.rules import forbid_imports, required_method
+        from pythonarchtesting.rules import forbid_imports, required_method
 
         __archtest__: Annotated[None, required_method(signature_mode="exact")] = None
 
@@ -90,7 +90,7 @@ def test_cli_validate_declarations_returns_zero_for_warning_only_json(
         source_dir,
         """
         from typing import Annotated
-        from src.rules import required_method
+        from pythonarchtesting.rules import required_method
 
         __archtest__: Annotated[None, required_method(signature_mode="exact")] = None
         """,

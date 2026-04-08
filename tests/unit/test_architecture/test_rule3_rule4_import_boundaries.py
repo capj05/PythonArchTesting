@@ -16,13 +16,15 @@ def _imports_for_file(path: Path) -> list[str]:
 
 
 def test_legacy_runtime_layer_has_been_removed():
-    assert not Path("src/runtime").exists()
+    assert not Path("src/pythonarchtesting/runtime").exists()
 
 
 def test_rule4_reporting_entrypoint_does_not_import_runtime_layer():
-    report_entry = Path("src/report/api.py")
+    report_entry = Path("src/pythonarchtesting/report/api.py")
     imports = _imports_for_file(report_entry)
-    offenders = [name for name in imports if name.startswith("src.runtime")]
+    offenders = [
+        name for name in imports if name.startswith("pythonarchtesting.runtime")
+    ]
     assert (
         not offenders
     ), f"Rule 4 violation: report API imports runtime layer: {offenders}"

@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.config.data import create_config_from_dict
-from src.entities import build_entity_index
-from src.report.api import build_multi_target_report
-from src.report.ir.builder import build_multi_target_report_ir
-from src.report.ir.serialize import to_legacy_schema_v2
-from src.state import ValidationResult, ValidationStatus
-from src.state_multi import RunState, TargetRunState
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.report.api import build_multi_target_report
+from pythonarchtesting.report.ir.builder import build_multi_target_report_ir
+from pythonarchtesting.report.ir.serialize import to_legacy_schema_v2
+from pythonarchtesting.state import ValidationResult, ValidationStatus
+from pythonarchtesting.state_multi import RunState, TargetRunState
 
 
 def _cfg():

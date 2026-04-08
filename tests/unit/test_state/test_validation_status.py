@@ -9,7 +9,7 @@ from enum import Enum
 import pytest
 
 try:
-    from src.state import ValidationStatus
+    from pythonarchtesting.state import ValidationStatus
 except ImportError:
     # Create a mock ValidationStatus for testing
     class ValidationStatus(Enum):

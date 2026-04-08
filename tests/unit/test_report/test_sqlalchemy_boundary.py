@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def test_report_package_does_not_import_sqlalchemy():
-    report_root = Path("src/report")
+    report_root = Path("src/pythonarchtesting/report")
     offenders: list[str] = []
 
     for path in report_root.rglob("*.py"):

@@ -1,6 +1,6 @@
 import pytest
 
-from src.cli import _parse_csv, build_parser
+from pythonarchtesting.cli import _parse_csv, build_parser
 
 
 def test_parse_csv_strips_and_ignores_empty():

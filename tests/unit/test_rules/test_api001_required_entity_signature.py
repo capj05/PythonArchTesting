@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.core.evaluation import evaluate_rules_for_target
-from src.entities import Entity, build_entity_index
-from src.entities_extraction import extract_entities_from_source
-from src.matching import MatchResult, MatchStatus
-from src.rules.compilation import compile_rules
+from pythonarchtesting.core.evaluation import evaluate_rules_for_target
+from pythonarchtesting.entities import Entity, build_entity_index
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.matching import MatchResult, MatchStatus
+from pythonarchtesting.rules.compilation import compile_rules
 
 
 def _extract_entities(source_text: str, *, role: str) -> list[Entity]:
@@ -33,7 +33,7 @@ def _extract_function_entity(source_text: str, *, role: str, name: str) -> Entit
 def test_api001_compile_emits_signature_and_return_rules():
     source = """
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 def normalize(a: int, b: int = 0) -> int:
     __archtest__: Annotated[None, required_entity_signature()]
@@ -57,7 +57,7 @@ def normalize(a: int, b: int = 0) -> int:
 def test_api001_compile_emits_same_rules_from_annotation_declaration():
     source = """
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 def normalize(a: int, b: int = 0) -> int:
     __archtest__: Annotated[
@@ -84,7 +84,7 @@ def normalize(a: int, b: int = 0) -> int:
 def test_api001_compile_emits_same_rules_from_signature_annotation_declaration():
     source = """
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 def normalize(
     value: str,
@@ -109,7 +109,7 @@ def normalize(
 def test_api001_evaluation_passes_for_compatible_target():
     source = """
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 def normalize(a: int, b: int = 0) -> int:
     __archtest__: Annotated[
@@ -154,7 +154,7 @@ def normalize(a: int, b: int = 1) -> int:
 def test_api001_evaluation_fails_for_incompatible_signature():
     source = """
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 def normalize(a: int, b: int) -> int:
     __archtest__: Annotated[
@@ -201,7 +201,7 @@ def normalize(a: int) -> int:
 def test_api001_unmatched_required_entity_fails():
     source = """
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 def normalize(a: int, b: int) -> int:
     __archtest__: Annotated[
@@ -242,7 +242,7 @@ def normalize(a: int, b: int) -> int:
 def test_api001_return_annotation_accepts_optional_union_normalization() -> None:
     source = """
 from typing import Annotated, Optional
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 class Result:
     pass
@@ -293,7 +293,7 @@ def build() -> Result | None:
 def test_api001_return_annotation_accepts_target_subtype() -> None:
     source = """
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 class BaseResult:
     pass
@@ -345,7 +345,7 @@ def build() -> ChildResult:
 def test_api001_return_annotation_rejects_target_supertype() -> None:
     source = """
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 class ChildResult:
     pass
@@ -398,7 +398,7 @@ def build() -> BaseResult:
 def test_api001_parameter_annotation_accepts_target_supertype() -> None:
     source = """
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 class Animal:
     pass
@@ -450,7 +450,7 @@ def handle(pet: Animal) -> None:
 def test_api001_parameter_annotation_rejects_target_subtype() -> None:
     source = """
 from typing import Annotated
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 class Animal:
     pass

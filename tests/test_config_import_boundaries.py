@@ -14,12 +14,12 @@ def test_removed_legacy_modules_not_importable():
     code = """
 import importlib
 for name in (
-    "src.api",
-    "src.cli_lazy",
-    "src.runner_parallel",
-    "src.config.config",
-    "src.config.schema",
-    "src.state.project_state.discovery_bridge",
+    "pythonarchtesting.api",
+    "pythonarchtesting.cli_lazy",
+    "pythonarchtesting.runner_parallel",
+    "pythonarchtesting.config.config",
+    "pythonarchtesting.config.schema",
+    "pythonarchtesting.state.project_state.discovery_bridge",
 ):
     try:
         importlib.import_module(name)
@@ -35,6 +35,6 @@ for name in (
 
 
 def test_public_config_and_cli_imports_work():
-    assert _import_ok("src.config")
-    assert _import_ok("src.config.loader")
-    assert _import_ok("src.cli")
+    assert _import_ok("pythonarchtesting.config")
+    assert _import_ok("pythonarchtesting.config.loader")
+    assert _import_ok("pythonarchtesting.cli")

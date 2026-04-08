@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
-from src.report.renderers.common import core_rows
-from src.report.renderers.json import render_json
-from src.report.renderers.markdown import render_markdown
+from pythonarchtesting.report.renderers.common import core_rows
+from pythonarchtesting.report.renderers.json import render_json
+from pythonarchtesting.report.renderers.markdown import render_markdown
 
 
 def _sample_report() -> dict:

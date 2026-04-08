@@ -13,9 +13,9 @@ def _run_cli_help_module_capture() -> list[str]:
     code = """
 import json
 import sys
-import src.cli
+import pythonarchtesting.cli
 try:
-    src.cli.main(["--help"])
+    pythonarchtesting.cli.main(["--help"])
 except SystemExit:
     pass
 print(json.dumps({"mods": sorted(sys.modules.keys())}))
@@ -34,10 +34,12 @@ print(json.dumps({"mods": sorted(sys.modules.keys())}))
 
 def _cli_importtime_us(stderr_text: str) -> int:
     matches = re.findall(
-        r"import time:\s+\d+\s+\|\s+(\d+)\s+\|\s+src\.cli",
+        r"import time:\s+\d+\s+\|\s+(\d+)\s+\|\s+pythonarchtesting\.cli",
         stderr_text,
     )
-    assert matches, f"Could not find src.cli importtime line in stderr:\n{stderr_text}"
+    assert (
+        matches
+    ), f"Could not find pythonarchtesting.cli importtime line in stderr:\n{stderr_text}"
     return int(matches[-1])
 
 
@@ -45,10 +47,10 @@ def test_cli_help_import_safety():
     """CLI --help must not import optional DB modules."""
     mods = _run_cli_help_module_capture()
     assert not any(m.startswith("sqlalchemy") for m in mods)
-    assert "src.runner_multi" not in mods
-    assert not any(m.startswith("src.runner_multi.") for m in mods)
-    assert "src.state.project_state" not in mods
-    assert not any(m.startswith("src.state.project_state.") for m in mods)
+    assert "pythonarchtesting.runner_multi" not in mods
+    assert not any(m.startswith("pythonarchtesting.runner_multi.") for m in mods)
+    assert "pythonarchtesting.state.project_state" not in mods
+    assert not any(m.startswith("pythonarchtesting.state.project_state.") for m in mods)
 
 
 def test_cli_help_importtime_budget():
@@ -61,7 +63,7 @@ def test_cli_help_importtime_budget():
                 "-X",
                 "importtime",
                 "-c",
-                "import src.cli; src.cli.main(['--help'])",
+                "import pythonarchtesting.cli; pythonarchtesting.cli.main(['--help'])",
             ],
             capture_output=True,
             text=True,

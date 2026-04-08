@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from src.rules import required_entity_signature
+from pythonarchtesting.rules import required_entity_signature
 
 
 def add_numbers(a: int, b: int) -> int:

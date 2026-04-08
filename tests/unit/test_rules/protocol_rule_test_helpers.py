@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.core.evaluation import evaluate_rules_for_target
-from src.entities import Entity, build_entity_index
-from src.entities_extraction import extract_entities_from_source
-from src.matching import MatchResult, MatchStatus
-from src.rules.compilation import compile_rules
+from pythonarchtesting.core.evaluation import evaluate_rules_for_target
+from pythonarchtesting.entities import Entity, build_entity_index
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.matching import MatchResult, MatchStatus
+from pythonarchtesting.rules.compilation import compile_rules
 
 
 def extract_entities(source_text: str, *, role: str) -> list[Entity]:

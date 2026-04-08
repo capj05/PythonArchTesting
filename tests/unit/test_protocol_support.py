@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import src.protocol_support as protocol_support
-from src import protocols
+import pythonarchtesting.protocol_support as protocol_support
+from pythonarchtesting import protocols
 
 
 def test_protocol_support_reexports_protocol_public_api() -> None:

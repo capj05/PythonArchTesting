@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from src.config.projects import resolve_projects_config
-from src.exceptions import ConfigurationError
+from pythonarchtesting.config.projects import resolve_projects_config
+from pythonarchtesting.exceptions import ConfigurationError
 
 
 class StubConfig:

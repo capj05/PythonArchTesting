@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from src.config.data import create_config_from_dict
-from src.entities_extraction.paths import (
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.entities_extraction.paths import (
     module_path_from_file,
     root_path_from_module_path,
 )
-from src.util.discovery_utils import discover_python_files
+from pythonarchtesting.util.discovery_utils import discover_python_files
 
 
 def test_module_path_from_file_maps_stub_package_init_to_package(

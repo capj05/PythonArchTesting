@@ -5,9 +5,9 @@ Tests for deterministic matching.
 import textwrap
 from pathlib import Path
 
-from src.entities import build_entity_index
-from src.entities_extraction import extract_entities_from_source
-from src.matching import MatchingConfig, MatchStatus, run_matching
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.matching import MatchingConfig, MatchStatus, run_matching
 
 
 def test_matching_determinism() -> None:

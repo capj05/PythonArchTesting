@@ -8,19 +8,20 @@ from typing import Dict, List
 
 # Forbidden import patterns for each target module
 FORBIDDEN_IMPORTS: Dict[str, List[str]] = {
-    "src.util.type_utils": [
-        "src.execution",
-        "src.report",
-        "src.rules",  # Util modules should not pull in declaration or execution layers
+    "pythonarchtesting.util.type_utils": [
+        "pythonarchtesting.execution",
+        "pythonarchtesting.report",
+        # Util modules should not pull in declaration or execution layers.
+        "pythonarchtesting.rules",
     ],
-    "src.report.dispatcher": [
-        "src.report.formats",
-        "src.report.generators",
+    "pythonarchtesting.report.dispatcher": [
+        "pythonarchtesting.report.formats",
+        "pythonarchtesting.report.generators",
     ],
-    "src.cli": [
-        "src.execution",
-        "src.runner_multi",
-        "src.state.project_state",
+    "pythonarchtesting.cli": [
+        "pythonarchtesting.execution",
+        "pythonarchtesting.runner_multi",
+        "pythonarchtesting.state.project_state",
     ],
 }
 

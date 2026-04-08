@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-import src.report.api as report_api
-from src.config.data import create_config_from_dict
-from src.entities import build_entity_index
-from src.exceptions import ReportGenerationError
-from src.matching import MatchResult, MatchStatus
-from src.report.api import build_multi_target_report
-from src.state import ValidationResult, ValidationStatus
-from src.state_multi import RunState, TargetRunState
+import pythonarchtesting.report.api as report_api
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.exceptions import ReportGenerationError
+from pythonarchtesting.matching import MatchResult, MatchStatus
+from pythonarchtesting.report.api import build_multi_target_report
+from pythonarchtesting.state import ValidationResult, ValidationStatus
+from pythonarchtesting.state_multi import RunState, TargetRunState
 
 
 def _cfg(report: dict | None = None):

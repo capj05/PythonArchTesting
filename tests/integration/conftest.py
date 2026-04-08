@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.state import ProjectState
+from pythonarchtesting.state import ProjectState
 
 
 @pytest.fixture

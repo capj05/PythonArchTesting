@@ -7,7 +7,7 @@ def test_pro002_evaluation_passes_for_unannotated_return_direct_constructor() ->
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:
@@ -45,7 +45,7 @@ def test_pro002_evaluation_passes_for_unannotated_return_assigned_constructor() 
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:
@@ -86,7 +86,7 @@ def test_pro002_evaluation_passes_for_unannotated_parameter_default_constructor(
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -126,7 +126,7 @@ def test_pro002_evaluation_fails_for_unannotated_return_conflicting_local_classe
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:
@@ -174,7 +174,7 @@ def test_pro002_evaluation_passes_for_return_same_module_helper_direct_construct
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:
@@ -219,7 +219,7 @@ def test_pro002_evaluation_passes_for_return_same_module_helper_assigned_constru
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:
@@ -265,7 +265,7 @@ def test_pro002_evaluation_fails_for_return_same_module_helper_conflicting_class
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:
@@ -314,7 +314,7 @@ def test_pro002_fails_for_return_same_module_helper_nested_helper_call() -> None
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:
@@ -356,7 +356,7 @@ def test_pro002_evaluation_fails_for_unannotated_return_helper_attribute_call() 
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:
@@ -400,7 +400,7 @@ def test_pro002_evaluation_fails_for_unannotated_return_same_module_helper_cycle
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:

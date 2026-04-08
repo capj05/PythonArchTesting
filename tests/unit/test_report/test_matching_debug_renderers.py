@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from src.report.renderers.markdown import render_markdown
-from src.report.renderers.markdown_multi import render_markdown_bundle
-from src.report.renderers.matching_debug import (
+from pythonarchtesting.report.renderers.markdown import render_markdown
+from pythonarchtesting.report.renderers.markdown_multi import render_markdown_bundle
+from pythonarchtesting.report.renderers.matching_debug import (
     build_matching_debug_blocks_for_target,
     collect_metric_columns,
     compute_metric_normalization,

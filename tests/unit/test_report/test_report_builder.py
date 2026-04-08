@@ -1,17 +1,17 @@
 import pytest
 
-import src.report.api as report_api
-from src.config.data import create_config_from_dict
-from src.core.models import RuleResult
-from src.entities import Entity, SignatureInfo
-from src.exceptions import ReportGenerationError
-from src.matching import Candidate, MatchResult, MatchStatus
-from src.report.api import (
+import pythonarchtesting.report.api as report_api
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.core.models import RuleResult
+from pythonarchtesting.entities import Entity, SignatureInfo
+from pythonarchtesting.exceptions import ReportGenerationError
+from pythonarchtesting.matching import Candidate, MatchResult, MatchStatus
+from pythonarchtesting.report.api import (
     build_report,
     compute_aggregate_exit_code,
     compute_exit_code,
 )
-from src.state import ProjectState, ValidationResult, ValidationStatus
+from pythonarchtesting.state import ProjectState, ValidationResult, ValidationStatus
 
 
 def _fresh_state(tmp_path) -> ProjectState:

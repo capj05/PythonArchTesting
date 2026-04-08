@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-import src.cli as cli_module
-from src.cli import main
+import pythonarchtesting.cli as cli_module
+from pythonarchtesting.cli import main
 
 
 def _smoke_paths() -> tuple[Path, Path, Path]:

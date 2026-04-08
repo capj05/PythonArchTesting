@@ -13,8 +13,8 @@ from types import SimpleNamespace
 import pytest
 
 # Import the modules to be tested
-from src.constants import ValidationConstants
-from src.state import ProjectState
+from pythonarchtesting.constants import ValidationConstants
+from pythonarchtesting.state import ProjectState
 
 
 @pytest.fixture

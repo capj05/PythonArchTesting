@@ -5,11 +5,11 @@ Tests for passive rule marker behavior.
 import importlib
 from typing import Annotated, get_args, get_origin
 
-from src.rules.declaration.utils import RuleSeverity, get_rule_specs
+from pythonarchtesting.rules.declaration.utils import RuleSeverity, get_rule_specs
 
 
 def _rules_api():
-    from src import rules
+    from pythonarchtesting import rules
 
     return rules
 
@@ -70,8 +70,8 @@ def test_rule_markers_convert_to_rule_specs() -> None:
 
 
 def test_rule_spec_helpers_remain_compatibility_only_imports() -> None:
-    rules = importlib.import_module("src.rules")
-    utils = importlib.import_module("src.rules.declaration.utils")
+    rules = importlib.import_module("pythonarchtesting.rules")
+    utils = importlib.import_module("pythonarchtesting.rules.declaration.utils")
 
     assert not hasattr(rules, "RuleSpec")
     assert hasattr(utils, "RuleSpec")

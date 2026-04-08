@@ -7,7 +7,7 @@ import numbers
 import statistics
 from typing import Annotated, Any, Dict, List, Optional, Union
 
-from src.rules import forbid_imports
+from pythonarchtesting.rules import forbid_imports
 
 # Type annotations
 NumericData = Union[int, float]

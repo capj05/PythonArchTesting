@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from unittest.mock import patch
 
-from src.protocols.type_expr import (
+from pythonarchtesting.protocols.type_expr import (
     annotated_base_and_metadata,
     annotated_details,
     classvar_inner_annotation,

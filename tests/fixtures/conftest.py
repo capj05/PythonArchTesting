@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 try:
-    from src.state import ProjectState, ValidationStatus
+    from pythonarchtesting.state import ProjectState, ValidationStatus
 except ImportError:
     # These imports may fail if the modules don't exist yet
     ProjectState = None

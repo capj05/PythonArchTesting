@@ -8,9 +8,9 @@ from typing import List
 
 import pytest
 
-from src.report.api import build_report
-from src.report.json_generator import JSONReportGenerator
-from src.state import ProjectState, ValidationResult, ValidationStatus
+from pythonarchtesting.report.api import build_report
+from pythonarchtesting.report.json_generator import JSONReportGenerator
+from pythonarchtesting.state import ProjectState, ValidationResult, ValidationStatus
 
 
 @pytest.fixture

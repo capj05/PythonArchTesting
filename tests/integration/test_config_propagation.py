@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.config.data import create_config_from_dict
-from src.entities import build_entity_index
-from src.infrastructure.logging import configure_logging
-from src.matching import MatchingConfig
-from src.report.api import build_multi_target_report
-from src.state_multi import RunState, TargetRunState
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.infrastructure.logging import configure_logging
+from pythonarchtesting.matching import MatchingConfig
+from pythonarchtesting.report.api import build_multi_target_report
+from pythonarchtesting.state_multi import RunState, TargetRunState
 
 
 def _config():

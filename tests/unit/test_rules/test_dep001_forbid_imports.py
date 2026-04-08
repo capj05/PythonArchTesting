@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.core.evaluation import evaluate_rules_for_target
-from src.entities import Entity, build_entity_index
-from src.entities_extraction import extract_entities_from_source
-from src.matching import MatchResult, MatchStatus
-from src.rules.compilation import compile_rules
+from pythonarchtesting.core.evaluation import evaluate_rules_for_target
+from pythonarchtesting.entities import Entity, build_entity_index
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.matching import MatchResult, MatchStatus
+from pythonarchtesting.rules.compilation import compile_rules
 
 
 def _extract_entity(
@@ -36,7 +36,7 @@ def _extract_entity(
 def test_dep001_compile_emits_forbid_imports_rule():
     source = """
 from typing import Annotated
-from src.rules import forbid_imports
+from pythonarchtesting.rules import forbid_imports
 
 def _architecture_rules_marker() -> None:
     __archtest__: Annotated[
@@ -67,7 +67,7 @@ def _architecture_rules_marker() -> None:
 def test_dep001_compile_emits_forbid_imports_rule_from_annotation():
     source = """
 from typing import Annotated
-from src.rules import forbid_imports
+from pythonarchtesting.rules import forbid_imports
 
 def _architecture_rules_marker() -> None:
     __archtest__: Annotated[
@@ -98,7 +98,7 @@ def _architecture_rules_marker() -> None:
 def test_dep001_package_scope_detects_forbidden_imports_with_relative_resolution():
     source = """
 from typing import Annotated
-from src.rules import forbid_imports
+from pythonarchtesting.rules import forbid_imports
 
 def _architecture_rules_marker() -> None:
     __archtest__: Annotated[
@@ -190,7 +190,7 @@ def use_relative() -> int:
 def test_dep001_entity_scope_checks_only_matched_entity_module():
     source = """
 from typing import Annotated
-from src.rules import forbid_imports
+from pythonarchtesting.rules import forbid_imports
 
 def _architecture_rules_marker() -> None:
     __archtest__: Annotated[None, forbid_imports("requests", scope="entity")]

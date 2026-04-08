@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from src.exceptions import ReportGenerationError
-from src.report.api import generate_validation_report
-from src.report.dispatcher import create_reporter
-from src.report.markdown_generator import MarkdownReportGenerator
+from pythonarchtesting.exceptions import ReportGenerationError
+from pythonarchtesting.report.api import generate_validation_report
+from pythonarchtesting.report.dispatcher import create_reporter
+from pythonarchtesting.report.markdown_generator import MarkdownReportGenerator
 
 
 def _sample_report() -> dict:

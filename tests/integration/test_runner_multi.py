@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import src.runner_multi as runner_multi_module
-from src.config.data import create_config_from_dict
-from src.config.projects import resolve_projects_config
-from src.report.api import build_multi_target_report
-from src.runner_multi import run_multi
-from src.state.project_state import ProjectState
+import pythonarchtesting.runner_multi as runner_multi_module
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.config.projects import resolve_projects_config
+from pythonarchtesting.report.api import build_multi_target_report
+from pythonarchtesting.runner_multi import run_multi
+from pythonarchtesting.state.project_state import ProjectState
 
 
 def _smoke_paths() -> tuple[Path, Path, Path]:

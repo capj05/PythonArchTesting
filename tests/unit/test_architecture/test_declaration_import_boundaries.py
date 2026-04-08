@@ -16,13 +16,13 @@ def _imports_for_file(path: Path) -> list[str]:
 
 
 def test_declaration_layer_does_not_import_execution_runtime_or_reporting():
-    declaration_root = Path("src/rules/declaration")
+    declaration_root = Path("src/pythonarchtesting/rules/declaration")
     forbidden_prefixes = (
-        "src.execution",
-        "src.report",
-        "src.state",
-        "src.matching",
-        "src.discovery",
+        "pythonarchtesting.execution",
+        "pythonarchtesting.report",
+        "pythonarchtesting.state",
+        "pythonarchtesting.matching",
+        "pythonarchtesting.discovery",
     )
 
     offenders: list[str] = []

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import src.report.lazy as lazy
+import pythonarchtesting.report.lazy as lazy
 
 
 def test_generate_validation_report_forwards_config(monkeypatch):

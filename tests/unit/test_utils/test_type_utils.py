@@ -6,7 +6,7 @@ This module contains unit tests for type-related utilities.
 
 from typing import List
 
-from src.util.type_utils import (
+from pythonarchtesting.util.type_utils import (
     get_origin_type,
     get_type_args,
     get_type_name,

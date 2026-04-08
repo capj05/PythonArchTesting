@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.config.data import create_config_from_dict
-from src.state import ProjectState
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.state import ProjectState
 
 
 @pytest.fixture(autouse=True)

@@ -1,5 +1,5 @@
-from src.report.api import build_report
-from src.state import ProjectState, ValidationResult, ValidationStatus
+from pythonarchtesting.report.api import build_report
+from pythonarchtesting.state import ProjectState, ValidationResult, ValidationStatus
 
 
 def test_evidence_sorting_none_last():

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.entities import Entity
-from src.entities_extraction import extract_entities_from_source
-from src.protocols.signature_inference import infer_signature_target_reference
+from pythonarchtesting.entities import Entity
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.protocols.signature_inference import (
+    infer_signature_target_reference,
+)
 
 
 def _extract_entities(source_text: str) -> list[Entity]:

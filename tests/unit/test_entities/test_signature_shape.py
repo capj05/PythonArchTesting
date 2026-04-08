@@ -4,8 +4,8 @@ Tests for signature normalization.
 
 import ast
 
-from src.entities import signature_key_from_info
-from src.entities_extraction import signature_info_from_ast
+from pythonarchtesting.entities import signature_key_from_info
+from pythonarchtesting.entities_extraction import signature_info_from_ast
 
 
 def test_signature_info_from_ast() -> None:

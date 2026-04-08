@@ -6,15 +6,15 @@ import pytest
 @pytest.mark.parametrize(
     "module_name",
     [
-        "src.config.config_backup",
-        "src.config.config",
-        "src.api",
-        "src.cli_lazy",
-        "src.runner_parallel",
-        "src.rules_original",
-        "src.pat_rules",
-        "src.config.schema",
-        "src.state.project_state.discovery_bridge",
+        "pythonarchtesting.config.config_backup",
+        "pythonarchtesting.config.config",
+        "pythonarchtesting.api",
+        "pythonarchtesting.cli_lazy",
+        "pythonarchtesting.runner_parallel",
+        "pythonarchtesting.rules_original",
+        "pythonarchtesting.pat_rules",
+        "pythonarchtesting.config.schema",
+        "pythonarchtesting.state.project_state.discovery_bridge",
     ],
 )
 def test_removed_legacy_modules_are_not_importable(module_name: str):

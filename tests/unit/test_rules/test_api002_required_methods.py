@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.core.evaluation import evaluate_rules_for_target
-from src.entities import Entity, build_entity_index
-from src.entities_extraction import extract_entities_from_source
-from src.matching import MatchResult, MatchStatus
-from src.rules.compilation import compile_rules
+from pythonarchtesting.core.evaluation import evaluate_rules_for_target
+from pythonarchtesting.entities import Entity, build_entity_index
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.matching import MatchResult, MatchStatus
+from pythonarchtesting.rules.compilation import compile_rules
 
 
 def _extract_entity(
@@ -35,7 +35,7 @@ def _extract_entity(
 def test_api002_compile_emits_required_method_rule():
     source = """
 from typing import Annotated
-from src.rules import required_method
+from pythonarchtesting.rules import required_method
 
 class Processor:
     def run(self, data: int) -> int:
@@ -56,7 +56,7 @@ class Processor:
 def test_api002_compile_emits_required_method_rule_from_annotation() -> None:
     source = """
 from typing import Annotated
-from src.rules import required_method
+from pythonarchtesting.rules import required_method
 
 class Processor:
     def run(self, data: int) -> int:
@@ -77,7 +77,7 @@ class Processor:
 def test_api002_evaluation_passes_for_compatible_method():
     source = """
 from typing import Annotated
-from src.rules import required_method
+from pythonarchtesting.rules import required_method
 
 class Processor:
     @classmethod
@@ -130,7 +130,7 @@ class Processor:
 def test_api002_evaluation_fails_for_method_kind_mismatch():
     source = """
 from typing import Annotated
-from src.rules import required_method
+from pythonarchtesting.rules import required_method
 
 class Processor:
     @classmethod
@@ -180,7 +180,7 @@ class Processor:
 def test_api002_unmatched_required_method_fails():
     source = """
 from typing import Annotated
-from src.rules import required_method
+from pythonarchtesting.rules import required_method
 
 class Processor:
     def run(self, data: int) -> int:
@@ -219,7 +219,7 @@ class Processor:
 def test_api002_compile_non_method_emits_compiler_evidence():
     source = """
 from typing import Annotated
-from src.rules import required_method
+from pythonarchtesting.rules import required_method
 
 def run(data: int) -> int:
     __archtest__: Annotated[None, required_method()]

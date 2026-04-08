@@ -7,7 +7,7 @@ def test_pro001_evaluation_passes_for_property_protocol_member() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     @property
@@ -43,7 +43,7 @@ def test_pro001_evaluation_passes_for_annotated_attribute_protocol_member() -> N
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     name: str
@@ -74,7 +74,7 @@ def test_pro001_evaluation_passes_for_constant_protocol_member() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     DEFAULT_LIMIT = 100
@@ -105,7 +105,7 @@ def test_pro001_evaluation_fails_for_missing_attribute_protocol_member() -> None
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     name: str
@@ -137,7 +137,7 @@ def test_pro001_evaluation_fails_for_attribute_annotation_mismatch() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     name: str
@@ -174,7 +174,7 @@ def test_pro001_evaluation_fails_for_missing_attribute_annotation() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     name: str
@@ -211,7 +211,7 @@ def test_pro001_evaluation_does_not_treat_method_as_attribute_match() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     name: str
@@ -246,7 +246,7 @@ def test_pro001_evaluation_rejects_read_only_property_for_writable_attribute_pro
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     name: str
@@ -286,7 +286,7 @@ class SqlRepository:
 def test_pro001_evaluation_accepts_covariant_read_only_property_protocol() -> None:
     source = """
 from typing import Annotated, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class BaseName:
     pass
@@ -334,7 +334,7 @@ def test_pro001_evaluation_accepts_plain_attribute_for_read_only_property_protoc
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     @property
@@ -369,7 +369,7 @@ def test_pro001_evaluation_rejects_read_only_property_for_writable_property_prot
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     @property
@@ -418,7 +418,7 @@ def test_pro001_evaluation_accepts_writable_property_protocol_through_inherited_
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     @property
@@ -464,7 +464,7 @@ class SqlRepository(BaseSqlRepository):
 def test_pro001_evaluation_accepts_normalized_attribute_annotation() -> None:
     source = """
 from typing import Annotated, Optional, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Name:
     pass
@@ -501,7 +501,7 @@ def test_pro001_evaluation_accepts_plain_attribute_for_deferred_classvar_protoco
 ):
     source = """
 from typing import Annotated, ClassVar, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     flag: ClassVar[bool]
@@ -532,7 +532,7 @@ def test_pro001_evaluation_accepts_classvar_attribute_for_deferred_classvar_prot
 ):
     source = """
 from typing import Annotated, ClassVar, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     flag: ClassVar[bool]
@@ -565,7 +565,7 @@ def test_pro001_evaluation_rejects_mismatched_inner_type_for_deferred_classvar_p
 ):
     source = """
 from typing import Annotated, ClassVar, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     flag: ClassVar[bool]

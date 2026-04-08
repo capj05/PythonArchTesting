@@ -26,10 +26,10 @@ def test_load_rollout_targets_ignores_comments_blanks_and_duplicates(
             [
                 "",
                 "   # comment",
-                "src/constants",
-                "src/constants",
+                "src/pythonarchtesting/constants",
+                "src/pythonarchtesting/constants",
                 "   ",
-                "src/exceptions.py",
+                "src/pythonarchtesting/exceptions.py",
             ]
         ),
         encoding="utf-8",
@@ -37,12 +37,16 @@ def test_load_rollout_targets_ignores_comments_blanks_and_duplicates(
 
     targets = module.load_rollout_targets(manifest)
 
-    assert targets == ["src/constants", "src/exceptions.py"]
+    assert targets == [
+        "src/pythonarchtesting/constants",
+        "src/pythonarchtesting/exceptions.py",
+    ]
 
 
 def test_main_rejects_empty_manifest(tmp_path: Path, monkeypatch, capsys):
     module = _load_module()
     (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "pythonarchtesting").mkdir()
     manifest = tmp_path / "targets.txt"
     manifest.write_text("# comment only\n\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
@@ -58,12 +62,13 @@ def test_main_rejects_target_outside_src(tmp_path: Path, monkeypatch, capsys):
     module = _load_module()
     src_dir = tmp_path / "src"
     src_dir.mkdir()
-    (src_dir / "constants").mkdir()
+    (src_dir / "pythonarchtesting").mkdir()
+    (src_dir / "pythonarchtesting" / "constants").mkdir()
     outside_target = tmp_path / "outside.py"
     outside_target.write_text("", encoding="utf-8")
     manifest = tmp_path / "targets.txt"
     manifest.write_text(
-        "\n".join(["src/constants", "outside.py"]),
+        "\n".join(["src/pythonarchtesting/constants", "outside.py"]),
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -81,19 +86,21 @@ def test_main_invokes_mypy_in_manifest_order_and_returns_subprocess_code(
     module = _load_module()
     src_dir = tmp_path / "src"
     src_dir.mkdir()
-    (src_dir / "constants").mkdir()
-    (src_dir / "__init__.py").write_text("", encoding="utf-8")
-    (src_dir / "exceptions.py").write_text("", encoding="utf-8")
-    (src_dir / "state_multi.py").write_text("", encoding="utf-8")
+    package_dir = src_dir / "pythonarchtesting"
+    package_dir.mkdir()
+    (package_dir / "constants").mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "exceptions.py").write_text("", encoding="utf-8")
+    (package_dir / "state_multi.py").write_text("", encoding="utf-8")
     manifest = tmp_path / "targets.txt"
     manifest.write_text(
         "\n".join(
             [
-                "src/constants",
-                "src/__init__.py",
-                "src/exceptions.py",
-                "src/state_multi.py",
-                "src/constants",
+                "src/pythonarchtesting/constants",
+                "src/pythonarchtesting/__init__.py",
+                "src/pythonarchtesting/exceptions.py",
+                "src/pythonarchtesting/state_multi.py",
+                "src/pythonarchtesting/constants",
             ]
         ),
         encoding="utf-8",
@@ -114,10 +121,10 @@ def test_main_invokes_mypy_in_manifest_order_and_returns_subprocess_code(
     command = recorded["command"]
     assert command[0:3] == [sys.executable, "-m", "mypy"]
     assert command[3:7] == [
-        "src/constants",
-        "src/__init__.py",
-        "src/exceptions.py",
-        "src/state_multi.py",
+        "src/pythonarchtesting/constants",
+        "src/pythonarchtesting/__init__.py",
+        "src/pythonarchtesting/exceptions.py",
+        "src/pythonarchtesting/state_multi.py",
     ]
     assert command[-4:] == [
         "--ignore-missing-imports",

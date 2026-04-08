@@ -334,7 +334,7 @@ def assert_config_valid(config: Dict[str, Any]) -> None:
     Raises:
         AssertionError: If the configuration is invalid
     """
-    from src.config import validate_configuration
+    from pythonarchtesting.config import validate_configuration
 
     result = validate_configuration(config)
     if not result.is_valid:

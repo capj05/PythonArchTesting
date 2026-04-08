@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.entities import Entity
-from src.entities_extraction import extract_entities_from_source
-from src.protocols.reference_resolution import (
+from pythonarchtesting.entities import Entity
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.protocols.reference_resolution import (
     module_entity_for,
     normalize_reference,
     resolve_reference,

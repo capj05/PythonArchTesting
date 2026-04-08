@@ -4,10 +4,14 @@ Tests for configuration validation functionality.
 
 import pytest
 
-from src.config import load_config, validate_configuration, validate_value
-from src.config.schema_rules import ValidationRule, ValueType
-from src.config.validator import get_schema_info
-from src.exceptions import ConfigurationError
+from pythonarchtesting.config import (
+    load_config,
+    validate_configuration,
+    validate_value,
+)
+from pythonarchtesting.config.schema_rules import ValidationRule, ValueType
+from pythonarchtesting.config.validator import get_schema_info
+from pythonarchtesting.exceptions import ConfigurationError
 
 
 def test_valid_config_structure(sample_config):

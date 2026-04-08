@@ -1,7 +1,7 @@
 import ast
 import textwrap
 
-from src.evidence.static_ast import collect_import_graph
+from pythonarchtesting.evidence.static_ast import collect_import_graph
 
 
 def test_collect_import_graph_relative_and_asname():

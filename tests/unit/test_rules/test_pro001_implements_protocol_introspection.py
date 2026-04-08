@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.protocols.introspection import (
+from pythonarchtesting.protocols.introspection import (
     is_protocol_entity,
     protocol_attributes,
     protocol_methods,
@@ -162,7 +162,7 @@ def test_pro001_protocol_collector_treats_property_as_attribute() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     @property
@@ -200,7 +200,7 @@ def test_pro001_protocol_collector_deduplicates_attributes_and_ignores_archtest(
 from typing import Annotated
 from typing import ClassVar
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     name = "fallback"

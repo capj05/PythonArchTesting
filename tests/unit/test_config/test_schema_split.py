@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from src.config.schema_data import CONFIGURATION_SCHEMA as CONFIGURATION_SCHEMA_DATA
-from src.config.schema_rules import ValidationRule as ValidationRuleRules
-from src.config.schema_rules import ValueType as ValueTypeRules
+from pythonarchtesting.config.schema_data import (
+    CONFIGURATION_SCHEMA as CONFIGURATION_SCHEMA_DATA,
+)
+from pythonarchtesting.config.schema_rules import ValidationRule as ValidationRuleRules
+from pythonarchtesting.config.schema_rules import ValueType as ValueTypeRules
 
 CONFIGURATION_SCHEMA = CONFIGURATION_SCHEMA_DATA
 ValidationRule = ValidationRuleRules

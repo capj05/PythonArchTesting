@@ -12,11 +12,14 @@ from typing import Any, Dict
 import psutil
 import pytest
 
-from src.config.data import create_config_from_dict
-from src.evidence.collection import collect_static_evidence, parse_python_modules
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.evidence.collection import (
+    collect_static_evidence,
+    parse_python_modules,
+)
 
 try:
-    from src.state import ProjectState
+    from pythonarchtesting.state import ProjectState
 except ImportError:
     ProjectState = None
 

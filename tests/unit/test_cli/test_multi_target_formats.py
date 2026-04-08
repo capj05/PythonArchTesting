@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import src.cli as cli
+import pythonarchtesting.cli as cli
 
 
 def _stub_config():

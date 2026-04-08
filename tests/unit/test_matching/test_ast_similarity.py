@@ -5,8 +5,8 @@ Tests for AST fingerprint similarity.
 import textwrap
 from pathlib import Path
 
-from src.entities_extraction import extract_entities_from_source
-from src.matching import ast_similarity
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.matching import ast_similarity
 
 
 def _entity_from_source(source: str, name: str) -> object:

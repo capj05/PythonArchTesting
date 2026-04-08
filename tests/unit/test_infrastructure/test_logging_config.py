@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 
-from src.config.data import create_config_from_dict
-from src.infrastructure.logging import configure_logging, get_logger
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.infrastructure.logging import configure_logging, get_logger
 
 
 def _flush_handlers() -> None:
@@ -18,7 +18,7 @@ def test_module_logger_writes_to_configured_file(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
     configure_logging(cfg, force=True)
-    logger = get_logger("src.runner_multi")
+    logger = get_logger("pythonarchtesting.runner_multi")
     logger.info("module log line")
     _flush_handlers()
 
@@ -33,7 +33,7 @@ def test_logging_file_disabled_does_not_create_log_file(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
     configure_logging(cfg, force=True)
-    logger = get_logger("src.runner_multi")
+    logger = get_logger("pythonarchtesting.runner_multi")
     logger.info("should not be persisted")
     _flush_handlers()
 
@@ -51,7 +51,7 @@ def test_force_reconfiguration_switches_log_file(monkeypatch, tmp_path):
     )
 
     configure_logging(cfg1, force=True)
-    logger = get_logger("src.runner_multi")
+    logger = get_logger("pythonarchtesting.runner_multi")
     logger.info("first file")
     _flush_handlers()
 

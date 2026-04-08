@@ -3,9 +3,9 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-from src.config.data import create_config_from_dict
-from src.matching import MatchStatus
-from src.state import ProjectState
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.matching import MatchStatus
+from pythonarchtesting.state import ProjectState
 
 
 def _write_file(path: Path, content: str) -> None:

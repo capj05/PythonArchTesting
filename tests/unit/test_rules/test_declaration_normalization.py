@@ -4,9 +4,9 @@ import textwrap
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.entities_extraction import extract_entities_from_source
-from src.rules.compilation import compile_rules
-from src.rules.compilation.declarations import (
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.rules.compilation import compile_rules
+from pythonarchtesting.rules.compilation.declarations import (
     declaration_rule_id_suffixes,
     normalize_declaration_entries,
 )
@@ -26,7 +26,7 @@ def _extract_entities(source: str):
 def test_normalize_annotation_only_entries() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature, required_method
+        from pythonarchtesting.rules import required_entity_signature, required_method
 
         def run(value: int) -> int:
             __archtest__: Annotated[
@@ -52,7 +52,7 @@ def test_normalize_annotation_only_entries() -> None:
 def test_normalize_same_annotation_keeps_one_entry() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature
+        from pythonarchtesting.rules import required_entity_signature
 
         def run(value: int) -> int:
             __archtest__: Annotated[None, required_entity_signature(mode="exact")]
@@ -71,7 +71,7 @@ def test_normalize_same_annotation_keeps_one_entry() -> None:
 def test_normalize_same_kind_annotations_keep_stable_order_and_suffixes() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature
+        from pythonarchtesting.rules import required_entity_signature
 
         def run(value: int) -> int:
             __archtest__: Annotated[None, required_entity_signature(mode="compatible")]
@@ -106,7 +106,7 @@ def test_invalid_annotation_declarations_emit_compiler_evidence_without_rules() 
 def test_required_signature_annotation_declaration_compiles_supported_rules() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature
+        from pythonarchtesting.rules import required_entity_signature
 
         def run(value: int) -> int:
             __archtest__: Annotated[
@@ -130,7 +130,7 @@ def test_required_signature_annotation_declaration_compiles_supported_rules() ->
 def test_multiple_same_kind_annotation_declarations_get_unique_rule_ids() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature
+        from pythonarchtesting.rules import required_entity_signature
 
         def run(value: int) -> int:
             __archtest__: Annotated[
@@ -160,7 +160,7 @@ def test_multiple_same_kind_annotation_declarations_get_unique_rule_ids() -> Non
 def test_normalize_same_signature_annotation_keeps_one_entry() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature
+        from pythonarchtesting.rules import required_entity_signature
 
         def run(
             value: Annotated[int, required_entity_signature(mode="exact")],
@@ -185,7 +185,7 @@ def test_normalize_same_signature_annotation_keeps_one_entry() -> None:
 def test_literal_and_marker_metadata_normalize_to_same_entry() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature
+        from pythonarchtesting.rules import required_entity_signature
 
         def run(value: int) -> int:
             __archtest__: Annotated[
@@ -255,7 +255,7 @@ def test_signature_required_signature_annotation_declaration_compiles_supported_
 ):
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature
+        from pythonarchtesting.rules import required_entity_signature
 
         def run(
             value: Annotated[
@@ -300,7 +300,7 @@ def test_removed_type_check_signature_rule_kind_emits_invalid_declaration_eviden
 def test_signature_disallowed_rule_kind_emits_invalid_declaration_evidence() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import forbid_imports
+        from pythonarchtesting.rules import forbid_imports
 
         def run(
             value: Annotated[int, forbid_imports("requests", scope="entity")],
@@ -319,7 +319,7 @@ def test_signature_disallowed_rule_kind_emits_invalid_declaration_evidence() -> 
 def test_protocol_signature_rule_kind_compiles_protocol_signature_rule() -> None:
     entities = _extract_entities("""
         from typing import Annotated, Protocol
-        from src.rules import implements_protocol
+        from pythonarchtesting.rules import implements_protocol
 
         class Repository(Protocol):
             def get(self, item_id: str) -> str:
@@ -342,7 +342,7 @@ def test_protocol_signature_rule_kind_compiles_protocol_signature_rule() -> None
 def test_protocol_signature_symbol_reference_missing_emits_compiler_evidence() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import implements_protocol
+        from pythonarchtesting.rules import implements_protocol
 
         def run(
             value: Annotated[int, implements_protocol(Repository)],
@@ -360,7 +360,7 @@ def test_protocol_signature_symbol_reference_missing_emits_compiler_evidence() -
 def test_compile_rules_surface_matches_supported_canonical_import() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_method
+        from pythonarchtesting.rules import required_method
 
         def run(value: int) -> int:
             __archtest__: Annotated[None, required_method(signature_mode="exact")]
@@ -385,7 +385,7 @@ def test_flow_declarations_are_preserved_without_deduping_and_enforce_flow_compi
 ):
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import enforce_flow, flow
+        from pythonarchtesting.rules import enforce_flow, flow
 
         def run(value: str) -> str:
             current = value
@@ -409,7 +409,7 @@ def test_flow_declarations_are_preserved_without_deduping_and_enforce_flow_compi
 def test_enforce_flow_without_explicit_variable_emits_ambiguity_evidence() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import enforce_flow, flow
+        from pythonarchtesting.rules import enforce_flow, flow
 
         def run(value: str) -> str:
             first = value

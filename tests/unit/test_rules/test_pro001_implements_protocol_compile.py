@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import Mock
 
-from src.rules.compilation import compile_rules
+from pythonarchtesting.rules.compilation import compile_rules
 from tests.unit.test_rules.protocol_rule_test_helpers import extract_entities
 
 
@@ -10,7 +10,7 @@ def test_pro001_compile_emits_protocol_rule() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -56,7 +56,7 @@ class SqlRepository:
 def test_pro001_compile_non_class_emits_invalid_target_evidence() -> None:
     source = """
 from typing import Annotated
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 def build() -> None:
     __archtest__: Annotated[None, implements_protocol("source_module.Repository")]
@@ -93,7 +93,7 @@ class SqlRepository:
 def test_pro001_compile_non_protocol_reference_emits_compiler_evidence() -> None:
     source = """
 from typing import Annotated
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository:
     def get(self, item_id: str) -> str:
@@ -118,7 +118,7 @@ def test_pro001_compile_accepts_wrapped_protocol_reference() -> None:
 from typing import Annotated
 from typing import Optional
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -142,7 +142,7 @@ def test_pro001_compile_accepts_single_class_container_protocol_reference() -> N
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -166,7 +166,7 @@ def test_pro001_compile_accepts_protocol_alias_and_indirect_protocol_base() -> N
     source = """
 from typing import Annotated
 from typing import Protocol as TypingProtocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class BaseRepository(TypingProtocol):
     def get(self, item_id: str) -> str:
@@ -194,7 +194,7 @@ def test_pro001_compile_accepts_typing_extensions_protocol_direct_import() -> No
     source = """
 from typing import Annotated
 from typing_extensions import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -220,7 +220,7 @@ def test_pro001_compile_accepts_typing_extensions_protocol_alias_and_indirect_ba
     source = """
 from typing import Annotated
 from typing_extensions import Protocol as ExtProtocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class BaseRepository(ExtProtocol):
     def get(self, item_id: str) -> str:
@@ -248,7 +248,7 @@ def test_pro001_compile_does_not_require_runtime_checkable() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:

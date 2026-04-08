@@ -7,7 +7,7 @@ def test_pro002_evaluation_fails_for_protocol_mismatch() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -42,7 +42,7 @@ def test_pro002_evaluation_fails_for_missing_inherited_protocol_method() -> None
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class BaseRepository(Protocol):
     def get(self, item_id: str) -> str:
@@ -88,7 +88,7 @@ def test_pro002_evaluation_passes_for_parameter_annotation_with_inherited_target
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class BaseRepository(Protocol):
     def get(self, item_id: str) -> str:
@@ -135,7 +135,7 @@ def test_pro002_evaluation_passes_for_return_annotation_with_composed_protocol()
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Reader(Protocol):
     def get(self, item_id: str) -> str:
@@ -188,7 +188,7 @@ def test_pro002_evaluation_passes_for_parameter_attribute_protocol() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     endpoint: str
@@ -222,7 +222,7 @@ def test_pro002_evaluation_passes_for_return_property_protocol() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     @property
@@ -259,7 +259,7 @@ def test_pro002_evaluation_fails_for_attribute_protocol_mismatch() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     endpoint: str
@@ -296,7 +296,7 @@ def test_pro002_parameter_role_rejects_read_only_property_for_writable_attribute
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     endpoint: str
@@ -339,7 +339,7 @@ def process(repo: SqlRepository) -> None:
 def test_pro002_return_role_accepts_covariant_read_only_property_protocol() -> None:
     source = """
 from typing import Annotated, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class BaseStatus:
     pass
@@ -390,7 +390,7 @@ def test_pro002_return_role_accepts_plain_attribute_for_read_only_property_proto
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     @property
@@ -427,7 +427,7 @@ def test_pro002_return_role_rejects_read_only_property_for_writable_property_pro
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     @property
@@ -479,7 +479,7 @@ def test_pro002_return_role_accepts_writable_property_protocol_through_inherited
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     @property
@@ -526,7 +526,7 @@ def build() -> SqlService:
 def test_pro002_parameter_role_accepts_contravariant_method_annotation() -> None:
     source = """
 from typing import Annotated, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Animal:
     pass
@@ -572,7 +572,7 @@ def process(repo: SqlRepository) -> None:
 def test_pro002_return_role_accepts_covariant_method_annotation() -> None:
     source = """
 from typing import Annotated, Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class BaseResult:
     pass

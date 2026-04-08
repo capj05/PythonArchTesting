@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.config.data import create_config_from_dict
-from src.evidence.collection import (
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.evidence.collection import (
     collect_static_evidence,
     parse_python_modules,
 )

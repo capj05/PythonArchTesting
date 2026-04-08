@@ -3,12 +3,15 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from src.entities import Entity
-from src.entities_extraction import extract_entities_from_source
-from src.entities_extraction.annotations import (
+from pythonarchtesting.entities import Entity
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.entities_extraction.annotations import (
     extract_signature_annotation_declarations,
 )
-from src.protocols.signature_slots import signature_slots, signature_subject_annotation
+from pythonarchtesting.protocols.signature_slots import (
+    signature_slots,
+    signature_subject_annotation,
+)
 
 
 def _parse_function(source: str) -> ast.FunctionDef:

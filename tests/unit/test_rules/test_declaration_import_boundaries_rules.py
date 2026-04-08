@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-DECLARATION_MODULES = ("src.rules.declaration.core",)
+DECLARATION_MODULES = ("pythonarchtesting.rules.declaration.core",)
 
 
 @pytest.mark.parametrize("module_name", DECLARATION_MODULES)
@@ -18,7 +18,7 @@ import importlib
 import json
 import sys
 
-forbidden_prefixes = ("src.execution", "src.report", "sqlalchemy")
+forbidden_prefixes = ("pythonarchtesting.execution", "pythonarchtesting.report", "sqlalchemy")
 before = set(sys.modules)
 importlib.import_module("{module_name}")
 after = set(sys.modules)
@@ -44,9 +44,9 @@ def test_supported_rules_remain_declaration_only() -> None:
 import json
 import sys
 from typing import Annotated
-import src.rules as rules
+import pythonarchtesting.rules as rules
 
-forbidden_prefixes = ("src.execution", "src.report", "sqlalchemy")
+forbidden_prefixes = ("pythonarchtesting.execution", "pythonarchtesting.report", "sqlalchemy")
 before = set(sys.modules)
 
 def marker(value: int) -> int:

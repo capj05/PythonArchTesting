@@ -4,7 +4,7 @@ Integration tests for direct module discovery behavior.
 
 from pathlib import Path
 
-from src.state import ProjectState
+from pythonarchtesting.state import ProjectState
 
 
 def test_discover_modules_returns_empty_without_target_path():

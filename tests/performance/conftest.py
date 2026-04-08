@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 import psutil
 import pytest
 
-from src.state import ProjectState
+from pythonarchtesting.state import ProjectState
 
 
 @pytest.fixture

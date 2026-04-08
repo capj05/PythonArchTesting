@@ -5,10 +5,10 @@ Tests for matching-stage candidate caps and memoization hooks.
 import textwrap
 from pathlib import Path
 
-from src.config.data import create_config_from_dict
-from src.entities import build_entity_index
-from src.entities_extraction import extract_entities_from_source
-from src.matching import MatchingConfig, run_matching
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.matching import MatchingConfig, run_matching
 
 
 def _extract(source: str, file_path: Path, root_path: Path, role: str) -> list:
@@ -32,7 +32,7 @@ def test_stage2_cap_reduces_ast_similarity_calls(monkeypatch):
         def ref_fn(x):
             return x
         """,
-        root_source / "pkg" / "src.py",
+        root_source / "pkg" / "pythonarchtesting.py",
         root_source,
         "source",
     )
@@ -54,7 +54,7 @@ def test_stage2_cap_reduces_ast_similarity_calls(monkeypatch):
     source_index = build_entity_index(source_entities)
     target_index = build_entity_index(target_entities)
 
-    import src.matching as matching_module
+    import pythonarchtesting.matching as matching_module
 
     real_ast_similarity = matching_module.ast_similarity
     calls = {"count": 0}

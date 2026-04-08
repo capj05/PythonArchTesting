@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from src.report.api import build_report
-from src.report.ir.builder import build_report_ir
-from src.report.ir.serialize import to_legacy_schema_v2
-from src.state import ProjectState, ValidationResult, ValidationStatus
+from pythonarchtesting.report.api import build_report
+from pythonarchtesting.report.ir.builder import build_report_ir
+from pythonarchtesting.report.ir.serialize import to_legacy_schema_v2
+from pythonarchtesting.state import ProjectState, ValidationResult, ValidationStatus
 
 
 def _fresh_state(tmp_path) -> ProjectState:

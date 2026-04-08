@@ -4,12 +4,12 @@ import ast
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.config.data import create_config_from_dict
-from src.config.projects import TargetSpec
-from src.entities import build_entity_index
-from src.evidence.collection import ParsedModule
-from src.runner_multi import evaluate_target
-from src.state_multi import RunState
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.config.projects import TargetSpec
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.evidence.collection import ParsedModule
+from pythonarchtesting.runner_multi import evaluate_target
+from pythonarchtesting.state_multi import RunState
 
 
 def _run_state(config) -> RunState:
@@ -49,7 +49,8 @@ def test_evaluate_target_reuses_parsed_modules_for_static_evidence(
         return [parsed], []
 
     monkeypatch.setattr(
-        "src.runner_multi.parse_python_modules", fake_parse_python_modules
+        "pythonarchtesting.runner_multi.parse_python_modules",
+        fake_parse_python_modules,
     )
 
     target_state = evaluate_target(run_state=run_state, spec=spec)

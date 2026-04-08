@@ -7,7 +7,7 @@ def test_pro002_evaluation_passes_for_parameter_annotation() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -42,7 +42,7 @@ def test_pro002_evaluation_passes_for_return_annotation() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:
@@ -77,7 +77,7 @@ def test_pro002_evaluation_fails_for_missing_target_annotation() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -113,7 +113,7 @@ def test_pro002_evaluation_fails_for_unresolved_target_annotation() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -145,7 +145,7 @@ def test_pro002_evaluation_passes_for_wrapped_target_annotation_with_alias() -> 
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -187,7 +187,7 @@ def test_pro002_evaluation_passes_for_container_parameter_annotation() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -226,7 +226,7 @@ def test_pro002_evaluation_passes_for_container_return_annotation() -> None:
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Service(Protocol):
     def run(self, payload: str) -> str:
@@ -266,7 +266,7 @@ def test_pro002_evaluation_rejects_multi_class_container_target_annotation() -> 
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -306,7 +306,7 @@ def test_pro002_evaluation_resolves_import_aliases_and_method_receiver_slots() -
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class Repository(Protocol):
     def get(self, item_id: str) -> str:
@@ -347,7 +347,7 @@ def test_pro002_evaluation_uses_canonical_slots_for_vararg_and_kwonly_annotation
     source = """
 from typing import Annotated
 from typing import Protocol
-from src.rules import implements_protocol
+from pythonarchtesting.rules import implements_protocol
 
 class ItemsRepository(Protocol):
     def collect(self, item_id: str) -> str:

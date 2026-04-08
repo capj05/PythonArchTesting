@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from src.config.accessors import (
+from pythonarchtesting.config.accessors import (
     get_bool,
     get_float,
     get_int,
     get_section,
 )
-from src.config.data import create_config_from_dict
+from pythonarchtesting.config.data import create_config_from_dict
 
 
 def _typed_config():

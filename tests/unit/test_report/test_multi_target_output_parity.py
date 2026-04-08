@@ -7,12 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from src.config.data import create_config_from_dict
-from src.entities import build_entity_index
-from src.exceptions import ReportGenerationError
-from src.report.api import build_multi_target_report, generate_multi_target_report
-from src.state import ValidationResult, ValidationStatus
-from src.state_multi import RunState, TargetRunState
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.exceptions import ReportGenerationError
+from pythonarchtesting.report.api import (
+    build_multi_target_report,
+    generate_multi_target_report,
+)
+from pythonarchtesting.state import ValidationResult, ValidationStatus
+from pythonarchtesting.state_multi import RunState, TargetRunState
 
 
 def _golden(name: str) -> str:

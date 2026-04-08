@@ -1,7 +1,7 @@
 import textwrap
 from pathlib import Path
 
-from src.entities_extraction import extract_entities_from_source
+from pythonarchtesting.entities_extraction import extract_entities_from_source
 
 
 def _extract_entities(source: str):
@@ -19,7 +19,7 @@ def test_annotation_marker_extraction_across_supported_scopes() -> None:
     entities = _extract_entities("""
         import typing
         from typing import Annotated
-        from src.rules import (
+        from pythonarchtesting.rules import (
             forbid_imports,
             implements_protocol,
             required_entity_signature,
@@ -79,7 +79,7 @@ def test_annotation_marker_extraction_across_supported_scopes() -> None:
 def test_annotation_markers_preserve_source_order_across_multiple_statements() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import (
+        from pythonarchtesting.rules import (
             forbid_imports,
             required_entity_signature,
             required_method,
@@ -113,7 +113,7 @@ def test_annotation_marker_records_unsupported_cases_without_failing_extraction(
 ):
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_method
+        from pythonarchtesting.rules import required_method
 
         __archtest__: Annotated[None, required_method(signature_mode="exact")] = None
 
@@ -159,7 +159,7 @@ def test_signature_annotation_markers_extract_supported_param_and_return_metadat
 ):
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature
+        from pythonarchtesting.rules import required_entity_signature
 
         def normalize(
             value: Annotated[str, required_entity_signature(mode="compatible")],
@@ -204,7 +204,7 @@ def test_signature_annotation_markers_extract_supported_param_and_return_metadat
 def test_signature_annotation_markers_unwrap_qualified_annotated_base_text() -> None:
     entities = _extract_entities("""
         import typing
-        from src.rules import required_entity_signature
+        from pythonarchtesting.rules import required_entity_signature
 
         def normalize(
             value: typing.Annotated[
@@ -235,7 +235,7 @@ def test_signature_protocol_markers_extract_symbol_style_param_and_return_metada
 ):
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import implements_protocol
+        from pythonarchtesting.rules import implements_protocol
 
         class Repository:
             def get(self, item_id: str) -> str:
@@ -352,7 +352,7 @@ def test_annotation_marker_records_invalid_literal_tuple_metadata_without_failin
 def test_signature_annotation_markers_follow_deterministic_scan_order() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature
+        from pythonarchtesting.rules import required_entity_signature
 
         def normalize(
             first: Annotated[int, required_entity_signature(mode="exact")],
@@ -393,7 +393,7 @@ def test_signature_annotation_markers_follow_deterministic_scan_order() -> None:
 def test_signature_annotation_markers_allow_protocol_markers() -> None:
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import forbid_imports, implements_protocol
+        from pythonarchtesting.rules import forbid_imports, implements_protocol
 
         def normalize(
             value: Annotated[
@@ -430,7 +430,7 @@ def test_body_markers_do_not_override_signature_declarations_of_same_rule_kind()
 ):
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import required_entity_signature, required_method
+        from pythonarchtesting.rules import required_entity_signature, required_method
 
         def normalize(
             value: Annotated[str, required_entity_signature(mode="compatible")],
@@ -466,7 +466,7 @@ def test_function_body_flow_markers_extract_statement_surface_and_anchor_metadat
 ):
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import enforce_flow, flow
+        from pythonarchtesting.rules import enforce_flow, flow
 
         def normalize(value: str) -> str:
             current = value.strip()
@@ -493,7 +493,7 @@ def test_nested_flow_markers_extract_while_nested_non_flow_markers_stay_invalid(
 ):
     entities = _extract_entities("""
         from typing import Annotated
-        from src.rules import flow, required_method
+        from pythonarchtesting.rules import flow, required_method
 
         def normalize(value: str) -> str:
             current = value

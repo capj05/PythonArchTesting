@@ -2,12 +2,22 @@
 Main pytest configuration file.
 """
 
+import os
 import shutil
+import sys
 from pathlib import Path
 from typing import Any, Dict, Generator, List
 from uuid import uuid4
 
 import pytest
+
+SRC_ROOT = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(0, str(SRC_ROOT))
+os.environ["PYTHONPATH"] = (
+    str(SRC_ROOT)
+    if not os.environ.get("PYTHONPATH")
+    else f"{SRC_ROOT}{os.pathsep}{os.environ['PYTHONPATH']}"
+)
 
 
 @pytest.fixture

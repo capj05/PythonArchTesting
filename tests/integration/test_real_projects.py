@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 try:
-    from src.state import ProjectState
+    from pythonarchtesting.state import ProjectState
 except ImportError:
     ProjectState = None
 

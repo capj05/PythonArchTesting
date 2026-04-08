@@ -5,7 +5,7 @@ import json
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from src.cli import main
+from pythonarchtesting.cli import main
 
 
 def _repo_root() -> Path:
@@ -57,7 +57,7 @@ def _write_annotation_fixture(base: Path) -> tuple[Path, Path]:
     (source / "reference.py").write_text(
         (
             "from typing import Annotated\n"
-            "from src.rules import required_entity_signature\n"
+            "from pythonarchtesting.rules import required_entity_signature\n"
             "\n"
             "def normalize(value: str) -> str:\n"
             '    __archtest__: Annotated[None, required_entity_signature(mode="exact")]\n'
@@ -81,7 +81,7 @@ def _write_signature_annotation_fixture(base: Path) -> tuple[Path, Path]:
     (source / "reference.py").write_text(
         (
             "from typing import Annotated\n"
-            "from src.rules import required_entity_signature\n"
+            "from pythonarchtesting.rules import required_entity_signature\n"
             "\n"
             "def normalize(\n"
             '    value: Annotated[str, required_entity_signature(mode="exact")],\n'
@@ -106,7 +106,7 @@ def _write_protocol_annotation_fixture(base: Path) -> tuple[Path, Path]:
     (source / "reference.py").write_text(
         (
             "from typing import Annotated, Protocol\n"
-            "from src.rules import implements_protocol\n"
+            "from pythonarchtesting.rules import implements_protocol\n"
             "\n"
             "class Repository(Protocol):\n"
             "    def get(self, item_id: str) -> str:\n"
@@ -137,7 +137,7 @@ def _write_protocol_signature_annotation_fixture(base: Path) -> tuple[Path, Path
     (source / "reference.py").write_text(
         (
             "from typing import Annotated, Protocol\n"
-            "from src.rules import implements_protocol\n"
+            "from pythonarchtesting.rules import implements_protocol\n"
             "\n"
             "class Repository(Protocol):\n"
             "    def get(self, item_id: str) -> str:\n"

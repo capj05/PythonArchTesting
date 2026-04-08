@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-import src.report.api as report_api
-import src.report.core as report_core
-from src.config.data import create_config_from_dict
-from src.entities import build_entity_index
-from src.exceptions import ReportGenerationError
-from src.report.api import build_multi_target_report, build_report
-from src.state import ProjectState, ValidationResult, ValidationStatus
-from src.state_multi import RunState, TargetRunState
+import pythonarchtesting.report.api as report_api
+import pythonarchtesting.report.core as report_core
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.exceptions import ReportGenerationError
+from pythonarchtesting.report.api import build_multi_target_report, build_report
+from pythonarchtesting.state import ProjectState, ValidationResult, ValidationStatus
+from pythonarchtesting.state_multi import RunState, TargetRunState
 
 
 def _state_with_results(tmp_path: Path) -> ProjectState:

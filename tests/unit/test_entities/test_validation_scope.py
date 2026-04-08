@@ -1,8 +1,11 @@
 import textwrap
 from pathlib import Path
 
-from src.entities_extraction import extract_entities_from_source
-from src.validation_scope import filter_entities_for_scope, is_template_logical_view
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.validation_scope import (
+    filter_entities_for_scope,
+    is_template_logical_view,
+)
 
 
 def _extract_entities(source: str):

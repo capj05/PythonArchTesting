@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.core.evaluation import evaluate_rules_for_target
-from src.entities import Entity, build_entity_index
-from src.entities_extraction import extract_entities_from_source
-from src.matching import MatchResult, MatchStatus
-from src.rules.compilation import compile_rules
+from pythonarchtesting.core.evaluation import evaluate_rules_for_target
+from pythonarchtesting.entities import Entity, build_entity_index
+from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.matching import MatchResult, MatchStatus
+from pythonarchtesting.rules.compilation import compile_rules
 
 
 def _extract_entities(source_text: str, *, role: str) -> list[Entity]:
@@ -64,7 +64,7 @@ def _evaluate_single_rule(source: str, target: str) -> list:
 def test_flw001_evaluation_passes_for_linear_flow() -> None:
     source = """
 from typing import Annotated
-from src.rules import enforce_flow, flow
+from pythonarchtesting.rules import enforce_flow, flow
 
 def process(value: str) -> str:
     current = value
@@ -76,7 +76,7 @@ def process(value: str) -> str:
 """
     target = """
 from typing import Annotated
-from src.rules import flow
+from pythonarchtesting.rules import flow
 
 def process(value: str) -> str:
     current = value
@@ -92,7 +92,7 @@ def process(value: str) -> str:
 def test_flw001_evaluation_passes_when_all_branches_satisfy_flow() -> None:
     source = """
 from typing import Annotated
-from src.rules import enforce_flow, flow
+from pythonarchtesting.rules import enforce_flow, flow
 
 def process(value: str) -> str:
     current = value
@@ -104,7 +104,7 @@ def process(value: str) -> str:
 """
     target = """
 from typing import Annotated
-from src.rules import flow
+from pythonarchtesting.rules import flow
 
 def process(value: str) -> str:
     current = value
@@ -124,7 +124,7 @@ def process(value: str) -> str:
 def test_flw001_evaluation_fails_when_one_branch_skips_stage() -> None:
     source = """
 from typing import Annotated
-from src.rules import enforce_flow, flow
+from pythonarchtesting.rules import enforce_flow, flow
 
 def process(value: str) -> str:
     current = value
@@ -136,7 +136,7 @@ def process(value: str) -> str:
 """
     target = """
 from typing import Annotated
-from src.rules import flow
+from pythonarchtesting.rules import flow
 
 def process(value: str) -> str:
     current = value
@@ -154,7 +154,7 @@ def process(value: str) -> str:
 def test_flw001_evaluation_fails_for_early_return_path() -> None:
     source = """
 from typing import Annotated
-from src.rules import enforce_flow, flow
+from pythonarchtesting.rules import enforce_flow, flow
 
 def process(value: str) -> str:
     current = value
@@ -166,7 +166,7 @@ def process(value: str) -> str:
 """
     target = """
 from typing import Annotated
-from src.rules import flow
+from pythonarchtesting.rules import flow
 
 def process(value: str) -> str:
     current = value
@@ -185,7 +185,7 @@ def process(value: str) -> str:
 def test_flw001_evaluation_fails_for_out_of_order_stage() -> None:
     source = """
 from typing import Annotated
-from src.rules import enforce_flow, flow
+from pythonarchtesting.rules import enforce_flow, flow
 
 def process(value: str) -> str:
     current = value
@@ -197,7 +197,7 @@ def process(value: str) -> str:
 """
     target = """
 from typing import Annotated
-from src.rules import flow
+from pythonarchtesting.rules import flow
 
 def process(value: str) -> str:
     current = value.strip()
