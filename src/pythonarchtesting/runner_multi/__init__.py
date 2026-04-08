@@ -4,7 +4,6 @@ Multi-target runner implementation (source once, N targets).
 
 from __future__ import annotations
 
-import sys
 from typing import List, Optional, Tuple
 
 from pythonarchtesting.config import Config
@@ -60,7 +59,3 @@ def run_multi(
 
 
 __all__ = ["prepare_source", "evaluate_target", "run_multi"]
-
-# Backward compatibility for dotted monkeypatch paths like
-# "pythonarchtesting.runner_multi.runner_multi.*".
-runner_multi = sys.modules[__name__]

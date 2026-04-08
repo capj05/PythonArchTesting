@@ -143,10 +143,6 @@ class ProjectState(
             for check_type, stats in self.validation_stats.items()
         }
 
-    def get(self, key: str, default: Any = None) -> Any:
-        """Dict-style accessor for backward compatibility."""
-        return getattr(self, key, default)
-
     def discover_modules(self) -> list[str]:
         """Delegate to module discovery component."""
         if self.target_project_path:

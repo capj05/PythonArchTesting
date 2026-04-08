@@ -29,7 +29,7 @@ def run_multi(*args: Any, **kwargs: Any) -> Any:
 
 
 def ProjectState(*args: Any, **kwargs: Any) -> Any:
-    from pythonarchtesting.state.project_state import ProjectState as _project_state
+    from pythonarchtesting.state import ProjectState as _project_state
 
     return _project_state(*args, **kwargs)
 

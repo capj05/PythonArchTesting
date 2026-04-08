@@ -1,9 +1,5 @@
 """
-ProjectState legacy single-target state package (staging).
-
-Public surface must remain stable:
-- ProjectState
-- ValidationStatus alias (back-compat)
+Internal single-target state implementation.
 """
 
 from __future__ import annotations

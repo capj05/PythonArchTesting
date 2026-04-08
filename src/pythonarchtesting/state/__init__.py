@@ -4,13 +4,11 @@ Provides modular components for project state management, validation,
 discovery, and memory management.
 """
 
-import sys
-
 from pythonarchtesting.constants import ValidationConstants
 
+from ._project_state import ProjectState
 from .discovery import ModuleDiscovery
 from .memory_manager import MemoryManager
-from .project_state import ProjectState
 from .validation import ValidationResult, rule_result_to_validation
 
 # Re-export ValidationStatus for backward compatibility
@@ -24,6 +22,3 @@ __all__ = [
     "ModuleDiscovery",
     "ProjectState",
 ]
-
-# Backward compatibility for dotted monkeypatch paths like "pythonarchtesting.state.state.*".
-state = sys.modules[__name__]
