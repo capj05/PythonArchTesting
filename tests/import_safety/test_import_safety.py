@@ -117,7 +117,7 @@ def test_util_type_utils_declaration_free_import():
     [
         "pythonarchtesting.validation_scope",
         "pythonarchtesting.report.lazy",
-        "pythonarchtesting.state.project_state._core",
+        "pythonarchtesting.state._project_state._core",
     ],
 )
 def test_min_supported_python_module_import_smoke(target_module: str) -> None:

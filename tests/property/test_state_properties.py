@@ -31,7 +31,7 @@ class TestStateProperties:
             return
 
         project_state = ProjectState("/test", [])
-        initial_count = len(project_state.get("imported_modules", {}))
+        initial_count = len(project_state.imported_modules)
 
         for name in module_names:
             # Simulate adding module

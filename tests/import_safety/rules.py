@@ -21,6 +21,7 @@ FORBIDDEN_IMPORTS: Dict[str, List[str]] = {
     "pythonarchtesting.cli": [
         "pythonarchtesting.execution",
         "pythonarchtesting.runner_multi",
+        "pythonarchtesting.state._project_state",
         "pythonarchtesting.state.project_state",
     ],
 }

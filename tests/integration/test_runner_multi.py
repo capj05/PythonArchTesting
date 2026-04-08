@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import pythonarchtesting.runner_multi as runner_multi_module
 from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.config.projects import resolve_projects_config
 from pythonarchtesting.report.api import build_multi_target_report
 from pythonarchtesting.runner_multi import run_multi
-from pythonarchtesting.state.project_state import ProjectState
+from pythonarchtesting.state import ProjectState
 
 
 def _smoke_paths() -> tuple[Path, Path, Path]:
@@ -96,6 +98,8 @@ def test_run_multi_does_not_use_project_state_singleton(monkeypatch) -> None:
     assert len(target_states) == 2
 
 
-def test_runner_multi_alias_contract() -> None:
-    assert runner_multi_module.runner_multi is runner_multi_module
-    assert runner_multi_module.runner_multi.run_multi is runner_multi_module.run_multi
+def test_runner_multi_alias_contract_removed() -> None:
+    assert not hasattr(runner_multi_module, "runner_multi")
+
+    with pytest.raises(AttributeError):
+        _ = runner_multi_module.runner_multi

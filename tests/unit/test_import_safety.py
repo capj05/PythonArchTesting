@@ -44,11 +44,15 @@ def _cli_importtime_us(stderr_text: str) -> int:
 
 
 def test_cli_help_import_safety():
-    """CLI --help must not import optional DB modules."""
+    """CLI --help must not import optional DB modules or internal runners/state."""
     mods = _run_cli_help_module_capture()
     assert not any(m.startswith("sqlalchemy") for m in mods)
     assert "pythonarchtesting.runner_multi" not in mods
     assert not any(m.startswith("pythonarchtesting.runner_multi.") for m in mods)
+    assert "pythonarchtesting.state._project_state" not in mods
+    assert not any(
+        m.startswith("pythonarchtesting.state._project_state.") for m in mods
+    )
     assert "pythonarchtesting.state.project_state" not in mods
     assert not any(m.startswith("pythonarchtesting.state.project_state.") for m in mods)
 
