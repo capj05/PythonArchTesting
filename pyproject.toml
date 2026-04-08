@@ -3,14 +3,14 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "python-arch-testing"
+name = "pythonarchtesting"
 version = "0.1.0"
 description = "A toolkit for testing and enforcing architectural constraints in Python projects"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "capj05", email = "capj05@vse.cz"}
 ]
 keywords = ["architecture", "testing", "validation", "python"]
 classifiers = [
@@ -58,17 +58,24 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/PythonArchTesting"
-Documentation = "https://python-arch-testing.readthedocs.io"
-Repository = "https://github.com/yourusername/PythonArchTesting.git"
-"Bug Tracker" = "https://github.com/yourusername/PythonArchTesting/issues"
+Homepage = "https://github.com/capj05/PythonArchTesting"
+Documentation = "https://github.com/capj05/PythonArchTesting/tree/main/docs"
+Repository = "https://github.com/capj05/PythonArchTesting.git"
+"Bug Tracker" = "https://github.com/capj05/PythonArchTesting/issues"
 
 [project.scripts]
-python-arch-test = "src.cli:main"
+python-arch-test = "pythonarchtesting.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+pythonarchtesting = ["*.conf"]
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["src*", "tests*"]
+where = ["src"]
+include = ["pythonarchtesting*"]
+exclude = ["tests*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -79,7 +86,7 @@ addopts = [
     "-v",
     "--strict-markers",
     "--strict-config",
-    "--cov=src",
+    "--cov=pythonarchtesting",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
@@ -97,7 +104,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["src"]
+source = ["pythonarchtesting"]
 omit = [
     "*/tests/*",
     "*/test_*",
@@ -141,7 +148,7 @@ extend-exclude = '''
 profile = "black"
 multi_line_output = 3
 line_length = 88
-known_first_party = ["src"]
+known_first_party = ["pythonarchtesting"]
 
 [tool.mypy]
 python_version = "3.12"
