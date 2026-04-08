@@ -112,6 +112,22 @@ def test_util_type_utils_declaration_free_import():
     )
 
 
+@pytest.mark.parametrize(
+    "target_module",
+    [
+        "pythonarchtesting.validation_scope",
+        "pythonarchtesting.report.lazy",
+        "pythonarchtesting.state.project_state._core",
+    ],
+)
+def test_min_supported_python_module_import_smoke(target_module: str) -> None:
+    """Import smoke test for modules that require the minimum supported syntax."""
+    loaded_modules = capture_module_imports(target_module)
+
+    assert loaded_modules, f"Importing {target_module} loaded no modules"
+    assert target_module in loaded_modules
+
+
 def test_harness_self_check(tmp_path: Path):
     """
     Self-check that validates the test harness can detect violations.
