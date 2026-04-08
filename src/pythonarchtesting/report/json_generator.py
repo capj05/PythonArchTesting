@@ -10,8 +10,7 @@ class JSONReportGenerator(BaseReportGenerator):
     """Generates JSON reports for validation results."""
 
     def _generate_report(self, output_file: Optional[str] = None) -> str:
-        report_data = self._ensure_report()
-        rendered = render_json(report_data)
+        rendered = render_json(self._ensure_document())
         if output_file:
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(rendered)

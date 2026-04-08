@@ -9,6 +9,15 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from pythonarchtesting.constants import ReportingConstants
+from pythonarchtesting.report.ir.models import ReportDocument
+from pythonarchtesting.report.ir.normalize import report_dict_to_ir
+from pythonarchtesting.report.ir.serialize import to_legacy_schema_v2
+
+
+def _infer_report_kind(report: Dict[str, Any]) -> str:
+    if report.get("targets") is not None and report.get("results") is None:
+        return "multi"
+    return "single"
 
 
 class BaseReportGenerator(ABC):
@@ -22,8 +31,11 @@ class BaseReportGenerator(ABC):
             report_data: Canonical report dict or ProjectState instance
         """
         self._state = None
+        self.document: Optional[ReportDocument] = None
         self.report: Optional[Dict[str, Any]] = None
-        if isinstance(report_data, dict):
+        if isinstance(report_data, ReportDocument):
+            self.document = report_data
+        elif isinstance(report_data, dict):
             self.report = report_data
         else:
             self._state = report_data
@@ -50,14 +62,22 @@ class BaseReportGenerator(ABC):
 
     def _ensure_report(self) -> Dict[str, Any]:
         if self.report is None:
-            if self._state is None:
-                raise ValueError("Report data is not available.")
-
-            # Lazy import to avoid circular dependency
-            from pythonarchtesting.report.api import build_report
-
-            self.report = build_report(self._state)
+            self.report = to_legacy_schema_v2(self._ensure_document())
         return self.report
+
+    def _ensure_document(self) -> ReportDocument:
+        if self.document is None:
+            if self.report is not None:
+                self.document = report_dict_to_ir(
+                    self.report, kind=_infer_report_kind(self.report)
+                )
+            elif self._state is not None:
+                from pythonarchtesting.report.api import build_report_document
+
+                self.document = build_report_document(self._state)
+            else:
+                raise ValueError("Report data is not available.")
+        return self.document
 
     @abstractmethod
     def _generate_report(self, output_file: Optional[str] = None) -> str:

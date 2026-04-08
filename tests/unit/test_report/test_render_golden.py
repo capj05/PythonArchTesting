@@ -3,10 +3,12 @@ from pathlib import Path
 
 import pytest
 
+from pythonarchtesting.report.ir.normalize import report_dict_to_ir
+from pythonarchtesting.state import ProjectState
 from pythonarchtesting.exceptions import ReportGenerationError
 from pythonarchtesting.report.api import generate_validation_report
 from pythonarchtesting.report.dispatcher import create_reporter
-from pythonarchtesting.report.markdown_generator import MarkdownReportGenerator
+from pythonarchtesting.report.renderers.markdown import render_markdown
 
 
 def _sample_report() -> dict:
@@ -62,6 +64,12 @@ def _sample_report() -> dict:
     }
 
 
+def _empty_state(tmp_path: Path) -> ProjectState:
+    state = ProjectState(str(tmp_path), [])
+    state.initialize(str(tmp_path))
+    return state
+
+
 def _golden(name: str) -> str:
     path = Path("tests/fixtures/reports") / name
     return path.read_text(encoding="utf-8").replace("\r\n", "\n").strip()
@@ -72,13 +80,8 @@ def _normalize(value: str) -> str:
 
 
 def test_markdown_report_golden():
-    rendered = MarkdownReportGenerator(_sample_report()).generate()
+    rendered = render_markdown(report_dict_to_ir(_sample_report(), kind="single"))
     assert _normalize(rendered) == _golden("single_markdown.golden")
-
-
-def test_json_report_golden():
-    rendered = create_reporter("json", _sample_report()).generate()
-    assert _normalize(rendered) == _golden("single_json.golden")
 
 
 def test_dispatcher_non_db_sinks_do_not_require_sqlalchemy():
@@ -97,9 +100,9 @@ def test_create_reporter_rejects_removed_html_sink():
         create_reporter("html", _sample_report())
 
 
-def test_generate_validation_report_rejects_removed_html_format():
+def test_generate_validation_report_rejects_removed_html_format(tmp_path):
     with pytest.raises(
         ReportGenerationError,
         match="Unsupported output format 'html'. Available formats: json, markdown",
     ):
-        generate_validation_report(_sample_report(), "html")
+        generate_validation_report(_empty_state(tmp_path), "html")

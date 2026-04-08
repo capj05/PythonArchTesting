@@ -20,22 +20,17 @@ class MarkdownReportGenerator(BaseReportGenerator):
         self._matching_debug_context = matching_debug_context
 
     def _generate_report(self, output_file: str | None = None) -> str:
-        report = self._ensure_report()
-        if (
-            isinstance(report, dict)
-            and report.get("targets") is not None
-            and report.get("run")
-        ):
-            if report.get("results") is None and report.get("targets"):
-                if not output_file:
-                    raise ValueError(
-                        "Multi-target markdown reporting requires an output directory path."
-                    )
-                return render_markdown_bundle(
-                    report,
-                    Path(output_file),
-                    matching_debug_context=self._matching_debug_context,
+        document = self._ensure_document()
+        if document.kind == "multi":
+            if not output_file:
+                raise ValueError(
+                    "Multi-target markdown reporting requires an output directory path."
                 )
+            return render_markdown_bundle(
+                document,
+                Path(output_file),
+                matching_debug_context=self._matching_debug_context,
+            )
         return render_markdown(
-            report, matching_debug_context=self._matching_debug_context
+            document, matching_debug_context=self._matching_debug_context
         )

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+
+from ..ir.models import ReportDocument
+from ..ir.serialize import to_legacy_schema_v2
 
 
-def render_json(report: Dict[str, Any]) -> str:
-    """Render schema-v2 payload as deterministic JSON."""
-    return json.dumps(report, indent=2, sort_keys=True)
+def render_json(document: ReportDocument) -> str:
+    """Render typed report document as deterministic schema-v2 JSON."""
+    return json.dumps(to_legacy_schema_v2(document), indent=2, sort_keys=True)

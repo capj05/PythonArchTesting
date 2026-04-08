@@ -4,15 +4,21 @@ import ast
 from pathlib import Path
 
 
-def test_report_api_module_does_not_import_concrete_generators():
+def test_report_api_module_does_not_import_compatibility_layers():
     path = Path("src/pythonarchtesting/report/api.py")
     tree = ast.parse(path.read_text(encoding="utf-8"))
 
-    concrete_modules = {
+    compatibility_modules = {
+        "pythonarchtesting.report.core",
+        "pythonarchtesting.report.dispatcher",
+        "pythonarchtesting.report.base_generator",
         "pythonarchtesting.report.json_generator",
         "pythonarchtesting.report.markdown_generator",
     }
-    concrete_relative = {
+    compatibility_relative = {
+        "core",
+        "dispatcher",
+        "base_generator",
         "json_generator",
         "markdown_generator",
     }
@@ -21,33 +27,14 @@ def test_report_api_module_does_not_import_concrete_generators():
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name in concrete_modules:
-                    offenders.append(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module in concrete_modules or (
-                node.module in concrete_relative
-            ):  # noqa: E501
-                offenders.append(node.module or "")
-
-    assert not offenders, f"api.py imports concrete generators: {offenders}"
-
-
-def test_report_api_module_does_not_import_core():
-    path = Path("src/pythonarchtesting/report/api.py")
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-
-    offenders: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name == "pythonarchtesting.report.core":
+                if alias.name in compatibility_modules:
                     offenders.append(alias.name)
         elif isinstance(node, ast.ImportFrom):
             module = node.module or ""
-            if module == "pythonarchtesting.report.core" or module.endswith(".core"):
+            if module in compatibility_modules or module in compatibility_relative:
                 offenders.append(module)
 
-    assert not offenders, f"api.py imports report.core: {offenders}"
+    assert not offenders, f"api.py imports compatibility layers: {offenders}"
 
 
 def test_report_modules_do_not_import_sqlalchemy():
@@ -56,6 +43,9 @@ def test_report_modules_do_not_import_sqlalchemy():
         Path("src/pythonarchtesting/report/dispatcher.py"),
         Path("src/pythonarchtesting/report/json_generator.py"),
         Path("src/pythonarchtesting/report/markdown_generator.py"),
+        Path("src/pythonarchtesting/report/renderers/json.py"),
+        Path("src/pythonarchtesting/report/renderers/markdown.py"),
+        Path("src/pythonarchtesting/report/renderers/markdown_multi.py"),
     ]
     offenders: list[str] = []
     for path in paths:
@@ -71,4 +61,4 @@ def test_report_modules_do_not_import_sqlalchemy():
 
     assert not offenders, (
         "Non-DB report modules import sqlalchemy: " f"{offenders}"
-    )  # noqa: E501
+    )

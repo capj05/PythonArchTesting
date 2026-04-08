@@ -13,22 +13,37 @@ from .matching_debug import (
     render_matching_debug_markdown,
 )
 from .table import Table, render_markdown_table
+from ..ir.models import EntityRef, ReportDocument, TargetReport
+
+
+def _entity_to_dict(entity: EntityRef) -> Dict[str, Any]:
+    return {
+        "module": entity.module,
+        "qualname": entity.qualname,
+        "file": entity.file,
+        "line": entity.line,
+    }
+
+
+def _single_target_debug_report(target: TargetReport, target_path: Optional[str]) -> Dict[str, Any]:
+    return {
+        "display_name": "__single__",
+        "target_id": "__single__",
+        "target_path": str(target_path or ""),
+        "matching": {"matches": [dict(match) for match in target.matching.matches]},
+    }
 
 
 def render_markdown(
-    report: Dict[str, Any],
+    document: ReportDocument,
     *,
     matching_debug_context: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Render canonical schema-v2 report in markdown format."""
-    results = report.get("results", []) or []
-    summary = report.get("summary", {}) or {}
-    single_target_report = {
-        "display_name": "__single__",
-        "target_id": "__single__",
-        "target_path": str((report.get("run") or {}).get("target_path") or ""),
-        "matching": report.get("matching") or {},
-    }
+    """Render typed single-target report document in markdown format."""
+    target = document.targets[0]
+    results = target.results
+    summary = target.summary
+    single_target_report = _single_target_debug_report(target, document.run.target_path)
     matching_blocks = build_matching_debug_blocks_for_target(
         single_target_report,
         get_target_debug_context(matching_debug_context, single_target_report),
@@ -38,16 +53,16 @@ def render_markdown(
     lines: List[str] = [
         "# Validation Report",
         "",
-        f"**Generated:** {escape_markdown(str(report.get('generated_at', '')))}",
-        f"**Framework:** {escape_markdown(str(report.get('framework_version', '')))}",
-        f"**Exit Code:** {report.get('exit_code', 0)}",
+        f"**Generated:** {escape_markdown(str(document.generated_at))}",
+        f"**Framework:** {escape_markdown(str(document.framework_version))}",
+        f"**Exit Code:** {document.exit_code}",
         "",
         "## Summary",
         "",
-        f"- Total Results: {summary.get('results_total', len(results))}",
-        f"- Status Counts: {escape_markdown(str(summary.get('status_counts', {})))}",
-        f"- Severity Counts: {escape_markdown(str(summary.get('severity_counts', {})))}",
-        f"- Category Counts: {escape_markdown(str(summary.get('category_counts', {})))}",
+        f"- Total Results: {summary.results_total}",
+        f"- Status Counts: {escape_markdown(str(summary.status_counts))}",
+        f"- Severity Counts: {escape_markdown(str(summary.severity_counts))}",
+        f"- Category Counts: {escape_markdown(str(summary.category_counts))}",
         "",
         render_matching_debug_markdown(
             matching_blocks,
@@ -73,21 +88,21 @@ def render_markdown(
     )
     rows = []
     for item in results:
-        source = item.get("source") or {}
-        target = item.get("target") or {}
-        message = str(item.get("message") or "")
+        source = _entity_to_dict(item.source)
+        target_entity = _entity_to_dict(item.target)
+        message = item.message
         if len(message) > 160:
             message = message[:157] + "..."
         rows.append(
             (
-                str(item.get("project_id") or ""),
-                str(item.get("result_id") or ""),
-                str(item.get("category") or ""),
-                str(item.get("severity") or ""),
-                str(item.get("status") or ""),
-                str(item.get("rule_id") or ""),
+                item.project_id,
+                item.result_id,
+                item.category,
+                item.severity,
+                item.status,
+                item.rule_id,
                 format_entity(source),
-                format_entity(target),
+                format_entity(target_entity),
                 format_location(source),
                 message,
             )

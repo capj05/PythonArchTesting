@@ -10,7 +10,6 @@ from pythonarchtesting.exceptions import ReportGenerationError
 from pythonarchtesting.state import ProjectState
 from pythonarchtesting.state_multi import RunState, TargetRunState
 
-from .dispatcher import create_reporter
 from .ir.from_state import (
     build_multi_target_report_document as _build_multi_target_report_document_from_state,
 )
@@ -23,21 +22,30 @@ from .ir.serialize import to_legacy_schema_v2
 from .policy import compute_aggregate_exit_code as _compute_aggregate_exit_code
 from .policy import compute_exit_code as _compute_exit_code
 from .policy import compute_target_exit_code as _compute_target_exit_code
-from .renderers import render_json
+from .renderers import render_json, render_markdown
+from .renderers.markdown_multi import render_markdown_bundle
 from .schema_v2 import validate_report_schema_v2 as _validate_report_schema_v2
 
 validate_report_schema_v2 = _validate_report_schema_v2
 
 
 def build_report_document(
-    state_obj: ProjectState, config: Optional[Any] = None
+    state_obj: ProjectState,
+    config: Optional[Any] = None,
+    *,
+    now_utc_z_fn: Any = None,
+    validate_report_schema_v2_fn: Any = None,
 ) -> ReportDocument:
     """Build typed single-target report IR document."""
     return _build_report_document_from_state(
         state_obj,
         config,
-        now_utc_z_fn=now_utc_z,
-        validate_report_schema_v2_fn=validate_report_schema_v2,
+        now_utc_z_fn=now_utc_z if now_utc_z_fn is None else now_utc_z_fn,
+        validate_report_schema_v2_fn=(
+            validate_report_schema_v2
+            if validate_report_schema_v2_fn is None
+            else validate_report_schema_v2_fn
+        ),
     )
 
 
@@ -45,13 +53,19 @@ def build_multi_target_report_document(
     run_state: RunState,
     target_states: Sequence[TargetRunState],
     config: Optional[Any] = None,
+    *,
+    validate_report_schema_v2_fn: Any = None,
 ) -> ReportDocument:
     """Build typed multi-target report IR document."""
     return _build_multi_target_report_document_from_state(
         run_state,
         list(target_states),
         config,
-        validate_report_schema_v2_fn=validate_report_schema_v2,
+        validate_report_schema_v2_fn=(
+            validate_report_schema_v2
+            if validate_report_schema_v2_fn is None
+            else validate_report_schema_v2_fn
+        ),
     )
 
 
@@ -88,28 +102,20 @@ def generate_validation_report(
     include_sections: Optional[List[str]] = None,
     config: Optional[Any] = None,
 ) -> str:
-    """
-    Generate a report of validation results for a single target.
-
-    Keeps compatibility with the existing dispatcher/generator interface.
-    """
-    if include_sections is None:
-        include_sections = []
-
+    """Generate a report of validation results for a single target."""
+    del include_sections
     try:
-        normalized_format = output_format
-        report_data: Any = state_obj
-        if config is not None:
-            report_data = build_report(state_obj, config)
-        reporter_kwargs: Dict[str, Any] = {}
-        if normalized_format == ReportingConstants.MARKDOWN_FORMAT:
+        document = build_report_document(state_obj, config)
+        if output_format == ReportingConstants.JSON_FORMAT:
+            return render_json(document)
+        if output_format == ReportingConstants.MARKDOWN_FORMAT:
             from .renderers.matching_debug import build_single_matching_debug_context
 
-            reporter_kwargs["matching_debug_context"] = (
-                build_single_matching_debug_context(state_obj)
+            return render_markdown(
+                document,
+                matching_debug_context=build_single_matching_debug_context(state_obj),
             )
-        reporter = create_reporter(normalized_format, report_data, **reporter_kwargs)
-        return reporter.generate(include_sections=include_sections)
+        raise ValueError(output_format)
     except ValueError as e:
         raise ReportGenerationError(
             f"Unsupported output format '{output_format}'. "
@@ -124,25 +130,32 @@ def generate_multi_target_report(
     config: Optional[Any] = None,
     output_path: Optional[str | Path] = None,
 ) -> str:
-    """Generate a multi-target report output for any registered sink."""
-    report_data = build_multi_target_report(run_state, target_states, config)
-    normalized_format = output_format
-    if normalized_format == ReportingConstants.JSON_FORMAT:
-        rendered = render_json(report_data)
+    """Generate a multi-target report output for a supported format."""
+    document = build_multi_target_report_document(run_state, target_states, config)
+    if output_format == ReportingConstants.JSON_FORMAT:
+        rendered = render_json(document)
         if output_path is not None:
             Path(output_path).write_text(rendered, encoding="utf-8")
         return rendered
     try:
-        reporter_kwargs: Dict[str, Any] = {}
-        if normalized_format == ReportingConstants.MARKDOWN_FORMAT:
+        if output_format == ReportingConstants.MARKDOWN_FORMAT:
             from .renderers.matching_debug import build_multi_matching_debug_context
 
-            reporter_kwargs["matching_debug_context"] = (
-                build_multi_matching_debug_context(run_state, target_states)
+            if output_path is None:
+                raise ValueError(
+                    "Multi-target markdown reporting requires an output directory path."
+                )
+            return render_markdown_bundle(
+                document,
+                Path(output_path),
+                matching_debug_context=build_multi_matching_debug_context(
+                    run_state, target_states
+                ),
             )
-        reporter = create_reporter(normalized_format, report_data, **reporter_kwargs)
-        return reporter.generate(output_file=str(output_path) if output_path else None)
+        raise ValueError(output_format)
     except ValueError as e:
+        if str(e) == "Multi-target markdown reporting requires an output directory path.":
+            raise
         raise ReportGenerationError(
             f"Unsupported multi-target format '{output_format}'. "
             f"Available formats: json, markdown"

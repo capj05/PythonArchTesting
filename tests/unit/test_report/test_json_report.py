@@ -8,8 +8,9 @@ from typing import List
 
 import pytest
 
-from pythonarchtesting.report.api import build_report
-from pythonarchtesting.report.json_generator import JSONReportGenerator
+from pythonarchtesting.report.api import build_report, generate_validation_report
+from pythonarchtesting.report.renderers.json import render_json
+from pythonarchtesting.report.ir.builder import build_report_ir
 from pythonarchtesting.state import ProjectState, ValidationResult, ValidationStatus
 
 
@@ -58,7 +59,7 @@ def test_schema_v2_root_fields(single_project_state):
     for result in results:
         single_project_state.add_validation_result(result)
 
-    report = JSONReportGenerator(single_project_state).generate()
+    report = render_json(build_report_ir(single_project_state))
     data = json.loads(report)
 
     assert data["schema_version"] == "2"
@@ -92,7 +93,7 @@ def test_schema_v2_results_sorted(single_project_state):
     for result in results:
         single_project_state.add_validation_result(result)
 
-    report = JSONReportGenerator(single_project_state).generate()
+    report = generate_validation_report(single_project_state, "json")
     data = json.loads(report)
 
     expected = build_report(single_project_state)["results"]

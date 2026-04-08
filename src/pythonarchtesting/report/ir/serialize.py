@@ -81,10 +81,12 @@ def _result_to_dict(item: ResultItem) -> Dict[str, Any]:
 
 
 def _matching_to_dict(section: MatchingSection) -> Dict[str, Any]:
-    return {
+    out: Dict[str, Any] = {
         "matches": [dict(v) for v in section.matches],
-        "matching_config": dict(section.matching_config),
     }
+    if section.matching_config:
+        out["matching_config"] = dict(section.matching_config)
+    return out
 
 
 def _results_summary_to_dict(summary: Any) -> Dict[str, Any]:

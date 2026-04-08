@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from pythonarchtesting.report.ir.normalize import report_dict_to_ir
 from pythonarchtesting.report.renderers.common import core_rows
 from pythonarchtesting.report.renderers.json import render_json
 from pythonarchtesting.report.renderers.markdown import render_markdown
@@ -48,10 +49,11 @@ def _sample_report() -> dict:
 
 def test_format_parity_core_rows():
     report = _sample_report()
+    document = report_dict_to_ir(report, kind="single")
     expected_rows = core_rows(report["results"])
 
-    json_output = render_json(report)
-    markdown_output = render_markdown(report)
+    json_output = render_json(document)
+    markdown_output = render_markdown(document)
 
     parsed = json.loads(json_output)
     assert core_rows(parsed["results"]) == expected_rows

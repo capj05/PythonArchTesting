@@ -320,11 +320,15 @@ def report_dict_to_ir(report: Dict[str, Any], kind: str) -> ReportDocument:
         if not summary_payload and results_payload:
             summary_payload = build_results_summary(results_payload)
         original_target_id = str(target_payload.get("target_id") or "")
+        display_name_override = str(
+            target_payload.get("display_name") or original_target_id
+        )
         target_path = str(target_payload.get("target_path") or "")
         canonical_target_id, display_name = normalized_ids.get(
             (original_target_id, target_path),
-            (slugify_target_id(original_target_id), original_target_id),
+            (slugify_target_id(original_target_id), display_name_override),
         )
+        display_name = display_name_override or display_name
         targets.append(
             TargetReport(
                 target_id=canonical_target_id,

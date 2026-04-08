@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from pythonarchtesting.report.ir.normalize import report_dict_to_ir
 from pythonarchtesting.report.renderers.markdown import render_markdown
 from pythonarchtesting.report.renderers.markdown_multi import render_markdown_bundle
 from pythonarchtesting.report.renderers.matching_debug import (
@@ -193,7 +194,8 @@ def test_metric_union_and_deterministic_column_order():
 
 def test_markdown_matching_debug_renders_and_escapes_problematic_content():
     md = render_markdown(
-        _single_report_with_matching(), matching_debug_context=_single_context()
+        report_dict_to_ir(_single_report_with_matching(), kind="single"),
+        matching_debug_context=_single_context(),
     )
     assert "## Matching Candidates (Debug)" in md
     assert "No candidates recorded." in md
@@ -238,7 +240,10 @@ def test_markdown_metric_table_optional_when_many_metrics_points_to_html():
     report["matching"]["matches"][0]["candidates"][0]["breakdown"].update(
         {"m1": 1, "m2": 2, "m3": 3, "m4": 4, "m5": 5}
     )
-    md = render_markdown(report, matching_debug_context=_single_context())
+    md = render_markdown(
+        report_dict_to_ir(report, kind="single"),
+        matching_debug_context=_single_context(),
+    )
     assert "Metric heatmap omitted in Markdown output" in md
 
 
@@ -343,7 +348,11 @@ def test_multi_target_markdown_matching_debug_isolated_per_target(tmp_path: Path
     }
 
     md_root = tmp_path / "md"
-    render_markdown_bundle(report, md_root, matching_debug_context=ctx)
+    render_markdown_bundle(
+        report_dict_to_ir(report, kind="multi"),
+        md_root,
+        matching_debug_context=ctx,
+    )
 
     a_md = (md_root / "targets" / "a.md").read_text(encoding="utf-8")
     b_md = (md_root / "targets" / "b.md").read_text(encoding="utf-8")

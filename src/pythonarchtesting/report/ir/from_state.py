@@ -5,7 +5,7 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 from hashlib import sha1
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from pythonarchtesting.config import load_config
 from pythonarchtesting.config.accessors import (
@@ -27,8 +27,21 @@ from ..policy import (
     compute_target_exit_code,
 )
 from ..schema_v2 import validate_report_schema_v2
-from .models import ReportDocument
-from .normalize import report_dict_to_ir
+from .models import (
+    AggregateSummary,
+    EntityRef,
+    EvidenceItem,
+    MatchingSection,
+    MatchingSummary,
+    ReportDocument,
+    ResultItem,
+    ResultsSummary,
+    RunMeta,
+    TargetReport,
+)
+from .order import sort_matches, sort_results, sort_targets
+from .serialize import to_legacy_schema_v2
+from .target_ids import normalize_target_ids
 
 _VALIDATIONRESULT_FIELD_MAP = {
     "src_module": "src_package",
@@ -257,6 +270,196 @@ def _entity_location(entity: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "class": class_name,
         "function": function_name,
     }
+
+
+def _entity_ref(value: Optional[Dict[str, Any]]) -> EntityRef:
+    src = value or {}
+    class_name, function_name = _split_qualname(src.get("qualname"))
+    return EntityRef(
+        module=src.get("module"),
+        qualname=src.get("qualname"),
+        file=src.get("file"),
+        line=src.get("line"),
+        cls=class_name,
+        function=function_name,
+    )
+
+
+def _evidence_item(value: Dict[str, Any]) -> EvidenceItem:
+    location = value.get("location") or {}
+    payload = value.get("payload")
+    if not isinstance(payload, dict):
+        payload = {"value": payload}
+    evidence_id = payload.get("evidence_id")
+    return EvidenceItem(
+        type=str(value.get("type") or ""),
+        payload=dict(payload),
+        location_file=location.get("file"),
+        location_line=location.get("line"),
+        evidence_id=str(evidence_id) if evidence_id is not None else None,
+    )
+
+
+def _stable_key(item: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
+    return (
+        str(item.get("severity") or ""),
+        str(item.get("status") or ""),
+        str(item.get("rule_id") or ""),
+        str(item.get("source_entity_id") or ""),
+        str(item.get("target_entity_id") or ""),
+    )
+
+
+def _ordering_key(item: Dict[str, Any]) -> Tuple[Any, ...]:
+    source = item.get("source") or {}
+    target = item.get("target") or {}
+    return (
+        SEV_RANK.get(str(item.get("severity") or "").lower(), 9),
+        STAT_RANK.get(str(item.get("status") or ""), 9),
+        str(item.get("rule_id") or ""),
+        str(item.get("source_entity_id") or ""),
+        str(item.get("target_entity_id") or ""),
+        str(source.get("file") or ""),
+        -1 if source.get("line") is None else int(source.get("line") or 0),
+        str(target.get("file") or ""),
+        -1 if target.get("line") is None else int(target.get("line") or 0),
+        str(item.get("result_id") or ""),
+    )
+
+
+def _result_item(item: Dict[str, Any]) -> ResultItem:
+    known_keys = {
+        "result_id",
+        "project_id",
+        "rule_id",
+        "rule_type",
+        "category",
+        "status",
+        "severity",
+        "message",
+        "source_entity_id",
+        "target_entity_id",
+        "match_status",
+        "confidence",
+        "source",
+        "target",
+        "evidence",
+        "details",
+        "fix_hints",
+        "tags",
+        "timing_seconds",
+        "activation_source",
+    }
+    return ResultItem(
+        result_id=str(item.get("result_id") or ""),
+        project_id=str(item.get("project_id") or ""),
+        rule_id=str(item.get("rule_id") or ""),
+        rule_type=(
+            str(item["rule_type"]) if item.get("rule_type") is not None else None
+        ),
+        category=str(item.get("category") or ""),
+        status=str(item.get("status") or ""),
+        severity=str(item.get("severity") or ""),
+        message=str(item.get("message") or ""),
+        source_entity_id=(
+            str(item["source_entity_id"])
+            if item.get("source_entity_id") is not None
+            else None
+        ),
+        target_entity_id=(
+            str(item["target_entity_id"])
+            if item.get("target_entity_id") is not None
+            else None
+        ),
+        match_status=(
+            str(item["match_status"]) if item.get("match_status") is not None else None
+        ),
+        confidence=(
+            float(item["confidence"]) if item.get("confidence") is not None else None
+        ),
+        source=_entity_ref(item.get("source") or {}),
+        target=_entity_ref(item.get("target") or {}),
+        evidence=tuple(_evidence_item(ev) for ev in (item.get("evidence") or [])),
+        details=dict(item.get("details") or {}),
+        fix_hints=tuple(str(v) for v in (item.get("fix_hints") or [])),
+        tags=tuple(str(v) for v in (item.get("tags") or [])),
+        timing_seconds=(
+            float(item["timing_seconds"]) if item.get("timing_seconds") is not None else None
+        ),
+        activation_source=(
+            str(item["activation_source"])
+            if item.get("activation_source") is not None
+            else None
+        ),
+        stable_key=_stable_key(item),
+        ordering_key=_ordering_key(item),
+        extras={k: v for k, v in item.items() if k not in known_keys},
+    )
+
+
+def _matching_summary(matches: Iterable[Dict[str, Any]]) -> MatchingSummary:
+    rows = list(matches)
+    summary = {
+        "total": len(rows),
+        "matched": 0,
+        "low_confidence": 0,
+        "ambiguous": 0,
+        "unmatched": 0,
+    }
+    for row in rows:
+        status = str(row.get("status") or "")
+        if status in summary:
+            summary[status] += 1
+    return MatchingSummary(
+        total=summary["total"],
+        matched=summary["matched"],
+        low_confidence=summary["low_confidence"],
+        ambiguous=summary["ambiguous"],
+        unmatched=summary["unmatched"],
+    )
+
+
+def _results_summary_ir(summary_payload: Optional[Dict[str, Any]]) -> ResultsSummary:
+    data = summary_payload or {}
+    return ResultsSummary(
+        results_total=int(data.get("results_total", 0)),
+        status_counts=dict(data.get("status_counts") or {}),
+        severity_counts=dict(data.get("severity_counts") or {}),
+        category_counts=dict(data.get("category_counts") or {}),
+        top_rules=tuple(dict(row) for row in (data.get("top_rules") or [])),
+        top_source_files=tuple(dict(row) for row in (data.get("top_source_files") or [])),
+        timings=(dict(data["timings"]) if data.get("timings") is not None else None),
+    )
+
+
+def _matching_section(matches: Iterable[Dict[str, Any]], config: Dict[str, Any]) -> MatchingSection:
+    ordered_matches = tuple(sort_matches(matches))
+    return MatchingSection(
+        matches=ordered_matches,
+        matching_config=dict(config),
+        summary=_matching_summary(ordered_matches),
+    )
+
+
+def _config_fingerprint(config_snapshot: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not config_snapshot:
+        return None
+    payload = json.dumps(config_snapshot, sort_keys=True, default=str, separators=(",", ":"))
+    return sha1(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _validate_report_document(
+    document: ReportDocument,
+    config: Any,
+    validate_report_schema_v2_fn: Callable[[Any], List[str]],
+) -> None:
+    if not _get_config_bool(config, "report", "validate_schema_v2", False):
+        return
+    errors = validate_report_schema_v2_fn(to_legacy_schema_v2(document))
+    if errors:
+        raise ReportGenerationError(
+            "Report schema v2 validation failed: " + "; ".join(errors)
+        )
 
 
 def _result_id(project_id: str, item: Dict[str, Any]) -> str:
@@ -778,112 +981,159 @@ def _build_results_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _build_single_report_dict(
+def _format_datetime_z(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _build_single_report_document(
     state_obj: ProjectState,
     config: Optional[Any],
     *,
     now_utc_z_fn: Callable[[], str],
     validate_report_schema_v2_fn: Callable[[Any], List[str]],
-) -> Dict[str, Any]:
+) -> ReportDocument:
     cfg = config or getattr(state_obj, "config", None) or load_config()
-    run = _build_run_section(state_obj, cfg, now_utc_z_fn=now_utc_z_fn)
-    matching = _build_matching_section(state_obj, cfg)
-    results = _build_results_section(state_obj, cfg)
-    summary = _build_results_summary(results)
-    exit_code = compute_exit_code(results, cfg)
-    report = {
-        "schema_version": "2",
-        "framework_version": _framework_version(),
-        "generated_at": run["generated_at"],
-        "run": run,
-        "matching": matching,
-        "results": results,
-        "summary": summary,
-        "exit_code": exit_code,
-    }
-    if _get_config_bool(cfg, "report", "validate_schema_v2", False):
-        errors = validate_report_schema_v2_fn(report)
-        if errors:
-            raise ReportGenerationError(
-                "Report schema v2 validation failed: " + "; ".join(errors)
-            )
-    return report
+    generated_at = now_utc_z_fn()
+    config_snapshot = _maybe_config_snapshot(cfg)
+    framework_version = _framework_version()
+    results_payload = _build_results_section(state_obj, cfg)
+    summary_payload = _build_results_summary(results_payload)
+    results = tuple(sort_results([_result_item(item) for item in results_payload]))
+    matching_payload = _build_matching_section(state_obj, cfg)
+    matching = _matching_section(
+        matching_payload.get("matches") or [],
+        matching_payload.get("matching_config") or {},
+    )
+    exit_code = compute_exit_code(results_payload, cfg)
+    run = RunMeta(
+        generated_at=generated_at,
+        target_path=(
+            str(state_obj.target_project_path)
+            if getattr(state_obj, "target_project_path", None)
+            else None
+        ),
+        source_path=None,
+        reference_modules=tuple(sorted(str(v) for v in state_obj.reference_modules)),
+        config_snapshot=config_snapshot,
+        config_fingerprint=_config_fingerprint(config_snapshot),
+        tool_version=framework_version,
+        mode=STATIC_ANALYSIS_MODE,
+    )
+    target_id = _derive_project_id(None, run.target_path)
+    target = TargetReport(
+        target_id=target_id,
+        display_name=target_id,
+        source_root=run.source_path,
+        target_path=str(run.target_path or ""),
+        tags=tuple(),
+        mode=run.mode,
+        matching=matching,
+        results=results,
+        summary=_results_summary_ir(summary_payload),
+        artifacts=tuple(),
+        exit_code=exit_code,
+    )
+    document = ReportDocument(
+        schema_version="2",
+        framework_version=framework_version,
+        generated_at=generated_at,
+        run=run,
+        targets=(target,),
+        summary=AggregateSummary(
+            targets_total=1,
+            targets_failed=1 if exit_code else 0,
+            targets_passed=0 if exit_code else 1,
+            results=_results_summary_ir(summary_payload),
+        ),
+        exit_code=exit_code,
+        kind="single",
+    )
+    _validate_report_document(document, cfg, validate_report_schema_v2_fn)
+    return document
 
 
-def _format_datetime_z(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _build_multi_target_report_dict(
+def _build_multi_target_report_document(
     run_state: RunState,
     target_states: List[TargetRunState],
     config: Optional[Any],
     *,
     validate_report_schema_v2_fn: Callable[[Any], List[str]],
-) -> Dict[str, Any]:
+) -> ReportDocument:
     cfg = config or run_state.config or load_config()
     generated_at = _format_datetime_z(run_state.run_generated_at)
+    config_snapshot = _maybe_config_snapshot(cfg)
+    run = RunMeta(
+        generated_at=generated_at,
+        target_path=None,
+        source_path=str(run_state.source_path),
+        reference_modules=tuple(sorted(str(v) for v in run_state.reference_modules)),
+        config_snapshot=config_snapshot,
+        config_fingerprint=_config_fingerprint(config_snapshot),
+        tool_version=run_state.framework_version,
+        mode=STATIC_ANALYSIS_MODE,
+    )
 
-    run_section = {
-        "generated_at": generated_at,
-        "source_path": str(run_state.source_path),
-        "reference_modules": sorted(list(run_state.reference_modules)),
-        "config_snapshot": _maybe_config_snapshot(cfg),
-        "config_fingerprint": None,
-        "tool_version": run_state.framework_version,
-        "mode": STATIC_ANALYSIS_MODE,
-    }
+    target_id_map = normalize_target_ids(
+        [
+            {"target_id": target.target_id, "target_path": str(target.target_path)}
+            for target in target_states
+        ]
+    )
+    targets: List[TargetReport] = []
+    combined_results_payload: List[Dict[str, Any]] = []
 
-    targets_payload: List[Dict[str, Any]] = []
-    combined_results: List[Dict[str, Any]] = []
-    for target in sorted(target_states, key=lambda t: t.target_id):
-        matching = _build_matching_section_for_target(target, cfg)
-        results = _build_results_section_for_target(run_state, target, cfg)
-        target_summary = _build_results_summary(results)
-        exit_code = compute_target_exit_code(results, cfg)
-        target.exit_code = exit_code
-        combined_results.extend(results)
-        targets_payload.append(
-            {
-                "target_id": target.target_id,
-                "display_name": target.target_id,
-                "source_root": str(run_state.source_path),
-                "target_path": str(target.target_path),
-                "tags": [],
-                "mode": STATIC_ANALYSIS_MODE,
-                "matching": matching,
-                "results": results,
-                "summary": target_summary,
-                "artifacts": [],
-                "exit_code": exit_code,
-            }
+    for target_state in target_states:
+        matching_payload = _build_matching_section_for_target(target_state, cfg)
+        results_payload = _build_results_section_for_target(run_state, target_state, cfg)
+        target_summary_payload = _build_results_summary(results_payload)
+        exit_code = compute_target_exit_code(results_payload, cfg)
+        target_state.exit_code = exit_code
+        combined_results_payload.extend(results_payload)
+        original_target_id = str(target_state.target_id)
+        target_path = str(target_state.target_path)
+        canonical_target_id, display_name = target_id_map.get(
+            (original_target_id, target_path),
+            (original_target_id, original_target_id),
+        )
+        targets.append(
+            TargetReport(
+                target_id=canonical_target_id,
+                display_name=display_name,
+                source_root=run.source_path,
+                target_path=target_path,
+                tags=tuple(),
+                mode=run.mode,
+                matching=_matching_section(
+                    matching_payload.get("matches") or [],
+                    matching_payload.get("matching_config") or {},
+                ),
+                results=tuple(sort_results([_result_item(item) for item in results_payload])),
+                summary=_results_summary_ir(target_summary_payload),
+                artifacts=tuple(),
+                exit_code=exit_code,
+            )
         )
 
-    failed = sum(1 for t in target_states if t.exit_code == 1)
-    summary = {
-        "targets_total": len(target_states),
-        "targets_failed": failed,
-        "targets_passed": len(target_states) - failed,
-        "results": _build_results_summary(combined_results),
-    }
-
+    targets = sort_targets(targets)
+    failed = sum(1 for target in target_states if target.exit_code == 1)
     aggregate_exit_code = compute_aggregate_exit_code(target_states, cfg)
-    report = {
-        "schema_version": "2",
-        "framework_version": run_state.framework_version,
-        "generated_at": generated_at,
-        "run": run_section,
-        "targets": targets_payload,
-        "summary": summary,
-        "exit_code": aggregate_exit_code,
-    }
-    if _get_config_bool(cfg, "report", "validate_schema_v2", False):
-        errors = validate_report_schema_v2_fn(report)
-        if errors:
-            raise ReportGenerationError(
-                "Report schema v2 validation failed: " + "; ".join(errors)
-            )
-    return report
+    document = ReportDocument(
+        schema_version="2",
+        framework_version=run_state.framework_version,
+        generated_at=generated_at,
+        run=run,
+        targets=tuple(targets),
+        summary=AggregateSummary(
+            targets_total=len(target_states),
+            targets_failed=failed,
+            targets_passed=len(target_states) - failed,
+            results=_results_summary_ir(_build_results_summary(combined_results_payload)),
+        ),
+        exit_code=aggregate_exit_code,
+        kind="multi",
+    )
+    _validate_report_document(document, cfg, validate_report_schema_v2_fn)
+    return document
 
 
 def build_report_document(
@@ -896,13 +1146,12 @@ def build_report_document(
     ),
 ) -> ReportDocument:
     """Build typed IR document for a single-target run."""
-    report = _build_single_report_dict(
+    return _build_single_report_document(
         state_obj,
         config,
         now_utc_z_fn=now_utc_z_fn,
         validate_report_schema_v2_fn=validate_report_schema_v2_fn,
     )
-    return report_dict_to_ir(report, kind="single")
 
 
 def build_multi_target_report_document(
@@ -915,10 +1164,9 @@ def build_multi_target_report_document(
     ),
 ) -> ReportDocument:
     """Build typed IR document for a multi-target run."""
-    report = _build_multi_target_report_dict(
+    return _build_multi_target_report_document(
         run_state,
         target_states,
         config,
         validate_report_schema_v2_fn=validate_report_schema_v2_fn,
     )
-    return report_dict_to_ir(report, kind="multi")
