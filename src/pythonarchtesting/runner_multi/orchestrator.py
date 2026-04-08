@@ -40,7 +40,7 @@ def run_multi(
     if load_config_first and config is None:
         from pythonarchtesting.config import load_config
 
-        config = load_config(config_path=custom_config, env=os.environ, cli_args={})
+        config = load_config(config_path=custom_config, cli_args={})
 
     if config is None:
         raise ValueError("Config is required for run_multi")

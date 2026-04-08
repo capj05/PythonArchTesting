@@ -166,7 +166,6 @@ def _maybe_config_snapshot(
         "files",
         "performance",
         "memory",
-        "type_check",
         "import",
         "logging",
         "report",

@@ -19,7 +19,7 @@ class ValidationResult:
 class ConfigurationValidator:
     """Validates configuration values against schema."""
 
-    _REMOVED_SECTIONS = {"arch_rules", "runtime", "structural_check"}
+    _REMOVED_SECTIONS = {"arch_rules", "runtime", "structural_check", "type_check"}
 
     def __init__(self) -> None:
         self.schema = self._load_schema()

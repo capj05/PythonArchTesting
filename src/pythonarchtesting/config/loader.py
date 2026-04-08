@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import configparser
 import os
+import warnings
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Optional
 
 from pythonarchtesting.constants import FileConstants
 from pythonarchtesting.exceptions import ConfigurationError, ErrorContext
@@ -35,6 +36,33 @@ def _package_root() -> Path:
 def _default_config_path() -> str:
     """Get the default configuration file path."""
     return str(_package_root() / FileConstants.DEFAULT_CONFIG_FILE)
+
+
+def _resolve_auto_config_path(cwd: Path) -> Optional[Path]:
+    """Resolve the auto-discovered user config file in the current directory."""
+    canonical_path = cwd / "python_arch_testing.conf"
+    legacy_path = cwd / "custom_config.conf"
+
+    if canonical_path.is_file():
+        if legacy_path.is_file():
+            warnings.warn(
+                "Ignoring deprecated auto-discovered config file "
+                "'custom_config.conf' because 'python_arch_testing.conf' is present.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return canonical_path
+
+    if legacy_path.is_file():
+        warnings.warn(
+            "Auto-discovery of 'custom_config.conf' is deprecated; rename it to "
+            "'python_arch_testing.conf'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return legacy_path
+
+    return None
 
 
 def _load_config_file(config_path: str) -> Dict[str, Dict[str, str]]:
@@ -259,11 +287,10 @@ def _reject_removed_runtime_cli_args(cli_args: Dict[str, Any]) -> None:
 def load_config(
     *,
     config_path: Optional[str] = None,
-    env: Optional[Mapping[str, str]] = None,
     cli_args: Optional[Dict[str, Any]] = None,
 ) -> Config:
     """
-    Load configuration from files, environment, and CLI arguments.
+    Load configuration from files and CLI arguments.
 
     This function performs explicit configuration loading without any
     import-time side effects. It can be called multiple times with
@@ -271,7 +298,6 @@ def load_config(
 
     Args:
         config_path: Optional path to custom configuration file
-        env: Optional environment mapping (defaults to os.environ)
         cli_args: Optional CLI arguments dictionary
 
     Returns:
@@ -280,7 +306,6 @@ def load_config(
     Raises:
         ConfigurationError: If configuration is invalid or cannot be loaded
     """
-    env = env or os.environ
     cli_args = cli_args or {}
     _reject_removed_runtime_cli_args(cli_args)
 
@@ -305,11 +330,9 @@ def load_config(
         custom_config = _load_config_file(config_path)
         _merge_config_dicts(config_dict, custom_config)
     else:
-        # Try to load custom config from current directory
-        custom_config_filename = "python_arch_testing.conf"
-        custom_config_path = os.path.join(os.getcwd(), custom_config_filename)
-        if os.path.exists(custom_config_path):
-            custom_config = _load_config_file(custom_config_path)
+        auto_config_path = _resolve_auto_config_path(Path.cwd())
+        if auto_config_path is not None:
+            custom_config = _load_config_file(str(auto_config_path))
             _merge_config_dicts(config_dict, custom_config)
 
     # Apply CLI arguments (highest priority)
@@ -373,8 +396,6 @@ def _apply_cli_args(
                     value = "DEBUG"
                 elif transform == "ERROR" and value:
                     value = "ERROR"
-                elif cli_key == "runtime_fast" and not value:
-                    continue
             else:
                 section, key = mapping
 

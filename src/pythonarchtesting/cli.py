@@ -159,7 +159,6 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     config = load_config(
         config_path=args.config,
-        env=os.environ,
         cli_args={"output_format": getattr(args, "format", None)},
     )
 

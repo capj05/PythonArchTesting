@@ -43,8 +43,6 @@ class FilesConfig:
 
     python_extension: str = ".py"
     init_filename: str = "__init__.py"
-    config_default: str = "defaults.conf"
-    config_custom: str = "custom_config.conf"
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,17 +63,6 @@ class MemoryConfig:
     max_module_age_hours: float = 24.0
     auto_cleanup: bool = True
     cleanup_interval: int = 1000
-
-
-@dataclass(frozen=True, slots=True)
-class TypeCheckConfig:
-    """Type checking configuration."""
-
-    enabled: bool = True
-    check_return_values: bool = True
-    check_arguments: bool = True
-    strict: bool = True
-    show_annotation_warnings: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +149,6 @@ class Config:
     files: FilesConfig = field(default_factory=FilesConfig)
     performance: PerformanceConfig = field(default_factory=PerformanceConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
-    type_check: TypeCheckConfig = field(default_factory=TypeCheckConfig)
     import_config: ImportConfig = field(default_factory=ImportConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     report: ReportConfig = field(default_factory=ReportConfig)
@@ -274,7 +260,6 @@ def create_config_from_dict(config_dict: Dict[str, Dict[str, Any]]) -> Config:
         files=_get_section("files", FilesConfig),
         performance=_get_section("performance", PerformanceConfig),
         memory=_get_section("memory", MemoryConfig),
-        type_check=_get_section("type_check", TypeCheckConfig),
         import_config=_get_section("import", ImportConfig),
         logging=_get_section("logging", LoggingConfig),
         report=_get_section("report", ReportConfig),

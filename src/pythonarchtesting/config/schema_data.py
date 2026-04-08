@@ -68,16 +68,6 @@ CONFIGURATION_SCHEMA: Dict[str, Dict[str, ValidationRule]] = {
             pattern=r"^[a-zA-Z_][a-zA-Z0-9_.]*\.py$",
             default_value="__init__.py",
         ),
-        "config_default": ValidationRule(
-            value_type=ValueType.STRING,
-            pattern=r"^[a-zA-Z0-9._-]+$",
-            default_value="defaults.conf",
-        ),
-        "config_custom": ValidationRule(
-            value_type=ValueType.STRING,
-            pattern=r"^[a-zA-Z0-9._-]+$",
-            default_value="custom_config.conf",
-        ),
     },
     "performance": {
         "default_timeout": ValidationRule(
@@ -121,19 +111,6 @@ CONFIGURATION_SCHEMA: Dict[str, Dict[str, ValidationRule]] = {
             max_value=10000,
             default_value=1000,
             error_message="Cleanup interval must be between 10 and 10000",
-        ),
-    },
-    "type_check": {
-        "enabled": ValidationRule(value_type=ValueType.BOOLEAN, default_value=True),
-        "check_return_values": ValidationRule(
-            value_type=ValueType.BOOLEAN, default_value=True
-        ),
-        "check_arguments": ValidationRule(
-            value_type=ValueType.BOOLEAN, default_value=True
-        ),
-        "strict": ValidationRule(value_type=ValueType.BOOLEAN, default_value=True),
-        "show_annotation_warnings": ValidationRule(
-            value_type=ValueType.BOOLEAN, default_value=True
         ),
     },
     "import": {
