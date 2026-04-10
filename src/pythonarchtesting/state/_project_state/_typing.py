@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-from types import ModuleType
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 from pythonarchtesting.constants import ValidationConstants
-from pythonarchtesting.state.discovery import ModuleDiscovery
-from pythonarchtesting.state.memory_manager import MemoryManager
-from pythonarchtesting.state.validation import ValidationResult
+
+from ._context import ProjectContext
+from ._stores import ProjectServices, ProjectStores
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from pythonarchtesting.config import Config
-    from pythonarchtesting.core.models import Rule, RuleResult
-    from pythonarchtesting.entities import Entity, EntityIndex
-    from pythonarchtesting.matching import MatchResult
+    from pythonarchtesting.state.validation import ValidationResult
 
 FunctionLike = Callable[..., Any]
 FunctionRegistry = dict[str, list[FunctionLike]]
@@ -22,49 +19,63 @@ ValidationStats = dict[str, dict[ValidationConstants.ValidationStatus, int]]
 EvidenceCache = dict[str, list[Any]]
 
 
-class ProjectStateLike(Protocol):
-    config: Config | None
-    target_project_path: str | None
-    reference_modules: list[str]
-    validation_scope: str
-    target_module_name: str | None
-    imported_modules: dict[str, ModuleType]
-    target_functions: FunctionRegistry
-    import_order: list[str]
-    validation_results: list[ValidationResult]
-    validation_stats: ValidationStats
-    source_entities: list[Entity]
-    target_entities: list[Entity]
-    source_non_matchable_entities: list[Entity]
-    target_non_matchable_entities: list[Entity]
-    source_index: EntityIndex | None
-    target_index: EntityIndex | None
-    source_by_id: dict[str, Entity]
-    target_by_id: dict[str, Entity]
-    match_results: list[MatchResult]
-    match_by_source_id: dict[str, MatchResult]
-    match_registry: dict[str, MatchResult]
-    rules: list[Rule]
-    rule_results: list[RuleResult]
-    _static_evidence_cache: EvidenceCache | None
-    _sys_path_inserted: str | None
-    _import_stack: list[str]
-    memory_manager: MemoryManager
-    module_discovery: ModuleDiscovery
+class BaseStateLike(Protocol):
+    _context: ProjectContext
+    _stores: ProjectStores
+    _services: ProjectServices
 
-    def add_validation_result(self, result: ValidationResult) -> None: ...
+    def _ensure_context_config(self) -> ProjectContext: ...
 
-    def import_module(self, module_path: str) -> ModuleType | None: ...
+    @property
+    def memory_manager(self) -> Any: ...
+
+
+class ImportsStateLike(BaseStateLike, Protocol):
+    def _replace_context(self, **changes: Any) -> ProjectContext: ...
 
     def _active_config(self) -> Config: ...
 
+    def add_validation_result(self, result: ValidationResult) -> None: ...
+
+    def import_module(self, module_path: str) -> Any: ...
+
     def _set_import_order(self, module_paths: list[str]) -> None: ...
 
-    def _discover_python_files(self, root_path: Path) -> list[Path]: ...
-
-    def _resolve_source_module_files(self, module_path: str) -> list[Path]: ...
-
     def _continue_on_import_error(self) -> bool: ...
+
+    @property
+    def target_project_path(self) -> str | None: ...
+
+    @property
+    def target_module_name(self) -> str | None: ...
+
+    @property
+    def reference_modules(self) -> list[str]: ...
+
+    @reference_modules.setter
+    def reference_modules(self, value: list[str]) -> None: ...
+
+    @property
+    def import_order(self) -> list[str]: ...
+
+    @import_order.setter
+    def import_order(self, value: list[str]) -> None: ...
+
+    @property
+    def imported_modules(self) -> dict[str, Any]: ...
+
+    @imported_modules.setter
+    def imported_modules(self, value: dict[str, Any]) -> None: ...
+
+    @property
+    def target_functions(self) -> FunctionRegistry: ...
+
+    @target_functions.setter
+    def target_functions(self, value: FunctionRegistry) -> None: ...
+
+
+class FunctionsStateLike(BaseStateLike, Protocol):
+    def import_module(self, module_path: str) -> Any: ...
 
     def find_reference_function_str(
         self,
@@ -72,7 +83,7 @@ class ProjectStateLike(Protocol):
         target_module: str | None = None,
         src_module: str | None = None,
         src_qualname: str | None = None,
-    ) -> FunctionLike | None: ...
+    ) -> Any: ...
 
     def _find_reference(
         self,
@@ -80,14 +91,47 @@ class ProjectStateLike(Protocol):
         target_module: str | None,
         src_module: str | None,
         src_qualname: str | None,
-    ) -> FunctionLike | None: ...
+    ) -> Any: ...
 
     def _module_distance(self, a: str, b: str | None) -> tuple[int, int]: ...
 
-    def build_entity_indexes(self) -> None: ...
 
-    def run_matching(self) -> None: ...
+class EntitiesStateLike(BaseStateLike, Protocol):
+    def add_validation_result(self, result: ValidationResult) -> None: ...
 
-    def compile_rules(self) -> None: ...
+    def _discover_python_files(self, root_path: Path) -> list[Path]: ...
 
-    def evaluate_rules(self) -> None: ...
+    def _resolve_source_module_files(self, module_path: str) -> list[Path]: ...
+
+
+class RulesStateLike(BaseStateLike, Protocol):
+    def add_validation_result(self, result: ValidationResult) -> None: ...
+
+
+class EvidenceStateLike(BaseStateLike, Protocol):
+    def _active_config(self) -> Config: ...
+
+
+class MatchStateLike(BaseStateLike, Protocol):
+    @property
+    def source_by_id(self) -> dict[str, Any]: ...
+
+    @property
+    def target_index(self) -> Any: ...
+
+
+__all__ = [
+    "BaseStateLike",
+    "EvidenceCache",
+    "EvidenceStateLike",
+    "FunctionLike",
+    "FunctionRegistry",
+    "FunctionsStateLike",
+    "ImportsStateLike",
+    "MatchStateLike",
+    "ProjectContext",
+    "ProjectServices",
+    "ProjectStores",
+    "RulesStateLike",
+    "ValidationStats",
+]

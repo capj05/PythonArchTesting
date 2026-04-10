@@ -6,19 +6,14 @@ import os
 import sys
 import time
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
 from pythonarchtesting.config.accessors import get_bool, get_int
 from pythonarchtesting.constants import ImportConstants
 from pythonarchtesting.infrastructure.logging import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover
-    from ._typing import (
-        EvidenceCache,
-        FunctionRegistry,
-        ProjectStateLike,
-        ValidationStats,
-    )
+    from ._typing import ImportsStateLike
 
 logger = get_logger(__name__)
 
@@ -31,89 +26,52 @@ class ProjectStateImportsMixin:
     - import_module()
     """
 
-    target_project_path: str | None
-    target_module_name: str | None
-    reference_modules: list[str]
-    imported_modules: dict[str, ModuleType]
-    target_functions: FunctionRegistry
-    import_order: list[str]
-    validation_results: list[Any]
-    validation_stats: ValidationStats
-    source_entities: list[Any]
-    target_entities: list[Any]
-    source_non_matchable_entities: list[Any]
-    target_non_matchable_entities: list[Any]
-    source_index: Any
-    target_index: Any
-    source_by_id: dict[str, Any]
-    target_by_id: dict[str, Any]
-    match_results: list[Any]
-    match_by_source_id: dict[str, Any]
-    match_registry: dict[str, Any]
-    rules: list[Any]
-    rule_results: list[Any]
-    _static_evidence_cache: EvidenceCache | None
-    _sys_path_inserted: str | None
-    _import_stack: list[str]
-
     def initialize(
-        self: "ProjectStateLike",
+        self: "ImportsStateLike",
         target_project_path: str,
         target_module_name: Optional[str] = None,
-    ) -> "ProjectStateLike":
+    ) -> "ImportsStateLike":
         """
         Initialize the project state with a target project path.
         """
         normalized_path = os.path.abspath(target_project_path)
-        if self._sys_path_inserted and self._sys_path_inserted in sys.path:
-            if self._sys_path_inserted != normalized_path:
-                sys.path.remove(self._sys_path_inserted)
-        self._sys_path_inserted = None
+        if self._stores.imports.sys_path_inserted in sys.path:
+            current_path = self._stores.imports.sys_path_inserted
+            if current_path and current_path != normalized_path:
+                sys.path.remove(current_path)
 
-        self.target_project_path = normalized_path
-        self.target_module_name = target_module_name
-        self.reference_modules = []
-        self.imported_modules = {}
-        self.target_functions = {}
-        self.import_order = []
-        self.validation_results = []
-        self.validation_stats = {}
-        self.source_entities = []
-        self.target_entities = []
-        self.source_non_matchable_entities = []
-        self.target_non_matchable_entities = []
-        self.source_index = None
-        self.target_index = None
-        self.source_by_id = {}
-        self.target_by_id = {}
-        self.match_results = []
-        self.match_by_source_id = {}
-        self.match_registry = {}
-        self.rules = []
-        self.rule_results = []
-        self._static_evidence_cache = None
+        self._stores.reset_imports()
+        self._stores.reset_validation()
+        self._stores.reset_analysis()
+        self._stores.reset_evidence()
+        self._replace_context(
+            target_project_path=normalized_path,
+            target_module_name=target_module_name,
+            reference_modules=[],
+        )
 
-        self.module_discovery.set_target_path(self.target_project_path)
+        self._services.module_discovery.set_target_path(self.target_project_path)
 
-        logger.info(f"Initializing project state: {self.target_project_path}")
+        logger.info("Initializing project state: %s", self.target_project_path)
 
         if self.target_project_path and self.target_project_path not in sys.path:
             sys.path.insert(0, self.target_project_path)
-            self._sys_path_inserted = self.target_project_path
+            self._stores.imports.sys_path_inserted = self.target_project_path
 
         return self
 
     def register_reference_modules(
-        self: "ProjectStateLike", *module_paths: str
-    ) -> "ProjectStateLike":
+        self: "ImportsStateLike", *module_paths: str
+    ) -> "ImportsStateLike":
         """
         Register reference module paths to be imported.
         """
+        updated_modules = list(self.reference_modules)
         for module_path in module_paths:
-            if module_path and module_path not in self.reference_modules:
-                self.reference_modules.append(module_path)
+            if module_path and module_path not in updated_modules:
+                updated_modules.append(module_path)
 
-        self.reference_modules = sorted(set(self.reference_modules))
+        self.reference_modules = sorted(set(updated_modules))
         if self.reference_modules:
             self._set_import_order(self.import_order + self.reference_modules)
 
@@ -143,7 +101,7 @@ class ProjectStateImportsMixin:
         return self
 
     def validate_functions(
-        self: "ProjectStateLike",
+        self: "ImportsStateLike",
         validate_func: Callable[[Callable[..., Any], str], Any],
     ) -> dict[str, Any]:
         """
@@ -189,14 +147,14 @@ class ProjectStateImportsMixin:
             "execution_time": time.time() - start_time,
         }
 
-    def _continue_on_import_error(self: "ProjectStateLike") -> bool:
+    def _continue_on_import_error(self: "ImportsStateLike") -> bool:
         cfg = self._active_config()
         value = get_bool(cfg, "error_handling", "continue_on_import_error", None)
         if value is None:
             value = get_bool(cfg, "import", "continue_on_import_error", True)
         return bool(value) if value is not None else True
 
-    def import_module(self: "ProjectStateLike", module_path: str) -> ModuleType | None:
+    def import_module(self: "ImportsStateLike", module_path: str) -> ModuleType | None:
         """
         Import a module by its path.
         """
@@ -204,20 +162,18 @@ class ProjectStateImportsMixin:
 
         if module_path in project_modules:
             self.memory_manager.track_module_usage(module_path)
-            return project_modules[module_path]
+            return cast(ModuleType, project_modules[module_path])
 
         if (
             self.memory_manager.lazy_loading_enabled
             and self.memory_manager.should_defer_import(module_path)
         ):
-            logger.debug(f"Deferring import of module: {module_path}")
+            logger.debug("Deferring import of module: %s", module_path)
             return None
 
-        import_stack = self._import_stack
+        import_stack = self._stores.imports.import_stack
         if module_path in import_stack:
-            from pythonarchtesting.exceptions import (
-                ErrorContext,
-            )
+            from pythonarchtesting.exceptions import ErrorContext
             from pythonarchtesting.exceptions import ImportError as FrameworkImportError
 
             error = FrameworkImportError(
@@ -230,7 +186,7 @@ class ProjectStateImportsMixin:
             logger.warning(str(error))
             return None
 
-        self._import_stack.append(module_path)
+        import_stack.append(module_path)
 
         try:
             module = importlib.import_module(module_path)
@@ -246,17 +202,15 @@ class ProjectStateImportsMixin:
                 self._set_import_order(self.import_order + [module_path])
 
             return module
-        except ImportError as e:
-            from pythonarchtesting.exceptions import (
-                ErrorContext,
-            )
+        except ImportError as exc:
+            from pythonarchtesting.exceptions import ErrorContext
             from pythonarchtesting.exceptions import ImportError as FrameworkImportError
 
             context = ErrorContext(module=module_path)
             error = FrameworkImportError(
-                f"Failed to import module '{module_path}': {e}",
+                f"Failed to import module '{module_path}': {exc}",
                 context=context,
-                original_error=e,
+                original_error=exc,
                 error_code="MODULE_IMPORT_FAILED",
                 suggestion="Check if the module path is correct and dependencies are installed.",
             )
@@ -270,17 +224,15 @@ class ProjectStateImportsMixin:
                     return None
                 raise error
             return None
-        except Exception as e:  # pragma: no cover - defensive
-            from pythonarchtesting.exceptions import (
-                ErrorContext,
-            )
+        except Exception as exc:  # pragma: no cover - defensive
+            from pythonarchtesting.exceptions import ErrorContext
             from pythonarchtesting.exceptions import ImportError as FrameworkImportError
 
             context = ErrorContext(module=module_path)
             error = FrameworkImportError(
-                f"Unexpected error importing '{module_path}': {str(e)}",
+                f"Unexpected error importing '{module_path}': {str(exc)}",
                 context=context,
-                original_error=e,
+                original_error=exc,
                 error_code="UNEXPECTED_IMPORT_ERROR",
             )
             logger.error(str(error))
@@ -288,9 +240,9 @@ class ProjectStateImportsMixin:
                 raise error
             return None
         finally:
-            if self._import_stack:
-                self._import_stack.pop()
+            if import_stack:
+                import_stack.pop()
 
-    def _set_import_order(self: "ProjectStateLike", module_paths: list[str]) -> None:
+    def _set_import_order(self: "ImportsStateLike", module_paths: list[str]) -> None:
         """Store deterministic import order."""
         self.import_order = sorted(set(module_paths))

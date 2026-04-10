@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from pathlib import Path
-from types import ModuleType
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
-from pythonarchtesting.config import Config
+from pythonarchtesting.config import Config, load_config
 from pythonarchtesting.constants import ValidationConstants
 from pythonarchtesting.infrastructure.logging import get_logger
 from pythonarchtesting.state.discovery import ModuleDiscovery
 from pythonarchtesting.state.memory_manager import MemoryManager
 
-from ._typing import EvidenceCache, FunctionRegistry, ValidationStats
+from ._context import ProjectContext
+from ._stores import ProjectServices, ProjectStores
 from .entities import ProjectStateEntitiesMixin
 from .evidence import ProjectStateEvidenceMixin
 from .functions import ProjectStateFunctionsMixin
@@ -19,13 +20,32 @@ from .imports import ProjectStateImportsMixin
 from .rules_engine import ProjectStateRulesMixin
 
 if TYPE_CHECKING:
-    from pythonarchtesting.core.models import Rule, RuleResult
-    from pythonarchtesting.entities import Entity, EntityIndex
-    from pythonarchtesting.matching import MatchResult
     from pythonarchtesting.state.validation import ValidationResult
 
 ValidationStatus = ValidationConstants.ValidationStatus
 logger = get_logger(__name__)
+
+
+def _context_property(name: str, *, rebuild_services: bool = False) -> property:
+    def getter(self: "ProjectState") -> Any:
+        return getattr(self._context, name)
+
+    def setter(self: "ProjectState", value: Any) -> None:
+        self._replace_context(**{name: value})
+        if rebuild_services:
+            self._rebuild_services(value)
+
+    return property(getter, setter)
+
+
+def _store_property(store_name: str, field_name: str) -> property:
+    def getter(self: "ProjectState") -> Any:
+        return getattr(getattr(self._stores, store_name), field_name)
+
+    def setter(self: "ProjectState", value: Any) -> None:
+        setattr(getattr(self._stores, store_name), field_name, value)
+
+    return property(getter, setter)
 
 
 class ProjectState(
@@ -39,6 +59,35 @@ class ProjectState(
     State manager for storing project information (single-target only).
     """
 
+    config = _context_property("config", rebuild_services=True)
+    target_project_path = _context_property("target_project_path")
+    reference_modules = _context_property("reference_modules")
+    validation_scope = _context_property("validation_scope")
+    target_module_name = _context_property("target_module_name")
+
+    imported_modules = _store_property("imports", "imported_modules")
+    target_functions = _store_property("imports", "target_functions")
+    import_order = _store_property("imports", "import_order")
+    validation_results = _store_property("validation", "validation_results")
+    validation_stats = _store_property("validation", "validation_stats")
+    source_entities = _store_property("entities", "source_entities")
+    target_entities = _store_property("entities", "target_entities")
+    source_non_matchable_entities = _store_property(
+        "entities", "source_non_matchable_entities"
+    )
+    target_non_matchable_entities = _store_property(
+        "entities", "target_non_matchable_entities"
+    )
+    source_index = _store_property("entities", "source_index")
+    target_index = _store_property("entities", "target_index")
+    source_by_id = _store_property("entities", "source_by_id")
+    target_by_id = _store_property("entities", "target_by_id")
+    match_results = _store_property("matches", "match_results")
+    match_by_source_id = _store_property("matches", "match_by_source_id")
+    match_registry = _store_property("matches", "match_registry")
+    rules = _store_property("rules", "rules")
+    rule_results = _store_property("rules", "rule_results")
+
     def __init__(
         self,
         target_path: str,
@@ -50,57 +99,96 @@ class ProjectState(
 
         logger.info("Initializing project state...")
 
-        # Store configuration
-        self.config: Config | None = config
-        self.target_project_path: str | None = target_path
-        self.reference_modules: list[str] = list(reference_modules)
-        self.validation_scope = validation_scope
-
         self._state_lock = threading.RLock()
-
-        # Single-target configuration
-        self.target_module_name: Optional[str] = None
-        self.imported_modules: dict[str, ModuleType] = {}
-        self.target_functions: FunctionRegistry = {}
-        self.import_order: list[str] = []
-        self._import_stack: list[str] = []
-
-        # Modular components
-        self.memory_manager = MemoryManager(config=config)
-        self.module_discovery = ModuleDiscovery(config=config)
-
-        # Validation
-        self.validation_results: list[ValidationResult] = []
-        self.validation_stats: ValidationStats = {}
-
-        # Matching/entities/rules
-        self.source_entities: list[Entity] = []
-        self.target_entities: list[Entity] = []
-        self.source_non_matchable_entities: list[Entity] = []
-        self.target_non_matchable_entities: list[Entity] = []
-        self.source_index: Optional[EntityIndex] = None
-        self.target_index: Optional[EntityIndex] = None
-        self.source_by_id: dict[str, Entity] = {}
-        self.target_by_id: dict[str, Entity] = {}
-        self.match_results: list[MatchResult] = []
-        self.match_by_source_id: dict[str, MatchResult] = {}
-        self.match_registry: dict[str, MatchResult] = {}
-        self.rules: list[Rule] = []
-        self.rule_results: list[RuleResult] = []
-
-        # Evidence
-        self._static_evidence_cache: EvidenceCache | None = None
-
-        # sys.path tracking
-        self._sys_path_inserted: Optional[str] = None
+        self._context = ProjectContext(
+            config=config,
+            target_project_path=target_path,
+            reference_modules=list(reference_modules),
+            validation_scope=validation_scope,
+            target_module_name=None,
+        )
+        self._stores = ProjectStores()
+        self._services = self._build_services(config)
 
         self._initialized = True
+
+    @property
+    def _static_evidence_cache(self) -> Any:
+        return self._stores.evidence.static_evidence_cache
+
+    @_static_evidence_cache.setter
+    def _static_evidence_cache(self, value: Any) -> None:
+        self._stores.evidence.static_evidence_cache = value
+
+    @property
+    def _import_stack(self) -> list[str]:
+        return self._stores.imports.import_stack
+
+    @_import_stack.setter
+    def _import_stack(self, value: list[str]) -> None:
+        self._stores.imports.import_stack = value
+
+    @property
+    def _sys_path_inserted(self) -> str | None:
+        return self._stores.imports.sys_path_inserted
+
+    @_sys_path_inserted.setter
+    def _sys_path_inserted(self, value: str | None) -> None:
+        self._stores.imports.sys_path_inserted = value
+
+    @property
+    def memory_manager(self) -> MemoryManager:
+        return self._services.memory_manager
+
+    @memory_manager.setter
+    def memory_manager(self, value: MemoryManager) -> None:
+        self._services.memory_manager = value
+
+    @property
+    def module_discovery(self) -> ModuleDiscovery:
+        return self._services.module_discovery
+
+    @module_discovery.setter
+    def module_discovery(self, value: ModuleDiscovery) -> None:
+        self._services.module_discovery = value
+        self._sync_service_target_path()
+
+    def _build_services(self, config: Config | None) -> ProjectServices:
+        module_discovery = ModuleDiscovery(
+            path=self._context.target_project_path,
+            config=config,
+        )
+        return ProjectServices(
+            memory_manager=MemoryManager(config=config),
+            module_discovery=module_discovery,
+        )
+
+    def _sync_service_target_path(self) -> None:
+        self._services.module_discovery.set_target_path(
+            self._context.target_project_path
+        )
+
+    def _replace_context(self, **changes: Any) -> ProjectContext:
+        self._context = replace(self._context, **changes)
+        self._sync_service_target_path()
+        return self._context
+
+    def _rebuild_services(self, config: Config | None = None) -> None:
+        self._services = self._build_services(
+            config if config is not None else self.config
+        )
+
+    def _ensure_context_config(self) -> ProjectContext:
+        if self._context.config is None:
+            config = load_config()
+            self._replace_context(config=config)
+            self._rebuild_services(config)
+        return self._context
 
     def add_validation_result(self, result: ValidationResult) -> None:
         """Add a validation result to the state with thread safety."""
         with self._state_lock:
             self.validation_results.append(result)
-            # Keep existing stat updates by moving the old body here verbatim.
             status = result.status
             check_type = result.check_type
             if check_type not in self.validation_stats:
@@ -125,7 +213,7 @@ class ProjectState(
         """
         Get validation results, optionally filtered by type, status, or function.
         """
-        results = self.validation_results
+        results = cast(list[ValidationResult], self.validation_results)
 
         if check_type:
             results = [r for r in results if r.check_type == check_type]
@@ -145,16 +233,14 @@ class ProjectState(
 
     def discover_modules(self) -> list[str]:
         """Delegate to module discovery component."""
-        if self.target_project_path:
-            self.module_discovery.set_target_path(self.target_project_path)
+        self._sync_service_target_path()
         modules = self.module_discovery.discover_modules()
         self._set_import_order(modules)
         return modules
 
     def _get_discovery_config(self) -> dict[str, Any]:
         """Return discovery settings for the configured target project."""
-        if self.target_project_path:
-            self.module_discovery.set_target_path(self.target_project_path)
+        self._sync_service_target_path()
         return self.module_discovery.get_discovery_config()
 
     def _get_module_file_path(
@@ -184,8 +270,7 @@ class ProjectState(
 
     def clear_validation_results(self) -> None:
         """Clear validation results and accumulated stats."""
-        self.validation_results = []
-        self.validation_stats = {}
+        self._stores.reset_validation()
 
     def get_memory_stats(self) -> dict[str, Any]:
         """Return memory statistics for the current state."""
