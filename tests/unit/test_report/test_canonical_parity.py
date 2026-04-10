@@ -3,16 +3,26 @@ from pathlib import Path
 
 import pytest
 
+import pythonarchtesting.report.api as report_api
 import pythonarchtesting.report.core as report_core
 from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.entities import build_entity_index
 from pythonarchtesting.exceptions import ReportGenerationError
-from pythonarchtesting.report.api import build_multi_target_report, build_report
+from pythonarchtesting.report.api import (
+    build_multi_target_report,
+    build_report,
+    build_single_target_report_from_run_target,
+    generate_single_target_report_from_run_target,
+    generate_validation_report,
+)
 from pythonarchtesting.report.ir.builder import (
     build_multi_target_report_ir,
     build_report_ir,
 )
 from pythonarchtesting.report.ir.serialize import to_legacy_schema_v2
+from pythonarchtesting.runner_multi.orchestrator import (
+    run_single_target as run_single_target_unified,
+)
 from pythonarchtesting.state import ProjectState, ValidationResult, ValidationStatus
 from pythonarchtesting.state_multi import RunState, TargetRunState
 
@@ -156,7 +166,100 @@ def test_report_core_build_report_uses_explicit_hook_injection(tmp_path, monkeyp
 def test_report_core_build_report_uses_explicit_schema_validator(tmp_path, monkeypatch):
     cfg = create_config_from_dict({"report": {"validate_schema_v2": True}})
     state = _state_with_results(tmp_path)
-    monkeypatch.setattr(report_core, "validate_report_schema_v2", lambda _report: ["bad"])
+    monkeypatch.setattr(
+        report_core, "validate_report_schema_v2", lambda _report: ["bad"]
+    )
 
     with pytest.raises(ReportGenerationError):
         report_core.build_report(state, cfg)
+
+
+def test_unified_single_target_report_matches_legacy_project_state_output(
+    tmp_path, monkeypatch
+):
+    source_dir = tmp_path / "reference"
+    target_dir = tmp_path / "target"
+    source_dir.mkdir()
+    target_dir.mkdir()
+    (source_dir / "calculator.pyi").write_text(
+        "from typing import Annotated\n\n"
+        "def add(a: int, b: int) -> "
+        'Annotated[int, ("required_entity_signature", {"mode": "exact"})]: ...\n',
+        encoding="utf-8",
+    )
+    (target_dir / "calculator.py").write_text(
+        "def add(a: int, b: int) -> int:\n    return a + b\n",
+        encoding="utf-8",
+    )
+    cfg = create_config_from_dict(
+        {
+            "discovery": {"included_file_patterns": ["*.pyi"]},
+            "projects": {"source_path": str(source_dir)},
+        }
+    )
+
+    legacy_state = ProjectState(str(target_dir), ["calculator"], config=cfg)
+    legacy_state.analyze()
+
+    monkeypatch.setattr(report_api, "now_utc_z", lambda: "2026-02-12T00:00:00Z")
+
+    run_state, target_state = run_single_target_unified(
+        config=cfg,
+        target_path=str(target_dir),
+        reference_modules=["calculator"],
+    )
+
+    legacy_report = build_report(legacy_state, cfg)
+    unified_report = build_single_target_report_from_run_target(
+        run_state,
+        target_state,
+        cfg,
+    )
+
+    assert unified_report == legacy_report
+
+
+def test_unified_single_target_markdown_matches_legacy_project_state_output(
+    tmp_path, monkeypatch
+):
+    source_dir = tmp_path / "reference"
+    target_dir = tmp_path / "target"
+    source_dir.mkdir()
+    target_dir.mkdir()
+    (source_dir / "calculator.pyi").write_text(
+        "from typing import Annotated\n\n"
+        "def add(a: int, b: int) -> "
+        'Annotated[int, ("required_entity_signature", {"mode": "exact"})]: ...\n',
+        encoding="utf-8",
+    )
+    (target_dir / "calculator.py").write_text(
+        "def add(a: int, b: int) -> int:\n    return a + b\n",
+        encoding="utf-8",
+    )
+    cfg = create_config_from_dict(
+        {
+            "discovery": {"included_file_patterns": ["*.pyi"]},
+            "projects": {"source_path": str(source_dir)},
+        }
+    )
+
+    legacy_state = ProjectState(str(target_dir), ["calculator"], config=cfg)
+    legacy_state.analyze()
+
+    monkeypatch.setattr(report_api, "now_utc_z", lambda: "2026-02-12T00:00:00Z")
+
+    run_state, target_state = run_single_target_unified(
+        config=cfg,
+        target_path=str(target_dir),
+        reference_modules=["calculator"],
+    )
+
+    legacy_report = generate_validation_report(legacy_state, "markdown", config=cfg)
+    unified_report = generate_single_target_report_from_run_target(
+        run_state,
+        target_state,
+        "markdown",
+        cfg,
+    )
+
+    assert unified_report == legacy_report

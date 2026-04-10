@@ -196,21 +196,18 @@ def test_multi_target_cli_does_not_use_project_state_singleton(monkeypatch, tmp_
     assert exit_code == 1
 
 
-def test_single_target_cli_does_not_use_project_state_singleton_constructor(
-    monkeypatch, tmp_path
-):
+def test_single_target_cli_does_not_use_project_state_singleton(monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
     _, target_ok, _ = _smoke_paths()
     monkeypatch.chdir(Path(__file__).resolve().parents[2])
 
-    original_factory = cli_module.ProjectState
-    calls = {"count": 0}
-
-    def _counting_factory(*args, **kwargs):
-        calls["count"] += 1
-        return original_factory(*args, **kwargs)
-
-    monkeypatch.setattr(cli_module, "ProjectState", _counting_factory)
+    monkeypatch.setattr(
+        cli_module,
+        "ProjectState",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("ProjectState should not be used for single-target CLI")
+        ),
+    )
     exit_code = main(
         [
             "--config",
@@ -222,5 +219,4 @@ def test_single_target_cli_does_not_use_project_state_singleton_constructor(
         ]
     )
 
-    assert calls["count"] == 1
     assert exit_code in (0, 1)

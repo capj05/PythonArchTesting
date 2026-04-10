@@ -99,6 +99,29 @@ def test_example_project_readme_uses_current_cli_surface() -> None:
     assert "Decorator syntax remains supported" not in text
 
 
+def test_example_project_reference_uses_current_rule_markers() -> None:
+    root = _repo_root()
+    calculator = (
+        root / "example" / "project_1" / "reference" / "calculator.py"
+    ).read_text(encoding="utf-8")
+    data_processor = (
+        root / "example" / "project_1" / "reference" / "data_processor.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "from pythonarchtesting.rules import required_entity_signature, required_method"
+        in calculator
+    )
+    assert "from src.rules" not in calculator
+    assert ") -> Annotated[" in calculator
+    assert (
+        'required_entity_signature(mode="compatible", return_annotation="warning")'
+        in calculator
+    )
+    assert "from pythonarchtesting.rules import forbid_imports" in data_processor
+    assert "from src.rules" not in data_processor
+
+
 def test_annotation_switch_notes_are_labeled_historical() -> None:
     root = _repo_root()
     files = [
