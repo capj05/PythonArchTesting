@@ -384,7 +384,9 @@ def _result_item(item: Dict[str, Any]) -> ResultItem:
         fix_hints=tuple(str(v) for v in (item.get("fix_hints") or [])),
         tags=tuple(str(v) for v in (item.get("tags") or [])),
         timing_seconds=(
-            float(item["timing_seconds"]) if item.get("timing_seconds") is not None else None
+            float(item["timing_seconds"])
+            if item.get("timing_seconds") is not None
+            else None
         ),
         activation_source=(
             str(item["activation_source"])
@@ -427,12 +429,16 @@ def _results_summary_ir(summary_payload: Optional[Dict[str, Any]]) -> ResultsSum
         severity_counts=dict(data.get("severity_counts") or {}),
         category_counts=dict(data.get("category_counts") or {}),
         top_rules=tuple(dict(row) for row in (data.get("top_rules") or [])),
-        top_source_files=tuple(dict(row) for row in (data.get("top_source_files") or [])),
+        top_source_files=tuple(
+            dict(row) for row in (data.get("top_source_files") or [])
+        ),
         timings=(dict(data["timings"]) if data.get("timings") is not None else None),
     )
 
 
-def _matching_section(matches: Iterable[Dict[str, Any]], config: Dict[str, Any]) -> MatchingSection:
+def _matching_section(
+    matches: Iterable[Dict[str, Any]], config: Dict[str, Any]
+) -> MatchingSection:
     ordered_matches = tuple(sort_matches(matches))
     return MatchingSection(
         matches=ordered_matches,
@@ -444,7 +450,9 @@ def _matching_section(matches: Iterable[Dict[str, Any]], config: Dict[str, Any])
 def _config_fingerprint(config_snapshot: Optional[Dict[str, Any]]) -> Optional[str]:
     if not config_snapshot:
         return None
-    payload = json.dumps(config_snapshot, sort_keys=True, default=str, separators=(",", ":"))
+    payload = json.dumps(
+        config_snapshot, sort_keys=True, default=str, separators=(",", ":")
+    )
     return sha1(payload.encode("utf-8")).hexdigest()[:16]
 
 
@@ -1052,6 +1060,71 @@ def _build_single_report_document(
     return document
 
 
+def _build_single_report_document_from_run_target(
+    run_state: RunState,
+    target_state: TargetRunState,
+    config: Optional[Any],
+    *,
+    now_utc_z_fn: Callable[[], str],
+    validate_report_schema_v2_fn: Callable[[Any], List[str]],
+) -> ReportDocument:
+    cfg = config or run_state.config or load_config()
+    generated_at = now_utc_z_fn()
+    config_snapshot = _maybe_config_snapshot(cfg)
+    framework_version = run_state.framework_version
+    results_payload = _build_results_section_for_target(run_state, target_state, cfg)
+    summary_payload = _build_results_summary(results_payload)
+    results = tuple(sort_results([_result_item(item) for item in results_payload]))
+    matching_payload = _build_matching_section_for_target(target_state, cfg)
+    matching = _matching_section(
+        matching_payload.get("matches") or [],
+        matching_payload.get("matching_config") or {},
+    )
+    exit_code = compute_exit_code(results_payload, cfg)
+    target_id = str(target_state.target_id)
+    target_path = str(target_state.target_path)
+    run = RunMeta(
+        generated_at=generated_at,
+        target_path=target_path,
+        source_path=None,
+        reference_modules=tuple(sorted(str(v) for v in run_state.reference_modules)),
+        config_snapshot=config_snapshot,
+        config_fingerprint=_config_fingerprint(config_snapshot),
+        tool_version=framework_version,
+        mode=STATIC_ANALYSIS_MODE,
+    )
+    target = TargetReport(
+        target_id=target_id,
+        display_name=target_id,
+        source_root=run.source_path,
+        target_path=target_path,
+        tags=tuple(),
+        mode=run.mode,
+        matching=matching,
+        results=results,
+        summary=_results_summary_ir(summary_payload),
+        artifacts=tuple(),
+        exit_code=exit_code,
+    )
+    document = ReportDocument(
+        schema_version="2",
+        framework_version=framework_version,
+        generated_at=generated_at,
+        run=run,
+        targets=(target,),
+        summary=AggregateSummary(
+            targets_total=1,
+            targets_failed=1 if exit_code else 0,
+            targets_passed=0 if exit_code else 1,
+            results=_results_summary_ir(summary_payload),
+        ),
+        exit_code=exit_code,
+        kind="single",
+    )
+    _validate_report_document(document, cfg, validate_report_schema_v2_fn)
+    return document
+
+
 def _build_multi_target_report_document(
     run_state: RunState,
     target_states: List[TargetRunState],
@@ -1084,7 +1157,9 @@ def _build_multi_target_report_document(
 
     for target_state in target_states:
         matching_payload = _build_matching_section_for_target(target_state, cfg)
-        results_payload = _build_results_section_for_target(run_state, target_state, cfg)
+        results_payload = _build_results_section_for_target(
+            run_state, target_state, cfg
+        )
         target_summary_payload = _build_results_summary(results_payload)
         exit_code = compute_target_exit_code(results_payload, cfg)
         target_state.exit_code = exit_code
@@ -1107,7 +1182,9 @@ def _build_multi_target_report_document(
                     matching_payload.get("matches") or [],
                     matching_payload.get("matching_config") or {},
                 ),
-                results=tuple(sort_results([_result_item(item) for item in results_payload])),
+                results=tuple(
+                    sort_results([_result_item(item) for item in results_payload])
+                ),
                 summary=_results_summary_ir(target_summary_payload),
                 artifacts=tuple(),
                 exit_code=exit_code,
@@ -1127,7 +1204,9 @@ def _build_multi_target_report_document(
             targets_total=len(target_states),
             targets_failed=failed,
             targets_passed=len(target_states) - failed,
-            results=_results_summary_ir(_build_results_summary(combined_results_payload)),
+            results=_results_summary_ir(
+                _build_results_summary(combined_results_payload)
+            ),
         ),
         exit_code=aggregate_exit_code,
         kind="multi",
@@ -1148,6 +1227,26 @@ def build_report_document(
     """Build typed IR document for a single-target run."""
     return _build_single_report_document(
         state_obj,
+        config,
+        now_utc_z_fn=now_utc_z_fn,
+        validate_report_schema_v2_fn=validate_report_schema_v2_fn,
+    )
+
+
+def build_single_target_report_document_from_run_target(
+    run_state: RunState,
+    target_state: TargetRunState,
+    config: Optional[Any] = None,
+    *,
+    now_utc_z_fn: Callable[[], str] = now_utc_z,
+    validate_report_schema_v2_fn: Callable[[Any], List[str]] = (
+        validate_report_schema_v2
+    ),
+) -> ReportDocument:
+    """Build typed IR document for a unified single-target run."""
+    return _build_single_report_document_from_run_target(
+        run_state,
+        target_state,
         config,
         now_utc_z_fn=now_utc_z_fn,
         validate_report_schema_v2_fn=validate_report_schema_v2_fn,

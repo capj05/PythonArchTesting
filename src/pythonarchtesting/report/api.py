@@ -10,6 +10,7 @@ from pythonarchtesting.exceptions import ReportGenerationError
 from pythonarchtesting.state import ProjectState
 from pythonarchtesting.state_multi import RunState, TargetRunState
 
+from .ir import from_state as from_state_ir
 from .ir.from_state import (
     build_multi_target_report_document as _build_multi_target_report_document_from_state,
 )
@@ -69,6 +70,28 @@ def build_multi_target_report_document(
     )
 
 
+def build_single_target_report_document_from_run_target(
+    run_state: RunState,
+    target_state: TargetRunState,
+    config: Optional[Any] = None,
+    *,
+    now_utc_z_fn: Any = None,
+    validate_report_schema_v2_fn: Any = None,
+) -> ReportDocument:
+    """Build typed single-target report IR from unified run/target state."""
+    return from_state_ir.build_single_target_report_document_from_run_target(
+        run_state,
+        target_state,
+        config,
+        now_utc_z_fn=now_utc_z if now_utc_z_fn is None else now_utc_z_fn,
+        validate_report_schema_v2_fn=(
+            validate_report_schema_v2
+            if validate_report_schema_v2_fn is None
+            else validate_report_schema_v2_fn
+        ),
+    )
+
+
 def build_report(
     state_obj: ProjectState, config: Optional[Any] = None
 ) -> Dict[str, Any]:
@@ -84,6 +107,21 @@ def build_multi_target_report(
     """Build canonical schema-v2 report dictionary for multi-target runs."""
     return to_legacy_schema_v2(
         build_multi_target_report_document(run_state, target_states, config)
+    )
+
+
+def build_single_target_report_from_run_target(
+    run_state: RunState,
+    target_state: TargetRunState,
+    config: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Build canonical schema-v2 report dictionary for unified single-target runs."""
+    return to_legacy_schema_v2(
+        build_single_target_report_document_from_run_target(
+            run_state,
+            target_state,
+            config,
+        )
     )
 
 
@@ -114,6 +152,38 @@ def generate_validation_report(
             return render_markdown(
                 document,
                 matching_debug_context=build_single_matching_debug_context(state_obj),
+            )
+        raise ValueError(output_format)
+    except ValueError as e:
+        raise ReportGenerationError(
+            f"Unsupported output format '{output_format}'. "
+            f"Available formats: json, markdown"
+        ) from e
+
+
+def generate_single_target_report_from_run_target(
+    run_state: RunState,
+    target_state: TargetRunState,
+    output_format: str = ReportingConstants.JSON_FORMAT,
+    config: Optional[Any] = None,
+) -> str:
+    """Generate a report of validation results for a unified single target."""
+    try:
+        document = build_single_target_report_document_from_run_target(
+            run_state,
+            target_state,
+            config,
+        )
+        if output_format == ReportingConstants.JSON_FORMAT:
+            return render_json(document)
+        if output_format == ReportingConstants.MARKDOWN_FORMAT:
+            from .renderers.matching_debug import build_multi_matching_debug_context
+
+            return render_markdown(
+                document,
+                matching_debug_context=build_multi_matching_debug_context(
+                    run_state, [target_state]
+                ),
             )
         raise ValueError(output_format)
     except ValueError as e:
@@ -154,7 +224,10 @@ def generate_multi_target_report(
             )
         raise ValueError(output_format)
     except ValueError as e:
-        if str(e) == "Multi-target markdown reporting requires an output directory path.":
+        if (
+            str(e)
+            == "Multi-target markdown reporting requires an output directory path."
+        ):
             raise
         raise ReportGenerationError(
             f"Unsupported multi-target format '{output_format}'. "

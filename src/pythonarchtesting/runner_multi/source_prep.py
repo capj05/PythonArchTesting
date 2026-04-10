@@ -74,6 +74,7 @@ def prepare_source(
     source_path: Path,
     reference_modules: Optional[List[str]] = None,
     validation_scope: str = VALIDATION_SCOPE_ALL,
+    _source_root_label: str = "source",
 ) -> RunState:
     include_nested = get_bool(config, "matching", "include_nested_functions", False)
     source_entities: List[Entity] = []
@@ -126,7 +127,7 @@ def prepare_source(
                     None,
                     role="source",
                     include_nested_functions=include_nested,
-                    root_label="source",
+                    root_label=_source_root_label,
                 )
                 source_entities.extend(matchable)
     else:
@@ -163,7 +164,7 @@ def prepare_source(
                 None,
                 role="source",
                 include_nested_functions=include_nested,
-                root_label="source",
+                root_label=_source_root_label,
             )
             source_entities.extend(matchable)
 

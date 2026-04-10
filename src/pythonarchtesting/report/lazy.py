@@ -24,6 +24,33 @@ def build_report(state_obj: Any, config: Optional[Any] = None) -> Dict[str, Any]
     return cast(Dict[str, Any], module.build_report(state_obj, config))
 
 
+def build_single_target_report_document_from_run_target(
+    run_state: Any,
+    target_state: Any,
+    config: Optional[Any] = None,
+) -> Any:
+    """Lazy wrapper for unified single-target IR builder."""
+    module = _get_report_module()
+    return module.build_single_target_report_document_from_run_target(
+        run_state, target_state, config
+    )
+
+
+def build_single_target_report_from_run_target(
+    run_state: Any,
+    target_state: Any,
+    config: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Lazy wrapper for unified single-target report builder."""
+    module = _get_report_module()
+    return cast(
+        Dict[str, Any],
+        module.build_single_target_report_from_run_target(
+            run_state, target_state, config
+        ),
+    )
+
+
 def generate_validation_report(
     state_obj: Any,
     output_format: str = "json",
@@ -36,6 +63,22 @@ def generate_validation_report(
         str,
         module.generate_validation_report(
             state_obj, output_format, include_sections, config
+        ),
+    )
+
+
+def generate_single_target_report_from_run_target(
+    run_state: Any,
+    target_state: Any,
+    output_format: str = "json",
+    config: Optional[Any] = None,
+) -> str:
+    """Lazy wrapper for unified single-target report generation."""
+    module = _get_report_module()
+    return cast(
+        str,
+        module.generate_single_target_report_from_run_target(
+            run_state, target_state, output_format, config
         ),
     )
 

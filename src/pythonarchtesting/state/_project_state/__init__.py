@@ -1,6 +1,4 @@
-"""
-Internal single-target state implementation.
-"""
+"""Compatibility single-target state layer built on older runtime assumptions."""
 
 from __future__ import annotations
 

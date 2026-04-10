@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from ..ir.models import EntityRef, ReportDocument, TargetReport
 from .common import format_entity, format_location
 from .escape import escape_markdown
 from .matching_debug import (
@@ -13,7 +14,6 @@ from .matching_debug import (
     render_matching_debug_markdown,
 )
 from .table import Table, render_markdown_table
-from ..ir.models import EntityRef, ReportDocument, TargetReport
 
 
 def _entity_to_dict(entity: EntityRef) -> Dict[str, Any]:
@@ -25,10 +25,12 @@ def _entity_to_dict(entity: EntityRef) -> Dict[str, Any]:
     }
 
 
-def _single_target_debug_report(target: TargetReport, target_path: Optional[str]) -> Dict[str, Any]:
+def _single_target_debug_report(
+    target: TargetReport, target_path: Optional[str]
+) -> Dict[str, Any]:
     return {
-        "display_name": "__single__",
-        "target_id": "__single__",
+        "display_name": target.display_name,
+        "target_id": target.target_id,
         "target_path": str(target_path or ""),
         "matching": {"matches": [dict(match) for match in target.matching.matches]},
     }

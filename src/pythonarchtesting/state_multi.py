@@ -1,6 +1,4 @@
-"""
-Multi-target run state containers (no global singleton).
-"""
+"""Canonical runtime state containers for source-once, target-per-run execution."""
 
 from __future__ import annotations
 

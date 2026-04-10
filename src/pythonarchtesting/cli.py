@@ -14,9 +14,9 @@ from typing import Any, List, Optional
 from pythonarchtesting.config import Config, load_config, resolve_projects_config
 from pythonarchtesting.infrastructure.logging import configure_logging
 from pythonarchtesting.report.lazy import (
-    build_report,
+    build_single_target_report_from_run_target,
     generate_multi_target_report,
-    generate_validation_report,
+    generate_single_target_report_from_run_target,
     get_multi_exit_code,
 )
 from pythonarchtesting.validation_scope import VALIDATION_SCOPE_ALL, VALIDATION_SCOPES
@@ -26,6 +26,14 @@ def run_multi(*args: Any, **kwargs: Any) -> Any:
     from pythonarchtesting.runner_multi import run_multi as _run_multi
 
     return _run_multi(*args, **kwargs)
+
+
+def run_single_target_unified(*args: Any, **kwargs: Any) -> Any:
+    from pythonarchtesting.runner_multi.orchestrator import (
+        run_single_target as _run_single_target_unified,
+    )
+
+    return _run_single_target_unified(*args, **kwargs)
 
 
 def ProjectState(*args: Any, **kwargs: Any) -> Any:
@@ -101,15 +109,19 @@ def _run_single_target(
     output_format: Optional[str],
     validation_scope: str = VALIDATION_SCOPE_ALL,
 ) -> int:
-    state = ProjectState(
+    run_state, target_state = run_single_target_unified(
+        config=config,
         target_path=target_path,
         reference_modules=reference_modules or [],
-        config=config,
         validation_scope=validation_scope,
     )
-    state.analyze()
 
-    report = generate_validation_report(state, output_format or "json", config=config)
+    report = generate_single_target_report_from_run_target(
+        run_state,
+        target_state,
+        output_format or "json",
+        config=config,
+    )
     if output_file:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(report)
@@ -117,7 +129,9 @@ def _run_single_target(
     else:
         print(report)
 
-    report_data = build_report(state, config)
+    report_data = build_single_target_report_from_run_target(
+        run_state, target_state, config
+    )
     exit_code = int(report_data.get("exit_code", 0))
     if exit_code != 0:
         print(f"Validation failed for {target_path}")
