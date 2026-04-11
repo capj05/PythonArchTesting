@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import fnmatch
-from collections import deque
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Literal
 
-from pythonarchtesting.core.models import EvalContext, Rule, RuleResult, RuleStatus
+from pythonarchtesting.core.compilation.common import canonicalize_payload, evidence_id
+from pythonarchtesting.core.models import (
+    EvalContext,
+    Evidence,
+    Rule,
+    RuleResult,
+    RuleStatus,
+)
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.execution.import_edges import (
     NormalizedImportEdge,
@@ -15,6 +21,12 @@ from pythonarchtesting.execution.import_edges import (
 from pythonarchtesting.execution.import_graph import (
     build_module_dependency_graph,
     filter_module_dependency_graph,
+)
+from pythonarchtesting.execution.import_policy_paths import (
+    MAX_REPORTED_REACHABLE_PATHS,
+    ImportPathStep,
+    ReachableImportViolation,
+    collect_reachable_import_violations,
 )
 from pythonarchtesting.matching import MatchResult
 
@@ -123,7 +135,7 @@ def _sort_occurrences(
     )
 
 
-def _build_result(
+def _build_direct_result(
     *,
     rule: Rule,
     source: Entity,
@@ -168,6 +180,151 @@ def _build_result(
         ),
         evidence=(),
         details=details,
+    )
+
+
+def _build_occurrence_from_path_step(
+    step: ImportPathStep,
+    forbidden_prefix: str,
+) -> Dict[str, Any]:
+    return {
+        "filepath": step.filepath_rel,
+        "lineno": step.lineno,
+        "imported_module": step.to_module,
+        "forbidden_prefix": forbidden_prefix,
+    }
+
+
+def _build_reachable_violation_payload(
+    *,
+    violation: ReachableImportViolation,
+    base_details: Dict[str, Any],
+) -> Dict[str, Any]:
+    step_payloads = [
+        {
+            "from_module": step.from_module,
+            "to_module": step.to_module,
+            "filepath": step.filepath_rel,
+            "lineno": step.lineno,
+            "in_type_checking": step.in_type_checking,
+            "is_top_level": step.is_top_level,
+        }
+        for step in violation.steps
+    ]
+    return {
+        "mode": base_details["mode"],
+        "scope": base_details["scope"],
+        "scope_value": base_details["scope_value"],
+        "start_module": violation.start_module,
+        "intermediate_modules": [step.to_module for step in violation.steps[:-1]],
+        "forbidden_target": violation.forbidden_target,
+        "forbidden_prefix": violation.forbidden_prefix,
+        "path_length": len(violation.steps),
+        "steps": step_payloads,
+    }
+
+
+def _build_reachable_violation_evidence(
+    *,
+    violations: tuple[ReachableImportViolation, ...],
+    target: Entity,
+    base_details: Dict[str, Any],
+) -> tuple[Evidence, ...]:
+    evidence_items: list[Evidence] = []
+    for violation in violations:
+        payload = _build_reachable_violation_payload(
+            violation=violation,
+            base_details=base_details,
+        )
+        first_step = violation.steps[0] if violation.steps else None
+        evidence_items.append(
+            Evidence(
+                evidence_id=evidence_id("import_path", payload),
+                type="import_path",
+                source="ast",
+                role="target",
+                entity_id=target.canonical_id,
+                payload=canonicalize_payload(payload),
+                location=(
+                    {
+                        "filepath": first_step.filepath_rel,
+                        "lineno": first_step.lineno,
+                        "module": first_step.from_module,
+                    }
+                    if first_step is not None
+                    else None
+                ),
+            )
+        )
+    return tuple(evidence_items)
+
+
+def _build_reachable_violation_details(
+    *,
+    base_details: Dict[str, Any],
+    violations: tuple[ReachableImportViolation, ...],
+    reported_violations: tuple[ReachableImportViolation, ...],
+) -> Dict[str, Any]:
+    found_forbidden = {violation.forbidden_prefix for violation in violations}
+    occurrences: list[Dict[str, Any]] = []
+    seen_occurrences: set[tuple[str, int, str, str]] = set()
+
+    for violation in violations:
+        terminal_step = violation.steps[-1]
+        occurrence = _build_occurrence_from_path_step(
+            terminal_step,
+            violation.forbidden_prefix,
+        )
+        occurrence_key = (
+            str(occurrence["filepath"]),
+            int(occurrence["lineno"]),
+            str(occurrence["imported_module"]),
+            str(occurrence["forbidden_prefix"]),
+        )
+        if occurrence_key in seen_occurrences:
+            continue
+        seen_occurrences.add(occurrence_key)
+        occurrences.append(occurrence)
+
+    violation_paths = [
+        {
+            "start_module": violation.start_module,
+            "intermediate_modules": [step.to_module for step in violation.steps[:-1]],
+            "forbidden_target": violation.forbidden_target,
+            "forbidden_prefix": violation.forbidden_prefix,
+            "path_length": len(violation.steps),
+        }
+        for violation in reported_violations
+    ]
+    path_count_total = len(violations)
+    path_count_reported = len(reported_violations)
+    return {
+        **base_details,
+        "forbidden_modules": sorted(found_forbidden),
+        "occurrences": _sort_occurrences(occurrences),
+        "path_count": path_count_total,
+        "path_count_total": path_count_total,
+        "path_count_reported": path_count_reported,
+        "paths_truncated": path_count_total > path_count_reported,
+        "start_modules": sorted({violation.start_module for violation in violations}),
+        "forbidden_targets": sorted(
+            {violation.forbidden_target for violation in violations}
+        ),
+        "violation_paths": violation_paths,
+    }
+
+
+def _build_reachable_message(
+    *,
+    base_details: Dict[str, Any],
+    forbidden_modules: list[str],
+    path_count_total: int,
+) -> str:
+    path_label = "path" if path_count_total == 1 else "paths"
+    return (
+        f"DEP001 reachable forbidden import paths found in {base_details['scope']} "
+        f"'{base_details['scope_value']}': {forbidden_modules} "
+        f"({path_count_total} {path_label})"
     )
 
 
@@ -233,7 +390,7 @@ def _evaluate_direct_mode(
         found_forbidden.add(matched)
         occurrences.append(_build_occurrence(edge, matched))
 
-    return _build_result(
+    return _build_direct_result(
         rule=rule,
         source=source,
         target=target,
@@ -292,48 +449,50 @@ def _evaluate_reachable_mode(
         and filtered_graph.nodes[module].is_internal
         and _matches_prefix(module, allow) is None
     )
-    pending_modules = deque(root_modules)
-    visited_modules: set[str] = set()
-    found_forbidden: set[str] = set()
-    occurrences: list[Dict[str, Any]] = []
-    seen_occurrences: set[tuple[str, int, str, str]] = set()
-
-    while pending_modules:
-        module_name = pending_modules.popleft()
-        if module_name in visited_modules:
-            continue
-        visited_modules.add(module_name)
-
-        for edge in filtered_graph.get_outgoing(module_name):
-            if _matches_prefix(edge.imported_module, allow) is not None:
-                continue
-
-            matched = _matches_prefix(edge.imported_module, forbidden)
-            if matched is not None:
-                occurrence_key = (
-                    edge.filepath_rel,
-                    edge.lineno,
-                    edge.imported_module,
-                    matched,
-                )
-                if occurrence_key not in seen_occurrences:
-                    seen_occurrences.add(occurrence_key)
-                    found_forbidden.add(matched)
-                    occurrences.append(_build_occurrence(edge, matched))
-                continue
-
-            imported_node = filtered_graph.nodes.get(edge.imported_module)
-            if imported_node is not None and imported_node.is_internal:
-                pending_modules.append(edge.imported_module)
-
-    return _build_result(
-        rule=rule,
-        source=source,
-        target=target,
-        match=match,
+    violations = collect_reachable_import_violations(
+        graph=filtered_graph,
+        root_modules=root_modules,
+        forbidden_prefixes=forbidden,
+        allowed_prefixes=allow,
+    )
+    reported_violations = violations[:MAX_REPORTED_REACHABLE_PATHS]
+    details = _build_reachable_violation_details(
         base_details=base_details,
-        found_forbidden=found_forbidden,
-        occurrences=occurrences,
+        violations=violations,
+        reported_violations=reported_violations,
+    )
+
+    if not violations:
+        return RuleResult(
+            rule_id=rule.rule_id,
+            status="OK",
+            source_entity_id=source.canonical_id,
+            target_entity_id=target.canonical_id,
+            match_status=match.status.value,
+            confidence=match.confidence,
+            message="OK",
+            evidence=(),
+            details=details,
+        )
+
+    return RuleResult(
+        rule_id=rule.rule_id,
+        status="FAILED",
+        source_entity_id=source.canonical_id,
+        target_entity_id=target.canonical_id,
+        match_status=match.status.value,
+        confidence=match.confidence,
+        message=_build_reachable_message(
+            base_details=base_details,
+            forbidden_modules=details["forbidden_modules"],
+            path_count_total=details["path_count_total"],
+        ),
+        evidence=_build_reachable_violation_evidence(
+            violations=reported_violations,
+            target=target,
+            base_details=base_details,
+        ),
+        details=details,
     )
 
 
