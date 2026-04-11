@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Literal
@@ -10,6 +11,10 @@ from pythonarchtesting.execution.import_edges import (
     NormalizedImportEdge,
     collect_canonical_module_entities,
     collect_normalized_import_edges_for_modules,
+)
+from pythonarchtesting.execution.import_graph import (
+    build_module_dependency_graph,
+    filter_module_dependency_graph,
 )
 from pythonarchtesting.matching import MatchResult
 
@@ -166,6 +171,23 @@ def _build_result(
     )
 
 
+def _collect_ignored_filepaths(
+    *,
+    entities: Iterable[Entity],
+    ignore_globs: list[str],
+) -> set[str]:
+    if not ignore_globs:
+        return set()
+
+    return {
+        entity.filepath_rel
+        for entity in entities
+        if any(
+            fnmatch.fnmatch(entity.filepath_rel, pattern) for pattern in ignore_globs
+        )
+    }
+
+
 def _evaluate_direct_mode(
     *,
     rule: Rule,
@@ -236,39 +258,39 @@ def _evaluate_reachable_mode(
     ignore_globs: list[str],
     ignore_type_checking: bool,
 ) -> RuleResult:
-    active_module_entities = collect_canonical_module_entities(
+    canonical_module_entities = collect_canonical_module_entities(
         entities=ctx.target_index.all_sorted,
-        ignore_globs=ignore_globs,
     )
-    active_modules = frozenset(
-        entity.module_path for entity in active_module_entities if entity.module_path
-    )
+    internal_modules = {
+        entity.module_path: entity.filepath_rel
+        for entity in canonical_module_entities
+        if entity.module_path
+    }
+    all_modules = frozenset(internal_modules)
     imported_edges = collect_normalized_import_edges_for_modules(
-        entities=active_module_entities,
-        scope_modules=active_modules,
+        entities=canonical_module_entities,
+        scope_modules=all_modules,
     )
-
-    adjacency: dict[str, list[NormalizedImportEdge]] = {}
-    for edge in imported_edges:
-        if ignore_type_checking and edge.in_type_checking:
-            continue
-        if not edge.is_top_level:
-            continue
-        adjacency.setdefault(edge.importer_module, []).append(edge)
-
-    for edges in adjacency.values():
-        edges.sort(
-            key=lambda edge: (
-                edge.filepath_rel,
-                edge.lineno,
-                edge.imported_module,
-            )
-        )
+    base_graph = build_module_dependency_graph(
+        internal_modules=internal_modules,
+        edges=imported_edges,
+    )
+    filtered_graph = filter_module_dependency_graph(
+        base_graph,
+        ignore_type_checking=ignore_type_checking,
+        include_local_edges=False,
+        ignored_filepaths=_collect_ignored_filepaths(
+            entities=canonical_module_entities,
+            ignore_globs=ignore_globs,
+        ),
+    )
 
     root_modules = sorted(
         module
         for module in scope.scope_modules
-        if module in active_modules and _matches_prefix(module, allow) is None
+        if filtered_graph.nodes.get(module) is not None
+        and filtered_graph.nodes[module].is_internal
+        and _matches_prefix(module, allow) is None
     )
     pending_modules = deque(root_modules)
     visited_modules: set[str] = set()
@@ -282,7 +304,7 @@ def _evaluate_reachable_mode(
             continue
         visited_modules.add(module_name)
 
-        for edge in adjacency.get(module_name, []):
+        for edge in filtered_graph.get_outgoing(module_name):
             if _matches_prefix(edge.imported_module, allow) is not None:
                 continue
 
@@ -300,7 +322,8 @@ def _evaluate_reachable_mode(
                     occurrences.append(_build_occurrence(edge, matched))
                 continue
 
-            if edge.imported_module in active_modules:
+            imported_node = filtered_graph.nodes.get(edge.imported_module)
+            if imported_node is not None and imported_node.is_internal:
                 pending_modules.append(edge.imported_module)
 
     return _build_result(
