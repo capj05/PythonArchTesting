@@ -37,6 +37,9 @@ Editable development install:
 pip install -e .[dev]
 ```
 
+Dependency declarations are maintained only in `pyproject.toml`. Do not add or
+edit `requirements*.txt` files in this repository.
+
 CLI entrypoints:
 
 - `python-arch-test` for most users

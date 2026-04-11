@@ -4,13 +4,16 @@ Configuration is INI-based. For most users, the important settings are the ones
 that choose the reference and targets, shape discovery, tune matching, and
 control reporting.
 
-The bundled default configuration is loaded internally from the package.
-User configuration precedence is:
+The bundled default configuration is always loaded internally from the package.
+For normal CLI usage, when `--config` is omitted, the CLI enables config
+auto-discovery in this order:
 
-- `--config path/to/file.conf`
-- auto-discovered `python_arch_testing.conf`
-- deprecated auto-discovered `custom_config.conf`
+1. explicit `--config path/to/file.conf`
+2. auto-discovered `python_arch_testing.conf`
+3. deprecated `custom_config.conf` fallback only when
+   `python_arch_testing.conf` is absent
 
+CLI arguments remain the highest-priority overrides after file loading.
 Environment-variable overlays are not supported by `load_config()`.
 
 Point the CLI at a custom file when you need an explicit override:

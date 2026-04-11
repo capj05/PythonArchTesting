@@ -78,14 +78,15 @@ def _default_config_path() -> str:
 
 def _resolve_auto_config_path(cwd: Path) -> Optional[Path]:
     """Resolve the auto-discovered user config file in the current directory."""
-    canonical_path = cwd / "python_arch_testing.conf"
-    legacy_path = cwd / "custom_config.conf"
+    canonical_path = cwd / FileConstants.PYTHON_ARCH_TESTING_CONFIG_FILE
+    legacy_path = cwd / FileConstants.LEGACY_CUSTOM_CONFIG_FILE
 
     if canonical_path.is_file():
         if legacy_path.is_file():
             warnings.warn(
                 "Ignoring deprecated auto-discovered config file "
-                "'custom_config.conf' because 'python_arch_testing.conf' is present.",
+                f"'{FileConstants.LEGACY_CUSTOM_CONFIG_FILE}' because "
+                f"'{FileConstants.PYTHON_ARCH_TESTING_CONFIG_FILE}' is present.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -93,8 +94,9 @@ def _resolve_auto_config_path(cwd: Path) -> Optional[Path]:
 
     if legacy_path.is_file():
         warnings.warn(
-            "Auto-discovery of 'custom_config.conf' is deprecated; rename it to "
-            "'python_arch_testing.conf'.",
+            f"Auto-discovery of '{FileConstants.LEGACY_CUSTOM_CONFIG_FILE}' is "
+            "deprecated; rename it to "
+            f"'{FileConstants.PYTHON_ARCH_TESTING_CONFIG_FILE}'.",
             DeprecationWarning,
             stacklevel=2,
         )

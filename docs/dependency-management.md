@@ -1,16 +1,12 @@
 # Dependency Management
 
-This project uses package installation for normal CLI usage and keeps two plain
-requirements files for dependency management:
-
-- `requirements.txt` for runtime dependencies
-- `requirements-dev.txt` for optional development, test, and documentation dependencies
+`pyproject.toml` is the only authoritative source for dependency declarations in
+this repository.
 
 ## Files
 
-- `requirements.txt`: user/runtime dependencies
-- `requirements-dev.txt`: optional developer tooling, tests, and docs dependencies
-- `pyproject.toml`: package metadata plus matching `dev` extras for editable installs
+- `pyproject.toml`: runtime dependencies, development extras, and tool
+  configuration
 
 ## Install dependencies
 
@@ -20,22 +16,19 @@ Preferred runtime install:
 pip install .
 ```
 
-Runtime dependencies only:
-
-```powershell
-pip install -r requirements.txt
-```
-
-Development tools only:
-
-```powershell
-pip install -r requirements-dev.txt
-```
-
 Editable install with dev extras:
 
 ```powershell
 pip install -e .[dev]
 ```
 
-The requirements files are intentionally maintained without hashes so they stay easy to read and update.
+## Editing dependencies
+
+Edit dependencies only in `pyproject.toml`:
+
+- `[project.dependencies]` for runtime requirements
+- `[project.optional-dependencies].dev` for development, test, and documentation
+  tooling
+
+CI installs from package metadata with `python -m pip install .[dev]`. Plain
+requirements files are not part of the supported repository workflow.

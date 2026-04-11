@@ -56,13 +56,16 @@ pytest tests/ -v -n auto --cov=pythonarchtesting --cov-fail-under=80
 
 CI is defined in `.github/workflows/ci.yml`. It runs:
 
-1. `pytest tests/ -v -n auto --cov=pythonarchtesting --cov-fail-under=80`
-2. `python tools/diagrams/check_freshness.py --profile ci`
-3. `flake8 src/ tests/`
-4. `black --check src/ tests/`
-5. `isort --check-only src/ tests/`
-6. `python scripts/mypy_scoped_gate.py --targets-file configs/mypy_rollout_targets.txt`
-7. `python -m mypy src/ --ignore-missing-imports --show-error-codes --no-incremental` (non-blocking visibility step during rollout)
+1. A `unit` matrix job on Python `3.10`, `3.11`, and `3.12`
+2. `python -m pip install .[dev]` in each job
+3. `pytest tests/unit`
+4. Import-safety and import-boundary checks:
+   `pytest tests/import_safety tests/test_rules_import_safety.py tests/unit/test_import_safety.py tests/unit/test_import_safety_lazy.py tests/unit/test_no_legacy_utils_imports.py`
+5. `mypy src/pythonarchtesting`
+6. `flake8 src tests`
+
+CI installs from package metadata only. `requirements.txt` and
+`requirements-dev.txt` are not used by the workflow.
 
 ## Mypy Rollout Phases
 
