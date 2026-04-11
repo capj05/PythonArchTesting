@@ -60,7 +60,7 @@ CI is defined in `.github/workflows/ci.yml`. It runs:
 2. `python -m pip install .[dev]` in each job
 3. `pytest tests/unit`
 4. Import-safety and import-boundary checks:
-   `pytest tests/import_safety tests/test_rules_import_safety.py tests/unit/test_import_safety.py tests/unit/test_import_safety_lazy.py tests/unit/test_no_legacy_utils_imports.py`
+   `pytest tests/import_safety tests/test_rules_import_safety.py tests/unit/test_import_safety.py tests/unit/test_import_safety_lazy.py`
 5. `mypy src/pythonarchtesting`
 6. `flake8 src tests`
 
