@@ -21,7 +21,12 @@ from pythonarchtesting.rules import forbid_imports, required_entity_signature, r
 
 __archtest__: Annotated[
     None,
-    forbid_imports("statistics", scope="package", package="data_processor"),
+    forbid_imports(
+        "statistics",
+        scope="package",
+        package="data_processor",
+        mode="direct",
+    ),
 ]
 
 

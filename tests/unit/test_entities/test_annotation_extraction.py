@@ -106,6 +106,10 @@ def test_annotation_markers_preserve_source_order_across_multiple_statements() -
     assert function_entity.annotation_declarations[1].params == {
         "signature_mode": "exact"
     }
+    assert function_entity.annotation_declarations[2].params == {
+        "forbidden": ["statistics"],
+        "scope": "entity",
+    }
 
 
 def test_annotation_marker_records_unsupported_cases_without_failing_extraction() -> (

@@ -127,11 +127,18 @@ Common options:
 
 - `scope`
 - `package`
+- `mode`
 - `ignore_type_checking`
 - `allow`
 - `ignore_globs`
 - `severity`
 - `message`
+
+Notes:
+
+- `mode="reachable"` is the default contract.
+- `mode="direct"` preserves the current direct AST import check.
+- In Phase 1, `mode="reachable"` reports an `ERROR` because reachability analysis is not implemented yet.
 
 Example:
 
@@ -141,7 +148,12 @@ from pythonarchtesting.rules import forbid_imports
 
 __archtest__: Annotated[
     None,
-    forbid_imports("statistics", scope="package", package="data_processor"),
+    forbid_imports(
+        "statistics",
+        scope="package",
+        package="data_processor",
+        mode="direct",
+    ),
 ]
 ```
 

@@ -141,6 +141,28 @@ def _matches_prefix(name: str, prefixes: List[str]) -> str | None:
     return None
 
 
+def _error_result(
+    *,
+    rule: Rule,
+    source: Entity,
+    target: Entity,
+    match: MatchResult,
+    message: str,
+    details: Dict[str, Any],
+) -> RuleResult:
+    return RuleResult(
+        rule_id=rule.rule_id,
+        status="ERROR",
+        source_entity_id=source.canonical_id,
+        target_entity_id=target.canonical_id,
+        match_status=match.status.value,
+        confidence=match.confidence,
+        message=message,
+        evidence=(),
+        details=details,
+    )
+
+
 class ImportPolicyEvaluator:
     """Evaluator for forbidden import policy rules (DEP001)."""
 
@@ -157,6 +179,7 @@ class ImportPolicyEvaluator:
         ignore_globs = [str(item) for item in list(rule.params.get("ignore_globs", []))]
         ignore_type_checking = bool(rule.params.get("ignore_type_checking", True))
         scope = str(rule.params.get("scope", "package"))
+        mode = str(rule.params.get("mode", "reachable"))
 
         if scope == "entity":
             scope_modules = {target.module_path}
@@ -175,6 +198,46 @@ class ImportPolicyEvaluator:
                 if entity.module_path == package_prefix
                 or entity.module_path.startswith(package_prefix + ".")
             }
+
+        base_details = {
+            "package_prefix": package_prefix,
+            "scope": scope,
+            "match_status": match.status.value,
+            "mode": mode,
+        }
+
+        if mode == "reachable":
+            return _error_result(
+                rule=rule,
+                source=source,
+                target=target,
+                match=match,
+                message=(
+                    "DEP001 reachable import policy mode is the default semantic "
+                    "contract, but reachability analysis is not implemented yet."
+                ),
+                details={
+                    **base_details,
+                    "reason": "reachable_mode_not_implemented",
+                    "forbidden_modules": sorted(set(forbidden)),
+                    "occurrences": [],
+                },
+            )
+
+        if mode != "direct":
+            return _error_result(
+                rule=rule,
+                source=source,
+                target=target,
+                match=match,
+                message=f"DEP001 import policy received unsupported mode: {mode!r}.",
+                details={
+                    **base_details,
+                    "reason": "invalid_mode",
+                    "forbidden_modules": sorted(set(forbidden)),
+                    "occurrences": [],
+                },
+            )
 
         imported_rows: List[Dict[str, Any]] = []
         for entity in ctx.target_index.all_sorted:
@@ -236,11 +299,9 @@ class ImportPolicyEvaluator:
         forbidden_modules = sorted(found_forbidden)
         status: RuleStatus = "FAILED" if occurrences else "OK"
         details = {
-            "package_prefix": package_prefix,
+            **base_details,
             "forbidden_modules": forbidden_modules,
             "occurrences": occurrences,
-            "scope": scope,
-            "match_status": match.status.value,
         }
 
         if status == "OK":

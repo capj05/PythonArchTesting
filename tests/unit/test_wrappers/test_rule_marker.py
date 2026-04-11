@@ -5,6 +5,8 @@ Tests for passive rule marker behavior.
 import importlib
 from typing import Annotated, get_args, get_origin
 
+import pytest
+
 from pythonarchtesting.rules.declaration.utils import RuleSeverity, get_rule_specs
 
 
@@ -32,10 +34,10 @@ def test_configured_helpers_return_rule_markers() -> None:
 
 
 def test_rule_markers_are_passive_metadata_objects() -> None:
-    marker = _rules_api().required_entity_signature(mode="compatible")
+    marker = _rules_api().forbid_imports("statistics", scope="package")
 
-    assert marker.kind == "required_entity_signature"
-    assert marker.params["mode"] == "compatible"
+    assert marker.kind == "forbid_imports"
+    assert marker.params["mode"] == "reachable"
     assert marker.message is None
     assert marker.severity == RuleSeverity.ERROR
     assert not callable(marker)
@@ -77,3 +79,11 @@ def test_rule_spec_helpers_remain_compatibility_only_imports() -> None:
     assert hasattr(utils, "RuleSpec")
     assert hasattr(utils, "add_rule_spec")
     assert hasattr(utils, "get_rule_specs")
+
+
+def test_forbid_imports_rejects_invalid_mode() -> None:
+    with pytest.raises(
+        ValueError,
+        match="forbid_imports\\(\\) mode must be 'reachable' or 'direct'\\.",
+    ):
+        _rules_api().forbid_imports("statistics", mode="invalid")

@@ -81,6 +81,34 @@ def test_collect_declaration_diagnostics_covers_unknown_metadata(tmp_path):
     )
 
 
+def test_collect_declaration_diagnostics_includes_invalid_import_policy_mode(
+    tmp_path,
+):
+    source_dir = tmp_path / "source"
+    _write_source_file(
+        source_dir,
+        """
+        from typing import Annotated
+
+        def invalid_mode_rule() -> None:
+            __archtest__: Annotated[
+                None,
+                ("forbid_imports", {"forbidden": ["requests"], "mode": "invalid"}),
+            ]
+        """,
+    )
+
+    run_state = prepare_source(config=_config(), source_path=source_dir)
+    diagnostics = collect_declaration_diagnostics(run_state)
+
+    assert any(
+        item["check_type"] == "compiler_invalid_import_policy_mode"
+        and item["category"] == "invalid_declaration"
+        and item["severity"] == "error"
+        for item in diagnostics
+    )
+
+
 def test_cli_validate_declarations_returns_zero_for_warning_only_json(
     tmp_path, capsys, monkeypatch
 ):
@@ -110,7 +138,10 @@ def test_cli_validate_declarations_returns_zero_for_warning_only_json(
 
     assert exit_code == 0
     assert payload["summary"]["warning_declarations"] == 1
-    assert payload["diagnostics"][0]["check_type"] == "annotation_declaration_warning"
+    assert any(
+        item["check_type"] == "annotation_declaration_warning"
+        for item in payload["diagnostics"]
+    )
 
 
 def test_cli_validate_declarations_returns_non_zero_for_invalid_declaration(
@@ -168,6 +199,44 @@ def test_cli_validate_declarations_reports_source_syntax_error(
     assert exit_code == 1
     assert payload["summary"]["syntax_errors"] == 1
     assert payload["diagnostics"][0]["check_type"] == "extraction/syntax_error"
+
+
+def test_cli_validate_declarations_reports_invalid_import_policy_mode(
+    tmp_path, capsys, monkeypatch
+):
+    monkeypatch.chdir(Path(__file__).resolve().parents[3])
+    source_dir = tmp_path / "source"
+    _write_source_file(
+        source_dir,
+        """
+        from typing import Annotated
+
+        def invalid_mode_rule() -> None:
+            __archtest__: Annotated[
+                None,
+                ("forbid_imports", {"forbidden": ["requests"], "mode": "invalid"}),
+            ]
+        """,
+    )
+
+    exit_code = cli.main(
+        [
+            "--validate-declarations",
+            "--source",
+            str(source_dir),
+            "--format",
+            "json",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert payload["summary"]["invalid_declarations"] == 1
+    assert payload["summary"]["errors_total"] == 1
+    assert (
+        payload["diagnostics"][0]["check_type"] == "compiler_invalid_import_policy_mode"
+    )
 
 
 def test_cli_validate_declarations_writes_output_file(tmp_path, capsys, monkeypatch):

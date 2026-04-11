@@ -16,7 +16,12 @@ DataPoint = Dict[str, Any]
 
 __archtest__: Annotated[
     None,
-    forbid_imports("statistics", scope="package", package="data_processor"),
+    forbid_imports(
+        "statistics",
+        scope="package",
+        package="data_processor",
+        mode="direct",
+    ),
 ]
 
 
