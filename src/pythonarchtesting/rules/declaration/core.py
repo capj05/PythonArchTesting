@@ -113,6 +113,10 @@ def forbid_imports(
     """
     Capture forbidden import policy for the rule engine.
 
+    Canonical scope values are ``"module"`` and ``"package"``. The legacy
+    ``"entity"`` input is still accepted for backward compatibility and is
+    normalized during rule compilation.
+
     Defaults to ``mode="reachable"`` for the future reachability-based
     contract. Use ``mode="direct"`` to preserve the current direct AST import
     behavior during migration. This helper is declaration-only and returns

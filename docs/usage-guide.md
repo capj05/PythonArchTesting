@@ -46,6 +46,11 @@ class Calculator:
         return a + b
 ```
 
+`forbid_imports(...)` uses `scope="module"` for file-wide checks and
+`scope="package"` for package-subtree checks. The legacy `scope="entity"`
+spelling is still accepted for compatibility, but `module` is the canonical
+public name.
+
 Other supported declaration shapes:
 
 ```python

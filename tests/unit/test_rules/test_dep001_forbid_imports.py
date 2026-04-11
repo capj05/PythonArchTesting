@@ -120,6 +120,40 @@ def _architecture_rules_marker() -> None:
     assert [rule.params["mode"] for rule in rules] == ["reachable", "direct"]
 
 
+def test_dep001_compile_normalizes_scope_values() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports("requests", scope="module"),
+    ]
+    __archtest__: Annotated[
+        None,
+        forbid_imports("socket", scope="entity"),
+    ]
+    __archtest__: Annotated[
+        None,
+        forbid_imports("subprocess", scope="nonsense"),
+    ]
+    return None
+"""
+    source_entity = _extract_entity(
+        source,
+        role="source",
+        file_path="assignment/rules.py",
+        kind="function",
+        name="_architecture_rules_marker",
+    )
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert evidence == []
+    assert compiler_results == []
+    assert [rule.params["scope"] for rule in rules] == ["module", "module", "package"]
+
+
 def test_dep001_compile_invalid_raw_mode_emits_compiler_error_evidence() -> None:
     source = """
 from typing import Annotated
@@ -224,6 +258,8 @@ def use_relative() -> int:
     assert (
         "DEP001 forbidden imports found in package 'assignment'" in results[0].message
     )
+    assert results[0].details["scope"] == "package"
+    assert results[0].details["scope_value"] == "assignment"
     occurrences = results[0].details["occurrences"]
     imported_modules = [item["imported_module"] for item in occurrences]
     assert "requests" in imported_modules
@@ -282,6 +318,8 @@ def run() -> int:
     )
     assert results[0].details["mode"] == "reachable"
     assert results[0].details["reason"] == "reachable_mode_not_implemented"
+    assert results[0].details["scope"] == "package"
+    assert results[0].details["scope_value"] == "assignment"
 
 
 def test_dep001_reachable_mode_returns_not_implemented_error_for_indirect_case():
@@ -345,9 +383,11 @@ def run() -> int:
     assert [result.status for result in results] == ["ERROR"]
     assert results[0].details["mode"] == "reachable"
     assert results[0].details["reason"] == "reachable_mode_not_implemented"
+    assert results[0].details["scope"] == "package"
+    assert results[0].details["scope_value"] == "assignment"
 
 
-def test_dep001_direct_mode_entity_scope_checks_only_matched_entity_module():
+def test_dep001_direct_mode_module_scope_checks_only_matched_module():
     source = """
 from typing import Annotated
 from pythonarchtesting.rules import forbid_imports
@@ -355,7 +395,7 @@ from pythonarchtesting.rules import forbid_imports
 def _architecture_rules_marker() -> None:
     __archtest__: Annotated[
         None,
-        forbid_imports("requests", scope="entity", mode="direct"),
+        forbid_imports("requests", scope="module", mode="direct"),
     ]
     return None
 """
@@ -406,6 +446,79 @@ def unsafe() -> int:
     assert errors == []
     assert [result.status for result in results] == ["OK"]
     assert results[0].details["mode"] == "direct"
+    assert results[0].details["scope"] == "module"
+    assert results[0].details["scope_value"] == "assignment.safe"
+
+
+def test_dep001_direct_mode_module_scope_is_file_wide_not_entity_local() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports("requests", scope="module", mode="direct"),
+    ]
+    return None
+"""
+    target_module = """
+def safe() -> int:
+    return 1
+
+def unsafe() -> int:
+    import requests
+    return 2
+"""
+    source_entity = _extract_entity(
+        source,
+        role="source",
+        file_path="assignment/rules.py",
+        kind="function",
+        name="_architecture_rules_marker",
+    )
+    target_entities = extract_entities_from_source(
+        source_text=target_module,
+        file_path=Path("assignment/core.py"),
+        root_path=Path("."),
+        target_module_name=None,
+        role="target",
+        include_nested_functions=False,
+        root_label="target",
+    )
+    target_entities = [
+        entity for entity in target_entities if entity.kind == "function"
+    ]
+    target_safe_entity = next(
+        entity
+        for entity in target_entities
+        if entity.kind == "function" and entity.name == "safe"
+    )
+
+    results, errors = _evaluate_dep001_rule(
+        source_entity=source_entity,
+        target_entities=target_entities,
+        match=MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_safe_entity.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        ),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert (
+        "DEP001 forbidden imports found in module 'assignment.core'"
+        in results[0].message
+    )
+    assert results[0].details["scope"] == "module"
+    assert results[0].details["scope_value"] == "assignment.core"
+    assert [item["imported_module"] for item in results[0].details["occurrences"]] == [
+        "requests"
+    ]
 
 
 def test_dep001_direct_and_reachable_modes_diverge_for_indirect_imports() -> None:
@@ -416,7 +529,7 @@ from pythonarchtesting.rules import forbid_imports
 def _architecture_rules_marker() -> None:
     __archtest__: Annotated[
         None,
-        forbid_imports("requests", scope="entity", mode="direct"),
+        forbid_imports("requests", scope="module", mode="direct"),
     ]
     return None
 """
@@ -427,7 +540,7 @@ from pythonarchtesting.rules import forbid_imports
 def _architecture_rules_marker() -> None:
     __archtest__: Annotated[
         None,
-        forbid_imports("requests", scope="entity"),
+        forbid_imports("requests", scope="module"),
     ]
     return None
 """
@@ -497,10 +610,14 @@ def run() -> int:
     assert direct_errors == []
     assert [result.status for result in direct_results] == ["OK"]
     assert direct_results[0].details["mode"] == "direct"
+    assert direct_results[0].details["scope"] == "module"
+    assert direct_results[0].details["scope_value"] == "assignment.a"
 
     assert reachable_errors == []
     assert [result.status for result in reachable_results] == ["ERROR"]
     assert reachable_results[0].details["mode"] == "reachable"
+    assert reachable_results[0].details["scope"] == "module"
+    assert reachable_results[0].details["scope_value"] == "assignment.a"
 
 
 def test_dep001_helper_rejects_invalid_mode() -> None:

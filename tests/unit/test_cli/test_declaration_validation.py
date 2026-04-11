@@ -40,7 +40,7 @@ def test_collect_declaration_diagnostics_covers_warning_and_invalid_cases(tmp_pa
             __archtest__: Annotated[None, ("required_method", ["exact"])]
 
         def invalid_surface(
-            value: Annotated[int, forbid_imports("requests", scope="entity")],
+            value: Annotated[int, forbid_imports("requests", scope="module")],
         ) -> int:
             return value
         """,

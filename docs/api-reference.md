@@ -136,6 +136,9 @@ Common options:
 
 Notes:
 
+- `scope="module"` checks the matched target module.
+- `scope="package"` checks the configured package subtree.
+- `scope="entity"` is accepted as a backward-compatible alias for `module`.
 - `mode="reachable"` is the default contract.
 - `mode="direct"` preserves the current direct AST import check.
 - In Phase 1, `mode="reachable"` reports an `ERROR` because reachability analysis is not implemented yet.

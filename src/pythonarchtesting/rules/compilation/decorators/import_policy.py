@@ -11,6 +11,15 @@ from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
 _VALID_IMPORT_POLICY_MODES = {"reachable", "direct"}
 
 
+def _normalize_import_policy_scope(raw_scope: Any) -> Literal["module", "package"]:
+    scope = str(raw_scope).lower()
+    if scope == "entity":
+        return "module"
+    if scope in {"module", "package"}:
+        return cast(Literal["module", "package"], scope)
+    return "package"
+
+
 def _invalid_mode_evidence(
     source_entity: Entity,
     declaration: DeclarationEntry,
@@ -77,9 +86,7 @@ def compile_forbid_imports(
     else:
         ignore_globs = []
 
-    scope = str(params_kwargs.get("scope", "package")).lower()
-    if scope not in {"package", "entity"}:
-        scope = "package"
+    scope = _normalize_import_policy_scope(params_kwargs.get("scope", "package"))
 
     package = params_kwargs.get("package")
     if package is not None and not isinstance(package, str):
@@ -124,8 +131,8 @@ def compile_forbid_imports(
             "fail_on_unmatched": False,
         },
         message_template=(
-            "DEP001 forbidden imports found in package "
-            "'{details.package_prefix}': {details.forbidden_modules}"
+            "DEP001 forbidden imports found in {details.scope} "
+            "'{details.scope_value}': {details.forbidden_modules}"
         ),
         fix_hints=(
             "Remove or replace imports that violate the forbidden dependency policy.",

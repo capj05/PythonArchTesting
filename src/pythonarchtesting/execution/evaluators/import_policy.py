@@ -1,137 +1,14 @@
 from __future__ import annotations
 
-import ast
-import fnmatch
-from typing import Any, Dict, List
+from dataclasses import dataclass
+from typing import Any, Dict, List, Literal
 
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult, RuleStatus
 from pythonarchtesting.entities import Entity
+from pythonarchtesting.execution.import_edges import (
+    collect_normalized_import_edges_for_modules,
+)
 from pythonarchtesting.matching import MatchResult
-
-
-def _resolve_relative_module(
-    *,
-    importer_module: str,
-    filepath_rel: str,
-    level: int,
-    module: str | None,
-) -> str:
-    importer_parts = importer_module.split(".") if importer_module else []
-    is_package_module = filepath_rel.endswith("/__init__.py")
-    if is_package_module:
-        context_parts = importer_parts
-    else:
-        context_parts = importer_parts[:-1]
-    remove_parts = max(level - 1, 0)
-    if remove_parts > len(context_parts):
-        base_parts: List[str] = []
-    else:
-        base_parts = context_parts[: len(context_parts) - remove_parts]
-    if module:
-        base_parts.extend(part for part in module.split(".") if part)
-    return ".".join(base_parts)
-
-
-def _normalize_import_targets(
-    *,
-    kind: str,
-    importer_module: str,
-    filepath_rel: str,
-    module: str,
-    name: str | None,
-) -> List[str]:
-    if kind == "import":
-        return [module] if module else []
-
-    level = 0
-    while level < len(module) and module[level] == ".":
-        level += 1
-    module_name = module[level:] if level > 0 else module
-    base_module = (
-        _resolve_relative_module(
-            importer_module=importer_module,
-            filepath_rel=filepath_rel,
-            level=level,
-            module=module_name if module_name else None,
-        )
-        if level > 0
-        else module_name
-    )
-    targets: List[str] = []
-    if base_module:
-        targets.append(base_module)
-    if name and name != "*" and base_module:
-        targets.append(f"{base_module}.{name}")
-    elif name and name != "*" and not base_module:
-        targets.append(name)
-    return targets
-
-
-def _is_type_checking_test(test: ast.AST) -> bool:
-    if isinstance(test, ast.Name):
-        return test.id == "TYPE_CHECKING"
-    if isinstance(test, ast.Attribute):
-        return (
-            isinstance(test.value, ast.Name)
-            and test.value.id == "typing"
-            and test.attr == "TYPE_CHECKING"
-        )
-    return False
-
-
-def _collect_import_edges_from_node(
-    node: ast.AST,
-    *,
-    module_path: str,
-    filepath_rel: str,
-    in_type_checking: bool = False,
-) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
-    for child in ast.iter_child_nodes(node):
-        child_in_type_checking = in_type_checking
-        if isinstance(child, ast.If) and _is_type_checking_test(child.test):
-            child_in_type_checking = True
-
-        if isinstance(child, ast.Import):
-            for alias in child.names:
-                if not alias.name:
-                    continue
-                rows.append(
-                    {
-                        "kind": "import",
-                        "module": alias.name,
-                        "name": None,
-                        "lineno": getattr(child, "lineno", 0),
-                        "filepath": filepath_rel,
-                        "module_path": module_path,
-                        "in_type_checking": child_in_type_checking,
-                    }
-                )
-        elif isinstance(child, ast.ImportFrom):
-            prefix = "." * (getattr(child, "level", 0) or 0)
-            mod = prefix + (child.module or "")
-            for alias in child.names:
-                rows.append(
-                    {
-                        "kind": "importfrom",
-                        "module": mod,
-                        "name": alias.name,
-                        "lineno": getattr(child, "lineno", 0),
-                        "filepath": filepath_rel,
-                        "module_path": module_path,
-                        "in_type_checking": child_in_type_checking,
-                    }
-                )
-
-        rows.extend(
-            _collect_import_edges_from_node(
-                child,
-                module_path=module_path,
-                filepath_rel=filepath_rel,
-                in_type_checking=child_in_type_checking,
-            )
-        )
-    return rows
 
 
 def _matches_prefix(name: str, prefixes: List[str]) -> str | None:
@@ -139,6 +16,56 @@ def _matches_prefix(name: str, prefixes: List[str]) -> str | None:
         if name == prefix or name.startswith(prefix + "."):
             return prefix
     return None
+
+
+def _normalize_scope_name(raw_scope: Any) -> Literal["module", "package"]:
+    scope = str(raw_scope).lower()
+    if scope == "entity":
+        return "module"
+    if scope == "module":
+        return "module"
+    return "package"
+
+
+@dataclass(frozen=True)
+class ImportPolicyScope:
+    scope_kind: Literal["module", "package"]
+    scope_value: str
+    scope_modules: frozenset[str]
+
+
+def _resolve_import_policy_scope(
+    *,
+    rule: Rule,
+    source: Entity,
+    target: Entity,
+    ctx: EvalContext,
+) -> ImportPolicyScope:
+    scope_kind = _normalize_scope_name(rule.params.get("scope", "package"))
+    if scope_kind == "module":
+        return ImportPolicyScope(
+            scope_kind="module",
+            scope_value=target.module_path,
+            scope_modules=frozenset({target.module_path}),
+        )
+
+    configured_package = rule.params.get("package")
+    if isinstance(configured_package, str) and configured_package:
+        scope_value = configured_package
+    else:
+        scope_value = source.module_path.split(".")[0] if source.module_path else ""
+
+    scope_modules = frozenset(
+        entity.module_path
+        for entity in ctx.target_index.all_sorted
+        if entity.module_path == scope_value
+        or entity.module_path.startswith(scope_value + ".")
+    )
+    return ImportPolicyScope(
+        scope_kind="package",
+        scope_value=scope_value,
+        scope_modules=scope_modules,
+    )
 
 
 def _error_result(
@@ -178,30 +105,17 @@ class ImportPolicyEvaluator:
         allow = [str(item) for item in list(rule.params.get("allow", []))]
         ignore_globs = [str(item) for item in list(rule.params.get("ignore_globs", []))]
         ignore_type_checking = bool(rule.params.get("ignore_type_checking", True))
-        scope = str(rule.params.get("scope", "package"))
         mode = str(rule.params.get("mode", "reachable"))
-
-        if scope == "entity":
-            scope_modules = {target.module_path}
-            package_prefix = target.module_path
-        else:
-            configured_package = rule.params.get("package")
-            if isinstance(configured_package, str) and configured_package:
-                package_prefix = configured_package
-            else:
-                package_prefix = (
-                    source.module_path.split(".")[0] if source.module_path else ""
-                )
-            scope_modules = {
-                entity.module_path
-                for entity in ctx.target_index.all_sorted
-                if entity.module_path == package_prefix
-                or entity.module_path.startswith(package_prefix + ".")
-            }
+        scope = _resolve_import_policy_scope(
+            rule=rule,
+            source=source,
+            target=target,
+            ctx=ctx,
+        )
 
         base_details = {
-            "package_prefix": package_prefix,
-            "scope": scope,
+            "scope": scope.scope_kind,
+            "scope_value": scope.scope_value,
             "match_status": match.status.value,
             "mode": mode,
         }
@@ -239,54 +153,32 @@ class ImportPolicyEvaluator:
                 },
             )
 
-        imported_rows: List[Dict[str, Any]] = []
-        for entity in ctx.target_index.all_sorted:
-            if entity.module_path not in scope_modules:
-                continue
-            if ignore_globs and any(
-                fnmatch.fnmatch(entity.filepath_rel, pattern)
-                for pattern in ignore_globs
-            ):
-                continue
-            node = entity.extras.get("ast_node")
-            if node is None:
-                continue
-            imported_rows.extend(
-                _collect_import_edges_from_node(
-                    node,
-                    module_path=entity.module_path,
-                    filepath_rel=entity.filepath_rel,
-                )
-            )
+        imported_edges = collect_normalized_import_edges_for_modules(
+            entities=ctx.target_index.all_sorted,
+            scope_modules=scope.scope_modules,
+            ignore_globs=ignore_globs,
+        )
 
         occurrences: List[Dict[str, Any]] = []
         found_forbidden: set[str] = set()
 
-        for row in imported_rows:
-            if ignore_type_checking and row.get("in_type_checking"):
+        for edge in imported_edges:
+            if ignore_type_checking and edge.in_type_checking:
                 continue
-            targets = _normalize_import_targets(
-                kind=str(row.get("kind", "")),
-                importer_module=str(row.get("module_path", "")),
-                filepath_rel=str(row.get("filepath", "")),
-                module=str(row.get("module", "")),
-                name=row.get("name"),
+            if _matches_prefix(edge.imported_module, allow) is not None:
+                continue
+            matched = _matches_prefix(edge.imported_module, forbidden)
+            if matched is None:
+                continue
+            found_forbidden.add(matched)
+            occurrences.append(
+                {
+                    "filepath": edge.filepath_rel,
+                    "lineno": edge.lineno,
+                    "imported_module": edge.imported_module,
+                    "forbidden_prefix": matched,
+                }
             )
-            for imported in targets:
-                if _matches_prefix(imported, allow) is not None:
-                    continue
-                matched = _matches_prefix(imported, forbidden)
-                if matched is None:
-                    continue
-                found_forbidden.add(matched)
-                occurrences.append(
-                    {
-                        "filepath": row.get("filepath"),
-                        "lineno": int(row.get("lineno", 0)),
-                        "imported_module": imported,
-                        "forbidden_prefix": matched,
-                    }
-                )
 
         occurrences = sorted(
             occurrences,
@@ -318,7 +210,8 @@ class ImportPolicyEvaluator:
             )
 
         message = (
-            f"DEP001 forbidden imports found in package '{package_prefix}': "
+            f"DEP001 forbidden imports found in {scope.scope_kind} "
+            f"'{scope.scope_value}': "
             f"{forbidden_modules}"
         )
         return RuleResult(
