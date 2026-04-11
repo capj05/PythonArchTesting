@@ -98,6 +98,40 @@ def test_collect_normalized_import_edges_from_node_resolves_relative_imports() -
     ]
 
 
+def test_collect_normalized_import_edges_from_node_resolves_relative_imports_in_init() -> (
+    None
+):
+    node = ast.parse("from . import utils")
+
+    edges = collect_normalized_import_edges_from_node(
+        node=node,
+        importer_module="assignment.sub",
+        filepath_rel="assignment/sub/__init__.py",
+    )
+
+    assert [edge.imported_module for edge in edges] == [
+        "assignment.sub",
+        "assignment.sub.utils",
+    ]
+
+
+def test_collect_normalized_import_edges_from_node_resolves_multi_level_relative_depth() -> (
+    None
+):
+    node = ast.parse("from ...pkg import mod")
+
+    edges = collect_normalized_import_edges_from_node(
+        node=node,
+        importer_module="assignment.feature.sub.module",
+        filepath_rel="assignment/feature/sub/module.py",
+    )
+
+    assert [edge.imported_module for edge in edges] == [
+        "assignment.pkg",
+        "assignment.pkg.mod",
+    ]
+
+
 def test_collect_normalized_import_edges_from_node_marks_type_checking_imports() -> (
     None
 ):

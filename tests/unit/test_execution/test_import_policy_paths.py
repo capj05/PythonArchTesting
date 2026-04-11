@@ -163,3 +163,64 @@ def test_collect_reachable_import_violations_is_sorted_independent_of_input_orde
         "assignment.a",
         "assignment.x",
     ]
+
+
+def test_collect_reachable_import_violations_deduplicates_duplicate_root_requests() -> (
+    None
+):
+    graph = build_module_dependency_graph(
+        internal_modules={
+            "assignment.a": "assignment/a.py",
+        },
+        edges=[
+            _edge(
+                importer_module="assignment.a",
+                imported_module="requests",
+                filepath_rel="assignment/a.py",
+                lineno=1,
+            ),
+        ],
+    )
+
+    violations = collect_reachable_import_violations(
+        graph=graph,
+        root_modules=["assignment.a", "assignment.a"],
+        forbidden_prefixes=["requests"],
+        allowed_prefixes=[],
+    )
+
+    assert len(violations) == 1
+    assert violations[0].start_module == "assignment.a"
+
+
+def test_collect_reachable_import_violations_does_not_traverse_external_modules() -> (
+    None
+):
+    graph = build_module_dependency_graph(
+        internal_modules={
+            "assignment.a": "assignment/a.py",
+        },
+        edges=[
+            _edge(
+                importer_module="assignment.a",
+                imported_module="requests",
+                filepath_rel="assignment/a.py",
+                lineno=1,
+            ),
+            _edge(
+                importer_module="requests",
+                imported_module="urllib3",
+                filepath_rel="site-packages/requests/__init__.py",
+                lineno=1,
+            ),
+        ],
+    )
+
+    violations = collect_reachable_import_violations(
+        graph=graph,
+        root_modules=["assignment.a"],
+        forbidden_prefixes=["urllib3"],
+        allowed_prefixes=[],
+    )
+
+    assert violations == ()

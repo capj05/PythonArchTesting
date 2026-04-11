@@ -1,63 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import Mock
-
-from pythonarchtesting.core.evaluation import evaluate_rules_for_target
-from pythonarchtesting.entities import Entity, build_entity_index
-from pythonarchtesting.entities_extraction import extract_entities_from_source
 from pythonarchtesting.matching import MatchResult, MatchStatus
-from pythonarchtesting.rules.compilation import compile_rules
-
-
-def _extract_entities(
-    source_text: str,
-    *,
-    role: str,
-    file_path: str,
-) -> list[Entity]:
-    return extract_entities_from_source(
-        source_text=source_text,
-        file_path=Path(file_path),
-        root_path=Path("."),
-        target_module_name=None,
-        role=role,  # type: ignore[arg-type]
-        include_nested_functions=False,
-        root_label=role,
-    )
-
-
-def _extract_entity(
-    source_text: str,
-    *,
-    role: str,
-    file_path: str,
-    kind: str,
-    name: str,
-) -> Entity:
-    for entity in _extract_entities(source_text, role=role, file_path=file_path):
-        if entity.kind == kind and entity.name == name:
-            return entity
-    raise AssertionError(f"Entity '{name}' ({kind}) not found for role={role}")
-
-
-def _evaluate_dep001_rule(
-    *,
-    source_entity: Entity,
-    target_entities: list[Entity],
-    match: MatchResult,
-):
-    rules, _, _ = compile_rules([source_entity], Mock())
-    source_index = build_entity_index([source_entity])
-    target_index = build_entity_index(target_entities)
-    matches = {source_entity.canonical_id: match}
-    return evaluate_rules_for_target(
-        rules=rules,
-        source_index=source_index,
-        target_index=target_index,
-        matches=matches,
-        config=Mock(),
-    )
+from tests.unit.test_rules._dep001_helpers import (
+    build_source_index_from_rule_source,
+    build_target_index_from_files,
+    evaluate_dep001_rule,
+    get_entity,
+)
 
 
 def test_dep001_reachable_mode_failed_result_includes_path_evidence() -> None:
@@ -72,44 +21,26 @@ def _architecture_rules_marker() -> None:
     ]
     return None
 """
-    target_a = """
+    target_index = build_target_index_from_files(
+        {
+            "assignment/a.py": """
 from assignment import b
-"""
-    target_b = """
+""",
+            "assignment/b.py": """
 from assignment import c
-"""
-    target_c = """
+""",
+            "assignment/c.py": """
 import requests
-"""
-    source_entity = _extract_entity(
-        source,
-        role="source",
-        file_path="assignment/rules.py",
-        kind="function",
-        name="_architecture_rules_marker",
+""",
+        }
     )
-    target_a_entities = _extract_entities(
-        target_a,
-        role="target",
-        file_path="assignment/a.py",
-    )
-    target_b_entities = _extract_entities(
-        target_b,
-        role="target",
-        file_path="assignment/b.py",
-    )
-    target_c_entities = _extract_entities(
-        target_c,
-        role="target",
-        file_path="assignment/c.py",
-    )
-    target_a_entity = next(
-        entity for entity in target_a_entities if entity.kind == "module"
-    )
+    source_entity, source_index = build_source_index_from_rule_source(source)
+    target_a_entity = get_entity(target_index.all_sorted, kind="module", name="a")
 
-    results, errors = _evaluate_dep001_rule(
+    results, errors = evaluate_dep001_rule(
         source_entity=source_entity,
-        target_entities=[*target_a_entities, *target_b_entities, *target_c_entities],
+        source_index=source_index,
+        target_index=target_index,
         match=MatchResult(
             source_id=source_entity.canonical_id,
             status=MatchStatus.MATCHED,
@@ -211,33 +142,22 @@ def _architecture_rules_marker() -> None:
     ]
     return None
 """
-    target_a = """
+    target_index = build_target_index_from_files(
+        {
+            "assignment/x.py": """
 import requests
-"""
-    target_x = """
+""",
+            "assignment/a.py": """
 import requests
-"""
-    source_entity = _extract_entity(
-        source,
-        role="source",
-        file_path="assignment/rules.py",
-        kind="function",
-        name="_architecture_rules_marker",
+""",
+        }
     )
-    target_a_entities = _extract_entities(
-        target_a,
-        role="target",
-        file_path="assignment/a.py",
-    )
-    target_x_entities = _extract_entities(
-        target_x,
-        role="target",
-        file_path="assignment/x.py",
-    )
+    source_entity, source_index = build_source_index_from_rule_source(source)
 
-    results, errors = _evaluate_dep001_rule(
+    results, errors = evaluate_dep001_rule(
         source_entity=source_entity,
-        target_entities=[*target_x_entities, *target_a_entities],
+        source_index=source_index,
+        target_index=target_index,
         match=MatchResult(
             source_id=source_entity.canonical_id,
             status=MatchStatus.UNMATCHED,
@@ -273,36 +193,21 @@ def _architecture_rules_marker() -> None:
     ]
     return None
 """
-    source_entity = _extract_entity(
-        source,
-        role="source",
-        file_path="assignment/rules.py",
-        kind="function",
-        name="_architecture_rules_marker",
+    target_files = {"assignment/entry.py": ""}
+    target_files["assignment/entry.py"] = (
+        "\n".join(f"import assignment.mid{index:02d}" for index in range(26)) + "\n"
     )
-
-    target_entities: list[Entity] = []
-    import_lines = [f"import assignment.mid{index:02d}" for index in range(26)]
-    entry_entities = _extract_entities(
-        "\n".join(import_lines) + "\n",
-        role="target",
-        file_path="assignment/entry.py",
-    )
-    target_entities.extend(entry_entities)
     for index in range(26):
-        middle_name = f"mid{index:02d}"
-        target_entities.extend(
-            _extract_entities(
-                "import requests\n",
-                role="target",
-                file_path=f"assignment/{middle_name}.py",
-            )
-        )
-    entry_module = next(entity for entity in entry_entities if entity.kind == "module")
+        target_files[f"assignment/mid{index:02d}.py"] = "import requests\n"
 
-    results, errors = _evaluate_dep001_rule(
+    target_index = build_target_index_from_files(target_files)
+    source_entity, source_index = build_source_index_from_rule_source(source)
+    entry_module = get_entity(target_index.all_sorted, kind="module", name="entry")
+
+    results, errors = evaluate_dep001_rule(
         source_entity=source_entity,
-        target_entities=target_entities,
+        source_index=source_index,
+        target_index=target_index,
         match=MatchResult(
             source_id=source_entity.canonical_id,
             status=MatchStatus.MATCHED,
@@ -323,3 +228,56 @@ def _architecture_rules_marker() -> None:
     assert result.details["paths_truncated"] is True
     assert len(result.details["violation_paths"]) == 25
     assert "26 paths" in result.message
+
+
+def test_dep001_reachable_mode_uses_stable_evidence_ids_across_runs() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports("requests", scope="module", mode="reachable"),
+    ]
+    return None
+"""
+    target_index = build_target_index_from_files(
+        {
+            "assignment/a.py": """
+from assignment import b
+""",
+            "assignment/b.py": """
+import requests
+""",
+        }
+    )
+    source_entity, source_index = build_source_index_from_rule_source(source)
+    target_a_entity = get_entity(target_index.all_sorted, kind="module", name="a")
+    match = MatchResult(
+        source_id=source_entity.canonical_id,
+        status=MatchStatus.MATCHED,
+        target_id=target_a_entity.canonical_id,
+        confidence=1.0,
+        reasons=[],
+        candidates=[],
+    )
+
+    first_results, first_errors = evaluate_dep001_rule(
+        source_entity=source_entity,
+        source_index=source_index,
+        target_index=target_index,
+        match=match,
+    )
+    second_results, second_errors = evaluate_dep001_rule(
+        source_entity=source_entity,
+        source_index=source_index,
+        target_index=target_index,
+        match=match,
+    )
+
+    assert first_errors == []
+    assert second_errors == []
+    assert [item.evidence_id for item in first_results[0].evidence] == [
+        item.evidence_id for item in second_results[0].evidence
+    ]
