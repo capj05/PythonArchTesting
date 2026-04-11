@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, List, Optional, Tuple, Union
 
+MISSING_DEFAULT = object()
+
 
 class ValueType(Enum):
     """Supported configuration value types."""
@@ -50,7 +52,11 @@ class ValidationRule:
     error_message: Optional[str] = None
 
     # Default value
-    default_value: Any = None
+    default_value: Any = MISSING_DEFAULT
+
+    def has_default(self) -> bool:
+        """Return whether the rule declares an explicit default value."""
+        return self.default_value is not MISSING_DEFAULT
 
     def validate(
         self, value: Any, section: str, key: str
@@ -111,6 +117,8 @@ class ValidationRule:
 
     def _validate_type(self, value: Any) -> bool:
         """Validate basic type of value."""
+        if value is None:
+            return self.has_default() and self.default_value is None
         if self.value_type == ValueType.STRING:
             return isinstance(value, str)
         elif self.value_type == ValueType.INTEGER:
@@ -134,6 +142,8 @@ class ValidationRule:
 
     def _convert_value(self, value: Any) -> Any:
         """Convert value to correct type."""
+        if value is None:
+            return None
         if self.value_type == ValueType.INTEGER:
             return int(value)
         elif self.value_type == ValueType.FLOAT:

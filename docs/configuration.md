@@ -9,9 +9,7 @@ For normal CLI usage, when `--config` is omitted, the CLI enables config
 auto-discovery in this order:
 
 1. explicit `--config path/to/file.conf`
-2. auto-discovered `python_arch_testing.conf`
-3. deprecated `custom_config.conf` fallback only when
-   `python_arch_testing.conf` is absent
+2. auto-discovered `.pythonarchtesting` from the current working directory
 
 CLI arguments remain the highest-priority overrides after file loading.
 Environment-variable overlays are not supported by `load_config()`.
@@ -21,6 +19,10 @@ Point the CLI at a custom file when you need an explicit override:
 ```bash
 python-arch-test --config path/to/custom.conf ...
 ```
+
+Nullable config fields use the literal token `null` in INI files. For example,
+`[logging] output_file = null` clears the deprecated alias and leaves
+`logging.filename` as the canonical setting.
 
 ## Common Sections
 

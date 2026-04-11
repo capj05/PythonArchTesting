@@ -24,9 +24,7 @@ class FileConstants:
 
     # Configuration files
     DEFAULT_CONFIG_FILE: Final[str] = "defaults.conf"
-    PYTHON_ARCH_TESTING_CONFIG_FILE: Final[str] = "python_arch_testing.conf"
-    LEGACY_CUSTOM_CONFIG_FILE: Final[str] = "custom_config.conf"
-    CUSTOM_CONFIG_FILE: Final[str] = LEGACY_CUSTOM_CONFIG_FILE
+    AUTO_DISCOVERED_CONFIG_FILE: Final[str] = ".pythonarchtesting"
 
     # Directory patterns to exclude
     EXCLUDED_DIRS: Final[tuple] = (

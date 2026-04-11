@@ -93,9 +93,7 @@ def test_cli_main_explicitly_enables_cwd_discovery_and_logs_buffered_warnings(
     monkeypatch.setattr(
         cli,
         "resolve_projects_config",
-        lambda **kwargs: SimpleNamespace(
-            targets=[SimpleNamespace(path=Path("/t1"))]
-        ),
+        lambda **kwargs: SimpleNamespace(targets=[SimpleNamespace(path=Path("/t1"))]),
     )
     monkeypatch.setattr(cli, "_run_single_target", lambda **kwargs: 0)
     monkeypatch.setattr(cli.os, "getcwd", lambda: "C:/repo")
@@ -109,3 +107,36 @@ def test_cli_main_explicitly_enables_cwd_discovery_and_logs_buffered_warnings(
     assert captured_kwargs["cwd"] == "C:/repo"
     assert callable(captured_kwargs["warning_sink"])
     assert events == ["configure_logging", "loader_warning: watch it"]
+
+
+def test_cli_main_autoloads_dotfile_config_without_explicit_config(
+    tmp_path, monkeypatch
+):
+    (tmp_path / ".pythonarchtesting").write_text(
+        "[performance]\ndefault_timeout = 45\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "configure_logging", lambda config: None)
+    monkeypatch.setattr(
+        cli,
+        "resolve_projects_config",
+        lambda **kwargs: SimpleNamespace(
+            source_path=Path("/source"),
+            targets=[SimpleNamespace(path=Path("/t1"))],
+        ),
+    )
+
+    seen = {}
+
+    def _run_single_target(**kwargs):
+        seen["timeout"] = kwargs["config"].performance.default_timeout
+        return 0
+
+    monkeypatch.setattr(cli, "_run_single_target", _run_single_target)
+
+    exit_code = cli.main(["--target", "a"])
+
+    assert exit_code == 0
+    assert seen["timeout"] == 45

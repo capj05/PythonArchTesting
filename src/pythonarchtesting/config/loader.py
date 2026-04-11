@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import configparser
 import os
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -18,6 +17,8 @@ from pythonarchtesting.exceptions import ConfigurationError, ErrorContext
 
 from .data import Config, create_config_from_dict
 from .validator import validate_configuration
+
+_NULL_CONFIG_VALUE = "null"
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +60,8 @@ def _emit_warning(
 
 def _serialize_config_value(value: Any) -> str:
     """Convert a configuration value to string for ConfigParser."""
+    if value is None:
+        return _NULL_CONFIG_VALUE
     if isinstance(value, (list, tuple, set)):
         return ", ".join(str(item) for item in value)
     if isinstance(value, bool):
@@ -78,31 +81,8 @@ def _default_config_path() -> str:
 
 def _resolve_auto_config_path(cwd: Path) -> Optional[Path]:
     """Resolve the auto-discovered user config file in the current directory."""
-    canonical_path = cwd / FileConstants.PYTHON_ARCH_TESTING_CONFIG_FILE
-    legacy_path = cwd / FileConstants.LEGACY_CUSTOM_CONFIG_FILE
-
-    if canonical_path.is_file():
-        if legacy_path.is_file():
-            warnings.warn(
-                "Ignoring deprecated auto-discovered config file "
-                f"'{FileConstants.LEGACY_CUSTOM_CONFIG_FILE}' because "
-                f"'{FileConstants.PYTHON_ARCH_TESTING_CONFIG_FILE}' is present.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        return canonical_path
-
-    if legacy_path.is_file():
-        warnings.warn(
-            f"Auto-discovery of '{FileConstants.LEGACY_CUSTOM_CONFIG_FILE}' is "
-            "deprecated; rename it to "
-            f"'{FileConstants.PYTHON_ARCH_TESTING_CONFIG_FILE}'.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return legacy_path
-
-    return None
+    auto_config_path = cwd / FileConstants.AUTO_DISCOVERED_CONFIG_FILE
+    return auto_config_path if auto_config_path.is_file() else None
 
 
 def _load_config_file(config_path: str) -> Dict[str, Dict[str, str]]:
@@ -180,6 +160,13 @@ def _convert_types_in_config_dict(
 def _convert_value_by_rule(value: Any, rule: Any) -> Any:
     """Convert a value based on validation rule type."""
     if value is None:
+        return None
+    if (
+        isinstance(value, str)
+        and value.strip().lower() == _NULL_CONFIG_VALUE
+        and rule.has_default()
+        and rule.default_value is None
+    ):
         return None
 
     # If already the right type, return as-is
@@ -273,25 +260,65 @@ def _apply_defaults_and_validate(
     return result
 
 
-def _normalize_logging_section(config_dict: Dict[str, Dict[str, Any]]) -> None:
+def _normalize_nullable_string(value: Any, key_name: str) -> str | None:
+    """Normalize an optional string value from config input."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigurationError(f"{key_name} must be a string")
+    normalized = value.strip()
+    if not normalized or normalized.lower() == _NULL_CONFIG_VALUE:
+        return None
+    return normalized
+
+
+def _normalize_logging_section(
+    config_dict: Dict[str, Dict[str, Any]],
+    warning_sink: Callable[[ConfigLoadWarning], None] | None = None,
+) -> None:
     """Normalize logging configuration keys and aliases."""
     if "logging" not in config_dict:
         config_dict["logging"] = {}
 
     log_section = config_dict["logging"]
-    filename = (log_section.get("filename") or "").strip() or None
-    alias = (log_section.get("output_file") or "").strip() or None
+    filename = _normalize_nullable_string(
+        log_section.get("filename"), "logging.filename"
+    )
+    alias = _normalize_nullable_string(
+        log_section.get("output_file"), "logging.output_file"
+    )
 
-    if filename and not isinstance(filename, str):
-        raise ConfigurationError("logging.filename must be a string")
-    if alias and not isinstance(alias, str):
-        raise ConfigurationError("logging.output_file must be a string")
-
-    # Alias precedence with default override
-    if alias and (not filename or filename == "log.txt"):
+    if filename is None and alias is not None:
         log_section["filename"] = alias
-    elif filename:
+        log_section["output_file"] = alias
+        return
+
+    if filename is not None:
+        if alias is None:
+            log_section["filename"] = filename
+            log_section["output_file"] = None
+            return
+        if filename == "log.txt":
+            log_section["filename"] = alias
+            log_section["output_file"] = alias
+            return
         log_section["filename"] = filename
+        if alias != filename:
+            _emit_warning(
+                warning_sink,
+                code="logging_output_file_ignored",
+                message=(
+                    "Ignoring deprecated logging.output_file because "
+                    "logging.filename is also set."
+                ),
+                section="logging",
+                key="output_file",
+                fallback_value=filename,
+            )
+        log_section["output_file"] = filename
+        return
+
+    log_section["output_file"] = None
 
 
 def _normalize_report_section(
@@ -418,7 +445,7 @@ def load_config(
     )
 
     # Normalize special sections
-    _normalize_logging_section(validated_config)
+    _normalize_logging_section(validated_config, warning_sink=warning_sink)
     _normalize_report_section(validated_config, warning_sink=warning_sink)
 
     # Create Config object

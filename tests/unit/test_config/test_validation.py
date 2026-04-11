@@ -3,7 +3,9 @@ Tests for configuration validation functionality.
 """
 
 import builtins
+import configparser
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +16,7 @@ from pythonarchtesting.config import (
     validate_value,
 )
 from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.config.schema_data import CONFIGURATION_SCHEMA
 from pythonarchtesting.config.schema_rules import ValidationRule, ValueType
 from pythonarchtesting.config.validator import get_schema_info
 from pythonarchtesting.exceptions import ConfigurationError
@@ -44,6 +47,24 @@ def test_defaults_applied_for_missing_sections():
     result = validate_configuration({})
     assert result.is_valid
     assert "discovery.exclude_hidden_dirs" in result.applied_defaults
+    assert "logging.output_file" in result.applied_defaults
+    assert result.applied_defaults["logging.output_file"] is None
+
+
+def test_packaged_defaults_conf_matches_schema_keys() -> None:
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read(Path("src/pythonarchtesting/defaults.conf"), encoding="utf-8")
+
+    defaults_keys = {
+        section_name: set(parser[section_name].keys())
+        for section_name in parser.sections()
+    }
+    schema_keys = {
+        section_name: set(section_rules.keys())
+        for section_name, section_rules in CONFIGURATION_SCHEMA.items()
+    }
+
+    assert defaults_keys == schema_keys
 
 
 @pytest.mark.parametrize(
@@ -122,10 +143,10 @@ def test_load_config_no_longer_exposes_parallel_performance_fields(tmp_path) -> 
         assert not hasattr(config.performance, attr)
 
 
-def test_load_config_does_not_autodiscover_python_arch_testing_conf_by_default(
+def test_load_config_does_not_autodiscover_dotfile_by_default(
     tmp_path, monkeypatch
 ) -> None:
-    config_path = tmp_path / "python_arch_testing.conf"
+    config_path = tmp_path / ".pythonarchtesting"
     config_path.write_text("[performance]\ndefault_timeout = 45\n", encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
@@ -135,10 +156,10 @@ def test_load_config_does_not_autodiscover_python_arch_testing_conf_by_default(
     assert config.performance.default_timeout == 30
 
 
-def test_load_config_can_autodiscover_python_arch_testing_conf_when_enabled(
+def test_load_config_can_autodiscover_dotfile_when_enabled(
     tmp_path,
 ) -> None:
-    config_path = tmp_path / "python_arch_testing.conf"
+    config_path = tmp_path / ".pythonarchtesting"
     config_path.write_text("[performance]\ndefault_timeout = 45\n", encoding="utf-8")
 
     config = load_config(discover_from_cwd=True, cwd=tmp_path)
@@ -149,7 +170,7 @@ def test_load_config_can_autodiscover_python_arch_testing_conf_when_enabled(
 def test_load_config_uses_explicit_config_over_autodiscovery(
     tmp_path,
 ) -> None:
-    autodiscovered = tmp_path / "python_arch_testing.conf"
+    autodiscovered = tmp_path / ".pythonarchtesting"
     explicit = tmp_path / "explicit.conf"
     autodiscovered.write_text("[performance]\ndefault_timeout = 11\n", encoding="utf-8")
     explicit.write_text("[performance]\ndefault_timeout = 62\n", encoding="utf-8")
@@ -163,30 +184,17 @@ def test_load_config_uses_explicit_config_over_autodiscovery(
     assert config.performance.default_timeout == 62
 
 
-def test_load_config_falls_back_to_custom_config_conf_with_deprecation_warning(
-    tmp_path,
-) -> None:
-    config_path = tmp_path / "custom_config.conf"
-    config_path.write_text("[performance]\ndefault_timeout = 52\n", encoding="utf-8")
+def test_load_config_does_not_autodiscover_legacy_config_filenames(tmp_path) -> None:
+    (tmp_path / "python_arch_testing.conf").write_text(
+        "[performance]\ndefault_timeout = 31\n", encoding="utf-8"
+    )
+    (tmp_path / "custom_config.conf").write_text(
+        "[performance]\ndefault_timeout = 99\n", encoding="utf-8"
+    )
 
-    with pytest.deprecated_call(match="custom_config\\.conf"):
-        config = load_config(discover_from_cwd=True, cwd=tmp_path)
+    config = load_config(discover_from_cwd=True, cwd=tmp_path)
 
-    assert config.performance.default_timeout == 52
-
-
-def test_load_config_prefers_python_arch_testing_conf_when_both_exist(
-    tmp_path,
-) -> None:
-    canonical = tmp_path / "python_arch_testing.conf"
-    legacy = tmp_path / "custom_config.conf"
-    canonical.write_text("[performance]\ndefault_timeout = 31\n", encoding="utf-8")
-    legacy.write_text("[performance]\ndefault_timeout = 99\n", encoding="utf-8")
-
-    with pytest.deprecated_call(match="custom_config\\.conf"):
-        config = load_config(discover_from_cwd=True, cwd=tmp_path)
-
-    assert config.performance.default_timeout == 31
+    assert config.performance.default_timeout == 30
 
 
 def test_load_config_signature_no_longer_accepts_env() -> None:
@@ -240,6 +248,47 @@ def test_load_config_invalid_report_schema_uses_warning_sink_not_print(
     assert captured_warnings[0].key == "schema_version"
     assert captured_warnings[0].fallback_value == "2"
     assert "falling back to '2'" in captured_warnings[0].message
+
+
+def test_load_config_supports_null_for_nullable_fields(tmp_path) -> None:
+    config_path = tmp_path / "config.ini"
+    config_path.write_text("[logging]\noutput_file = null\n", encoding="utf-8")
+
+    config = load_config(config_path=str(config_path))
+
+    assert config.logging.filename == "log.txt"
+    assert config.logging.output_file is None
+    assert config.raw["logging"]["output_file"] is None
+
+
+def test_load_config_output_file_alias_populates_filename(tmp_path) -> None:
+    config_path = tmp_path / "config.ini"
+    config_path.write_text("[logging]\noutput_file = alias.log\n", encoding="utf-8")
+
+    config = load_config(config_path=str(config_path))
+
+    assert config.logging.filename == "alias.log"
+    assert config.logging.output_file == "alias.log"
+
+
+def test_load_config_logging_filename_wins_over_output_file(tmp_path) -> None:
+    config_path = tmp_path / "config.ini"
+    config_path.write_text(
+        "[logging]\nfilename = primary.log\noutput_file = alias.log\n",
+        encoding="utf-8",
+    )
+    captured_warnings = []
+
+    config = load_config(
+        config_path=str(config_path),
+        warning_sink=captured_warnings.append,
+    )
+
+    assert config.logging.filename == "primary.log"
+    assert config.logging.output_file == "primary.log"
+    assert captured_warnings
+    assert captured_warnings[0].code == "logging_output_file_ignored"
+    assert captured_warnings[0].fallback_value == "primary.log"
 
 
 def test_load_config_missing_default_config_uses_warning_sink_not_print(

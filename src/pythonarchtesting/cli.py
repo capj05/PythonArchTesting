@@ -50,7 +50,13 @@ def _parse_csv(value: Optional[str]) -> List[str]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Python Architecture Testing CLI")
-    parser.add_argument("--config", help="Path to custom configuration file")
+    parser.add_argument(
+        "--config",
+        help=(
+            "Explicit configuration file path; when omitted, the CLI auto-loads "
+            "'.pythonarchtesting' from the current working directory"
+        ),
+    )
     parser.add_argument("--source", help="Source path for reference modules")
     parser.add_argument(
         "--target",

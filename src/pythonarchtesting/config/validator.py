@@ -109,7 +109,7 @@ class ConfigurationValidator:
                     errors.append(
                         f"{section_name}.{key_name}: Required configuration key is missing"
                     )
-                elif rule.default_value is not None:
+                elif rule.has_default():
                     applied_defaults[f"{section_name}.{key_name}"] = rule.default_value
 
         return errors, warnings, applied_defaults

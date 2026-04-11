@@ -196,10 +196,17 @@ def _convert_value(value: Any, field_info: Any) -> Any:
         # target_type might not be a real type (e.g., string representation)
         pass
 
+    type_str = str(target_type).lower()
+    if (
+        isinstance(value, str)
+        and value.strip().lower() == "null"
+        and ("optional" in type_str or "nonetype" in type_str)
+    ):
+        return None
+
     # Handle string conversions from ConfigParser
     if isinstance(value, str):
         # Handle basic types by checking type names
-        type_str = str(target_type).lower()
         if "bool" in type_str:
             return value.lower() in ("true", "yes", "1", "on")
         elif "int" in type_str:
