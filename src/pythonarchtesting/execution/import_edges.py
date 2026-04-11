@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import fnmatch
 from dataclasses import dataclass
-from typing import Iterable, Literal, Sequence
+from typing import Collection, Iterable, Literal, Sequence
 
 from pythonarchtesting.entities import Entity
 
@@ -17,6 +17,7 @@ class ParsedImportReference:
     module: str
     name: str | None
     in_type_checking: bool
+    is_top_level: bool
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,17 @@ class NormalizedImportEdge:
     filepath_rel: str
     lineno: int
     in_type_checking: bool
+    is_top_level: bool
+
+
+def _matches_ignore_globs(
+    filepath_rel: str,
+    ignore_globs: Sequence[str] | None,
+) -> bool:
+    return bool(
+        ignore_globs
+        and any(fnmatch.fnmatch(filepath_rel, pattern) for pattern in ignore_globs)
+    )
 
 
 def _resolve_relative_module(
@@ -69,12 +81,16 @@ def collect_import_references_from_node(
     importer_module: str,
     filepath_rel: str,
     in_type_checking: bool = False,
+    is_top_level_context: bool = True,
 ) -> list[ParsedImportReference]:
     references: list[ParsedImportReference] = []
     for child in ast.iter_child_nodes(node):
         child_in_type_checking = in_type_checking
         if isinstance(child, ast.If) and _is_type_checking_test(child.test):
             child_in_type_checking = True
+        child_is_top_level_context = is_top_level_context
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            child_is_top_level_context = False
 
         if isinstance(child, ast.Import):
             for alias in child.names:
@@ -89,6 +105,7 @@ def collect_import_references_from_node(
                         module=alias.name,
                         name=None,
                         in_type_checking=child_in_type_checking,
+                        is_top_level=is_top_level_context,
                     )
                 )
         elif isinstance(child, ast.ImportFrom):
@@ -104,6 +121,7 @@ def collect_import_references_from_node(
                         module=module,
                         name=alias.name,
                         in_type_checking=child_in_type_checking,
+                        is_top_level=is_top_level_context,
                     )
                 )
 
@@ -113,6 +131,7 @@ def collect_import_references_from_node(
                 importer_module=importer_module,
                 filepath_rel=filepath_rel,
                 in_type_checking=child_in_type_checking,
+                is_top_level_context=child_is_top_level_context,
             )
         )
     return references
@@ -131,6 +150,7 @@ def normalize_import_reference(
                 filepath_rel=ref.filepath_rel,
                 lineno=ref.lineno,
                 in_type_checking=ref.in_type_checking,
+                is_top_level=ref.is_top_level,
             )
         ]
 
@@ -158,6 +178,7 @@ def normalize_import_reference(
                 filepath_rel=ref.filepath_rel,
                 lineno=ref.lineno,
                 in_type_checking=ref.in_type_checking,
+                is_top_level=ref.is_top_level,
             )
         )
     if ref.name and ref.name != "*" and base_module:
@@ -168,6 +189,7 @@ def normalize_import_reference(
                 filepath_rel=ref.filepath_rel,
                 lineno=ref.lineno,
                 in_type_checking=ref.in_type_checking,
+                is_top_level=ref.is_top_level,
             )
         )
     elif ref.name and ref.name != "*" and not base_module:
@@ -178,6 +200,7 @@ def normalize_import_reference(
                 filepath_rel=ref.filepath_rel,
                 lineno=ref.lineno,
                 in_type_checking=ref.in_type_checking,
+                is_top_level=ref.is_top_level,
             )
         )
     return edges
@@ -206,17 +229,14 @@ def collect_normalized_import_edges_for_modules(
     scope_modules: set[str] | frozenset[str],
     ignore_globs: Sequence[str] | None = None,
 ) -> list[NormalizedImportEdge]:
+    module_entities = collect_canonical_module_entities(
+        entities=entities,
+        scope_modules=scope_modules,
+        ignore_globs=ignore_globs,
+    )
     edges: list[NormalizedImportEdge] = []
-    for entity in entities:
-        if entity.module_path not in scope_modules:
-            continue
-        if ignore_globs and any(
-            fnmatch.fnmatch(entity.filepath_rel, pattern) for pattern in ignore_globs
-        ):
-            continue
-        node = entity.extras.get("ast_node")
-        if node is None:
-            continue
+    for entity in module_entities:
+        node = entity.extras["ast_node"]
         edges.extend(
             collect_normalized_import_edges_from_node(
                 node=node,
@@ -224,7 +244,44 @@ def collect_normalized_import_edges_for_modules(
                 filepath_rel=entity.filepath_rel,
             )
         )
-    return edges
+    return sorted(
+        edges,
+        key=lambda edge: (
+            edge.importer_module,
+            edge.filepath_rel,
+            edge.lineno,
+            edge.imported_module,
+            edge.in_type_checking,
+            edge.is_top_level,
+        ),
+    )
+
+
+def collect_canonical_module_entities(
+    *,
+    entities: Iterable[Entity],
+    scope_modules: Collection[str] | None = None,
+    ignore_globs: Sequence[str] | None = None,
+) -> list[Entity]:
+    selected_by_module: dict[str, Entity] = {}
+    for entity in entities:
+        if scope_modules is not None and entity.module_path not in scope_modules:
+            continue
+        if _matches_ignore_globs(entity.filepath_rel, ignore_globs):
+            continue
+        if entity.extras.get("ast_node") is None:
+            continue
+
+        existing = selected_by_module.get(entity.module_path)
+        if existing is None:
+            selected_by_module[entity.module_path] = entity
+            continue
+        if entity.kind == "module" and existing.kind != "module":
+            selected_by_module[entity.module_path] = entity
+
+    return [
+        selected_by_module[module_path] for module_path in sorted(selected_by_module)
+    ]
 
 
 __all__: list[str] = []

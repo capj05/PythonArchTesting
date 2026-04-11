@@ -12,15 +12,13 @@ from pythonarchtesting.matching import MatchResult, MatchStatus
 from pythonarchtesting.rules.compilation import compile_rules
 
 
-def _extract_entity(
+def _extract_entities(
     source_text: str,
     *,
     role: str,
     file_path: str,
-    kind: str,
-    name: str,
-) -> Entity:
-    entities = extract_entities_from_source(
+) -> list[Entity]:
+    return extract_entities_from_source(
         source_text=source_text,
         file_path=Path(file_path),
         root_path=Path("."),
@@ -29,7 +27,17 @@ def _extract_entity(
         include_nested_functions=False,
         root_label=role,
     )
-    for entity in entities:
+
+
+def _extract_entity(
+    source_text: str,
+    *,
+    role: str,
+    file_path: str,
+    kind: str,
+    name: str,
+) -> Entity:
+    for entity in _extract_entities(source_text, role=role, file_path=file_path):
         if entity.kind == kind and entity.name == name:
             return entity
     raise AssertionError(f"Entity '{name}' ({kind}) not found for role={role}")
@@ -54,7 +62,7 @@ def _evaluate_dep001_rule(
     )
 
 
-def test_dep001_compile_defaults_to_reachable_mode_and_v2_rule_id():
+def test_dep001_compile_defaults_to_reachable_mode_and_v2_rule_id() -> None:
     source = """
 from typing import Annotated
 from pythonarchtesting.rules import forbid_imports
@@ -86,7 +94,7 @@ def _architecture_rules_marker() -> None:
     assert rules[0].params["fail_on_unmatched"] is False
 
 
-def test_dep001_compile_honors_explicit_modes():
+def test_dep001_compile_honors_explicit_modes() -> None:
     source = """
 from typing import Annotated
 from pythonarchtesting.rules import forbid_imports
@@ -182,7 +190,9 @@ def _architecture_rules_marker() -> None:
     assert evidence[0].payload["severity"] == "error"
 
 
-def test_dep001_direct_mode_package_scope_detects_forbidden_imports_with_relative_resolution():
+def test_dep001_direct_mode_package_scope_detects_forbidden_imports_with_relative_resolution() -> (
+    None
+):
     source = """
 from typing import Annotated
 from pythonarchtesting.rules import forbid_imports
@@ -225,24 +235,18 @@ def use_relative() -> int:
         kind="function",
         name="_architecture_rules_marker",
     )
-    target_run = _extract_entity(
-        target_core,
-        role="target",
-        file_path="assignment/core.py",
-        kind="function",
-        name="run",
-    )
-    target_relative = _extract_entity(
-        target_sub,
-        role="target",
-        file_path="assignment/sub/mod.py",
-        kind="function",
-        name="use_relative",
-    )
+    target_entities = [
+        *_extract_entities(target_core, role="target", file_path="assignment/core.py"),
+        *_extract_entities(
+            target_sub,
+            role="target",
+            file_path="assignment/sub/mod.py",
+        ),
+    ]
 
     results, errors = _evaluate_dep001_rule(
         source_entity=source_entity,
-        target_entities=[target_run, target_relative],
+        target_entities=target_entities,
         match=MatchResult(
             source_id=source_entity.canonical_id,
             status=MatchStatus.UNMATCHED,
@@ -260,15 +264,16 @@ def use_relative() -> int:
     )
     assert results[0].details["scope"] == "package"
     assert results[0].details["scope_value"] == "assignment"
-    occurrences = results[0].details["occurrences"]
-    imported_modules = [item["imported_module"] for item in occurrences]
+    imported_modules = [
+        item["imported_module"] for item in results[0].details["occurrences"]
+    ]
     assert "requests" in imported_modules
     assert "assignment.utils" in imported_modules
     assert "requests.sessions" not in imported_modules
     assert "socket" not in imported_modules
 
 
-def test_dep001_default_mode_returns_reachable_not_implemented_error():
+def test_dep001_default_reachable_mode_detects_top_level_forbidden_import() -> None:
     source = """
 from typing import Annotated
 from pythonarchtesting.rules import forbid_imports
@@ -278,8 +283,9 @@ def _architecture_rules_marker() -> None:
     return None
 """
     target = """
+import requests
+
 def run() -> int:
-    import requests
     return 1
 """
     source_entity = _extract_entity(
@@ -289,17 +295,15 @@ def run() -> int:
         kind="function",
         name="_architecture_rules_marker",
     )
-    target_entity = _extract_entity(
+    target_entities = _extract_entities(
         target,
         role="target",
         file_path="assignment/core.py",
-        kind="function",
-        name="run",
     )
 
     results, errors = _evaluate_dep001_rule(
         source_entity=source_entity,
-        target_entities=[target_entity],
+        target_entities=target_entities,
         match=MatchResult(
             source_id=source_entity.canonical_id,
             status=MatchStatus.UNMATCHED,
@@ -311,18 +315,16 @@ def run() -> int:
     )
 
     assert errors == []
-    assert [result.status for result in results] == ["ERROR"]
-    assert results[0].message == (
-        "DEP001 reachable import policy mode is the default semantic contract, "
-        "but reachability analysis is not implemented yet."
-    )
+    assert [result.status for result in results] == ["FAILED"]
     assert results[0].details["mode"] == "reachable"
-    assert results[0].details["reason"] == "reachable_mode_not_implemented"
     assert results[0].details["scope"] == "package"
     assert results[0].details["scope_value"] == "assignment"
+    assert [item["imported_module"] for item in results[0].details["occurrences"]] == [
+        "requests"
+    ]
 
 
-def test_dep001_reachable_mode_returns_not_implemented_error_for_indirect_case():
+def test_dep001_reachable_mode_fails_for_internal_chain_to_forbidden_external() -> None:
     source = """
 from typing import Annotated
 from pythonarchtesting.rules import forbid_imports
@@ -335,13 +337,15 @@ def _architecture_rules_marker() -> None:
     return None
 """
     target_a = """
+from assignment import b
+
 def use_b() -> int:
-    from assignment import b
-    return b.run()
+    return 1
 """
     target_b = """
+import requests
+
 def run() -> int:
-    import requests
     return 1
 """
     source_entity = _extract_entity(
@@ -351,24 +355,14 @@ def run() -> int:
         kind="function",
         name="_architecture_rules_marker",
     )
-    target_a_entity = _extract_entity(
-        target_a,
-        role="target",
-        file_path="assignment/a.py",
-        kind="function",
-        name="use_b",
-    )
-    target_b_entity = _extract_entity(
-        target_b,
-        role="target",
-        file_path="assignment/b.py",
-        kind="function",
-        name="run",
-    )
+    target_entities = [
+        *_extract_entities(target_a, role="target", file_path="assignment/a.py"),
+        *_extract_entities(target_b, role="target", file_path="assignment/b.py"),
+    ]
 
     results, errors = _evaluate_dep001_rule(
         source_entity=source_entity,
-        target_entities=[target_a_entity, target_b_entity],
+        target_entities=target_entities,
         match=MatchResult(
             source_id=source_entity.canonical_id,
             status=MatchStatus.UNMATCHED,
@@ -380,14 +374,16 @@ def run() -> int:
     )
 
     assert errors == []
-    assert [result.status for result in results] == ["ERROR"]
+    assert [result.status for result in results] == ["FAILED"]
     assert results[0].details["mode"] == "reachable"
-    assert results[0].details["reason"] == "reachable_mode_not_implemented"
     assert results[0].details["scope"] == "package"
     assert results[0].details["scope_value"] == "assignment"
+    assert [item["imported_module"] for item in results[0].details["occurrences"]] == [
+        "requests"
+    ]
 
 
-def test_dep001_direct_mode_module_scope_checks_only_matched_module():
+def test_dep001_direct_mode_module_scope_checks_only_matched_module() -> None:
     source = """
 from typing import Annotated
 from pythonarchtesting.rules import forbid_imports
@@ -415,24 +411,25 @@ def unsafe() -> int:
         kind="function",
         name="_architecture_rules_marker",
     )
-    target_safe_entity = _extract_entity(
+    target_safe_entities = _extract_entities(
         target_safe,
         role="target",
         file_path="assignment/safe.py",
-        kind="function",
-        name="safe",
     )
-    target_unsafe_entity = _extract_entity(
+    target_unsafe_entities = _extract_entities(
         target_unsafe,
         role="target",
         file_path="assignment/unsafe.py",
-        kind="function",
-        name="unsafe",
+    )
+    target_safe_entity = next(
+        entity
+        for entity in target_safe_entities
+        if entity.kind == "function" and entity.name == "safe"
     )
 
     results, errors = _evaluate_dep001_rule(
         source_entity=source_entity,
-        target_entities=[target_safe_entity, target_unsafe_entity],
+        target_entities=[*target_safe_entities, *target_unsafe_entities],
         match=MatchResult(
             source_id=source_entity.canonical_id,
             status=MatchStatus.MATCHED,
@@ -477,18 +474,11 @@ def unsafe() -> int:
         kind="function",
         name="_architecture_rules_marker",
     )
-    target_entities = extract_entities_from_source(
-        source_text=target_module,
-        file_path=Path("assignment/core.py"),
-        root_path=Path("."),
-        target_module_name=None,
+    target_entities = _extract_entities(
+        target_module,
         role="target",
-        include_nested_functions=False,
-        root_label="target",
+        file_path="assignment/core.py",
     )
-    target_entities = [
-        entity for entity in target_entities if entity.kind == "function"
-    ]
     target_safe_entity = next(
         entity
         for entity in target_entities
@@ -545,13 +535,15 @@ def _architecture_rules_marker() -> None:
     return None
 """
     target_a = """
+from assignment import b
+
 def use_b() -> int:
-    from assignment import b
-    return b.run()
+    return 1
 """
     target_b = """
+import requests
+
 def run() -> int:
-    import requests
     return 1
 """
     direct_source_entity = _extract_entity(
@@ -568,23 +560,26 @@ def run() -> int:
         kind="function",
         name="_architecture_rules_marker",
     )
-    target_a_entity = _extract_entity(
+    target_a_entities = _extract_entities(
         target_a,
         role="target",
         file_path="assignment/a.py",
-        kind="function",
-        name="use_b",
     )
-    target_b_entity = _extract_entity(
+    target_b_entities = _extract_entities(
         target_b,
         role="target",
         file_path="assignment/b.py",
-        kind="function",
-        name="run",
     )
+    target_a_entity = next(
+        entity
+        for entity in target_a_entities
+        if entity.kind == "function" and entity.name == "use_b"
+    )
+    target_entities = [*target_a_entities, *target_b_entities]
+
     direct_results, direct_errors = _evaluate_dep001_rule(
         source_entity=direct_source_entity,
-        target_entities=[target_a_entity, target_b_entity],
+        target_entities=target_entities,
         match=MatchResult(
             source_id=direct_source_entity.canonical_id,
             status=MatchStatus.MATCHED,
@@ -596,7 +591,7 @@ def run() -> int:
     )
     reachable_results, reachable_errors = _evaluate_dep001_rule(
         source_entity=default_source_entity,
-        target_entities=[target_a_entity, target_b_entity],
+        target_entities=target_entities,
         match=MatchResult(
             source_id=default_source_entity.canonical_id,
             status=MatchStatus.MATCHED,
@@ -614,10 +609,442 @@ def run() -> int:
     assert direct_results[0].details["scope_value"] == "assignment.a"
 
     assert reachable_errors == []
-    assert [result.status for result in reachable_results] == ["ERROR"]
+    assert [result.status for result in reachable_results] == ["FAILED"]
     assert reachable_results[0].details["mode"] == "reachable"
     assert reachable_results[0].details["scope"] == "module"
     assert reachable_results[0].details["scope_value"] == "assignment.a"
+    assert [
+        item["imported_module"] for item in reachable_results[0].details["occurrences"]
+    ] == ["requests"]
+
+
+def test_dep001_reachable_mode_ignores_local_only_forbidden_import_by_default() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports("requests", scope="module", mode="reachable"),
+    ]
+    return None
+"""
+    target_a = """
+from assignment import b
+"""
+    target_b = """
+def lazy() -> int:
+    import requests
+    return 1
+"""
+    source_entity = _extract_entity(
+        source,
+        role="source",
+        file_path="assignment/rules.py",
+        kind="function",
+        name="_architecture_rules_marker",
+    )
+    target_a_entities = _extract_entities(
+        target_a,
+        role="target",
+        file_path="assignment/a.py",
+    )
+    target_b_entities = _extract_entities(
+        target_b,
+        role="target",
+        file_path="assignment/b.py",
+    )
+    target_a_entity = next(
+        entity for entity in target_a_entities if entity.kind == "module"
+    )
+
+    results, errors = _evaluate_dep001_rule(
+        source_entity=source_entity,
+        target_entities=[*target_a_entities, *target_b_entities],
+        match=MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_a_entity.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        ),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["occurrences"] == []
+
+
+def test_dep001_reachable_mode_respects_ignore_type_checking_true() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports("requests", scope="module", mode="reachable"),
+    ]
+    return None
+"""
+    target_a = """
+from assignment import b
+"""
+    target_b = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import requests
+"""
+    source_entity = _extract_entity(
+        source,
+        role="source",
+        file_path="assignment/rules.py",
+        kind="function",
+        name="_architecture_rules_marker",
+    )
+    target_a_entities = _extract_entities(
+        target_a,
+        role="target",
+        file_path="assignment/a.py",
+    )
+    target_b_entities = _extract_entities(
+        target_b,
+        role="target",
+        file_path="assignment/b.py",
+    )
+    target_a_entity = next(
+        entity for entity in target_a_entities if entity.kind == "module"
+    )
+
+    results, errors = _evaluate_dep001_rule(
+        source_entity=source_entity,
+        target_entities=[*target_a_entities, *target_b_entities],
+        match=MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_a_entity.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        ),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["occurrences"] == []
+
+
+def test_dep001_reachable_mode_fails_when_ignore_type_checking_false() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports(
+            "requests",
+            scope="module",
+            mode="reachable",
+            ignore_type_checking=False,
+        ),
+    ]
+    return None
+"""
+    target_a = """
+from assignment import b
+"""
+    target_b = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import requests
+"""
+    source_entity = _extract_entity(
+        source,
+        role="source",
+        file_path="assignment/rules.py",
+        kind="function",
+        name="_architecture_rules_marker",
+    )
+    target_a_entities = _extract_entities(
+        target_a,
+        role="target",
+        file_path="assignment/a.py",
+    )
+    target_b_entities = _extract_entities(
+        target_b,
+        role="target",
+        file_path="assignment/b.py",
+    )
+    target_a_entity = next(
+        entity for entity in target_a_entities if entity.kind == "module"
+    )
+
+    results, errors = _evaluate_dep001_rule(
+        source_entity=source_entity,
+        target_entities=[*target_a_entities, *target_b_entities],
+        match=MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_a_entity.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        ),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert [item["imported_module"] for item in results[0].details["occurrences"]] == [
+        "requests"
+    ]
+
+
+def test_dep001_reachable_mode_prunes_allowed_prefix() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports(
+            "requests",
+            package="assignment",
+            scope="package",
+            mode="reachable",
+            allow=["assignment.adapters"],
+        ),
+    ]
+    return None
+"""
+    target_a = """
+import assignment.adapters.http
+"""
+    target_http = """
+import requests
+"""
+    source_entity = _extract_entity(
+        source,
+        role="source",
+        file_path="assignment/rules.py",
+        kind="function",
+        name="_architecture_rules_marker",
+    )
+    target_entities = [
+        *_extract_entities(target_a, role="target", file_path="assignment/a.py"),
+        *_extract_entities(
+            target_http,
+            role="target",
+            file_path="assignment/adapters/http.py",
+        ),
+    ]
+
+    results, errors = _evaluate_dep001_rule(
+        source_entity=source_entity,
+        target_entities=target_entities,
+        match=MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.UNMATCHED,
+            target_id=None,
+            confidence=0.0,
+            reasons=[],
+            candidates=[],
+        ),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["occurrences"] == []
+
+
+def test_dep001_reachable_mode_excludes_ignored_files_from_graph() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports(
+            "requests",
+            package="assignment",
+            scope="package",
+            mode="reachable",
+            ignore_globs=["assignment/generated/*"],
+        ),
+    ]
+    return None
+"""
+    target_a = """
+import assignment.generated.client
+"""
+    target_generated = """
+import requests
+"""
+    source_entity = _extract_entity(
+        source,
+        role="source",
+        file_path="assignment/rules.py",
+        kind="function",
+        name="_architecture_rules_marker",
+    )
+    target_entities = [
+        *_extract_entities(target_a, role="target", file_path="assignment/a.py"),
+        *_extract_entities(
+            target_generated,
+            role="target",
+            file_path="assignment/generated/client.py",
+        ),
+    ]
+
+    results, errors = _evaluate_dep001_rule(
+        source_entity=source_entity,
+        target_entities=target_entities,
+        match=MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.UNMATCHED,
+            target_id=None,
+            confidence=0.0,
+            reasons=[],
+            candidates=[],
+        ),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["occurrences"] == []
+
+
+def test_dep001_reachable_package_scope_uses_all_package_modules_as_roots() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports("requests", package="assignment", scope="package", mode="reachable"),
+    ]
+    return None
+"""
+    target_safe = """
+def safe() -> int:
+    return 1
+"""
+    target_unsafe = """
+import requests
+"""
+    source_entity = _extract_entity(
+        source,
+        role="source",
+        file_path="assignment/rules.py",
+        kind="function",
+        name="_architecture_rules_marker",
+    )
+    safe_entities = _extract_entities(
+        target_safe,
+        role="target",
+        file_path="assignment/safe.py",
+    )
+    unsafe_entities = _extract_entities(
+        target_unsafe,
+        role="target",
+        file_path="assignment/unsafe.py",
+    )
+    safe_function = next(
+        entity
+        for entity in safe_entities
+        if entity.kind == "function" and entity.name == "safe"
+    )
+
+    results, errors = _evaluate_dep001_rule(
+        source_entity=source_entity,
+        target_entities=[*safe_entities, *unsafe_entities],
+        match=MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=safe_function.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        ),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert [item["imported_module"] for item in results[0].details["occurrences"]] == [
+        "requests"
+    ]
+
+
+def test_dep001_direct_mode_deduplicates_occurrences_from_overlapping_entities() -> (
+    None
+):
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports("requests", scope="module", mode="direct"),
+    ]
+    return None
+"""
+    target_module = """
+def safe() -> int:
+    return 1
+
+def unsafe() -> int:
+    import requests
+    return 2
+"""
+    source_entity = _extract_entity(
+        source,
+        role="source",
+        file_path="assignment/rules.py",
+        kind="function",
+        name="_architecture_rules_marker",
+    )
+    target_entities = _extract_entities(
+        target_module,
+        role="target",
+        file_path="assignment/core.py",
+    )
+    target_safe_entity = next(
+        entity
+        for entity in target_entities
+        if entity.kind == "function" and entity.name == "safe"
+    )
+
+    results, errors = _evaluate_dep001_rule(
+        source_entity=source_entity,
+        target_entities=target_entities,
+        match=MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_safe_entity.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        ),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["occurrences"] == [
+        {
+            "filepath": "assignment/core.py",
+            "lineno": 6,
+            "imported_module": "requests",
+            "forbidden_prefix": "requests",
+        }
+    ]
 
 
 def test_dep001_helper_rejects_invalid_mode() -> None:
