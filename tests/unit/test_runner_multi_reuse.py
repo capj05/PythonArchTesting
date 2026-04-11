@@ -92,13 +92,16 @@ def test_run_single_target_returns_run_state_and_target_state_without_project_st
     )
 
     assert run_state.source_path == source_dir.resolve()
-    assert run_state.source_entities == []
+    assert run_state.source_entities
+    assert any(
+        entity.module_path == "reference" for entity in run_state.source_entities
+    )
     assert target_state.target_id == target_dir.name
     assert target_state.target_entities
     assert not hasattr(run_state, "arch_rules")
 
 
-def test_run_single_target_keeps_empty_source_when_reference_modules_absent(
+def test_run_single_target_discovers_source_when_reference_modules_absent(
     tmp_path,
 ) -> None:
     source_dir = tmp_path / "source"
@@ -120,8 +123,8 @@ def test_run_single_target_keeps_empty_source_when_reference_modules_absent(
         reference_modules=[],
     )
 
-    assert run_state.source_entities == []
-    assert run_state.source_by_id == {}
+    assert run_state.source_entities
+    assert run_state.source_by_id
     assert run_state.reference_modules == []
     assert target_state.target_entities
 

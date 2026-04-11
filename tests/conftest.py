@@ -12,12 +12,50 @@ from uuid import uuid4
 import pytest
 
 SRC_ROOT = Path(__file__).resolve().parents[1] / "src"
+PYTEST_TEMP_ROOT = Path.cwd() / ".tmp_pytest_builtin" / uuid4().hex
+PYTEST_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+
 sys.path.insert(0, str(SRC_ROOT))
 os.environ["PYTHONPATH"] = (
     str(SRC_ROOT)
     if not os.environ.get("PYTHONPATH")
     else f"{SRC_ROOT}{os.pathsep}{os.environ['PYTHONPATH']}"
 )
+
+
+class RepoTmpPathFactory:
+    """Minimal tmp_path_factory implementation backed by a repo-local directory."""
+
+    def __init__(self, base_path: Path, retention_policy: str) -> None:
+        self._base_path = base_path
+        self._retention_policy = retention_policy
+        self._counters: Dict[str, int] = {}
+
+    def getbasetemp(self) -> Path:
+        return self._base_path
+
+    def mktemp(self, basename: str, numbered: bool = True) -> Path:
+        safe_name = "".join(
+            ch if ch.isalnum() or ch in "._-" else "_" for ch in basename
+        )
+        if numbered:
+            index = self._counters.get(safe_name, 0)
+            self._counters[safe_name] = index + 1
+            path = self._base_path / f"{safe_name}{index}"
+        else:
+            path = self._base_path / safe_name
+
+        path.mkdir(parents=True, exist_ok=False)
+        return path
+
+
+@pytest.fixture(scope="session")
+def tmp_path_factory(request: pytest.FixtureRequest) -> RepoTmpPathFactory:
+    """Provide pytest's builtin tmp_path fixture with a repo-local temp factory."""
+    return RepoTmpPathFactory(
+        base_path=PYTEST_TEMP_ROOT,
+        retention_policy=request.config.getini("tmp_path_retention_policy"),
+    )
 
 
 @pytest.fixture
@@ -35,8 +73,8 @@ def sample_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def temp_dir() -> Generator[Path, None, None]:
-    """Create a temporary directory for tests."""
+def repo_tmp_path() -> Generator[Path, None, None]:
+    """Create a writable repo-local temp directory for tests that need it."""
     temp_root = Path.cwd() / ".tmp_test_runtime"
     temp_root.mkdir(exist_ok=True)
     temp_path = temp_root / uuid4().hex
@@ -48,15 +86,15 @@ def temp_dir() -> Generator[Path, None, None]:
 
 
 @pytest.fixture
-def tmp_path(temp_dir: Path) -> Path:
-    """Provide a writable repo-local tmp_path replacement for sandboxed runs."""
-    return temp_dir
+def temp_dir(repo_tmp_path: Path) -> Path:
+    """Temporary compatibility alias for tests that still need repo-local storage."""
+    return repo_tmp_path
 
 
 @pytest.fixture
-def temp_project_dir(temp_dir: Path) -> Generator[Path, None, None]:
+def temp_project_dir(repo_tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary project directory with basic structure."""
-    project_dir = temp_dir / "test_project"
+    project_dir = repo_tmp_path / "test_project"
     project_dir.mkdir()
 
     # Create basic Python project structure
@@ -140,14 +178,6 @@ def helper_function(data):
     files.append(utils)
 
     return files
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    """Register common markers."""
-    config.addinivalue_line("markers", "unit: mark test as a unit test")
-    config.addinivalue_line("markers", "integration: mark test as an integration test")
-    config.addinivalue_line("markers", "performance: mark test as a performance test")
-    config.addinivalue_line("markers", "property: mark test as a property-based test")
 
 
 def pytest_collection_modifyitems(

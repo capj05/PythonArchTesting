@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import importlib
-import subprocess
-import sys
+
+from tests.utils.subprocess_imports import run_python_json
 
 
 def test_rules_import_stays_lightweight() -> None:
-    code = """
+    payload = run_python_json("""
 import json
 import sys
 
@@ -22,15 +22,8 @@ forbidden = {
 }
 loaded = sorted(name for name in (after - before) if name in forbidden)
 print(json.dumps({"loaded": loaded}))
-"""
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == '{"loaded": []}'
+""")
+    assert payload == {"loaded": []}
 
 
 def test_rules_public_surface_is_core_only() -> None:

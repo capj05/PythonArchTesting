@@ -99,6 +99,7 @@ markers = [
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
+    "ignore::pytest.PytestDeprecationWarning:asyncio",
 ]
 
 [tool.coverage.run]
