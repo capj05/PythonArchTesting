@@ -172,16 +172,21 @@ Normative rules:
 - `debug` keeps the `verbose` structure and adds diagnostic appendices
 - `debug` is the only mode where diagnostic-heavy content is allowed by default
 
-### File Layout Contract
+### Markdown Output Topology
 
 #### Single-target Markdown
 
 Single-target Markdown remains one report document in all modes.
 
-- `standard`: one report document only
-- `verbose`: one report document with target-detail sections embedded inline
+- `standard`: exactly one report document only
+- `verbose`: exactly one report document with target-detail sections embedded
+  inline
 - `debug`: one report document with the `verbose` structure plus debug
   appendices inline
+- no bundle directory is introduced in any single-target mode
+- no `targets/` subdirectory is introduced in any single-target mode
+- no separate target page is allowed for single-target output
+- single-target Markdown remains suitable for stdout output
 
 #### Multi-target Markdown
 
@@ -192,11 +197,71 @@ Multi-target Markdown keeps the existing bundle paths:
 
 Mode-specific contract:
 
-- `standard`: only `report.md` is part of the user-facing contract
+- `standard`: `report.md` remains the run-level entry point and the only
+  user-facing page in the default contract
 - `verbose`: `report.md` plus `targets/<target_id>.md`
 - `debug`: same bundle shape as `verbose`
 
-This phase does not approve any alternative directory layout.
+This phase does not approve any alternative directory layout or collapsing
+multi-target Markdown into a single flat file by default.
+
+#### Topology Parity Rule
+
+Markdown modes must preserve the same semantic reading order across
+single-target and multi-target runs, but they do not need to preserve the same
+file count.
+
+- single-target uses inline detail because there is only one target
+- multi-target uses `report.md` plus target pages because there are multiple
+  navigable units
+
+#### Forbidden Topology Changes
+
+Single-target Markdown must not:
+
+- generate `report.md` plus `targets/<target_id>.md` as a synthetic bundle
+- require an output directory for Markdown generation
+- create a `targets/` directory only for parity with multi-target runs
+- split `verbose` or `debug` output across multiple files in this phase
+
+Multi-target Markdown must not:
+
+- collapse `verbose` or `debug` output into one monolithic Markdown page by
+  default
+- rename bundle roots away from `report.md` and `targets/<target_id>.md` in
+  this phase
+
+#### Topology Examples
+
+Single-target `verbose` example:
+
+- `student_a_report.md`
+- inline verdict
+- inline issue summary by rule
+- inline rule details
+- inline warnings
+- inline compact passed summary
+
+Single-target `debug` example:
+
+- `student_a_report.md`
+- all `verbose` content inline
+- inline matching debug appendices
+- inline raw evidence appendices
+- inline full result table appendices
+
+Multi-target `verbose` example:
+
+- `report.md`
+- `targets/student_a.md`
+- `targets/student_b.md`
+
+Multi-target `debug` example:
+
+- `report.md`
+- `targets/student_a.md`
+- `targets/student_b.md`
+- target pages include debug appendices without changing bundle shape
 
 ### Reading Order
 
