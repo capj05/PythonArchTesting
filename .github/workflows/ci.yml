@@ -7,7 +7,28 @@ on:
   pull_request:
 
 jobs:
+  syntax:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[dev]
+
+      - name: Syntax check
+        run: python -m compileall -q src tests
+
   unit:
+    needs: syntax
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -32,6 +53,7 @@ jobs:
         run: pytest tests/unit
 
   quality:
+    needs: syntax
     runs-on: ubuntu-latest
 
     steps:
@@ -48,11 +70,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install .[dev]
 
-      - name: Run import-safety checks
-        run: pytest tests/import_safety tests/test_rules_import_safety.py tests/unit/test_import_safety.py tests/unit/test_import_safety_lazy.py
+      - name: Lint
+        run: flake8 src tests
 
       - name: Type check
         run: mypy src/pythonarchtesting
 
-      - name: Lint
-        run: flake8 src tests
+      - name: Run import-safety checks
+        run: pytest tests/import_safety tests/test_rules_import_safety.py tests/unit/test_import_safety.py tests/unit/test_import_safety_lazy.py

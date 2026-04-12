@@ -75,8 +75,7 @@ class ValidationRule:
         try:
             converted_value = self._convert_value(value)
         except (ValueError, TypeError) as e:
-            return False, f"Cannot convert {key} to {
-                self.value_type.value}: {e}"
+            return False, f"Cannot convert {key} to {self.value_type.value}: {e}"
 
         # Range validation (only for INTEGER and FLOAT types)
         if self.value_type in [
@@ -224,44 +223,38 @@ class ValidationRule:
 
     # Error message methods
     def _type_error(self, section: str, key: str, value: Any) -> str:
-        return f"{section}.{key}: Expected {
-            self.value_type.value}, got {
-            type(value).__name__}"
+        return (
+            f"{section}.{key}: Expected {self.value_type.value}, "
+            f"got {type(value).__name__}"
+        )
 
     def _range_error(self, section: str, key: str, value: Any) -> str:
         if self.min_value is not None and self.max_value is not None:
-            return f"{section}.{key}: Value {value} not in range [{
-                self.min_value}, {
-                self.max_value}]"
+            return (
+                f"{section}.{key}: Value {value} not in range "
+                f"[{self.min_value}, {self.max_value}]"
+            )
         elif self.min_value is not None:
-            return f"{section}.{key}: Value {value} is less than minimum {
-                self.min_value}"
+            return f"{section}.{key}: Value {value} is less than minimum {self.min_value}"
         else:
-            return f"{section}.{key}: Value {value} is greater than maximum {
-                self.max_value}"
+            return f"{section}.{key}: Value {value} is greater than maximum {self.max_value}"
 
     def _length_error(self, section: str, key: str, value: Any) -> str:
         if self.min_length is not None and self.max_length is not None:
-            return f"{section}.{key}: Length {
-                len(value)} not in range [{
-                self.min_length}, {
-                self.max_length}]"
+            return (
+                f"{section}.{key}: Length {len(value)} not in range "
+                f"[{self.min_length}, {self.max_length}]"
+            )
         elif self.min_length is not None:
-            return f"{section}.{key}: Length {
-                len(value)} is less than minimum {
-                self.min_length}"
+            return f"{section}.{key}: Length {len(value)} is less than minimum {self.min_length}"
         else:
-            return f"{section}.{key}: Length {
-                len(value)} is greater than maximum {
-                self.max_length}"
+            return f"{section}.{key}: Length {len(value)} is greater than maximum {self.max_length}"
 
     def _allowed_values_error(self, section: str, key: str, value: Any) -> str:
-        return f"{section}.{key}: Value '{value}' not in allowed values: {
-            self.allowed_values}"
+        return f"{section}.{key}: Value '{value}' not in allowed values: {self.allowed_values}"
 
     def _pattern_error(self, section: str, key: str, value: Any) -> str:
-        return f"{section}.{key}: Value '{value}' does not match pattern '{
-            self.pattern}'"
+        return f"{section}.{key}: Value '{value}' does not match pattern '{self.pattern}'"
 
     def _path_error(self, section: str, key: str, value: Any) -> str:
         if self.must_exist:
