@@ -70,6 +70,8 @@ def normalize(
 
 Use `scope="module"` for file-wide checks and `scope="package"` for package
 subtrees. `scope="entity"` remains a compatibility alias for `module`.
+Bare `forbid_imports(...)` uses graph-based reachable-import checking by
+default; use `mode="direct"` for the direct AST import check.
 
 Validate the reference declarations before comparing targets:
 

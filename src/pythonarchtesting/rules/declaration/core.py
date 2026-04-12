@@ -117,10 +117,9 @@ def forbid_imports(
     ``"entity"`` input is still accepted for backward compatibility and is
     normalized during rule compilation.
 
-    Defaults to ``mode="reachable"`` for the future reachability-based
-    contract. Use ``mode="direct"`` to preserve the current direct AST import
-    behavior during migration. This helper is declaration-only and returns
-    passive annotation metadata.
+    Defaults to ``mode="reachable"`` for graph-based reachable-import
+    analysis. Use ``mode="direct"`` to opt into the direct AST import check.
+    This helper is declaration-only and returns passive annotation metadata.
     """
     if mode not in {"reachable", "direct"}:
         raise ValueError("forbid_imports() mode must be 'reachable' or 'direct'.")

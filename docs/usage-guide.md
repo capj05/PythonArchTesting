@@ -49,7 +49,8 @@ class Calculator:
 `forbid_imports(...)` uses `scope="module"` for file-wide checks and
 `scope="package"` for package-subtree checks. The legacy `scope="entity"`
 spelling is still accepted for compatibility, but `module` is the canonical
-public name.
+public name. Bare `forbid_imports(...)` defaults to reachable mode; use
+`mode="direct"` when you want the direct AST import check instead.
 
 Other supported declaration shapes:
 
