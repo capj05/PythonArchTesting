@@ -32,6 +32,18 @@ The aggregate policy comes from `[report].multi_target_exit_policy`:
 When you use `threshold`, `fail_threshold` decides how many failed targets are
 required before the full run exits with `1`.
 
+## JSON Compatibility
+
+JSON report semantics remain unchanged by the reporting update described in this
+document.
+
+- JSON output stays on the current schema contract.
+- JSON read order stays the same.
+- Markdown mode definitions in this document do not change JSON structure,
+  fields, or meaning.
+- Any future mode selection added in code must affect Markdown rendering only,
+  unless explicitly documented otherwise in a later phase.
+
 ## Read JSON In This Order
 
 ### Single-target
@@ -119,22 +131,214 @@ Typical workflow:
 4. use `fix_hints`
 5. inspect `evidence` only if the message is not enough
 
-## Markdown Output
+## Markdown Product Contract
 
-### Single-target Markdown
+This section is the canonical source of truth for Markdown reporting behavior.
+Phase 1 freezes the product contract only. It does not change renderer code,
+config plumbing, CLI flags, IR types, bundle paths, or JSON behavior.
 
-Single-target Markdown is one report document. If `--output` is omitted, the CLI
-prints it to stdout. If `--output` is provided, it writes the report to that
-file.
+### Current State vs Contract Gap
 
-### Multi-target Markdown
+The repository already documents a failure-first reading model, but the current
+Markdown implementation does not fully follow it yet.
 
-Multi-target Markdown writes a bundle and requires `--output` to point to a
-directory.
+Current repository facts:
 
-Bundle structure:
+- single-target Markdown currently renders `Summary`, then matching debug, then
+  `Results`
+- multi-target target pages currently render `Metadata`, `Summary`, `Matching`,
+  matching debug, then `Results`
+- the multi-target run index is currently a flat target table plus target links
+- the current Markdown generator path does not include any Markdown mode
+  selector
 
-- `report.md`: run-level summary and target index
-- `targets/<target_id>.md`: one page per target
+These are baseline facts, not the approved end-state contract.
 
-This is the easiest format for sharing batch results with humans.
+### Mode Definitions
+
+The approved Markdown modes are:
+
+- `standard`: default user-facing summary; aggregated, run-first, and optimized
+  for quick scanning
+- `verbose`: user-facing remediation detail; additive over `standard`
+- `debug`: developer-facing diagnostics; additive over `verbose`
+
+Normative rules:
+
+- `standard` answers: did the run fail, which targets have issues, and which
+  rules are recurring hotspots
+- `verbose` keeps the `standard` overview and adds target-centered detail for
+  fixing issues
+- `debug` keeps the `verbose` structure and adds diagnostic appendices
+- `debug` is the only mode where diagnostic-heavy content is allowed by default
+
+### File Layout Contract
+
+#### Single-target Markdown
+
+Single-target Markdown remains one report document in all modes.
+
+- `standard`: one report document only
+- `verbose`: one report document with target-detail sections embedded inline
+- `debug`: one report document with the `verbose` structure plus debug
+  appendices inline
+
+#### Multi-target Markdown
+
+Multi-target Markdown keeps the existing bundle paths:
+
+- `report.md`
+- `targets/<target_id>.md`
+
+Mode-specific contract:
+
+- `standard`: only `report.md` is part of the user-facing contract
+- `verbose`: `report.md` plus `targets/<target_id>.md`
+- `debug`: same bundle shape as `verbose`
+
+This phase does not approve any alternative directory layout.
+
+### Reading Order
+
+#### Standard
+
+1. verdict
+2. targets with issues
+3. warnings-only targets
+4. OK targets
+5. rule hotspots
+6. short navigation or short per-target summaries
+
+#### Verbose
+
+1. run verdict
+2. failing targets
+3. navigation to target detail
+4. target verdict
+5. issue summary by rule
+6. rule detail blocks
+7. warnings
+8. compact passed summary
+
+#### Debug
+
+1. the full `verbose` reading order
+2. matching debug
+3. raw evidence
+4. full result table
+5. internal diagnostics
+
+### Section Vocabulary
+
+These names are canonical for user-visible Markdown sections.
+
+| Section | Level | Meaning |
+| --- | --- | --- |
+| `Verdict` | run, target | The pass/fail outcome that readers should interpret first. |
+| `Targets With Issues` | run | Targets whose results should drive remediation first. |
+| `Warnings Only` | run, target | Targets or target-local findings with warnings but no failing outcome. |
+| `OK Targets` | run | Targets with no actionable problems. |
+| `Rule Hotspots` | run, target | Recurring or dominant failing rules worth prioritizing. |
+| `Short Per-Target Summaries` | run | Compact summaries used for scanning and navigation across targets. |
+| `Navigation` | run | Links or navigational hints that move readers to richer detail. |
+| `Issue Summary by Rule` | target | Grouped summary of target issues organized by rule. |
+| `Rule Details` | target | Rule-centered detail blocks used for remediation. |
+| `Compact Passed Summary` | target | Brief summary of what passed without listing every passed row. |
+| `Matching Debug` | debug | Diagnostic matching detail intended for investigation, not normal reading. |
+| `Raw Evidence` | debug | Evidence dumps that support deep investigation. |
+| `Full Result Table` | debug | Flat row listing of all results for exhaustive inspection. |
+| `Internal Diagnostics` | debug | Additional renderer or engine diagnostics intended for developers. |
+
+### Forbidden Content Rules
+
+`standard` must not include:
+
+- matching debug
+- raw evidence dumps
+- full result tables
+- passed-result row listings
+- target pages in multi-target output
+
+`verbose` must not include:
+
+- full matching candidate matrices as primary sections
+- raw evidence dumps as primary sections
+- full result tables as primary sections
+- diagnostic-first ordering
+
+`debug` may include all diagnostic material, but it must still preserve the
+`verbose` reader journey before appendices.
+
+### Content Matrix
+
+#### Single-target
+
+| Section | Standard | Verbose | Debug |
+| --- | --- | --- | --- |
+| Report title and generated metadata | Required | Required | Required |
+| Verdict | Required | Required | Required |
+| Run or target summary counts | Required | Required | Required |
+| `Warnings Only` | Optional | Optional | Optional |
+| `OK Targets` style summary | Optional | Optional | Optional |
+| `Rule Hotspots` | Required if data is available | Required if data is available | Required if data is available |
+| Short issue summary | Required | Required | Required |
+| `Issue Summary by Rule` | Forbidden | Required | Required |
+| `Rule Details` | Forbidden | Required | Required |
+| Standalone `Warnings` section | Forbidden unless needed in the summary | Required if warnings exist | Required if warnings exist |
+| `Compact Passed Summary` | Forbidden | Required | Required |
+| Matching summary counts | Forbidden | Optional only when needed for interpretation | Optional |
+| `Matching Debug` | Forbidden | Forbidden | Required |
+| `Raw Evidence` | Forbidden | Forbidden | Required |
+| `Full Result Table` | Forbidden | Forbidden | Required |
+| `Internal Diagnostics` | Forbidden | Forbidden | Optional |
+
+#### Multi-target `report.md`
+
+| Section | Standard | Verbose | Debug |
+| --- | --- | --- | --- |
+| Report title and generated metadata | Required | Required | Required |
+| Verdict | Required | Required | Required |
+| Run summary counts | Required | Required | Required |
+| `Targets With Issues` | Required | Required | Required |
+| `Warnings Only` | Required if present | Required if present | Required if present |
+| `OK Targets` | Required | Required | Required |
+| `Rule Hotspots` | Required if data is available | Required if data is available | Required if data is available |
+| `Short Per-Target Summaries` | Required | Required | Required |
+| `Navigation` links to target pages | Forbidden | Required | Required |
+| Flat target table in current form | Forbidden unless redesigned to fit this contract | Forbidden unless redesigned to fit this contract | Optional |
+| `Matching Debug` | Forbidden | Forbidden | Forbidden at run-index level by default |
+| `Raw Evidence` | Forbidden | Forbidden | Forbidden at run-index level by default |
+| `Full Result Table` | Forbidden | Forbidden | Forbidden at run-index level by default |
+
+#### Multi-target `targets/<target>.md`
+
+| Section | Standard | Verbose | Debug |
+| --- | --- | --- | --- |
+| Target page existence | Forbidden | Required | Required |
+| `Verdict` | N/A | Required | Required |
+| Metadata block as primary section | Forbidden | Optional, compact only | Optional |
+| `Issue Summary by Rule` | N/A | Required | Required |
+| `Rule Details` | N/A | Required | Required |
+| `Warnings` | N/A | Required if present | Required if present |
+| `Compact Passed Summary` | N/A | Required | Required |
+| Matching summary counts | N/A | Optional only when needed for interpretation | Optional |
+| `Matching Debug` | N/A | Forbidden | Required |
+| `Raw Evidence` | N/A | Forbidden | Required |
+| `Full Result Table` | N/A | Forbidden | Required |
+| `Internal Diagnostics` | N/A | Forbidden | Optional |
+
+### Out Of Scope For Phase 1
+
+This document does not approve implementation work in Phase 1.
+
+Specifically out of scope:
+
+- renderer changes
+- new config keys
+- new CLI flags
+- IR or schema changes
+- aggregation redesign
+- changes to JSON output
+
+Later phases may implement this contract, but they must not reopen the product
+semantics defined here unless the contract itself is revised.
