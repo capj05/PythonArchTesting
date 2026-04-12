@@ -194,7 +194,7 @@ def test_example_annotation_rules_e2e_json_contains_only_supported_rule_families
         "API001/required_entity_signature/v1",
         "API001/required_entity_signature_return/v1",
         "API002/required_method/v1",
-        "DEP001/forbid_imports/v1",
+        "DEP001/forbid_imports/v2",
         "PRO001/implements_protocol/v1",
         "PRO002/implements_protocol_signature/v1",
     }
@@ -439,7 +439,7 @@ def test_real_example_multi_target_json_report_is_accurate(
     target3 = targets["target3"]
     assert target3["exit_code"] == 1
     assert any(
-        item["rule_id"] == "DEP001/forbid_imports/v1"
+        item["rule_id"] == "DEP001/forbid_imports/v2"
         and item["status"] == "FAILED"
         and "statistics" in item["message"]
         for item in target3["results"]
@@ -453,7 +453,7 @@ def test_real_example_multi_target_json_report_is_accurate(
 
     for name in ("target4", "target5"):
         assert any(
-            item["rule_id"] == "DEP001/forbid_imports/v1" and item["status"] == "OK"
+            item["rule_id"] == "DEP001/forbid_imports/v2" and item["status"] == "OK"
             for item in targets[name]["results"]
         )
         assert any(

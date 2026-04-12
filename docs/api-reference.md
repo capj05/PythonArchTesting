@@ -127,11 +127,21 @@ Common options:
 
 - `scope`
 - `package`
+- `mode`
 - `ignore_type_checking`
 - `allow`
 - `ignore_globs`
 - `severity`
 - `message`
+
+Notes:
+
+- `scope="module"` checks the matched target module.
+- `scope="package"` checks the configured package subtree.
+- `scope="entity"` is accepted as a backward-compatible alias for `module`.
+- bare `forbid_imports(...)` defaults to `mode="reachable"`.
+- `mode="reachable"` enables graph-based reachable-import analysis.
+- `mode="direct"` performs the direct AST import check when requested explicitly.
 
 Example:
 
@@ -141,7 +151,12 @@ from pythonarchtesting.rules import forbid_imports
 
 __archtest__: Annotated[
     None,
-    forbid_imports("statistics", scope="package", package="data_processor"),
+    forbid_imports(
+        "statistics",
+        scope="package",
+        package="data_processor",
+        mode="direct",
+    ),
 ]
 ```
 

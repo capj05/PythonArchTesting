@@ -103,6 +103,7 @@ def forbid_imports(
     *forbidden: str,
     scope: str = "package",
     package: str | None = None,
+    mode: str = "reachable",
     ignore_type_checking: bool = True,
     allow: list[str] | None = None,
     ignore_globs: list[str] | None = None,
@@ -112,13 +113,22 @@ def forbid_imports(
     """
     Capture forbidden import policy for the rule engine.
 
+    Canonical scope values are ``"module"`` and ``"package"``. The legacy
+    ``"entity"`` input is still accepted for backward compatibility and is
+    normalized during rule compilation.
+
+    Defaults to ``mode="reachable"`` for graph-based reachable-import
+    analysis. Use ``mode="direct"`` to opt into the direct AST import check.
     This helper is declaration-only and returns passive annotation metadata.
     """
+    if mode not in {"reachable", "direct"}:
+        raise ValueError("forbid_imports() mode must be 'reachable' or 'direct'.")
     cleaned = _clean_kwargs(
         {
             "forbidden": list(forbidden),
             "scope": scope,
             "package": package,
+            "mode": mode,
             "ignore_type_checking": ignore_type_checking,
             "allow": list(allow or []),
             "ignore_globs": list(ignore_globs or []),

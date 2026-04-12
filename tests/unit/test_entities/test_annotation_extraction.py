@@ -90,7 +90,7 @@ def test_annotation_markers_preserve_source_order_across_multiple_statements() -
             __archtest__: Annotated[
                 None,
                 required_method(signature_mode="exact"),
-                forbid_imports("statistics", scope="entity"),
+                forbid_imports("statistics", scope="module"),
             ]
             return value
         """)
@@ -105,6 +105,10 @@ def test_annotation_markers_preserve_source_order_across_multiple_statements() -
     assert [decl.order for decl in function_entity.annotation_declarations] == [0, 1, 2]
     assert function_entity.annotation_declarations[1].params == {
         "signature_mode": "exact"
+    }
+    assert function_entity.annotation_declarations[2].params == {
+        "forbidden": ["statistics"],
+        "scope": "module",
     }
 
 
@@ -316,7 +320,7 @@ def test_annotation_marker_records_invalid_literal_tuple_metadata_without_failin
                 (123, {"mode": "compatible"}),
                 ("required_entity_signature", ["compatible"]),
                 ("custom_rule", {"enabled": True}),
-                ("forbid_imports", {"forbidden": ["statistics"], "scope": "entity"}),
+                ("forbid_imports", {"forbidden": ["statistics"], "scope": "module"}),
             ],
         ) -> str:
             return value.strip()
@@ -398,7 +402,7 @@ def test_signature_annotation_markers_allow_protocol_markers() -> None:
         def normalize(
             value: Annotated[
                 str,
-                forbid_imports("statistics", scope="entity"),
+                forbid_imports("statistics", scope="module"),
                 implements_protocol("sample.Repository"),
             ],
         ) -> str:

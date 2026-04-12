@@ -46,10 +46,18 @@ def _entry_diagnostic(entity: Any, entry: Any) -> dict[str, Any]:
 
 def _validation_diagnostic(validation: ValidationResult) -> dict[str, Any]:
     details = dict(validation.details or {})
+    check_type = validation.check_type
+    severity = str(getattr(validation.status, "value", validation.status)).lower()
+    is_compiler_diagnostic = check_type.startswith("compiler_")
+    is_invalid_declaration = check_type.startswith("compiler_invalid_")
     return {
-        "category": "source_error",
-        "severity": "error",
-        "check_type": validation.check_type,
+        "category": (
+            "invalid_declaration"
+            if is_invalid_declaration
+            else ("declaration_warning" if is_compiler_diagnostic else "source_error")
+        ),
+        "severity": severity,
+        "check_type": check_type,
         "entity": {
             "id": None,
             "kind": None,
@@ -81,7 +89,10 @@ def collect_declaration_diagnostics(run_state: RunState) -> list[dict[str, Any]]
     for validation in run_state.compiler_validations:
         if validation.check_type == "compiler_invalid_declaration":
             continue
-        if not validation.check_type.startswith("extraction/"):
+        if not (
+            validation.check_type.startswith("extraction/")
+            or validation.check_type.startswith("compiler_")
+        ):
             continue
         diagnostics.append(_validation_diagnostic(validation))
 

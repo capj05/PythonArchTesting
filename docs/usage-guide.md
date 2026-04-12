@@ -21,7 +21,12 @@ from pythonarchtesting.rules import forbid_imports, required_entity_signature, r
 
 __archtest__: Annotated[
     None,
-    forbid_imports("statistics", scope="package", package="data_processor"),
+    forbid_imports(
+        "statistics",
+        scope="package",
+        package="data_processor",
+        mode="direct",
+    ),
 ]
 
 
@@ -40,6 +45,12 @@ class Calculator:
         __archtest__: Annotated[None, required_method(signature_mode="compatible")]
         return a + b
 ```
+
+`forbid_imports(...)` uses `scope="module"` for file-wide checks and
+`scope="package"` for package-subtree checks. The legacy `scope="entity"`
+spelling is still accepted for compatibility, but `module` is the canonical
+public name. Bare `forbid_imports(...)` defaults to reachable mode; use
+`mode="direct"` when you want the direct AST import check instead.
 
 Other supported declaration shapes:
 

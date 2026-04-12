@@ -107,8 +107,15 @@ def compiler_evidence_to_validation(
     project_name: Optional[str] = None,
 ) -> ValidationResult:
     """Convert compiler evidence into a reportable validation result."""
+    payload_severity = str(evidence.payload.get("severity") or "").lower()
+    if payload_severity == "error":
+        status = ValidationConstants.ValidationStatus.ERROR
+    elif payload_severity == "info":
+        status = ValidationConstants.ValidationStatus.OK
+    else:
+        status = ValidationConstants.ValidationStatus.WARNING
     return ValidationResult(
-        status=ValidationConstants.ValidationStatus.WARNING,
+        status=status,
         description=str(
             evidence.payload.get("message")
             or evidence.payload.get("issue")

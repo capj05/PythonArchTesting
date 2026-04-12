@@ -303,7 +303,7 @@ def test_signature_disallowed_rule_kind_emits_invalid_declaration_evidence() -> 
         from pythonarchtesting.rules import forbid_imports
 
         def run(
-            value: Annotated[int, forbid_imports("requests", scope="entity")],
+            value: Annotated[int, forbid_imports("requests", scope="module")],
         ) -> int:
             return value
         """)
