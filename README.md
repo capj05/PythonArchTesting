@@ -76,19 +76,19 @@ default; use `mode="direct"` for the direct AST import check.
 Validate the reference declarations before comparing targets:
 
 ```bash
-python-arch-test --validate-declarations --source example/project_1/reference --format json
+python-arch-test --validate-declarations --source path/to/reference --format json
 ```
 
 Analyze a batch of targets and print a JSON report:
 
 ```bash
-python-arch-test --source example/project_1/reference --targets-dir example/project_1/assignments --format json
+python-arch-test --source path/to/reference --targets-dir path/to/assignments --format json
 ```
 
 Generate a Markdown bundle for the same run:
 
 ```bash
-python-arch-test --source example/project_1/reference --targets-dir example/project_1/assignments --format markdown --output reports/project_1_markdown
+python-arch-test --source path/to/reference --targets-dir path/to/assignments --format markdown --output reports/project_markdown
 ```
 
 ## How To Interpret Results

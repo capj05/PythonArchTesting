@@ -46,7 +46,7 @@ pytest tests/ -v -n auto --cov=pythonarchtesting --cov-fail-under=80
 2. `flake8 src/ tests/`
 3. `black --check src/ tests/`
 4. `isort --check-only src/ tests/`
-5. `python scripts/mypy_scoped_gate.py --targets-file configs/mypy_rollout_targets.txt`
+5. `mypy src/pythonarchtesting --ignore-missing-imports`
 6. `vulture --min-confidence 70 src tests`
 
 `check_full.ps1` runs `check_standard.ps1` first, then extended checks (`radon`,
@@ -116,8 +116,8 @@ Enrollment rule per PR:
 
 1. Run `python -m mypy <target> --ignore-missing-imports --follow-imports=skip --show-error-codes --no-incremental`.
 2. Fix until the target has zero errors.
-3. Add the target to `configs/mypy_rollout_targets.txt`.
-4. Ensure scoped gate passes and full shadow step still runs.
+3. Re-run `mypy src/pythonarchtesting --ignore-missing-imports`.
+4. Ensure the committed mypy gate passes.
 
 ## Transitional Notes
 

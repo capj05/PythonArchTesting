@@ -79,7 +79,7 @@ def build(repo: Annotated[object, implements_protocol("reference.Repository")]) 
 Use declaration validation to catch invalid metadata before comparing targets:
 
 ```bash
-python-arch-test --validate-declarations --source example/project_1/reference --format json
+python-arch-test --validate-declarations --source path/to/reference --format json
 ```
 
 What this does:
@@ -106,7 +106,7 @@ The JSON shape starts with:
 ## 3. Run A Single Target
 
 ```bash
-python-arch-test --source example/project_1/reference --target example/project_1/assignments/target1 --format json
+python-arch-test --source path/to/reference --target path/to/assignments/target1 --format json
 ```
 
 Use a single-target run when you are investigating one project in detail or
@@ -115,7 +115,7 @@ iterating on a specific submission.
 Single-target Markdown can go to stdout or a file:
 
 ```bash
-python-arch-test --source example/project_1/reference --target example/project_1/assignments/target1 --format markdown --output reports/target1.md
+python-arch-test --source path/to/reference --target path/to/assignments/target1 --format markdown --output reports/target1.md
 ```
 
 ## 4. Run Multiple Targets
@@ -123,13 +123,13 @@ python-arch-test --source example/project_1/reference --target example/project_1
 Batch analysis from a directory:
 
 ```bash
-python-arch-test --source example/project_1/reference --targets-dir example/project_1/assignments --format json
+python-arch-test --source path/to/reference --targets-dir path/to/assignments --format json
 ```
 
 Explicit target list:
 
 ```bash
-python-arch-test --source example/project_1/reference --target path/to/target_a --target path/to/target_b --format json
+python-arch-test --source path/to/reference --target path/to/target_a --target path/to/target_b --format json
 ```
 
 Target discovery controls:
@@ -143,7 +143,7 @@ Target discovery controls:
 Multi-target Markdown requires an output directory:
 
 ```bash
-python-arch-test --source example/project_1/reference --targets-dir example/project_1/assignments --format markdown --output reports/project_1_markdown
+python-arch-test --source path/to/reference --targets-dir path/to/assignments --format markdown --output reports/project_markdown
 ```
 
 The bundle contains:

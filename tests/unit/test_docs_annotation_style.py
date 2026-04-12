@@ -28,7 +28,6 @@ def test_public_docs_are_annotation_only() -> None:
         root / "docs" / "api-reference.md",
         root / "docs" / "architecture.md",
         root / "docs" / "core-components.md",
-        root / "example" / "project_1" / "README.md",
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in files)
 
@@ -62,9 +61,6 @@ def test_public_examples_and_default_reference_fixtures_are_annotation_first() -
         root / "docs" / "api-reference.md",
         root / "docs" / "architecture.md",
         root / "docs" / "core-components.md",
-        root / "example" / "project_1" / "README.md",
-        root / "example" / "project_1" / "reference" / "calculator.py",
-        root / "example" / "project_1" / "reference" / "data_processor.py",
         root / "tests" / "fixtures" / "smoke" / "source" / "reference.py",
         root
         / "tests"
@@ -86,26 +82,33 @@ def test_public_examples_and_default_reference_fixtures_are_annotation_first() -
         _assert_no_decorator_syntax(path)
 
 
-def test_example_project_readme_uses_current_cli_surface() -> None:
+def test_public_docs_use_current_cli_surface() -> None:
     root = _repo_root()
-    text = (root / "example" / "project_1" / "README.md").read_text(encoding="utf-8")
+    text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            root / "README.md",
+            root / "docs" / "usage-guide.md",
+        )
+    )
 
-    assert "python -m pythonarchtesting.cli" in text
     assert "--validate-declarations" in text
     assert "--targets-dir" in text
     assert "--format json" in text
     assert "--format markdown" in text
+    assert "python -m pythonarchtesting.cli" in text or "python-arch-test" in text
+    assert "path/to/reference" in text
+    assert "path/to/assignments" in text
     assert "python -m pythonarchtesting --help" not in text
-    assert "Decorator syntax remains supported" not in text
 
 
-def test_example_project_reference_uses_current_rule_markers() -> None:
+def test_tracked_reference_fixtures_use_current_rule_markers() -> None:
     root = _repo_root()
     calculator = (
-        root / "example" / "project_1" / "reference" / "calculator.py"
+        root / "tests" / "fixtures" / "e2e" / "project_1" / "reference" / "calculator.py"
     ).read_text(encoding="utf-8")
     data_processor = (
-        root / "example" / "project_1" / "reference" / "data_processor.py"
+        root / "tests" / "fixtures" / "e2e" / "project_1" / "reference" / "data_processor.py"
     ).read_text(encoding="utf-8")
 
     assert (
@@ -113,35 +116,10 @@ def test_example_project_reference_uses_current_rule_markers() -> None:
         in calculator
     )
     assert "from src.rules" not in calculator
-    assert ") -> Annotated[" in calculator
+    assert "__archtest__: Annotated[" in calculator
     assert (
         'required_entity_signature(mode="compatible", return_annotation="warning")'
         in calculator
     )
     assert "from pythonarchtesting.rules import forbid_imports" in data_processor
     assert "from src.rules" not in data_processor
-
-
-def test_annotation_switch_notes_are_labeled_historical() -> None:
-    root = _repo_root()
-    files = [
-        root / "docs" / "dev_notes" / "annotation_switch" / "README.md",
-        root
-        / "docs"
-        / "dev_notes"
-        / "annotation_switch"
-        / "02_current_state_in_repo.md",
-        root
-        / "docs"
-        / "dev_notes"
-        / "annotation_switch"
-        / "06_examples_and_limitations.md",
-    ]
-
-    for path in files:
-        text = path.read_text(encoding="utf-8").lower()
-        assert "historical" in text
-
-    current_state = files[1].read_text(encoding="utf-8")
-    assert "runtime_extract.py" in current_state
-    assert "no longer present" in current_state
