@@ -30,6 +30,16 @@ from .schema_v2 import validate_report_schema_v2 as _validate_report_schema_v2
 validate_report_schema_v2 = _validate_report_schema_v2
 
 
+def resolve_markdown_mode(config: Any | None, explicit_mode: str | None = None) -> str:
+    """Resolve the effective markdown mode from explicit arg or config, defaulting to standard."""
+    if explicit_mode is not None:
+        return explicit_mode
+    try:
+        return config.report.markdown_mode or "standard"
+    except AttributeError:
+        return "standard"
+
+
 def build_report_document(
     state_obj: ProjectState,
     config: Optional[Any] = None,
@@ -139,6 +149,7 @@ def generate_validation_report(
     output_format: str = ReportingConstants.JSON_FORMAT,
     include_sections: Optional[List[str]] = None,
     config: Optional[Any] = None,
+    markdown_mode: Optional[str] = None,
 ) -> str:
     """Generate a report of validation results for a single target."""
     del include_sections
@@ -152,6 +163,7 @@ def generate_validation_report(
             return render_markdown(
                 document,
                 matching_debug_context=build_single_matching_debug_context(state_obj),
+                markdown_mode=resolve_markdown_mode(config, markdown_mode),
             )
         raise ValueError(output_format)
     except ValueError as e:
@@ -166,6 +178,7 @@ def generate_single_target_report_from_run_target(
     target_state: TargetRunState,
     output_format: str = ReportingConstants.JSON_FORMAT,
     config: Optional[Any] = None,
+    markdown_mode: Optional[str] = None,
 ) -> str:
     """Generate a report of validation results for a unified single target."""
     try:
@@ -184,6 +197,7 @@ def generate_single_target_report_from_run_target(
                 matching_debug_context=build_multi_matching_debug_context(
                     run_state, [target_state]
                 ),
+                markdown_mode=resolve_markdown_mode(config, markdown_mode),
             )
         raise ValueError(output_format)
     except ValueError as e:
@@ -199,6 +213,7 @@ def generate_multi_target_report(
     output_format: str = ReportingConstants.JSON_FORMAT,
     config: Optional[Any] = None,
     output_path: Optional[str | Path] = None,
+    markdown_mode: Optional[str] = None,
 ) -> str:
     """Generate a multi-target report output for a supported format."""
     document = build_multi_target_report_document(run_state, target_states, config)
@@ -221,6 +236,7 @@ def generate_multi_target_report(
                 matching_debug_context=build_multi_matching_debug_context(
                     run_state, target_states
                 ),
+                markdown_mode=resolve_markdown_mode(config, markdown_mode),
             )
         raise ValueError(output_format)
     except ValueError as e:

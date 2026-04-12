@@ -484,6 +484,7 @@ def _apply_cli_args(
         "quiet": ("logging", "level", "ERROR"),
         "timeout": ("performance", "default_timeout"),
         "output_format": ("reporting", "output_formats"),
+        "markdown_mode": ("report", "markdown_mode"),
     }
 
     for cli_key, value in cli_args.items():

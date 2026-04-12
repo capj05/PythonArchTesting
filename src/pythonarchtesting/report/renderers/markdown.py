@@ -66,8 +66,15 @@ def render_markdown(
     document: ReportDocument,
     *,
     matching_debug_context: Optional[Dict[str, Any]] = None,
+    markdown_mode: str = "standard",
 ) -> str:
     """Render typed single-target report document in markdown format."""
+    if markdown_mode != "standard":
+        return render_markdown_mode(
+            document,
+            mode=markdown_mode,
+            matching_debug_context=matching_debug_context,
+        )
     target = document.targets[0]
     summary = target.summary
     single_target_report = target_debug_report(

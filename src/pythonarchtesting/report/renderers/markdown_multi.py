@@ -355,8 +355,16 @@ def render_markdown_bundle(
     output_root: Path,
     *,
     matching_debug_context: Optional[Dict[str, Any]] = None,
+    markdown_mode: str = "standard",
 ) -> str:
     """Write a deterministic multi-target markdown bundle and return index path."""
+    if markdown_mode != "standard":
+        return render_markdown_bundle_mode(
+            document,
+            output_root,
+            mode=markdown_mode,
+            matching_debug_context=matching_debug_context,
+        )
     return _render_markdown_bundle_legacy(
         document,
         output_root,
