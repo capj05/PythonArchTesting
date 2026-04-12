@@ -473,13 +473,15 @@ def test_verbose_multi_target_run_index_groups_targets_and_links_pages(
     assert "| Target | Path | Exit | Results | Failed |" not in index_md
 
 
-def test_verbose_internal_mode_rejects_unimplemented_modes(tmp_path: Path) -> None:
+def test_verbose_internal_mode_rejects_unimplemented_standard_mode(
+    tmp_path: Path,
+) -> None:
     document = report_dict_to_ir(_verbose_report(), kind="multi")
 
     with pytest.raises(
         ValueError,
-        match="Unsupported internal multi-target markdown mode 'debug'",
+        match="Unsupported internal multi-target markdown mode 'standard'",
     ):
-        MarkdownReportGenerator(document, markdown_mode="debug").generate(
-            output_file=str(tmp_path / "debug_bundle")
+        MarkdownReportGenerator(document, markdown_mode="standard").generate(
+            output_file=str(tmp_path / "standard_bundle")
         )

@@ -1,39 +1,65 @@
-"""Markdown renderer."""
+"""Single-target Markdown renderers."""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from ..ir.models import EntityRef, ReportDocument, TargetReport
-from .common import format_entity, format_location
+from ..ir.models import ReportDocument
+from ..presentation import (
+    MarkdownMode,
+    build_run_presentation,
+    build_target_presentation,
+)
 from .escape import escape_markdown
+from .markdown_sections import (
+    render_debug_appendices,
+    render_full_results_table,
+    render_target_detail_sections,
+    target_debug_report,
+)
 from .matching_debug import (
     DEFAULT_MATCHING_DEBUG_TOP_K,
     build_matching_debug_blocks_for_target,
     get_target_debug_context,
     render_matching_debug_markdown,
 )
-from .table import Table, render_markdown_table
 
 
-def _entity_to_dict(entity: EntityRef) -> Dict[str, Any]:
-    return {
-        "module": entity.module,
-        "qualname": entity.qualname,
-        "file": entity.file,
-        "line": entity.line,
-    }
+def render_markdown_mode(
+    document: ReportDocument,
+    *,
+    mode: MarkdownMode,
+    matching_debug_context: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Render a single-target markdown document for an explicit internal mode."""
+    if mode not in {"verbose", "debug"}:
+        raise ValueError(
+            f"Unsupported internal single-target markdown mode '{mode}'. "
+            "Only 'verbose' and 'debug' are implemented."
+        )
 
-
-def _single_target_debug_report(
-    target: TargetReport, target_path: Optional[str]
-) -> Dict[str, Any]:
-    return {
-        "display_name": target.display_name,
-        "target_id": target.target_id,
-        "target_path": str(target_path or ""),
-        "matching": {"matches": [dict(match) for match in target.matching.matches]},
-    }
+    target = document.targets[0]
+    run_presentation = build_run_presentation(document, mode="verbose")
+    target_presentation = build_target_presentation(target, mode="verbose")
+    lines: List[str] = [
+        f"# {escape_markdown(run_presentation.title)}",
+        "",
+        f"**Generated:** {escape_markdown(str(document.generated_at))}",
+        f"**Framework:** {escape_markdown(str(document.framework_version))}",
+        f"**Exit Code:** {document.exit_code}",
+        "",
+    ]
+    lines.extend(render_target_detail_sections(target, target_presentation))
+    if mode == "debug":
+        lines.extend(
+            render_debug_appendices(
+                target,
+                target_presentation,
+                matching_debug_context=matching_debug_context,
+                target_path=document.run.target_path,
+            )
+        )
+    return "\n".join(lines)
 
 
 def render_markdown(
@@ -43,9 +69,10 @@ def render_markdown(
 ) -> str:
     """Render typed single-target report document in markdown format."""
     target = document.targets[0]
-    results = target.results
     summary = target.summary
-    single_target_report = _single_target_debug_report(target, document.run.target_path)
+    single_target_report = target_debug_report(
+        target, target_path=document.run.target_path
+    )
     matching_blocks = build_matching_debug_blocks_for_target(
         single_target_report,
         get_target_debug_context(matching_debug_context, single_target_report),
@@ -75,41 +102,6 @@ def render_markdown(
         "## Results",
         "",
     ]
-
-    headers = (
-        "Project",
-        "Result ID",
-        "Category",
-        "Severity",
-        "Status",
-        "Rule",
-        "Source",
-        "Target",
-        "Location",
-        "Message",
-    )
-    rows = []
-    for item in results:
-        source = _entity_to_dict(item.source)
-        target_entity = _entity_to_dict(item.target)
-        message = item.message
-        if len(message) > 160:
-            message = message[:157] + "..."
-        rows.append(
-            (
-                item.project_id,
-                item.result_id,
-                item.category,
-                item.severity,
-                item.status,
-                item.rule_id,
-                format_entity(source),
-                format_entity(target_entity),
-                format_location(source),
-                message,
-            )
-        )
-
-    lines.append(render_markdown_table(Table(headers=headers, rows=tuple(rows))))
+    lines.append(render_full_results_table(target.results, truncate_messages=True))
     lines.append("")
     return "\n".join(lines)

@@ -5,7 +5,7 @@ from typing import Any
 
 from .base_generator import BaseReportGenerator
 from .presentation import MarkdownMode
-from .renderers.markdown import render_markdown
+from .renderers.markdown import render_markdown, render_markdown_mode
 from .renderers.markdown_multi import (
     render_markdown_bundle,
     render_markdown_bundle_mode,
@@ -42,6 +42,12 @@ class MarkdownReportGenerator(BaseReportGenerator):
             return render_markdown_bundle(
                 document,
                 Path(output_file),
+                matching_debug_context=self._matching_debug_context,
+            )
+        if self._markdown_mode is not None:
+            return render_markdown_mode(
+                document,
+                mode=self._markdown_mode,
                 matching_debug_context=self._matching_debug_context,
             )
         return render_markdown(
