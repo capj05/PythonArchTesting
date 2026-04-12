@@ -84,9 +84,10 @@ def evaluate_rule(
                 target_entity_id=match.target_id,
                 match_status=match.status.value,
                 confidence=match.confidence,
-                message=("Required target entity missing or not matchable " f"(status={
-                        match.status.value}, confidence={
-                        match.confidence})."),
+                message=(
+                    "Required target entity missing or not matchable "
+                    f"(status={match.status.value}, confidence={match.confidence})."
+                ),
                 evidence=(),
                 details={
                     "reason": "required_target_missing",

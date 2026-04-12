@@ -176,8 +176,7 @@ Generated module {module_name} for testing.
 
     if functions:
         for func_spec in functions:
-            func_name = func_spec.get("name", f"function_{
-                generate_random_string(5)}")
+            func_name = func_spec.get("name", f"function_{generate_random_string(5)}")
             func_args = func_spec.get("args", ["data"])
             complexity = func_spec.get("complexity", "simple")
 
@@ -186,8 +185,7 @@ Generated module {module_name} for testing.
 
     if classes:
         for class_spec in classes:
-            class_name = class_spec.get("name", f"TestClass{
-                generate_random_string(5)}")
+            class_name = class_spec.get("name", f"TestClass{generate_random_string(5)}")
             methods = class_spec.get("methods", ["process", "validate"])
             include_props = class_spec.get("include_properties", False)
 
@@ -254,13 +252,15 @@ def generate_test_project(
         imports = ["from typing import List, Dict, Any, Optional"]
         if i > 0:
             prev_module = module_names[i - 1]
-            imports.append(f"from .{prev_module} import {
-                prev_module.split('_')[1].title()}")
+            imports.append(
+                f"from .{prev_module} import {prev_module.split('_')[1].title()}"
+            )
 
         if include_circular_imports and i == num_modules - 1:
-            imports.append(f"from .{
-                module_names[0]} import {
-                module_names[0].split('_')[1].title()}")
+            imports.append(
+                f"from .{module_names[0]} import "
+                f"{module_names[0].split('_')[1].title()}"
+            )
 
         module_code = generate_python_module(module_name, functions, classes, imports)
 
@@ -297,8 +297,7 @@ class MainApplication:
 
     for module_name in module_names:
         module_short = module_name.split("_")[1]
-        main_code += f"        self.components.append({
-            module_short.title()}())\n"
+        main_code += f"        self.components.append({module_short.title()}())\n"
 
     main_code += """
     def run(self, data: Any) -> Dict[str, Any]:
@@ -315,8 +314,7 @@ class MainApplication:
 
     config = {
         "project": {
-            "name": f"generated_project_{
-                generate_random_string(6)}",
+            "name": f"generated_project_{generate_random_string(6)}",
             "version": "1.0.0",
             "description": "Generated test project for architecture validation",
         },

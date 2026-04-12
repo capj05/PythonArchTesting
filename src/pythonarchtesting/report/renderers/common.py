@@ -68,11 +68,10 @@ def format_evidence(ev: Dict[str, Any]) -> str:
     if isinstance(payload, dict) and "line_text" in payload:
         payload = dict(payload)
         line_text = payload.pop("line_text")
-    rendered = f"{
-        ev.get(
-            'type',
-            '')} at {loc_text} ({
-            format_payload(payload)})"
+    rendered = (
+        f"{ev.get('type', '')} at {loc_text} "
+        f"({format_payload(payload)})"
+    )
     if isinstance(line_text, str) and line_text.strip():
         rendered += f" line={line_text.strip()!r}"
     return rendered

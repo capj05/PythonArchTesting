@@ -150,11 +150,10 @@ def build_entity_index(entities: Iterable[Entity]) -> EntityIndex:
     by_fp: dict[tuple[str, str], list[Entity]] = {}
 
     for entity in entities:
-        core_key = f"{
-            entity.module_path}:{
-            entity.qualname}:{
-            entity.kind}:{
-                entity.signature_key}"
+        core_key = (
+            f"{entity.module_path}:{entity.qualname}:"
+            f"{entity.kind}:{entity.signature_key}"
+        )
         by_core.setdefault(core_key, []).append(entity)
         by_name.setdefault((entity.kind, entity.name), []).append(entity)
         by_sig.setdefault((entity.kind, entity.signature_key), []).append(entity)

@@ -160,20 +160,22 @@ def _exact_compare(
 ) -> List[str]:
     errors: List[str] = []
     if len(expected) != len(found):
-        errors.append(f"parameter count mismatch (expected {
-            len(expected)}, found {
-            len(found)})")
+        errors.append(
+            f"parameter count mismatch (expected {len(expected)}, "
+            f"found {len(found)})"
+        )
         return errors
     for exp, got in zip(expected, found):
         if exp.get("name") != got.get("name"):
-            errors.append(f"parameter name mismatch at position '{
-                exp.get('name')}' vs '{
-                got.get('name')}'")
+            errors.append(
+                f"parameter name mismatch at position '{exp.get('name')}' "
+                f"vs '{got.get('name')}'"
+            )
         if exp.get("kind") != got.get("kind"):
-            errors.append(f"parameter kind mismatch for '{
-                exp.get('name')}': expected {
-                exp.get('kind')}, found {
-                got.get('kind')}")
+            errors.append(
+                f"parameter kind mismatch for '{exp.get('name')}': "
+                f"expected {exp.get('kind')}, found {got.get('kind')}"
+            )
         if bool(exp.get("required")) != bool(got.get("required")):
             errors.append(
                 f"parameter required/optional mismatch for '{exp.get('name')}'"
@@ -219,9 +221,10 @@ def _compatible_compare(
         else:
             for exp, got in zip(expected_non_kw, found_non_kw):
                 if exp.get("kind") != got.get("kind"):
-                    errors.append(f"parameter kind mismatch: expected {
-                        exp.get('kind')}, found {
-                        got.get('kind')}")
+                    errors.append(
+                        f"parameter kind mismatch: expected {exp.get('kind')}, "
+                        f"found {got.get('kind')}"
+                    )
                 if exp.get("required") and not got.get("required"):
                     # Target being optional is acceptable for compatibility.
                     pass

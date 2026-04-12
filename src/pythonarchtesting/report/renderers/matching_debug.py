@@ -413,9 +413,10 @@ def render_matching_debug_markdown(
         "",
     ]
     for block in blocks:
-        lines.append(f"{source_heading_marks} Source: {
-            _escape_markdown_debug(
-                block.source.name)}")
+        lines.append(
+            f"{source_heading_marks} Source: "
+            f"{_escape_markdown_debug(block.source.name)}"
+        )
         lines.append("")
         lines.append(
             "- Source: "

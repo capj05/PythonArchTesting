@@ -99,11 +99,10 @@ def run_matching(
             by_source[match.source_id] = match
             continue
 
-        core_key = f"{
-            source.module_path}:{
-            source.qualname}:{
-            source.kind}:{
-                source.signature_key}"
+        core_key = (
+            f"{source.module_path}:{source.qualname}:"
+            f"{source.kind}:{source.signature_key}"
+        )
         stage1_candidates = target_index.by_core.get(core_key, [])
         if len(stage1_candidates) == 1:
             target = stage1_candidates[0]

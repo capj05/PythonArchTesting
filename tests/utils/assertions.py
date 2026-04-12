@@ -233,8 +233,9 @@ def assert_no_circular_imports(project_dir: Path) -> None:
     def has_cycle(file_path: str, path: List[str]) -> bool:
         if file_path in rec_stack:
             cycle_path = path[path.index(file_path) :] + [file_path]
-            raise AssertionError(f"Circular import detected: {
-                ' -> '.join(cycle_path)}")
+            raise AssertionError(
+                f"Circular import detected: {' -> '.join(cycle_path)}"
+            )
 
         if file_path in visited:
             return False
@@ -338,8 +339,7 @@ def assert_config_valid(config: Dict[str, Any]) -> None:
 
     result = validate_configuration(config)
     if not result.is_valid:
-        raise AssertionError(f"Configuration validation failed: {
-            result.errors}")
+        raise AssertionError(f"Configuration validation failed: {result.errors}")
 
 
 def assert_performance_within_threshold(
