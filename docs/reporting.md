@@ -137,23 +137,6 @@ This section is the canonical source of truth for Markdown reporting behavior.
 Phase 1 freezes the product contract only. It does not change renderer code,
 config plumbing, CLI flags, IR types, bundle paths, or JSON behavior.
 
-### Current State vs Contract Gap
-
-The repository already documents a failure-first reading model, but the current
-Markdown implementation does not fully follow it yet.
-
-Current repository facts:
-
-- single-target Markdown currently renders `Summary`, then matching debug, then
-  `Results`
-- multi-target target pages currently render `Metadata`, `Summary`, `Matching`,
-  matching debug, then `Results`
-- the multi-target run index is currently a flat target table plus target links
-- the current Markdown generator path does not include any Markdown mode
-  selector
-
-These are baseline facts, not the approved end-state contract.
-
 ### Mode Definitions
 
 The approved Markdown modes are:
@@ -163,6 +146,10 @@ The approved Markdown modes are:
 - `verbose`: user-facing remediation detail; additive over `standard`
 - `debug`: developer-facing diagnostics; additive over `verbose`
 
+Select a mode with `--markdown-mode standard|verbose|debug`. Defaults to `standard`.
+
+The implementation now matches this contract.
+
 Normative rules:
 
 - `standard` answers: did the run fail, which targets have issues, and which
@@ -171,6 +158,29 @@ Normative rules:
   fixing issues
 - `debug` keeps the `verbose` structure and adds diagnostic appendices
 - `debug` is the only mode where diagnostic-heavy content is allowed by default
+
+#### Standard mode (default)
+
+- Audience: quick CI scan
+- Default: yes (when `--markdown-mode` is omitted)
+- Shows: verdict, summary counts, failed results list, rule hotspots
+- Forbidden: Matching Debug, Raw Evidence, Full Result Table, Issue Summary by Rule, Rule Details
+- Multi-target: `report.md` is the only user-facing page
+
+#### Verbose mode
+
+- Audience: developer fixing failures
+- Default: no
+- Shows: all Standard content + Issue Summary by Rule, Rule Details, Warnings, Compact Passed Summary
+- Forbidden: Matching Debug, Raw Evidence as primary sections
+- Multi-target: adds target pages at `targets/<target_id>.md`
+
+#### Debug mode
+
+- Audience: developer investigating unexpected results
+- Default: no
+- Shows: all Verbose content + Matching Debug, Raw Evidence, Full Result Table
+- Multi-target: same bundle shape as Verbose with debug appendices on target pages
 
 ### Markdown Output Topology
 

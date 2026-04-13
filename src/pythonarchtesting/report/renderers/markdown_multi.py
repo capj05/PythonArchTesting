@@ -25,15 +25,7 @@ from .escape import escape_markdown
 from .markdown_sections import (
     join_rule_ids,
     render_debug_appendices,
-    render_full_results_table,
     render_target_detail_sections,
-    target_debug_report,
-)
-from .matching_debug import (
-    DEFAULT_MATCHING_DEBUG_TOP_K,
-    build_matching_debug_blocks_for_target,
-    get_target_debug_context,
-    render_matching_debug_markdown,
 )
 from .table import Table, render_markdown_table
 
@@ -68,12 +60,7 @@ def _render_target_page_legacy(
     *,
     matching_debug_context: Optional[Dict[str, Any]] = None,
 ) -> str:
-    debug_target = target_debug_report(target)
-    matching_blocks = build_matching_debug_blocks_for_target(
-        debug_target,
-        get_target_debug_context(matching_debug_context, debug_target),
-        top_k=DEFAULT_MATCHING_DEBUG_TOP_K,
-    )
+    failed = [r for r in target.results if r.status == "FAILED"]
     lines: List[str] = [
         f"# Target Report: {escape_markdown(target.target_id)}",
         "",
@@ -90,27 +77,16 @@ def _render_target_page_legacy(
         f"- Total Results: {target.summary.results_total}",
         f"- Status Counts: {escape_markdown(str(target.summary.status_counts))}",
         f"- Severity Counts: {escape_markdown(str(target.summary.severity_counts))}",
-        f"- Category Counts: {escape_markdown(str(target.summary.category_counts))}",
-        "",
-        "## Matching",
-        "",
-        f"- Total: {target.matching.summary.total}",
-        f"- Matched: {target.matching.summary.matched}",
-        f"- Low confidence: {target.matching.summary.low_confidence}",
-        f"- Ambiguous: {target.matching.summary.ambiguous}",
-        f"- Unmatched: {target.matching.summary.unmatched}",
-        "",
-        render_matching_debug_markdown(
-            matching_blocks,
-            top_k=DEFAULT_MATCHING_DEBUG_TOP_K,
-            heading_level=2,
-        ).rstrip(),
-        "",
-        "## Results",
         "",
     ]
-    lines.append(render_full_results_table(target.results))
-    lines.append("")
+    if failed:
+        lines.append("## Failed Results")
+        lines.append("")
+        for r in failed:
+            lines.append(
+                f"- {escape_markdown(r.rule_id)} [{escape_markdown(r.status)}] {escape_markdown(r.message)}"
+            )
+        lines.append("")
     return "\n".join(lines)
 
 

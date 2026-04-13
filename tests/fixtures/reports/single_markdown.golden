@@ -9,14 +9,7 @@
 - Total Results: 1
 - Status Counts: {'FAILED': 1}
 - Severity Counts: {'error': 1}
-- Category Counts: {'arch': 1}
 
-## Matching Candidates (Debug)
+## Failed Results
 
-No matching data available.
-
-## Results
-
-| Project | Result ID | Category | Severity | Status | Rule | Source | Target | Location | Message |
-|---|---|---|---|---|---|---|---|---|---|
-| proj-a | abc123 | arch | error | FAILED | arch/forbidden_dependency | pkg.mod:Cls.fn | pkg.t:T.fn | a.py:7 | Bad <dep> \| use safe |
+- arch/forbidden_dependency [FAILED] Bad <dep> \| use safe

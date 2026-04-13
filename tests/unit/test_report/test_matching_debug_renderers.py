@@ -196,6 +196,7 @@ def test_markdown_matching_debug_renders_and_escapes_problematic_content():
     md = render_markdown(
         report_dict_to_ir(_single_report_with_matching(), kind="single"),
         matching_debug_context=_single_context(),
+        markdown_mode="debug",
     )
     assert "## Matching Candidates (Debug)" in md
     assert "No candidates recorded." in md
@@ -243,6 +244,7 @@ def test_markdown_metric_table_optional_when_many_metrics_points_to_html():
     md = render_markdown(
         report_dict_to_ir(report, kind="single"),
         matching_debug_context=_single_context(),
+        markdown_mode="debug",
     )
     assert "Metric heatmap omitted in Markdown output" in md
 
@@ -352,6 +354,7 @@ def test_multi_target_markdown_matching_debug_isolated_per_target(tmp_path: Path
         report_dict_to_ir(report, kind="multi"),
         md_root,
         matching_debug_context=ctx,
+        markdown_mode="debug",
     )
 
     a_md = (md_root / "targets" / "a.md").read_text(encoding="utf-8")

@@ -138,7 +138,7 @@ def test_single_target_markdown_generation_returns_inline_document() -> None:
     rendered = MarkdownReportGenerator(document).generate()
 
     assert rendered.startswith("# Validation Report")
-    assert "alpha-fail" in rendered
+    assert "Alpha failed" in rendered
 
 
 def test_multi_target_markdown_generation_requires_output_directory() -> None:

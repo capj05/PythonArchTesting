@@ -13,15 +13,7 @@ from ..presentation import (
 from .escape import escape_markdown
 from .markdown_sections import (
     render_debug_appendices,
-    render_full_results_table,
     render_target_detail_sections,
-    target_debug_report,
-)
-from .matching_debug import (
-    DEFAULT_MATCHING_DEBUG_TOP_K,
-    build_matching_debug_blocks_for_target,
-    get_target_debug_context,
-    render_matching_debug_markdown,
 )
 
 
@@ -77,14 +69,7 @@ def render_markdown(
         )
     target = document.targets[0]
     summary = target.summary
-    single_target_report = target_debug_report(
-        target, target_path=document.run.target_path
-    )
-    matching_blocks = build_matching_debug_blocks_for_target(
-        single_target_report,
-        get_target_debug_context(matching_debug_context, single_target_report),
-        top_k=DEFAULT_MATCHING_DEBUG_TOP_K,
-    )
+    failed = [r for r in target.results if r.status == "FAILED"]
 
     lines: List[str] = [
         "# Validation Report",
@@ -98,17 +83,14 @@ def render_markdown(
         f"- Total Results: {summary.results_total}",
         f"- Status Counts: {escape_markdown(str(summary.status_counts))}",
         f"- Severity Counts: {escape_markdown(str(summary.severity_counts))}",
-        f"- Category Counts: {escape_markdown(str(summary.category_counts))}",
-        "",
-        render_matching_debug_markdown(
-            matching_blocks,
-            top_k=DEFAULT_MATCHING_DEBUG_TOP_K,
-            heading_level=2,
-        ).rstrip(),
-        "",
-        "## Results",
         "",
     ]
-    lines.append(render_full_results_table(target.results, truncate_messages=True))
-    lines.append("")
+    if failed:
+        lines.append("## Failed Results")
+        lines.append("")
+        for r in failed:
+            lines.append(
+                f"- {escape_markdown(r.rule_id)} [{escape_markdown(r.status)}] {escape_markdown(r.message)}"
+            )
+        lines.append("")
     return "\n".join(lines)
