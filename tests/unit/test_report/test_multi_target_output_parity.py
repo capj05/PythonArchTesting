@@ -117,7 +117,7 @@ def test_multi_target_json_golden():
     assert _normalize_paths(json.loads(rendered)) == _normalize_paths(expected)
 
 
-def test_multi_target_markdown_bundle_writes_index_and_target_pages(tmp_path):
+def test_multi_target_markdown_bundle_writes_standard_index_only(tmp_path):
     cfg = _cfg()
     run_state = _run_state(cfg)
     targets = [
@@ -136,12 +136,11 @@ def test_multi_target_markdown_bundle_writes_index_and_target_pages(tmp_path):
     root = tmp_path / "md"
     assert out == str(root / "report.md")
     assert (root / "report.md").exists()
-    pages = sorted((root / "targets").glob("*.md"))
-    assert len(pages) == 2
+    assert not (root / "targets").exists()
     index = (root / "report.md").read_text(encoding="utf-8")
-    assert "Targets" in index
-    assert "targets/a-project.md" in index
-    assert "targets/b-project.md" in index
+    assert "## Targets With Issues" in index
+    assert "## OK Targets" in index
+    assert "(targets/" not in index
 
 
 def test_multi_target_markdown_index_golden(tmp_path):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from ..ir.models import ReportDocument
 from ..presentation import (
@@ -13,6 +13,7 @@ from ..presentation import (
 from .escape import escape_markdown
 from .markdown_sections import (
     render_debug_appendices,
+    render_standard_target_sections,
     render_target_detail_sections,
 )
 
@@ -31,8 +32,8 @@ def render_markdown_mode(
         )
 
     target = document.targets[0]
-    run_presentation = build_run_presentation(document, mode="verbose")
-    target_presentation = build_target_presentation(target, mode="verbose")
+    run_presentation = build_run_presentation(document, mode=mode)
+    target_presentation = build_target_presentation(target, mode=mode)
     lines: List[str] = [
         f"# {escape_markdown(run_presentation.title)}",
         "",
@@ -64,33 +65,26 @@ def render_markdown(
     if markdown_mode != "standard":
         return render_markdown_mode(
             document,
-            mode=markdown_mode,
+            mode=cast(MarkdownMode, markdown_mode),
             matching_debug_context=matching_debug_context,
         )
     target = document.targets[0]
-    summary = target.summary
-    failed = [r for r in target.results if r.status == "FAILED"]
+    run_presentation = build_run_presentation(document, mode="standard")
+    target_presentation = build_target_presentation(target, mode="standard")
 
     lines: List[str] = [
-        "# Validation Report",
+        f"# {escape_markdown(run_presentation.title)}",
         "",
         f"**Generated:** {escape_markdown(str(document.generated_at))}",
         f"**Framework:** {escape_markdown(str(document.framework_version))}",
         f"**Exit Code:** {document.exit_code}",
         "",
-        "## Summary",
-        "",
-        f"- Total Results: {summary.results_total}",
-        f"- Status Counts: {escape_markdown(str(summary.status_counts))}",
-        f"- Severity Counts: {escape_markdown(str(summary.severity_counts))}",
-        "",
     ]
-    if failed:
-        lines.append("## Failed Results")
-        lines.append("")
-        for r in failed:
-            lines.append(
-                f"- {escape_markdown(r.rule_id)} [{escape_markdown(r.status)}] {escape_markdown(r.message)}"
-            )
-        lines.append("")
+    lines.extend(
+        render_standard_target_sections(
+            target,
+            target_presentation,
+            hotspots=run_presentation.rule_hotspots,
+        )
+    )
     return "\n".join(lines)

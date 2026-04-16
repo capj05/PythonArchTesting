@@ -134,8 +134,7 @@ Typical workflow:
 ## Markdown Product Contract
 
 This section is the canonical source of truth for Markdown reporting behavior.
-Phase 1 freezes the product contract only. It does not change renderer code,
-config plumbing, CLI flags, IR types, bundle paths, or JSON behavior.
+The current implementation follows this contract for Markdown rendering only.
 
 ### Mode Definitions
 
@@ -146,9 +145,8 @@ The approved Markdown modes are:
 - `verbose`: user-facing remediation detail; additive over `standard`
 - `debug`: developer-facing diagnostics; additive over `verbose`
 
-Select a mode with `--markdown-mode standard|verbose|debug`. Defaults to `standard`.
-
-The implementation now matches this contract.
+Select a mode with `--markdown-mode standard|verbose|debug`. Defaults to
+`standard`.
 
 Normative rules:
 
@@ -163,8 +161,10 @@ Normative rules:
 
 - Audience: quick CI scan
 - Default: yes (when `--markdown-mode` is omitted)
-- Shows: verdict, summary counts, failed results list, rule hotspots
-- Forbidden: Matching Debug, Raw Evidence, Full Result Table, Issue Summary by Rule, Rule Details
+- Shows: verdict, summary counts, short issue summary, optional warnings-only
+  summary, optional OK summary, rule hotspots
+- Forbidden: Matching Debug, Raw Evidence, Full Result Table, Issue Summary by
+  Rule, Rule Details, Compact Passed Summary
 - Multi-target: `report.md` is the only user-facing page
 
 #### Verbose mode
@@ -200,10 +200,8 @@ Single-target Markdown remains one report document in all modes.
 
 #### Multi-target Markdown
 
-Multi-target Markdown keeps the existing bundle paths:
-
-- `report.md`
-- `targets/<target_id>.md`
+Multi-target Markdown always uses `report.md` as the bundle root. Target pages
+at `targets/<target_id>.md` exist only in `verbose` and `debug`.
 
 Mode-specific contract:
 
@@ -222,8 +220,9 @@ single-target and multi-target runs, but they do not need to preserve the same
 file count.
 
 - single-target uses inline detail because there is only one target
-- multi-target uses `report.md` plus target pages because there are multiple
-  navigable units
+- multi-target `standard` keeps all scanning content on `report.md`
+- multi-target `verbose` and `debug` add target pages because there are
+  multiple navigable units
 
 #### Forbidden Topology Changes
 
@@ -314,6 +313,7 @@ These names are canonical for user-visible Markdown sections.
 | `Warnings Only` | run, target | Targets or target-local findings with warnings but no failing outcome. |
 | `OK Targets` | run | Targets with no actionable problems. |
 | `Rule Hotspots` | run, target | Recurring or dominant failing rules worth prioritizing. |
+| `Short Issue Summary` | target | Compact non-remediation summary of the failing rules shown in `standard`. |
 | `Short Per-Target Summaries` | run | Compact summaries used for scanning and navigation across targets. |
 | `Navigation` | run | Links or navigational hints that move readers to richer detail. |
 | `Issue Summary by Rule` | target | Grouped summary of target issues organized by rule. |
@@ -356,7 +356,7 @@ These names are canonical for user-visible Markdown sections.
 | `Warnings Only` | Optional | Optional | Optional |
 | `OK Targets` style summary | Optional | Optional | Optional |
 | `Rule Hotspots` | Required if data is available | Required if data is available | Required if data is available |
-| Short issue summary | Required | Required | Required |
+| Short issue summary | Required | Forbidden | Forbidden |
 | `Issue Summary by Rule` | Forbidden | Required | Required |
 | `Rule Details` | Forbidden | Required | Required |
 | Standalone `Warnings` section | Forbidden unless needed in the summary | Required if warnings exist | Required if warnings exist |

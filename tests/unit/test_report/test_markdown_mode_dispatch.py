@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 import pythonarchtesting.report.api as api
 import pythonarchtesting.report.lazy as lazy
@@ -71,7 +69,12 @@ def test_generate_single_target_json_does_not_pass_mode(monkeypatch):
 def test_generate_single_target_markdown_forwards_mode(monkeypatch):
     render_calls: list[dict[str, Any]] = []
 
-    def fake_render_markdown(document: Any, *, matching_debug_context=None, markdown_mode="standard") -> str:
+    def fake_render_markdown(
+        document: Any,
+        *,
+        matching_debug_context=None,
+        markdown_mode="standard",
+    ) -> str:
         render_calls.append({"markdown_mode": markdown_mode})
         return "# report"
 
@@ -98,7 +101,12 @@ def test_generate_single_target_markdown_forwards_mode(monkeypatch):
 def test_generate_single_target_markdown_defaults_to_standard(monkeypatch):
     render_calls: list[dict[str, Any]] = []
 
-    def fake_render_markdown(document: Any, *, matching_debug_context=None, markdown_mode="standard") -> str:
+    def fake_render_markdown(
+        document: Any,
+        *,
+        matching_debug_context=None,
+        markdown_mode="standard",
+    ) -> str:
         render_calls.append({"markdown_mode": markdown_mode})
         return "# report"
 
@@ -130,7 +138,13 @@ def test_generate_single_target_markdown_defaults_to_standard(monkeypatch):
 def test_generate_multi_target_markdown_forwards_mode(monkeypatch, tmp_path):
     render_calls: list[dict[str, Any]] = []
 
-    def fake_render_markdown_bundle(document, output_dir, *, matching_debug_context=None, markdown_mode="standard"):
+    def fake_render_markdown_bundle(
+        document,
+        output_dir,
+        *,
+        matching_debug_context=None,
+        markdown_mode="standard",
+    ):
         render_calls.append({"markdown_mode": markdown_mode})
         return str(output_dir)
 
@@ -212,7 +226,6 @@ def test_lazy_generate_validation_report_forwards_markdown_mode(monkeypatch):
 
 def test_markdown_generator_single_target_forwards_mode(monkeypatch):
     from pythonarchtesting.report.markdown_generator import MarkdownReportGenerator
-    from pythonarchtesting.report.presentation import MarkdownMode
 
     calls: dict[str, Any] = {}
 
@@ -235,8 +248,6 @@ def test_markdown_generator_single_target_forwards_mode(monkeypatch):
 
 
 def test_markdown_generator_multi_target_forwards_mode(monkeypatch, tmp_path):
-    from pathlib import Path
-
     from pythonarchtesting.report.markdown_generator import MarkdownReportGenerator
 
     calls: dict[str, Any] = {}
@@ -257,3 +268,108 @@ def test_markdown_generator_multi_target_forwards_mode(monkeypatch, tmp_path):
     gen._generate_report(output_file=str(tmp_path))
 
     assert calls["mode"] == "debug"
+
+
+def test_single_target_debug_renderer_builds_debug_presentations(monkeypatch):
+    import pythonarchtesting.report.renderers.markdown as markdown_mod
+
+    calls: list[tuple[str, str]] = []
+
+    def fake_build_run_presentation(document, *, mode):
+        calls.append(("run", mode))
+        return SimpleNamespace(title="Validation Report")
+
+    def fake_build_target_presentation(target, *, mode):
+        calls.append(("target", mode))
+        return SimpleNamespace()
+
+    monkeypatch.setattr(markdown_mod, "build_run_presentation", fake_build_run_presentation)
+    monkeypatch.setattr(
+        markdown_mod, "build_target_presentation", fake_build_target_presentation
+    )
+    monkeypatch.setattr(
+        markdown_mod, "render_target_detail_sections", lambda target, presentation: []
+    )
+    monkeypatch.setattr(
+        markdown_mod,
+        "render_debug_appendices",
+        lambda *args, **kwargs: [],
+    )
+
+    document = SimpleNamespace(
+        targets=[SimpleNamespace()],
+        generated_at="2026-04-12T00:00:00Z",
+        framework_version="test",
+        exit_code=1,
+        run=SimpleNamespace(target_path="/targets/alpha"),
+    )
+
+    markdown_mod.render_markdown_mode(document, mode="debug")
+
+    assert calls == [("run", "debug"), ("target", "debug")]
+
+
+def test_multi_target_debug_renderer_builds_debug_presentations(monkeypatch, tmp_path):
+    import pythonarchtesting.report.renderers.markdown_multi as markdown_multi_mod
+
+    calls: list[tuple[str, str]] = []
+
+    def fake_build_run_presentation(document, *, mode):
+        calls.append(("run", mode))
+        return SimpleNamespace(
+            title="Validation Run Report",
+            error_targets=tuple(),
+            targets_with_issues=tuple(),
+            warnings_only_targets=tuple(),
+            ok_targets=tuple(),
+            rule_hotspots=tuple(),
+            display_status="ISSUES",
+            exit_code=1,
+            targets_total=1,
+            targets_issues=1,
+            targets_error=0,
+            targets_warnings_only=0,
+            targets_ok=0,
+        )
+
+    def fake_build_target_presentation(target, *, mode):
+        calls.append(("target", mode))
+        return SimpleNamespace()
+
+    monkeypatch.setattr(
+        markdown_multi_mod, "build_run_presentation", fake_build_run_presentation
+    )
+    monkeypatch.setattr(
+        markdown_multi_mod, "build_target_presentation", fake_build_target_presentation
+    )
+    monkeypatch.setattr(
+        markdown_multi_mod, "_render_target_page_debug", lambda *args, **kwargs: "# target"
+    )
+    monkeypatch.setattr(
+        markdown_multi_mod,
+        "_render_run_index_mode",
+        lambda *args, **kwargs: "# index",
+    )
+
+    document = SimpleNamespace(
+        targets=[SimpleNamespace(target_id="alpha")],
+        generated_at="2026-04-12T00:00:00Z",
+        framework_version="test",
+        exit_code=1,
+        run=SimpleNamespace(source_path="/src"),
+        summary=SimpleNamespace(
+            results=SimpleNamespace(
+                results_total=1,
+                status_counts={"FAILED": 1},
+                severity_counts={"error": 1},
+            )
+        ),
+    )
+
+    markdown_multi_mod.render_markdown_bundle_mode(
+        document,
+        tmp_path / "bundle",
+        mode="debug",
+    )
+
+    assert calls == [("run", "debug"), ("target", "debug")]

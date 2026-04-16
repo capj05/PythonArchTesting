@@ -34,10 +34,10 @@ def resolve_markdown_mode(config: Any | None, explicit_mode: str | None = None) 
     """Resolve the effective markdown mode from explicit arg or config, defaulting to standard."""
     if explicit_mode is not None:
         return explicit_mode
-    try:
-        return config.report.markdown_mode or "standard"
-    except AttributeError:
+    if config is None:
         return "standard"
+    report_config = getattr(config, "report", None)
+    return getattr(report_config, "markdown_mode", None) or "standard"
 
 
 def build_report_document(

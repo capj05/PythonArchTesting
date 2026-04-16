@@ -4,12 +4,22 @@
 **Framework:** test
 **Exit Code:** 1
 
+## Verdict
+
+- Status: `ISSUES`
+- Exit code: 1
+- Target path: 
+
 ## Summary
 
-- Total Results: 1
-- Status Counts: {'FAILED': 1}
-- Severity Counts: {'error': 1}
+- Total results: 1
+- Status counts: {'FAILED': 1}
+- Severity counts: {'error': 1}
 
-## Failed Results
+## Short Issue Summary
 
-- arch/forbidden_dependency [FAILED] Bad <dep> \| use safe
+- `arch/forbidden_dependency`: status `ISSUES`; failed 1; Bad <dep> \| use safe
+
+## Rule Hotspots
+
+- arch/forbidden_dependency: 1 result(s) across 1 target(s); severities error=1

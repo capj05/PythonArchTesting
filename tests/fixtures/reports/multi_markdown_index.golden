@@ -5,18 +5,30 @@
 **Source:** /source
 **Exit Code:** 1
 
-## Run Summary
+## Verdict
 
+- Status: `ISSUES`
+- Exit code: 1
 - Targets total: 2
-- Targets passed: 1
-- Targets failed: 1
+- Targets with issues: 1
+- Warnings only: 0
+- OK targets: 1
 
-## Targets
+## Summary
 
-| Target | Path | Exit | Results | Failed |
-|---|---|---|---|---|
-| a | /targets/a | 0 | 1 | 0 |
-| b | /targets/b | 1 | 1 | 1 |
+- Results total: 2
+- Result status counts: {'FAILED': 1, 'OK': 1}
+- Result severity counts: {'error': 1, 'info': 1}
 
-- [a](targets/a.md)
-- [b](targets/b.md)
+## Targets With Issues
+
+- b: status `ISSUES`; exit 1; issues 1; warnings 0; top rules: arch/fail
+
+## OK Targets
+
+- a: status `OK`; exit 0; issues 0; warnings 0; top rules: arch/ok
+
+## Rule Hotspots
+
+- arch/fail: 1 result(s) across 1 target(s); severities error=1
+- arch/ok: 1 result(s) across 1 target(s); severities info=1

@@ -7,7 +7,7 @@ from collections import Counter
 from typing import Any, Dict, Optional, Sequence
 
 from ..ir.models import EntityRef, EvidenceItem, ResultItem, TargetReport
-from ..presentation import RuleIssueGroup, TargetPresentation
+from ..presentation import RuleHotspot, RuleIssueGroup, TargetPresentation
 from .common import format_entity, format_location
 from .escape import escape_markdown
 from .matching_debug import (
@@ -252,6 +252,63 @@ def render_compact_passed_summary(presentation: TargetPresentation) -> list[str]
     return lines
 
 
+def render_rule_hotspots(hotspots: Sequence[RuleHotspot]) -> list[str]:
+    """Render ordered hotspot summaries when hotspot data is available."""
+    lines = ["## Rule Hotspots", ""]
+    if not hotspots:
+        lines.append("No recurring rule hotspots.")
+        lines.append("")
+        return lines
+    for hotspot in hotspots:
+        severity_mix = ", ".join(
+            f"{escape_markdown(severity)}={count}"
+            for severity, count in sorted(hotspot.severity_mix.items())
+        )
+        if not severity_mix:
+            severity_mix = "none"
+        lines.append(
+            f"- {escape_markdown(hotspot.rule_id)}: {hotspot.count} result(s) across "
+            f"{hotspot.targets_affected} target(s); severities {severity_mix}"
+        )
+    lines.append("")
+    return lines
+
+
+def render_standard_target_sections(
+    target: TargetReport,
+    presentation: TargetPresentation,
+    *,
+    hotspots: Sequence[RuleHotspot],
+) -> list[str]:
+    """Render the compact default single-target reader journey."""
+    issue_groups = sort_rule_groups(presentation.issue_groups)
+    warning_groups = sort_rule_groups(presentation.warning_groups)
+    status_counts = escape_markdown(str(target.summary.status_counts))
+    severity_counts = escape_markdown(str(target.summary.severity_counts))
+    lines: list[str] = [
+        "## Verdict",
+        "",
+        f"- Status: `{escape_markdown(presentation.display_status)}`",
+        f"- Exit code: {presentation.exit_code}",
+        f"- Target path: {escape_markdown(target.target_path)}",
+        "",
+        "## Summary",
+        "",
+        f"- Total results: {target.summary.results_total}",
+        f"- Status counts: {status_counts}",
+        f"- Severity counts: {severity_counts}",
+        "",
+    ]
+    lines.extend(_render_standard_short_issue_summary(issue_groups))
+    if warning_groups:
+        lines.extend(_render_standard_warning_summary(warning_groups))
+    if presentation.display_status == "OK":
+        lines.extend(_render_standard_ok_summary(presentation))
+    if hotspots:
+        lines.extend(render_rule_hotspots(hotspots))
+    return lines
+
+
 def render_target_detail_sections(
     target: TargetReport, presentation: TargetPresentation
 ) -> list[str]:
@@ -293,6 +350,47 @@ def render_target_detail_sections(
             lines.extend(render_rule_group_block(group, heading_level=3))
 
     lines.extend(render_compact_passed_summary(presentation))
+    return lines
+
+
+def _render_standard_short_issue_summary(groups: Sequence[RuleIssueGroup]) -> list[str]:
+    lines = ["## Short Issue Summary", ""]
+    if not groups:
+        lines.append("No failing rules.")
+        lines.append("")
+        return lines
+
+    for group in groups:
+        lines.append(
+            f"- `{escape_markdown(group.rule_id)}`: status "
+            f"`{escape_markdown(group.display_status)}`; failed {group.failed_count}; "
+            f"{escape_markdown(group.summary_message)}"
+        )
+    lines.append("")
+    return lines
+
+
+def _render_standard_warning_summary(
+    groups: Sequence[RuleIssueGroup],
+) -> list[str]:
+    lines = ["## Warnings Only", ""]
+    for group in groups:
+        warning_total = group.warning_count + group.skipped_count
+        lines.append(
+            f"- `{escape_markdown(group.rule_id)}`: warning-grade results "
+            f"{warning_total}; {escape_markdown(group.summary_message)}"
+        )
+    lines.append("")
+    return lines
+
+
+def _render_standard_ok_summary(presentation: TargetPresentation) -> list[str]:
+    lines = ["## OK Summary", ""]
+    lines.append("- No actionable issues.")
+    lines.append(
+        f"- Passed checks: {presentation.compact_passed_summary.passed_total}"
+    )
+    lines.append("")
     return lines
 
 

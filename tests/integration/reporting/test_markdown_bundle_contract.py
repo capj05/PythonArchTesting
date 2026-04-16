@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from pythonarchtesting.report.markdown_generator import MarkdownReportGenerator
 from pythonarchtesting.report.paths import markdown_bundle_index, markdown_target_page
 

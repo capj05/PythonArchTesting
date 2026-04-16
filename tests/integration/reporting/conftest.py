@@ -98,7 +98,7 @@ def _target_payload(
 
 @pytest.fixture()
 def single_doc():
-    """A single-target IR document with one FAILED result."""
+    """A single-target IR document with failed, warning, and passing results."""
     results = [
         _result(
             project_id="alpha",
@@ -110,6 +110,17 @@ def single_doc():
             source_name="Service.run",
             line=10,
             fix_hints=["Remove forbidden import"],
+        ),
+        _result(
+            project_id="alpha",
+            result_id="alpha-warn-1",
+            rule_id="arch/rule-b",
+            status="WARNING",
+            severity="warning",
+            message="Alpha layer naming should be tightened",
+            source_name="Service.warn",
+            line=11,
+            fix_hints=["Rename the boundary module"],
         ),
         _result(
             project_id="alpha",
@@ -143,7 +154,7 @@ def single_doc():
 
 @pytest.fixture()
 def multi_doc():
-    """A multi-target IR document with alpha (failing) and beta (passing) targets."""
+    """A multi-target IR document with issue, warning-only, and OK targets."""
     alpha_results = [
         _result(
             project_id="alpha",
@@ -159,16 +170,30 @@ def multi_doc():
     beta_results = [
         _result(
             project_id="beta",
-            result_id="beta-ok-1",
+            result_id="beta-warn-1",
             rule_id="arch/rule-b",
-            status="OK",
-            severity="info",
-            message="Beta rule pass",
-            source_name="All.good",
+            status="WARNING",
+            severity="warning",
+            message="Beta layering should be simplified",
+            source_name="All.warn",
             line=20,
         ),
     ]
-    run_status_counts, run_severity_counts = _counts(alpha_results + beta_results)
+    gamma_results = [
+        _result(
+            project_id="gamma",
+            result_id="gamma-ok-1",
+            rule_id="arch/rule-c",
+            status="OK",
+            severity="info",
+            message="Gamma rule pass",
+            source_name="All.good",
+            line=30,
+        ),
+    ]
+    run_status_counts, run_severity_counts = _counts(
+        alpha_results + beta_results + gamma_results
+    )
     report_dict = {
         "schema_version": "2",
         "framework_version": "test",
@@ -176,14 +201,16 @@ def multi_doc():
         "exit_code": 1,
         "run": {"source_path": "/src"},
         "summary": {
-            "targets_total": 2,
+            "targets_total": 3,
             "targets_failed": 1,
-            "targets_passed": 1,
+            "targets_passed": 2,
             "results": {
-                "results_total": len(alpha_results) + len(beta_results),
+                "results_total": len(alpha_results) + len(beta_results) + len(gamma_results),
                 "status_counts": run_status_counts,
                 "severity_counts": run_severity_counts,
-                "category_counts": {"arch": len(alpha_results) + len(beta_results)},
+                "category_counts": {
+                    "arch": len(alpha_results) + len(beta_results) + len(gamma_results)
+                },
             },
         },
         "targets": [
@@ -200,6 +227,13 @@ def multi_doc():
                 target_path="/targets/beta",
                 exit_code=0,
                 results=beta_results,
+            ),
+            _target_payload(
+                target_id="gamma",
+                display_name="Gamma",
+                target_path="/targets/gamma",
+                exit_code=0,
+                results=gamma_results,
             ),
         ],
     }

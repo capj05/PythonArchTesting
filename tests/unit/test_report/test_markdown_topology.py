@@ -159,8 +159,7 @@ def test_multi_target_markdown_generation_writes_bundle_layout(tmp_path: Path) -
 
     assert index_path == str(output_root / "report.md")
     assert (output_root / "report.md").is_file()
-    assert (output_root / "targets" / "alpha.md").is_file()
-    assert (output_root / "targets" / "beta.md").is_file()
+    assert not (output_root / "targets").exists()
 
 
 def test_markdown_bundle_paths_remain_stable() -> None:
