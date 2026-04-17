@@ -33,14 +33,14 @@ class TestStateProperties:
         project_state = ProjectState("/test", [])
         initial_count = len(project_state.imported_modules)
 
-        for name in module_names:
+        for i, name in enumerate(module_names):
             # Simulate adding module
             if not hasattr(project_state, "imported_modules"):
                 project_state.imported_modules = {}
             project_state.imported_modules[name] = {"imports": []}
 
             current_count = len(project_state.imported_modules)
-            expected_count = initial_count + module_names.index(name) + 1
+            expected_count = initial_count + len(set(module_names[: i + 1]))
             assert current_count == expected_count
 
     @given(st.sets(st.text(min_size=1), min_size=1, max_size=50))
@@ -113,7 +113,7 @@ class TestStateProperties:
         assert sum(stats["by_type"].values()) == num_validations
         assert all(count >= 0 for count in stats["by_type"].values())
 
-    @given(st.dictionaries(keys=st.text(), values=st.lists(st.text())))
+    @given(st.dictionaries(keys=st.text(min_size=1), values=st.lists(st.text())))
     def test_import_graph_properties(self, import_graph: Dict[str, List[str]]):
         """Test that import graph maintains expected properties."""
         if not ProjectState:

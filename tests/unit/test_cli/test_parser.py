@@ -90,3 +90,47 @@ def test_build_parser_validate_declarations_flag():
     assert args.validate_declarations is True
     assert args.source == "reference"
     assert args.format == "json"
+
+
+def test_build_parser_markdown_mode_verbose():
+    parser = build_parser()
+    args = parser.parse_args(
+        ["--target", "a", "--format", "markdown", "--markdown-mode", "verbose"]
+    )
+    assert args.markdown_mode == "verbose"
+
+
+def test_build_parser_markdown_mode_debug():
+    parser = build_parser()
+    args = parser.parse_args(
+        ["--target", "a", "--format", "markdown", "--markdown-mode", "debug"]
+    )
+    assert args.markdown_mode == "debug"
+
+
+def test_build_parser_markdown_mode_standard():
+    parser = build_parser()
+    args = parser.parse_args(
+        ["--target", "a", "--format", "markdown", "--markdown-mode", "standard"]
+    )
+    assert args.markdown_mode == "standard"
+
+
+def test_build_parser_markdown_mode_default_is_none():
+    parser = build_parser()
+    args = parser.parse_args(["--target", "a", "--format", "markdown"])
+    assert args.markdown_mode is None
+
+
+def test_build_parser_markdown_mode_rejects_invalid_choice():
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--target", "a", "--format", "markdown", "--markdown-mode", "fancy"])
+
+
+def test_main_rejects_markdown_mode_with_json_format(monkeypatch):
+    from pythonarchtesting.cli import main
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--target", "a", "--format", "json", "--markdown-mode", "verbose"])
+    assert exc_info.value.code != 0

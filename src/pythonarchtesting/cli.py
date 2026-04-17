@@ -90,6 +90,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report output format",
     )
     parser.add_argument(
+        "--markdown-mode",
+        choices=["standard", "verbose", "debug"],
+        help="Markdown report mode (applies only when --format markdown)",
+    )
+    parser.add_argument(
         "--output",
         help="Output file path (prints to stdout if omitted)",
     )
@@ -114,6 +119,7 @@ def _run_single_target(
     output_file: Optional[str],
     output_format: Optional[str],
     validation_scope: str = VALIDATION_SCOPE_ALL,
+    markdown_mode: Optional[str] = None,
 ) -> int:
     run_state, target_state = run_single_target_unified(
         config=config,
@@ -127,6 +133,7 @@ def _run_single_target(
         target_state,
         output_format or "json",
         config=config,
+        markdown_mode=markdown_mode,
     )
     if output_file:
         with open(output_file, "w", encoding="utf-8") as f:
@@ -178,10 +185,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if getattr(args, "markdown_mode", None) is not None and getattr(args, "format", None) == "json":
+        parser.error("--markdown-mode cannot be used with --format json.")
+
     config_warnings: List[Any] = []
     config = load_config(
         config_path=args.config,
-        cli_args={"output_format": getattr(args, "format", None)},
+        cli_args={
+            "output_format": getattr(args, "format", None),
+            "markdown_mode": getattr(args, "markdown_mode", None),
+        },
         discover_from_cwd=args.config is None,
         cwd=os.getcwd(),
         warning_sink=config_warnings.append,
@@ -214,6 +227,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.validate_declarations:
         if args.format != "json":
             parser.error("Declaration validation supports only --format json.")
+        if getattr(args, "markdown_mode", None) is not None:
+            parser.error(
+                "--markdown-mode cannot be used with --validate-declarations (JSON-only output)."
+            )
         if (
             args.target
             or args.targets
@@ -296,7 +313,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             load_config_first=False,
         )
         report = generate_multi_target_report(
-            run_state, target_states, args.format, config, args.output
+            run_state, target_states, args.format, config, args.output,
+            markdown_mode=getattr(args, "markdown_mode", None),
         )
         if args.output and args.format == "json":
             with open(args.output, "w", encoding="utf-8") as f:
@@ -316,6 +334,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         output_file=args.output,
         output_format=args.format,
         validation_scope=args.validation_scope,
+        markdown_mode=getattr(args, "markdown_mode", None),
     )
 
 

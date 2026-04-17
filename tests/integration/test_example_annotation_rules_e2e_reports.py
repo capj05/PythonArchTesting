@@ -475,7 +475,7 @@ def test_real_example_multi_target_json_report_is_accurate(
         )
 
 
-def test_real_example_multi_target_markdown_bundle_is_written(
+def test_real_example_multi_target_standard_markdown_writes_report_only(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.chdir(_repo_root())
@@ -493,6 +493,66 @@ def test_real_example_multi_target_markdown_bundle_is_written(
             str(targets_dir),
             "--format",
             "markdown",
+            "--output",
+            str(markdown_out),
+        ]
+    )
+
+    assert exit_code == 1
+    assert (markdown_out / "report.md").is_file()
+    assert not (markdown_out / "targets").exists()
+
+
+def test_real_example_multi_target_explicit_standard_markdown_writes_report_only(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(_repo_root())
+    source, targets_dir = _real_example_source_targets()
+    config_path = _write_static_only_config(tmp_path)
+    markdown_out = tmp_path / "real_example_markdown_explicit_standard"
+
+    exit_code, _ = _run_cli(
+        [
+            "--config",
+            str(config_path),
+            "--source",
+            str(source),
+            "--targets-dir",
+            str(targets_dir),
+            "--format",
+            "markdown",
+            "--markdown-mode",
+            "standard",
+            "--output",
+            str(markdown_out),
+        ]
+    )
+
+    assert exit_code == 1
+    assert (markdown_out / "report.md").is_file()
+    assert not (markdown_out / "targets").exists()
+
+
+def test_real_example_multi_target_verbose_markdown_writes_target_pages(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(_repo_root())
+    source, targets_dir = _real_example_source_targets()
+    config_path = _write_static_only_config(tmp_path)
+    markdown_out = tmp_path / "real_example_markdown_verbose"
+
+    exit_code, _ = _run_cli(
+        [
+            "--config",
+            str(config_path),
+            "--source",
+            str(source),
+            "--targets-dir",
+            str(targets_dir),
+            "--format",
+            "markdown",
+            "--markdown-mode",
+            "verbose",
             "--output",
             str(markdown_out),
         ]

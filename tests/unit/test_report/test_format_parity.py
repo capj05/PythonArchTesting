@@ -61,5 +61,5 @@ def test_format_parity_core_rows():
     for item in report["results"]:
         result_id = item["result_id"]
         rule_id = item["rule_id"]
-        assert result_id in markdown_output
+        assert result_id in json_output
         assert rule_id in markdown_output

@@ -56,13 +56,15 @@ def generate_validation_report(
     output_format: str = "json",
     include_sections: Optional[List[str]] = None,
     config: Optional[Any] = None,
+    markdown_mode: Optional[str] = None,
 ) -> str:
     """Lazy wrapper for generate_validation_report function."""
     module = _get_report_module()
     return cast(
         str,
         module.generate_validation_report(
-            state_obj, output_format, include_sections, config
+            state_obj, output_format, include_sections, config,
+            markdown_mode=markdown_mode,
         ),
     )
 
@@ -72,13 +74,15 @@ def generate_single_target_report_from_run_target(
     target_state: Any,
     output_format: str = "json",
     config: Optional[Any] = None,
+    markdown_mode: Optional[str] = None,
 ) -> str:
     """Lazy wrapper for unified single-target report generation."""
     module = _get_report_module()
     return cast(
         str,
         module.generate_single_target_report_from_run_target(
-            run_state, target_state, output_format, config
+            run_state, target_state, output_format, config,
+            markdown_mode=markdown_mode,
         ),
     )
 
@@ -89,13 +93,15 @@ def generate_multi_target_report(
     output_format: str = "json",
     config: Optional[Any] = None,
     output_path: Optional[str | Path] = None,
+    markdown_mode: Optional[str] = None,
 ) -> str:
     """Lazy wrapper for generate_multi_target_report function."""
     module = _get_report_module()
     return cast(
         str,
         module.generate_multi_target_report(
-            run_state, target_states, output_format, config, output_path
+            run_state, target_states, output_format, config, output_path,
+            markdown_mode=markdown_mode,
         ),
     )
 

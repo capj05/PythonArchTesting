@@ -95,6 +95,7 @@ class ReportConfig:
     max_evidence_items_text: int = 3
     multi_target_exit_policy: str = "any_fail"
     fail_threshold: int = 1
+    markdown_mode: str = "standard"
 
 
 @dataclass(frozen=True, slots=True)

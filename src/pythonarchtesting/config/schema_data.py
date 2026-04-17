@@ -183,6 +183,11 @@ CONFIGURATION_SCHEMA: Dict[str, Dict[str, ValidationRule]] = {
             max_value=100000,
             default_value=1,
         ),
+        "markdown_mode": ValidationRule(
+            value_type=ValueType.STRING,
+            allowed_values=["standard", "verbose", "debug"],
+            default_value="standard",
+        ),
     },
     "error_handling": {
         "continue_on_error": ValidationRule(
