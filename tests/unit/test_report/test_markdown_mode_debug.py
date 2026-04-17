@@ -388,9 +388,11 @@ def test_multi_target_debug_mode_keeps_index_clean_and_appends_target_debug(
         ],
     )
     assert "Matching Candidates (Debug)" not in index_md
+    assert "## At a glance" in index_md
+    assert "## Projects with issues" in index_md
     assert "## Raw Evidence" not in index_md
+    assert "## Full Result Table" not in index_md
     assert "SECRET-EVIDENCE" not in index_md
-    assert "- Debug appendices: available on target pages." in index_md
     assert "### Matching Candidates (Debug)" in alpha_md
     assert "Source Alpha" in alpha_md
     assert "SECRET-EVIDENCE" in alpha_md

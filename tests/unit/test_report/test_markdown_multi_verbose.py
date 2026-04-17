@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from pythonarchtesting.report.ir.normalize import report_dict_to_ir
 from pythonarchtesting.report.markdown_generator import MarkdownReportGenerator
 
@@ -439,49 +437,53 @@ def test_verbose_multi_target_run_index_groups_targets_and_links_pages(
     _assert_section_order(
         index_md,
         [
-            "## Verdict",
-            "## Targets With Issues",
-            "## Warnings Only",
-            "## OK Targets",
-            "## Rule Hotspots",
+            "## At a glance",
+            "## Projects with issues",
+            "## Common failure causes",
+            "## Projects with warnings only",
+            "<summary><strong>Passed projects (1)</strong></summary>",
+            "## Run metadata",
         ],
     )
+    assert "## Verdict" not in index_md
+    assert "## Targets With Issues" not in index_md
+    assert "## Warnings Only" not in index_md
+    assert "## OK Targets" not in index_md
+    assert "## Rule Hotspots" not in index_md
     assert (
-        "- [alpha](targets/alpha.md): status `ISSUES`; exit 1; issues 1; "
-        "warnings 0; top rules: arch/rule-a; matching anomalies present" in index_md
+        "| [Alpha](targets/alpha.md) | ISSUES | 1 | 1 | Alpha import is forbidden |"
+        in index_md
     )
     assert (
-        "- [gamma](targets/gamma.md): status `ISSUES`; exit 1; issues 1; "
-        "warnings 0; top rules: arch/rule-c; matching anomalies present" in index_md
+        "| [Gamma](targets/gamma.md) | ISSUES | 1 | 1 | Gamma layering failed |"
+        in index_md
     )
     assert (
-        "- [delta](targets/delta.md): status `ISSUES`; exit 1; issues 1; "
-        "warnings 0; top rules: arch/rule-d" in index_md
+        "| [Delta](targets/delta.md) | ISSUES | 1 | 1 | Delta still has one forbidden dependency |"
+        in index_md
     )
     assert (
-        "- [beta](targets/beta.md): status `WARNINGS ONLY`; exit 0; issues 0; "
-        "warnings 1; top rules: arch/rule-b" in index_md
+        "| [Beta](targets/beta.md) | 1 | Beta uses a discouraged dependency |"
+        in index_md
     )
-    assert (
-        "- [epsilon](targets/epsilon.md): status `OK`; exit 0; issues 0; "
-        "warnings 0; top rules: arch/rule-e" in index_md
-    )
-    assert (
-        "- arch/rule-c: 2 result(s) across 1 target(s); severities error=1, "
-        "warning=1" in index_md
-    )
+    assert "| [Epsilon](targets/epsilon.md) | 2 |" in index_md
+    assert "| `arch/rule-c` | 1 | 2 |" in index_md
     assert "| Target | Path | Exit | Results | Failed |" not in index_md
+    assert "## Matching Debug" not in index_md
+    assert "## Raw Evidence" not in index_md
+    assert "## Full Result Table" not in index_md
 
 
-def test_verbose_internal_mode_rejects_unimplemented_standard_mode(
+def test_standard_mode_writes_compact_run_index_without_target_pages(
     tmp_path: Path,
 ) -> None:
     document = report_dict_to_ir(_verbose_report(), kind="multi")
+    output_root = tmp_path / "standard_bundle"
 
-    with pytest.raises(
-        ValueError,
-        match="Unsupported internal multi-target markdown mode 'standard'",
-    ):
-        MarkdownReportGenerator(document, markdown_mode="standard").generate(
-            output_file=str(tmp_path / "standard_bundle")
-        )
+    index_path = MarkdownReportGenerator(document, markdown_mode="standard").generate(
+        output_file=str(output_root)
+    )
+
+    assert index_path == str(output_root / "report.md")
+    assert (output_root / "report.md").is_file()
+    assert not (output_root / "targets").exists()

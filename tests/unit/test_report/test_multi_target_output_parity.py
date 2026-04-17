@@ -138,8 +138,9 @@ def test_multi_target_markdown_bundle_writes_standard_index_only(tmp_path):
     assert (root / "report.md").exists()
     assert not (root / "targets").exists()
     index = (root / "report.md").read_text(encoding="utf-8")
-    assert "## Targets With Issues" in index
-    assert "## OK Targets" in index
+    assert "## At a glance" in index
+    assert "## Projects with issues" in index
+    assert "<summary><strong>Passed projects (1)</strong></summary>" in index
     assert "(targets/" not in index
 
 
@@ -157,6 +158,30 @@ def test_multi_target_markdown_index_golden(tmp_path):
     assert _normalize_text(index) == _normalize_text(
         _golden("multi_markdown_index.golden")
     )
+
+
+def test_multi_target_markdown_explicit_standard_matches_default(tmp_path):
+    cfg, run_state, targets = _golden_targets()
+    default_out = generate_multi_target_report(
+        run_state,
+        targets,
+        output_format="markdown",
+        config=cfg,
+        output_path=tmp_path / "md_default",
+    )
+    explicit_out = generate_multi_target_report(
+        run_state,
+        targets,
+        output_format="markdown",
+        config=cfg,
+        output_path=tmp_path / "md_explicit",
+        markdown_mode="standard",
+    )
+
+    assert _normalize_text(
+        Path(default_out).read_text(encoding="utf-8")
+    ) == _normalize_text(Path(explicit_out).read_text(encoding="utf-8"))
+    assert not (tmp_path / "md_explicit" / "targets").exists()
 
 
 def test_multi_target_report_rejects_removed_html_format(tmp_path):

@@ -32,7 +32,7 @@ class MarkdownReportGenerator(BaseReportGenerator):
                 raise ValueError(
                     "Multi-target markdown reporting requires an output directory path."
                 )
-            if self._markdown_mode is not None:
+            if self._markdown_mode not in {None, "standard"}:
                 return render_markdown_bundle_mode(
                     document,
                     Path(output_file),
@@ -43,13 +43,16 @@ class MarkdownReportGenerator(BaseReportGenerator):
                 document,
                 Path(output_file),
                 matching_debug_context=self._matching_debug_context,
+                markdown_mode=self._markdown_mode or "standard",
             )
-        if self._markdown_mode is not None:
+        if self._markdown_mode not in {None, "standard"}:
             return render_markdown_mode(
                 document,
                 mode=self._markdown_mode,
                 matching_debug_context=self._matching_debug_context,
             )
         return render_markdown(
-            document, matching_debug_context=self._matching_debug_context
+            document,
+            matching_debug_context=self._matching_debug_context,
+            markdown_mode=self._markdown_mode or "standard",
         )

@@ -116,6 +116,12 @@ class TargetSummaryCard:
     top_rule_ids: Tuple[str, ...]
     has_matching_anomalies: bool
     has_target_page: bool
+    failed_rule_count: int
+    failed_check_count: int
+    warning_only_count: int
+    passed_check_count: int
+    main_problems: str
+    main_reason: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +136,9 @@ class RunPresentation:
     targets_issues: int
     targets_warnings_only: int
     targets_error: int
+    distinct_failing_rules: int
     rule_hotspots: Tuple[RuleHotspot, ...]
+    failing_rule_hotspots: Tuple[RuleHotspot, ...]
     target_summaries: Tuple[TargetSummaryCard, ...]
     targets_with_issues: Tuple[TargetSummaryCard, ...]
     warnings_only_targets: Tuple[TargetSummaryCard, ...]

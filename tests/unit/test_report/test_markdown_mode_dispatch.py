@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 import pythonarchtesting.report.api as api
 import pythonarchtesting.report.lazy as lazy
 
-
 # ---------------------------------------------------------------------------
 # resolve_markdown_mode helper
 # ---------------------------------------------------------------------------
@@ -162,7 +161,12 @@ def test_generate_multi_target_markdown_forwards_mode(monkeypatch, tmp_path):
     )
 
     api.generate_multi_target_report(
-        MagicMock(), [MagicMock()], "markdown", None, str(tmp_path), markdown_mode="debug"
+        MagicMock(),
+        [MagicMock()],
+        "markdown",
+        None,
+        str(tmp_path),
+        markdown_mode="debug",
     )
 
     assert render_calls[0]["markdown_mode"] == "debug"
@@ -192,7 +196,14 @@ def test_lazy_generate_single_target_forwards_markdown_mode(monkeypatch):
 def test_lazy_generate_multi_target_forwards_markdown_mode(monkeypatch):
     calls: dict[str, Any] = {}
 
-    def _fn(run_state, target_states, output_format, config, output_path=None, markdown_mode=None):
+    def _fn(
+        run_state,
+        target_states,
+        output_format,
+        config,
+        output_path=None,
+        markdown_mode=None,
+    ):
         calls["markdown_mode"] = markdown_mode
         return "ok"
 
@@ -215,7 +226,9 @@ def test_lazy_generate_validation_report_forwards_markdown_mode(monkeypatch):
     fake_module = SimpleNamespace(generate_validation_report=_fn)
     monkeypatch.setattr(lazy, "_get_report_module", lambda: fake_module)
 
-    lazy.generate_validation_report("state", "markdown", None, None, markdown_mode="verbose")
+    lazy.generate_validation_report(
+        "state", "markdown", None, None, markdown_mode="verbose"
+    )
     assert calls["markdown_mode"] == "verbose"
 
 
@@ -247,12 +260,41 @@ def test_markdown_generator_single_target_forwards_mode(monkeypatch):
     assert calls["mode"] == "verbose"
 
 
+def test_markdown_generator_single_target_explicit_standard_uses_standard_renderer(
+    monkeypatch,
+):
+    from pythonarchtesting.report.markdown_generator import MarkdownReportGenerator
+
+    calls: dict[str, Any] = {}
+
+    def fake_render_markdown(
+        document, *, matching_debug_context=None, markdown_mode="standard"
+    ):
+        calls["markdown_mode"] = markdown_mode
+        return "# result"
+
+    monkeypatch.setattr(
+        "pythonarchtesting.report.markdown_generator.render_markdown",
+        fake_render_markdown,
+    )
+
+    doc = MagicMock()
+    doc.kind = "single"
+    gen = MarkdownReportGenerator(doc, markdown_mode="standard")
+    gen._ensure_document = lambda: doc  # type: ignore[method-assign]
+    gen._generate_report()
+
+    assert calls["markdown_mode"] == "standard"
+
+
 def test_markdown_generator_multi_target_forwards_mode(monkeypatch, tmp_path):
     from pythonarchtesting.report.markdown_generator import MarkdownReportGenerator
 
     calls: dict[str, Any] = {}
 
-    def fake_render_bundle_mode(document, output_dir, *, mode, matching_debug_context=None):
+    def fake_render_bundle_mode(
+        document, output_dir, *, mode, matching_debug_context=None
+    ):
         calls["mode"] = mode
         return str(output_dir)
 
@@ -270,6 +312,37 @@ def test_markdown_generator_multi_target_forwards_mode(monkeypatch, tmp_path):
     assert calls["mode"] == "debug"
 
 
+def test_markdown_generator_multi_target_explicit_standard_uses_standard_renderer(
+    monkeypatch, tmp_path
+):
+    from pythonarchtesting.report.markdown_generator import MarkdownReportGenerator
+
+    calls: dict[str, Any] = {}
+
+    def fake_render_bundle(
+        document,
+        output_dir,
+        *,
+        matching_debug_context=None,
+        markdown_mode="standard",
+    ):
+        calls["markdown_mode"] = markdown_mode
+        return str(output_dir)
+
+    monkeypatch.setattr(
+        "pythonarchtesting.report.markdown_generator.render_markdown_bundle",
+        fake_render_bundle,
+    )
+
+    doc = MagicMock()
+    doc.kind = "multi"
+    gen = MarkdownReportGenerator(doc, markdown_mode="standard")
+    gen._ensure_document = lambda: doc  # type: ignore[method-assign]
+    gen._generate_report(output_file=str(tmp_path))
+
+    assert calls["markdown_mode"] == "standard"
+
+
 def test_single_target_debug_renderer_builds_debug_presentations(monkeypatch):
     import pythonarchtesting.report.renderers.markdown as markdown_mod
 
@@ -283,7 +356,9 @@ def test_single_target_debug_renderer_builds_debug_presentations(monkeypatch):
         calls.append(("target", mode))
         return SimpleNamespace()
 
-    monkeypatch.setattr(markdown_mod, "build_run_presentation", fake_build_run_presentation)
+    monkeypatch.setattr(
+        markdown_mod, "build_run_presentation", fake_build_run_presentation
+    )
     monkeypatch.setattr(
         markdown_mod, "build_target_presentation", fake_build_target_presentation
     )
@@ -343,11 +418,13 @@ def test_multi_target_debug_renderer_builds_debug_presentations(monkeypatch, tmp
         markdown_multi_mod, "build_target_presentation", fake_build_target_presentation
     )
     monkeypatch.setattr(
-        markdown_multi_mod, "_render_target_page_debug", lambda *args, **kwargs: "# target"
+        markdown_multi_mod,
+        "_render_target_page_debug",
+        lambda *args, **kwargs: "# target",
     )
     monkeypatch.setattr(
         markdown_multi_mod,
-        "_render_run_index_mode",
+        "_render_debug_run_index",
         lambda *args, **kwargs: "# index",
     )
 

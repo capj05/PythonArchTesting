@@ -152,9 +152,10 @@ Normative rules:
 
 - `standard` answers: did the run fail, which targets have issues, and which
   rules are recurring hotspots
-- `verbose` keeps the `standard` overview and adds target-centered detail for
-  fixing issues
-- `debug` keeps the `verbose` structure and adds diagnostic appendices
+- `verbose` keeps the same triage-first run overview as `standard`, but adds
+  linked target pages for fixing issues
+- `debug` keeps the `verbose` run overview and target pages, then adds
+  diagnostic appendices on target pages
 - `debug` is the only mode where diagnostic-heavy content is allowed by default
 
 #### Standard mode (default)
@@ -171,7 +172,9 @@ Normative rules:
 
 - Audience: developer fixing failures
 - Default: no
-- Shows: all Standard content + Issue Summary by Rule, Rule Details, Warnings, Compact Passed Summary
+- Shows: the same run-level triage sections as `standard`, plus linked
+  target pages with `Issue Summary by Rule`, `Rule Details`, `Warnings`, and
+  `Compact Passed Summary`
 - Forbidden: Matching Debug, Raw Evidence as primary sections
 - Multi-target: adds target pages at `targets/<target_id>.md`
 
@@ -179,7 +182,9 @@ Normative rules:
 
 - Audience: developer investigating unexpected results
 - Default: no
-- Shows: all Verbose content + Matching Debug, Raw Evidence, Full Result Table
+- Shows: the same run-level triage sections as `verbose`, plus target-page
+  appendices for Matching Debug, Raw Evidence, Full Result Table, and optional
+  Internal Diagnostics
 - Multi-target: same bundle shape as Verbose with debug appendices on target pages
 
 ### Markdown Output Topology
@@ -309,12 +314,17 @@ These names are canonical for user-visible Markdown sections.
 | Section | Level | Meaning |
 | --- | --- | --- |
 | `Verdict` | run, target | The pass/fail outcome that readers should interpret first. |
-| `Targets With Issues` | run | Targets whose results should drive remediation first. |
+| `At a glance` | run | Compact metrics table for multi-target `standard` triage. |
+| `Projects with issues` | run | Failing projects surfaced first in triage-first multi-target run indexes. |
+| `Common failure causes` | run | Non-OK rule hotspots ranked for triage-first multi-target run indexes. |
+| `Projects with warnings only` | run | Warning-only projects separated from failing projects in triage-first multi-target run indexes. |
+| `Passed projects` | run | Collapsed passed-project summary used by triage-first multi-target run indexes. |
+| `Run metadata` | run | Low-priority generated/framework/source metadata placed at the end of triage-first multi-target run indexes. |
 | `Warnings Only` | run, target | Targets or target-local findings with warnings but no failing outcome. |
-| `OK Targets` | run | Targets with no actionable problems. |
+| `OK Targets` | run | Targets with no actionable problems in compact single-target summaries or older contracts. |
 | `Rule Hotspots` | run, target | Recurring or dominant failing rules worth prioritizing. |
-| `Short Issue Summary` | target | Compact non-remediation summary of the failing rules shown in `standard`. |
-| `Short Per-Target Summaries` | run | Compact summaries used for scanning and navigation across targets. |
+| `Short Issue Summary` | target | Compact non-remediation summary of the failing rules shown in single-target `standard`. |
+| `Short Per-Target Summaries` | run | Compact summaries used for scanning and navigation when a multi-target run index embeds per-target triage rows. |
 | `Navigation` | run | Links or navigational hints that move readers to richer detail. |
 | `Issue Summary by Rule` | target | Grouped summary of target issues organized by rule. |
 | `Rule Details` | target | Rule-centered detail blocks used for remediation. |
@@ -369,16 +379,28 @@ These names are canonical for user-visible Markdown sections.
 
 #### Multi-target `report.md`
 
+All multi-target Markdown modes use a triage-first `report.md` overview: verdict
+banner, `At a glance`, `Projects with issues`, `Common failure causes`,
+optional `Projects with warnings only`, collapsed `Passed projects`, and a
+`Run metadata` footer. `standard` keeps that overview as the only user-facing
+page. `verbose` and `debug` retain the bundle structure with `report.md` plus
+`targets/<target>.md`.
+
 | Section | Standard | Verbose | Debug |
 | --- | --- | --- | --- |
-| Report title and generated metadata | Required | Required | Required |
+| Report title and generated metadata | Required, but metadata moves to `Run metadata` footer | Required | Required |
 | Verdict | Required | Required | Required |
-| Run summary counts | Required | Required | Required |
-| `Targets With Issues` | Required | Required | Required |
-| `Warnings Only` | Required if present | Required if present | Required if present |
-| `OK Targets` | Required | Required | Required |
-| `Rule Hotspots` | Required if data is available | Required if data is available | Required if data is available |
-| `Short Per-Target Summaries` | Required | Required | Required |
+| `At a glance` | Required | Required | Required |
+| `Projects with issues` | Required | Required | Required |
+| `Common failure causes` | Required if non-OK hotspot data is available | Required if non-OK hotspot data is available | Required if non-OK hotspot data is available |
+| `Projects with warnings only` | Required if present | Required if present | Required if present |
+| `Passed projects` | Required if any targets are `OK` | Required if any targets are `OK` | Required if any targets are `OK` |
+| `Run metadata` | Required | Required | Required |
+| `Targets With Issues` | Forbidden | Forbidden | Forbidden |
+| `Warnings Only` | Forbidden | Forbidden | Forbidden |
+| `OK Targets` | Forbidden | Forbidden | Forbidden |
+| `Rule Hotspots` | Forbidden | Forbidden | Forbidden |
+| `Short Per-Target Summaries` | Forbidden | Forbidden as a standalone section | Forbidden as a standalone section |
 | `Navigation` links to target pages | Forbidden | Required | Required |
 | Flat target table in current form | Forbidden unless redesigned to fit this contract | Forbidden unless redesigned to fit this contract | Optional |
 | `Matching Debug` | Forbidden | Forbidden | Forbidden at run-index level by default |

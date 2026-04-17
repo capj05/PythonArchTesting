@@ -34,6 +34,8 @@ from .policy import (
 
 _GROUP_STATUS_PRIORITY = {"ERROR": 0, "FAILED": 1, "WARNING": 2, "SKIPPED": 3}
 _SEVERITY_PRIORITY = {"error": 0, "warning": 1, "info": 2}
+_DISPLAY_STATUS_PRIORITY = {"ERROR": 0, "ISSUES": 1, "WARNINGS ONLY": 2, "OK": 3}
+_NON_OK_STATUSES = {"ERROR", "FAILED", "WARNING", "SKIPPED"}
 
 
 def build_run_presentation(
@@ -60,6 +62,7 @@ def build_run_presentation(
     error_targets = tuple(
         card for card in target_summaries if card.display_status == "ERROR"
     )
+    failing_rule_hotspots = build_failing_rule_hotspots(document.targets)
     return RunPresentation(
         title=(
             "Validation Report"
@@ -73,7 +76,9 @@ def build_run_presentation(
         targets_issues=len(targets_with_issues),
         targets_warnings_only=len(warnings_only_targets),
         targets_error=len(error_targets),
+        distinct_failing_rules=len(failing_rule_hotspots),
         rule_hotspots=build_rule_hotspots(document.summary.results, document.targets),
+        failing_rule_hotspots=failing_rule_hotspots,
         target_summaries=target_summaries,
         targets_with_issues=targets_with_issues,
         warnings_only_targets=warnings_only_targets,
@@ -173,6 +178,46 @@ def build_rule_hotspots(
     return tuple(hotspots)
 
 
+def build_failing_rule_hotspots(
+    targets: Sequence[TargetReport],
+) -> Tuple[RuleHotspot, ...]:
+    """Build run-level rule hotspots using only non-OK results."""
+    counts = Counter(
+        item.rule_id
+        for target in targets
+        for item in target.results
+        if item.status in _NON_OK_STATUSES and item.rule_id.strip()
+    )
+    hotspots = [
+        RuleHotspot(
+            rule_id=rule_id,
+            count=count,
+            severity_mix=_severity_mix_for_rule(
+                rule_id, targets, allowed_statuses=_NON_OK_STATUSES
+            ),
+            targets_affected=sum(
+                1
+                for target in targets
+                if any(
+                    item.rule_id == rule_id and item.status in _NON_OK_STATUSES
+                    for item in target.results
+                )
+            ),
+        )
+        for rule_id, count in counts.items()
+    ]
+    return tuple(
+        sorted(
+            hotspots,
+            key=lambda hotspot: (
+                -hotspot.count,
+                -hotspot.targets_affected,
+                hotspot.rule_id,
+            ),
+        )
+    )
+
+
 def build_compact_passed_summary(
     results: Tuple[ResultItem, ...],
 ) -> CompactPassedSummary:
@@ -234,6 +279,8 @@ def _build_target_summary_card(
         group.warning_count + group.skipped_count
         for group in presentation.warning_groups
     )
+    issue_groups = _sort_groups_for_triage(presentation.issue_groups)
+    warning_groups = _sort_groups_for_triage(presentation.warning_groups)
     return TargetSummaryCard(
         target_id=target.target_id,
         display_name=target.display_name,
@@ -250,6 +297,12 @@ def _build_target_summary_card(
             or matching_summary.unmatched > 0
         ),
         has_target_page=has_target_pages,
+        failed_rule_count=len(presentation.issue_groups),
+        failed_check_count=issue_count,
+        warning_only_count=warning_count,
+        passed_check_count=presentation.compact_passed_summary.passed_total,
+        main_problems=_build_main_problems(issue_groups),
+        main_reason=_build_main_reason(warning_groups),
     )
 
 
@@ -315,6 +368,51 @@ def _summary_message(items: Sequence[ResultItem]) -> str:
     return ranked[0].message if ranked else ""
 
 
+def _sort_groups_for_triage(
+    groups: Sequence[RuleIssueGroup],
+) -> Tuple[RuleIssueGroup, ...]:
+    return tuple(
+        sorted(
+            groups,
+            key=lambda group: (
+                _DISPLAY_STATUS_PRIORITY.get(group.display_status, 9),
+                _SEVERITY_PRIORITY.get(group.severity.lower(), 9),
+                group.rule_id,
+            ),
+        )
+    )
+
+
+def _build_main_problems(groups: Sequence[RuleIssueGroup]) -> str:
+    summaries = [
+        _truncate_summary(group.summary_message)
+        for group in groups
+        if group.summary_message.strip()
+    ]
+    if summaries:
+        return ", ".join(summaries[:2])
+    rule_ids = [group.rule_id for group in groups if group.rule_id.strip()]
+    return ", ".join(rule_ids[:2])
+
+
+def _build_main_reason(groups: Sequence[RuleIssueGroup]) -> str:
+    for group in groups:
+        summary = group.summary_message.strip()
+        if summary:
+            return _truncate_summary(summary)
+    for group in groups:
+        if group.rule_id.strip():
+            return group.rule_id
+    return ""
+
+
+def _truncate_summary(value: str, *, max_length: int = 48) -> str:
+    text = " ".join(value.split())
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - 3].rstrip() + "..."
+
+
 def _format_entity(entity: EntityRef, *, fallback: str) -> str:
     parts = [part for part in (entity.module, entity.qualname) if part]
     if parts:
@@ -349,12 +447,17 @@ def _format_file_line(path: str, line: int | None) -> str:
 
 
 def _severity_mix_for_rule(
-    rule_id: str, targets: Sequence[TargetReport]
+    rule_id: str,
+    targets: Sequence[TargetReport],
+    *,
+    allowed_statuses: set[str] | None = None,
 ) -> Dict[str, int]:
     counts: Dict[str, int] = {}
     for target in targets:
         for item in target.results:
             if item.rule_id != rule_id:
+                continue
+            if allowed_statuses is not None and item.status not in allowed_statuses:
                 continue
             counts[item.severity] = counts.get(item.severity, 0) + 1
     return dict(sorted(counts.items(), key=lambda item: item[0]))

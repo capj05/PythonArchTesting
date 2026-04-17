@@ -148,8 +148,22 @@ python-arch-test --source path/to/reference --targets-dir path/to/assignments --
 
 The bundle contains:
 
-- `report.md`: run-level summary and links to targets
+- `report.md`: the default `standard` multi-target report
+
+Use `verbose` or `debug` when you want per-target pages:
+
+```bash
+python-arch-test --source path/to/reference --targets-dir path/to/assignments --format markdown --markdown-mode verbose --output reports/project_markdown_verbose
+```
+
+Those modes write:
+
+- `report.md`: triage-first run-level index with linked target rows
 - `targets/<target_id>.md`: one page per target
+
+`verbose` keeps the linked run index and makes each target page remediation-first.
+`debug` keeps the same linked run index and target pages, then appends diagnostic
+sections such as matching debug and raw evidence on the target pages only.
 
 ## 6. Use `--validation-scope` Only When You Mean It
 

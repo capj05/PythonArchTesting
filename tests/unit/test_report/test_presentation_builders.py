@@ -4,6 +4,7 @@ from pythonarchtesting.report.ir.models import ResultsSummary
 from pythonarchtesting.report.ir.normalize import report_dict_to_ir
 from pythonarchtesting.report.presentation.builders import (
     build_compact_passed_summary,
+    build_failing_rule_hotspots,
     build_rule_hotspots,
     build_run_presentation,
     build_target_presentation,
@@ -407,11 +408,34 @@ def test_build_run_presentation_from_multi_ir_groups_targets() -> None:
     assert [card.target_id for card in presentation.targets_with_issues] == ["alpha"]
     assert [card.target_id for card in presentation.warnings_only_targets] == ["beta"]
     assert [card.target_id for card in presentation.ok_targets] == ["gamma"]
+    assert presentation.distinct_failing_rules == 2
+    assert [hotspot.rule_id for hotspot in presentation.failing_rule_hotspots] == [
+        "arch/rule-a",
+        "arch/rule-b",
+    ]
     assert [hotspot.rule_id for hotspot in presentation.rule_hotspots] == [
         "arch/rule-a",
         "arch/rule-b",
     ]
     assert presentation.rule_hotspots[0].targets_affected == 1
+    alpha = presentation.targets_with_issues[0]
+    beta = presentation.warnings_only_targets[0]
+    gamma = presentation.ok_targets[0]
+    assert alpha.failed_rule_count == 1
+    assert alpha.failed_check_count == 1
+    assert alpha.main_problems == "Alpha fail"
+    assert beta.warning_only_count == 1
+    assert beta.main_reason == "Beta warn"
+    assert gamma.passed_check_count == 1
+
+
+def test_build_failing_rule_hotspots_excludes_ok_only_rows() -> None:
+    document = report_dict_to_ir(_multi_report(), kind="multi")
+
+    hotspots = build_failing_rule_hotspots(document.targets)
+
+    assert [hotspot.rule_id for hotspot in hotspots] == ["arch/rule-a", "arch/rule-b"]
+    assert all(hotspot.rule_id != "arch/rule-c" for hotspot in hotspots)
 
 
 def test_build_rule_hotspots_falls_back_when_summary_is_empty() -> None:
