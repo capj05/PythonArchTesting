@@ -94,19 +94,25 @@ def test_build_parser_validate_declarations_flag():
 
 def test_build_parser_markdown_mode_verbose():
     parser = build_parser()
-    args = parser.parse_args(["--target", "a", "--format", "markdown", "--markdown-mode", "verbose"])
+    args = parser.parse_args(
+        ["--target", "a", "--format", "markdown", "--markdown-mode", "verbose"]
+    )
     assert args.markdown_mode == "verbose"
 
 
 def test_build_parser_markdown_mode_debug():
     parser = build_parser()
-    args = parser.parse_args(["--target", "a", "--format", "markdown", "--markdown-mode", "debug"])
+    args = parser.parse_args(
+        ["--target", "a", "--format", "markdown", "--markdown-mode", "debug"]
+    )
     assert args.markdown_mode == "debug"
 
 
 def test_build_parser_markdown_mode_standard():
     parser = build_parser()
-    args = parser.parse_args(["--target", "a", "--format", "markdown", "--markdown-mode", "standard"])
+    args = parser.parse_args(
+        ["--target", "a", "--format", "markdown", "--markdown-mode", "standard"]
+    )
     assert args.markdown_mode == "standard"
 
 
