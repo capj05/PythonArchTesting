@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .models import (
@@ -213,20 +212,9 @@ def _results_summary(payload: Optional[Dict[str, Any]]) -> ResultsSummary:
     )
 
 
-def _single_target_id(
-    run_payload: Dict[str, Any], results: List[Dict[str, Any]]
-) -> str:
-    if results and results[0].get("project_id"):
-        return str(results[0].get("project_id"))
-    target_path = run_payload.get("target_path")
-    if target_path:
-        return Path(str(target_path)).name or "single"
-    return "single"
-
-
 def report_dict_to_ir(report: Dict[str, Any], kind: str) -> ReportDocument:
     """Convert a schema-v2 legacy dict into a typed report document."""
-    if kind not in {"single", "multi"}:
+    if kind != "multi":
         raise ValueError(f"Unsupported report kind: {kind}")
 
     run_payload = dict(report.get("run") or {})
@@ -260,51 +248,6 @@ def report_dict_to_ir(report: Dict[str, Any], kind: str) -> ReportDocument:
         tool_version=framework_version,
         mode=str(run_payload.get("mode") or "static-only"),
     )
-
-    if kind == "single":
-        result_payload = [dict(v) for v in (report.get("results") or [])]
-        results_ir = sort_results([_result_item(item) for item in result_payload])
-        matching_payload = dict(report.get("matching") or {})
-        matches = tuple(
-            sort_matches(dict(v) for v in (matching_payload.get("matches") or []))
-        )
-        summary_payload = dict(report.get("summary") or {})
-        if not summary_payload and result_payload:
-            summary_payload = build_results_summary(result_payload)
-
-        target = TargetReport(
-            target_id=_single_target_id(run_payload, result_payload),
-            display_name=_single_target_id(run_payload, result_payload),
-            source_root=run_meta.source_path,
-            target_path=str(run_payload.get("target_path") or ""),
-            tags=tuple(),
-            mode=str(run_payload.get("mode") or "static-only"),
-            matching=MatchingSection(
-                matches=matches,
-                matching_config=dict(matching_payload.get("matching_config") or {}),
-                summary=_matching_summary(matches),
-            ),
-            results=tuple(results_ir),
-            summary=_results_summary(summary_payload),
-            artifacts=tuple(),
-            exit_code=int(report.get("exit_code", 0)),
-        )
-        aggregate = AggregateSummary(
-            targets_total=1,
-            targets_failed=1 if int(report.get("exit_code", 0)) else 0,
-            targets_passed=0 if int(report.get("exit_code", 0)) else 1,
-            results=_results_summary(summary_payload),
-        )
-        return ReportDocument(
-            schema_version=schema_version,
-            framework_version=framework_version,
-            generated_at=generated_at,
-            run=run_meta,
-            targets=(target,),
-            summary=aggregate,
-            exit_code=int(report.get("exit_code", 0)),
-            kind="single",
-        )
 
     target_payloads = [dict(payload or {}) for payload in (report.get("targets") or [])]
     normalized_ids = normalize_target_ids(target_payloads)

@@ -143,4 +143,4 @@ class ReportDocument:
     targets: Tuple[TargetReport, ...]
     summary: AggregateSummary
     exit_code: int
-    kind: Literal["single", "multi"]
+    kind: Literal["multi"]

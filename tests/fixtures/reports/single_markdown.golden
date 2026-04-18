@@ -4,22 +4,19 @@
 **Framework:** test
 **Exit Code:** 1
 
-## Verdict
-
-- Status: `ISSUES`
-- Exit code: 1
-- Target path: 
-
 ## Summary
 
-- Total results: 1
-- Status counts: {'FAILED': 1}
-- Severity counts: {'error': 1}
+- Total Results: 1
+- Status Counts: {'FAILED': 1}
+- Severity Counts: {'error': 1}
+- Category Counts: {'arch': 1}
 
-## Short Issue Summary
+## Matching Candidates (Debug)
 
-- `arch/forbidden_dependency`: status `ISSUES`; failed 1; Bad <dep> \| use safe
+No matching data available.
 
-## Rule Hotspots
+## Results
 
-- arch/forbidden_dependency: 1 result(s) across 1 target(s); severities error=1
+| Project | Result ID | Category | Severity | Status | Rule | Source | Target | Location | Message |
+|---|---|---|---|---|---|---|---|---|---|
+| proj-a | abc123 | arch | error | FAILED | arch/forbidden_dependency | pkg.mod:Cls.fn | pkg.t:T.fn | a.py:7 | Bad <dep> \| use safe |

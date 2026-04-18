@@ -9,7 +9,6 @@ from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.config.projects import resolve_projects_config
 from pythonarchtesting.report.api import build_multi_target_report
 from pythonarchtesting.runner_multi import run_multi
-from pythonarchtesting.state import ProjectState
 
 
 def _smoke_paths() -> tuple[Path, Path, Path]:
@@ -72,30 +71,6 @@ def test_run_multi_target_isolation_and_no_arch_output(monkeypatch) -> None:
         for target in report["targets"]
         for item in target.get("results") or []
     )
-
-
-def test_run_multi_does_not_use_project_state_singleton(monkeypatch) -> None:
-    monkeypatch.chdir(Path(__file__).resolve().parents[2])
-    cfg = _fresh_config()
-    source, target_ok, target_bad = _smoke_paths()
-    projects = resolve_projects_config(
-        cfg,
-        source_path=str(source),
-        targets=[str(target_ok), str(target_bad)],
-    )
-
-    def boom_init(self, *args, **kwargs):
-        raise AssertionError("ProjectState singleton constructor should not be used")
-
-    monkeypatch.setattr(ProjectState, "__init__", boom_init)
-    run_state, target_states = run_multi(
-        config=cfg,
-        projects=projects,
-        load_config_first=False,
-    )
-
-    assert run_state.source_entities is not None
-    assert len(target_states) == 2
 
 
 def test_runner_multi_alias_contract_removed() -> None:

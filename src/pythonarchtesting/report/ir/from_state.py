@@ -18,12 +18,10 @@ from pythonarchtesting.config.accessors import (
 )
 from pythonarchtesting.exceptions import ReportGenerationError
 from pythonarchtesting.matching import MatchingConfig
-from pythonarchtesting.state import ProjectState
 from pythonarchtesting.state_multi import RunState, TargetRunState
 
 from ..policy import (
     compute_aggregate_exit_code,
-    compute_exit_code,
     compute_target_exit_code,
 )
 from ..schema_v2 import validate_report_schema_v2
@@ -626,74 +624,6 @@ def _should_suppress_target_display(match_status: Any) -> bool:
     return status in {"low_confidence", "unmatched"}
 
 
-def _build_run_section(
-    state_obj: ProjectState, config: Any, *, now_utc_z_fn: Callable[[], str]
-) -> Dict[str, Any]:
-    target_path = state_obj.target_project_path
-    return {
-        "generated_at": now_utc_z_fn(),
-        "target_path": str(target_path) if target_path else None,
-        "reference_modules": sorted(list(state_obj.reference_modules)),
-        "config_snapshot": _maybe_config_snapshot(config),
-        "mode": STATIC_ANALYSIS_MODE,
-    }
-
-
-def _build_matching_section(state_obj: ProjectState, config: Any) -> Dict[str, Any]:
-    registry = getattr(state_obj, "match_registry", None) or {}
-    if registry:
-        match_results = [registry[key] for key in sorted(registry.keys())]
-    else:
-        match_results = sorted(
-            list(getattr(state_obj, "match_results", []) or []),
-            key=lambda m: getattr(m, "source_id", ""),
-        )
-
-    matches: List[Dict[str, Any]] = []
-    for match in match_results:
-        status = (
-            match.status.value if hasattr(match.status, "value") else str(match.status)
-        )
-        candidates = [_candidate_to_report(c) for c in match.candidates]
-        candidates = _sort_candidates(candidates)
-        matches.append(
-            {
-                "source_entity_id": match.source_id,
-                "target_entity_id": match.target_id,
-                "status": status,
-                "confidence": round(float(match.confidence), 6),
-                "candidates": candidates,
-                "reasons": list(match.reasons),
-            }
-        )
-
-    matching_cfg = MatchingConfig.from_config(config)
-    return {
-        "matches": _sort_matches(matches),
-        "matching_config": {
-            "threshold": matching_cfg.threshold,
-            "delta": matching_cfg.delta,
-            "min_candidate": matching_cfg.min_candidate,
-            "top_n": matching_cfg.top_n,
-            "max_fuzzy_candidates": matching_cfg.max_fuzzy_candidates,
-            "max_stage2_candidates": matching_cfg.max_stage2_candidates,
-            "max_stage3_candidates": matching_cfg.max_stage3_candidates,
-        },
-    }
-
-
-def _rule_meta_lookup(state_obj: ProjectState) -> Dict[str, Dict[str, Any]]:
-    meta: Dict[str, Dict[str, Any]] = {}
-    for rule in getattr(state_obj, "rules", []) or []:
-        meta[rule.rule_id] = {
-            "severity": rule.severity,
-            "fix_hints": list(rule.fix_hints),
-            "rule_type": rule.rule_type,
-            "activation_source": getattr(rule, "activation_source", None),
-        }
-    return meta
-
-
 def _rule_meta_lookup_from_lists(rules: List[Any]) -> Dict[str, Dict[str, Any]]:
     meta: Dict[str, Dict[str, Any]] = {}
     for rule in rules or []:
@@ -865,23 +795,6 @@ def _build_results(
     return _sort_results(results)
 
 
-def _build_results_section(
-    state_obj: ProjectState, config: Any
-) -> List[Dict[str, Any]]:
-    rule_meta = _rule_meta_lookup(state_obj)
-    rule_results = getattr(state_obj, "rule_results", []) or []
-    return _build_results(
-        rule_results=rule_results,
-        validation_results=state_obj.validation_results,
-        rule_meta=rule_meta,
-        source_by_id=state_obj.source_by_id,
-        target_by_id=state_obj.target_by_id,
-        project_id=_derive_project_id(
-            None, str(getattr(state_obj, "target_project_path", "") or "")
-        ),
-    )
-
-
 def _build_matching_section_for_target(
     target_state: TargetRunState,
     config: Any,
@@ -993,138 +906,6 @@ def _format_datetime_z(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _build_single_report_document(
-    state_obj: ProjectState,
-    config: Optional[Any],
-    *,
-    now_utc_z_fn: Callable[[], str],
-    validate_report_schema_v2_fn: Callable[[Any], List[str]],
-) -> ReportDocument:
-    cfg = config or getattr(state_obj, "config", None) or load_config()
-    generated_at = now_utc_z_fn()
-    config_snapshot = _maybe_config_snapshot(cfg)
-    framework_version = _framework_version()
-    results_payload = _build_results_section(state_obj, cfg)
-    summary_payload = _build_results_summary(results_payload)
-    results = tuple(sort_results([_result_item(item) for item in results_payload]))
-    matching_payload = _build_matching_section(state_obj, cfg)
-    matching = _matching_section(
-        matching_payload.get("matches") or [],
-        matching_payload.get("matching_config") or {},
-    )
-    exit_code = compute_exit_code(results_payload, cfg)
-    run = RunMeta(
-        generated_at=generated_at,
-        target_path=(
-            str(state_obj.target_project_path)
-            if getattr(state_obj, "target_project_path", None)
-            else None
-        ),
-        source_path=None,
-        reference_modules=tuple(sorted(str(v) for v in state_obj.reference_modules)),
-        config_snapshot=config_snapshot,
-        config_fingerprint=_config_fingerprint(config_snapshot),
-        tool_version=framework_version,
-        mode=STATIC_ANALYSIS_MODE,
-    )
-    target_id = _derive_project_id(None, run.target_path)
-    target = TargetReport(
-        target_id=target_id,
-        display_name=target_id,
-        source_root=run.source_path,
-        target_path=str(run.target_path or ""),
-        tags=tuple(),
-        mode=run.mode,
-        matching=matching,
-        results=results,
-        summary=_results_summary_ir(summary_payload),
-        artifacts=tuple(),
-        exit_code=exit_code,
-    )
-    document = ReportDocument(
-        schema_version="2",
-        framework_version=framework_version,
-        generated_at=generated_at,
-        run=run,
-        targets=(target,),
-        summary=AggregateSummary(
-            targets_total=1,
-            targets_failed=1 if exit_code else 0,
-            targets_passed=0 if exit_code else 1,
-            results=_results_summary_ir(summary_payload),
-        ),
-        exit_code=exit_code,
-        kind="single",
-    )
-    _validate_report_document(document, cfg, validate_report_schema_v2_fn)
-    return document
-
-
-def _build_single_report_document_from_run_target(
-    run_state: RunState,
-    target_state: TargetRunState,
-    config: Optional[Any],
-    *,
-    now_utc_z_fn: Callable[[], str],
-    validate_report_schema_v2_fn: Callable[[Any], List[str]],
-) -> ReportDocument:
-    cfg = config or run_state.config or load_config()
-    generated_at = now_utc_z_fn()
-    config_snapshot = _maybe_config_snapshot(cfg)
-    framework_version = run_state.framework_version
-    results_payload = _build_results_section_for_target(run_state, target_state, cfg)
-    summary_payload = _build_results_summary(results_payload)
-    results = tuple(sort_results([_result_item(item) for item in results_payload]))
-    matching_payload = _build_matching_section_for_target(target_state, cfg)
-    matching = _matching_section(
-        matching_payload.get("matches") or [],
-        matching_payload.get("matching_config") or {},
-    )
-    exit_code = compute_exit_code(results_payload, cfg)
-    target_id = str(target_state.target_id)
-    target_path = str(target_state.target_path)
-    run = RunMeta(
-        generated_at=generated_at,
-        target_path=target_path,
-        source_path=None,
-        reference_modules=tuple(sorted(str(v) for v in run_state.reference_modules)),
-        config_snapshot=config_snapshot,
-        config_fingerprint=_config_fingerprint(config_snapshot),
-        tool_version=framework_version,
-        mode=STATIC_ANALYSIS_MODE,
-    )
-    target = TargetReport(
-        target_id=target_id,
-        display_name=target_id,
-        source_root=run.source_path,
-        target_path=target_path,
-        tags=tuple(),
-        mode=run.mode,
-        matching=matching,
-        results=results,
-        summary=_results_summary_ir(summary_payload),
-        artifacts=tuple(),
-        exit_code=exit_code,
-    )
-    document = ReportDocument(
-        schema_version="2",
-        framework_version=framework_version,
-        generated_at=generated_at,
-        run=run,
-        targets=(target,),
-        summary=AggregateSummary(
-            targets_total=1,
-            targets_failed=1 if exit_code else 0,
-            targets_passed=0 if exit_code else 1,
-            results=_results_summary_ir(summary_payload),
-        ),
-        exit_code=exit_code,
-        kind="single",
-    )
-    _validate_report_document(document, cfg, validate_report_schema_v2_fn)
-    return document
-
-
 def _build_multi_target_report_document(
     run_state: RunState,
     target_states: List[TargetRunState],
@@ -1213,44 +994,6 @@ def _build_multi_target_report_document(
     )
     _validate_report_document(document, cfg, validate_report_schema_v2_fn)
     return document
-
-
-def build_report_document(
-    state_obj: ProjectState,
-    config: Optional[Any] = None,
-    *,
-    now_utc_z_fn: Callable[[], str] = now_utc_z,
-    validate_report_schema_v2_fn: Callable[[Any], List[str]] = (
-        validate_report_schema_v2
-    ),
-) -> ReportDocument:
-    """Build typed IR document for a single-target run."""
-    return _build_single_report_document(
-        state_obj,
-        config,
-        now_utc_z_fn=now_utc_z_fn,
-        validate_report_schema_v2_fn=validate_report_schema_v2_fn,
-    )
-
-
-def build_single_target_report_document_from_run_target(
-    run_state: RunState,
-    target_state: TargetRunState,
-    config: Optional[Any] = None,
-    *,
-    now_utc_z_fn: Callable[[], str] = now_utc_z,
-    validate_report_schema_v2_fn: Callable[[Any], List[str]] = (
-        validate_report_schema_v2
-    ),
-) -> ReportDocument:
-    """Build typed IR document for a unified single-target run."""
-    return _build_single_report_document_from_run_target(
-        run_state,
-        target_state,
-        config,
-        now_utc_z_fn=now_utc_z_fn,
-        validate_report_schema_v2_fn=validate_report_schema_v2_fn,
-    )
 
 
 def build_multi_target_report_document(

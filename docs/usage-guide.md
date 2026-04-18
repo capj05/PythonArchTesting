@@ -103,19 +103,13 @@ The JSON shape starts with:
 }
 ```
 
-## 3. Run A Single Target
+## 3. Run One Or More Targets
+
+Every run uses the same execution path. A single `--target` produces the same
+JSON schema as a batch run — `targets` array with one entry and a `summary`.
 
 ```bash
 python-arch-test --source path/to/reference --target path/to/assignments/target1 --format json
-```
-
-Use a single-target run when you are investigating one project in detail or
-iterating on a specific submission.
-
-Single-target Markdown can go to stdout or a file:
-
-```bash
-python-arch-test --source path/to/reference --target path/to/assignments/target1 --format markdown --output reports/target1.md
 ```
 
 ## 4. Run Multiple Targets
@@ -140,7 +134,8 @@ Target discovery controls:
 
 ## 5. Generate A Markdown Bundle
 
-Multi-target Markdown requires an output directory:
+Markdown output always requires `--output` pointing to a directory, whether you
+are running one target or many:
 
 ```bash
 python-arch-test --source path/to/reference --targets-dir path/to/assignments --format markdown --output reports/project_markdown
@@ -148,22 +143,8 @@ python-arch-test --source path/to/reference --targets-dir path/to/assignments --
 
 The bundle contains:
 
-- `report.md`: the default `standard` multi-target report
-
-Use `verbose` or `debug` when you want per-target pages:
-
-```bash
-python-arch-test --source path/to/reference --targets-dir path/to/assignments --format markdown --markdown-mode verbose --output reports/project_markdown_verbose
-```
-
-Those modes write:
-
-- `report.md`: triage-first run-level index with linked target rows
+- `report.md`: run-level summary and links to targets
 - `targets/<target_id>.md`: one page per target
-
-`verbose` keeps the linked run index and makes each target page remediation-first.
-`debug` keeps the same linked run index and target pages, then appends diagnostic
-sections such as matching debug and raw evidence on the target pages only.
 
 ## 6. Use `--validation-scope` Only When You Mean It
 

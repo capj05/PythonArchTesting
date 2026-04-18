@@ -9,8 +9,6 @@ from uuid import uuid4
 
 import pytest
 
-from pythonarchtesting.state import ProjectState
-
 
 @pytest.fixture
 def temp_project_dir() -> Generator[Path, None, None]:
@@ -85,11 +83,3 @@ class DataModel:
     files.append(models_file)
 
     return files
-
-
-@pytest.fixture
-def clean_project_state() -> ProjectState:
-    """Provide a clean project state instance."""
-    state = ProjectState("/test", [])
-    state.reset()
-    return state

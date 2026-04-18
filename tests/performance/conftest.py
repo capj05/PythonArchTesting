@@ -8,8 +8,6 @@ from typing import Any, Dict, List
 import psutil
 import pytest
 
-from pythonarchtesting.state import ProjectState
-
 
 @pytest.fixture
 def performance_test_data() -> Dict[str, Any]:
@@ -84,11 +82,3 @@ def benchmark_data() -> List[Dict[str, Any]]:
         }
         for i in range(1000)
     ]
-
-
-@pytest.fixture
-def clean_project_state() -> ProjectState:
-    """Provide a clean project state instance."""
-    state = ProjectState("/test", [])
-    state.reset()
-    return state

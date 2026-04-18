@@ -88,34 +88,6 @@ def _fallback_identity(entity_id: Optional[str], *, kind: str) -> MatchingDebugI
     )
 
 
-def build_single_matching_debug_context(state_obj: Any) -> Dict[str, Any]:
-    source_by_id = getattr(state_obj, "source_by_id", {}) or {}
-    target_by_id = getattr(state_obj, "target_by_id", {}) or {}
-    return {
-        "kind": "single",
-        "targets": {
-            "__single__": {
-                "sources": {
-                    str(key): value
-                    for key, value in (
-                        (str(k), _identity_from_entity(v))
-                        for k, v in source_by_id.items()
-                    )
-                    if value is not None
-                },
-                "targets": {
-                    str(key): value
-                    for key, value in (
-                        (str(k), _identity_from_entity(v))
-                        for k, v in target_by_id.items()
-                    )
-                    if value is not None
-                },
-            }
-        },
-    }
-
-
 def build_multi_matching_debug_context(
     run_state: Any, target_states: Sequence[Any]
 ) -> Dict[str, Any]:
@@ -154,10 +126,6 @@ def get_target_debug_context(
     targets = matching_debug_context.get("targets")
     if not isinstance(targets, dict):
         return None
-    if matching_debug_context.get("kind") == "single":
-        ctx = targets.get("__single__")
-        return ctx if isinstance(ctx, dict) else None
-
     display_name = str(
         target_report.get("display_name") or target_report.get("target_id") or ""
     )

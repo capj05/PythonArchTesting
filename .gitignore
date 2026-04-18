@@ -27,5 +27,5 @@ check_standard.ps1
 log.txt
 pytest_full.log
 coverage.xml
+.claude/
 CLAUDE.md
-.claude/settings.local.json

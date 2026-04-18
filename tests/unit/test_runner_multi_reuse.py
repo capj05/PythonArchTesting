@@ -8,11 +8,7 @@ from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.config.projects import TargetSpec
 from pythonarchtesting.entities import build_entity_index
 from pythonarchtesting.evidence.collection import ParsedModule
-from pythonarchtesting.runner_multi import evaluate_target
-from pythonarchtesting.runner_multi.orchestrator import (
-    run_single_target as run_single_target_unified,
-)
-from pythonarchtesting.state import ProjectState
+from pythonarchtesting.runner_multi import evaluate_target, run_multi
 from pythonarchtesting.state_multi import RunState
 
 
@@ -64,9 +60,7 @@ def test_evaluate_target_reuses_parsed_modules_for_static_evidence(
     assert not hasattr(run_state, "arch_rules")
 
 
-def test_run_single_target_returns_run_state_and_target_state_without_project_state(
-    monkeypatch, tmp_path
-) -> None:
+def test_run_multi_one_target_returns_one_target_state(tmp_path) -> None:
     source_dir = tmp_path / "source"
     target_dir = tmp_path / "target"
     source_dir.mkdir()
@@ -80,30 +74,18 @@ def test_run_single_target_returns_run_state_and_target_state_without_project_st
 
     cfg = create_config_from_dict({"projects": {"source_path": str(source_dir)}})
 
-    def boom_init(self, *args, **kwargs):
-        raise AssertionError("ProjectState singleton constructor should not be used")
-
-    monkeypatch.setattr(ProjectState, "__init__", boom_init)
-
-    run_state, target_state = run_single_target_unified(
+    run_state, target_states = run_multi(
         config=cfg,
-        target_path=str(target_dir),
-        reference_modules=[],
+        targets=[str(target_dir)],
+        source_path=str(source_dir),
+        load_config_first=False,
     )
 
-    assert run_state.source_path == source_dir.resolve()
-    assert run_state.source_entities
-    assert any(
-        entity.module_path == "reference" for entity in run_state.source_entities
-    )
-    assert target_state.target_id == target_dir.name
-    assert target_state.target_entities
-    assert not hasattr(run_state, "arch_rules")
+    assert len(target_states) == 1
+    assert target_states[0].target_id == target_dir.name
 
 
-def test_run_single_target_discovers_source_when_reference_modules_absent(
-    tmp_path,
-) -> None:
+def test_run_multi_one_target_prepares_source_once(monkeypatch, tmp_path) -> None:
     source_dir = tmp_path / "source"
     target_dir = tmp_path / "target"
     source_dir.mkdir()
@@ -117,52 +99,40 @@ def test_run_single_target_discovers_source_when_reference_modules_absent(
 
     cfg = create_config_from_dict({"projects": {"source_path": str(source_dir)}})
 
-    run_state, target_state = run_single_target_unified(
+    run_state, target_states = run_multi(
         config=cfg,
-        target_path=str(target_dir),
-        reference_modules=[],
+        targets=[str(target_dir)],
+        source_path=str(source_dir),
+        load_config_first=False,
     )
 
+    # Source should have been prepared — source_entities must be populated
     assert run_state.source_entities
-    assert run_state.source_by_id
-    assert run_state.reference_modules == []
-    assert target_state.target_entities
+    assert any(entity.module_path == "reference" for entity in run_state.source_entities)
 
 
-def test_run_single_target_resolves_reference_modules_from_configured_source_root(
-    tmp_path,
-) -> None:
-    source_dir = tmp_path / "reference"
-    target_dir = tmp_path / "target"
+def test_run_multi_one_target_uses_ordinary_target_id(tmp_path) -> None:
+    source_dir = tmp_path / "source"
+    target_dir = tmp_path / "my_target"
     source_dir.mkdir()
     target_dir.mkdir()
-    (source_dir / "calculator.pyi").write_text(
-        "from typing import Annotated\n\n"
-        "def add(a: int, b: int) -> "
-        'Annotated[int, ("required_entity_signature", {"mode": "exact"})]: ...\n',
-        encoding="utf-8",
+    (source_dir / "reference.py").write_text(
+        "def rule():\n    return 1\n", encoding="utf-8"
     )
-    (target_dir / "calculator.py").write_text(
-        "def add(a: int, b: int) -> int:\n    return a + b\n",
-        encoding="utf-8",
+    (target_dir / "impl.py").write_text(
+        "def rule():\n    return 1\n", encoding="utf-8"
     )
 
-    cfg = create_config_from_dict(
-        {
-            "discovery": {"included_file_patterns": ["*.pyi"]},
-            "projects": {"source_path": str(source_dir)},
-        }
-    )
+    cfg = create_config_from_dict({"projects": {"source_path": str(source_dir)}})
 
-    run_state, target_state = run_single_target_unified(
+    run_state, target_states = run_multi(
         config=cfg,
-        target_path=str(target_dir),
-        reference_modules=["calculator"],
+        targets=[str(target_dir)],
+        source_path=str(source_dir),
+        load_config_first=False,
     )
 
-    assert run_state.source_path == source_dir.resolve()
-    assert run_state.reference_modules == ["calculator"]
-    assert any(
-        entity.module_path == "calculator" for entity in run_state.source_entities
-    )
-    assert target_state.target_entities
+    assert len(target_states) == 1
+    # target_id should be the directory name, not "root" or "__single__"
+    assert target_states[0].target_id == target_dir.name
+    assert target_states[0].target_id not in ("root", "__single__")

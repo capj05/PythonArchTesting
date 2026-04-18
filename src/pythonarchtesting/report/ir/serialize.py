@@ -101,28 +101,6 @@ def _results_summary_to_dict(summary: Any) -> Dict[str, Any]:
     }
 
 
-def _single_target_to_report(
-    target: TargetReport, doc: ReportDocument
-) -> Dict[str, Any]:
-    run: Dict[str, Any] = {
-        "generated_at": doc.run.generated_at,
-        "target_path": doc.run.target_path,
-        "reference_modules": list(doc.run.reference_modules),
-        "config_snapshot": doc.run.config_snapshot,
-        "mode": doc.run.mode,
-    }
-    return {
-        "schema_version": doc.schema_version,
-        "framework_version": doc.framework_version,
-        "generated_at": doc.generated_at,
-        "run": run,
-        "matching": _matching_to_dict(target.matching),
-        "results": [_result_to_dict(r) for r in target.results],
-        "summary": _results_summary_to_dict(target.summary),
-        "exit_code": doc.exit_code,
-    }
-
-
 def _target_to_dict(target: TargetReport) -> Dict[str, Any]:
     return {
         "target_id": target.target_id,
@@ -141,10 +119,6 @@ def _target_to_dict(target: TargetReport) -> Dict[str, Any]:
 
 def to_legacy_schema_v2(doc: ReportDocument) -> Dict[str, Any]:
     """Serialize typed IR document to legacy schema-v2 dict layout."""
-    if doc.kind == "single":
-        target = doc.targets[0]
-        return _single_target_to_report(target, doc)
-
     run: Dict[str, Any] = {
         "generated_at": doc.run.generated_at,
         "source_path": doc.run.source_path,

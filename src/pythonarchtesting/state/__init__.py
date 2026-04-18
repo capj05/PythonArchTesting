@@ -6,7 +6,6 @@ discovery, and memory management.
 
 from pythonarchtesting.constants import ValidationConstants
 
-from ._project_state import ProjectState
 from .discovery import ModuleDiscovery
 from .memory_manager import MemoryManager
 from .validation import ValidationResult, rule_result_to_validation
@@ -20,5 +19,4 @@ __all__ = [
     "rule_result_to_validation",
     "MemoryManager",
     "ModuleDiscovery",
-    "ProjectState",
 ]

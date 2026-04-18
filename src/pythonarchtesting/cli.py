@@ -14,9 +14,7 @@ from typing import Any, List, Optional
 from pythonarchtesting.config import Config, load_config, resolve_projects_config
 from pythonarchtesting.infrastructure.logging import configure_logging
 from pythonarchtesting.report.lazy import (
-    build_single_target_report_from_run_target,
     generate_multi_target_report,
-    generate_single_target_report_from_run_target,
     get_multi_exit_code,
 )
 from pythonarchtesting.validation_scope import VALIDATION_SCOPE_ALL, VALIDATION_SCOPES
@@ -26,20 +24,6 @@ def run_multi(*args: Any, **kwargs: Any) -> Any:
     from pythonarchtesting.runner_multi import run_multi as _run_multi
 
     return _run_multi(*args, **kwargs)
-
-
-def run_single_target_unified(*args: Any, **kwargs: Any) -> Any:
-    from pythonarchtesting.runner_multi.orchestrator import (
-        run_single_target as _run_single_target_unified,
-    )
-
-    return _run_single_target_unified(*args, **kwargs)
-
-
-def ProjectState(*args: Any, **kwargs: Any) -> Any:
-    from pythonarchtesting.state import ProjectState as _project_state
-
-    return _project_state(*args, **kwargs)
 
 
 def _parse_csv(value: Optional[str]) -> List[str]:
@@ -90,11 +74,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report output format",
     )
     parser.add_argument(
-        "--markdown-mode",
-        choices=["standard", "verbose", "debug"],
-        help="Markdown report mode (applies only when --format markdown)",
-    )
-    parser.add_argument(
         "--output",
         help="Output file path (prints to stdout if omitted)",
     )
@@ -110,45 +89,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Limit validation to a specific scope",
     )
     return parser
-
-
-def _run_single_target(
-    config: Config,
-    target_path: str,
-    reference_modules: Optional[List[str]],
-    output_file: Optional[str],
-    output_format: Optional[str],
-    validation_scope: str = VALIDATION_SCOPE_ALL,
-    markdown_mode: Optional[str] = None,
-) -> int:
-    run_state, target_state = run_single_target_unified(
-        config=config,
-        target_path=target_path,
-        reference_modules=reference_modules or [],
-        validation_scope=validation_scope,
-    )
-
-    report = generate_single_target_report_from_run_target(
-        run_state,
-        target_state,
-        output_format or "json",
-        config=config,
-        markdown_mode=markdown_mode,
-    )
-    if output_file:
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(report)
-        print(f"Report written to {output_file}")
-    else:
-        print(report)
-
-    report_data = build_single_target_report_from_run_target(
-        run_state, target_state, config
-    )
-    exit_code = int(report_data.get("exit_code", 0))
-    if exit_code != 0:
-        print(f"Validation failed for {target_path}")
-    return exit_code
 
 
 def _run_declaration_validation(
@@ -185,16 +125,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if getattr(args, "markdown_mode", None) is not None and getattr(args, "format", None) == "json":
-        parser.error("--markdown-mode cannot be used with --format json.")
-
     config_warnings: List[Any] = []
     config = load_config(
         config_path=args.config,
-        cli_args={
-            "output_format": getattr(args, "format", None),
-            "markdown_mode": getattr(args, "markdown_mode", None),
-        },
+        cli_args={"output_format": getattr(args, "format", None)},
         discover_from_cwd=args.config is None,
         cwd=os.getcwd(),
         warning_sink=config_warnings.append,
@@ -209,17 +143,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         explicit_targets.extend(args.target)
     explicit_targets.extend(_parse_csv(args.targets))
 
-    if (
-        args.target
-        and len(args.target) > 1
-        and not (args.source or args.targets or args.targets_dir)
-    ):
-        parser.error(
-            "Multiple --target values require multi-target flags. "
-            "Use --targets/--targets-dir (and optionally --source), "
-            "or pass a single --target."
-        )
-
     reference_modules = _parse_csv(args.reference_modules)
     project_pattern = args.project_pattern
     exclude_patterns = _parse_csv(args.exclude_patterns) or None
@@ -227,10 +150,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.validate_declarations:
         if args.format != "json":
             parser.error("Declaration validation supports only --format json.")
-        if getattr(args, "markdown_mode", None) is not None:
-            parser.error(
-                "--markdown-mode cannot be used with --validate-declarations (JSON-only output)."
-            )
         if (
             args.target
             or args.targets
@@ -273,69 +192,32 @@ def main(argv: Optional[List[str]] = None) -> int:
         env_target_path=os.environ.get("PYTHON_ARCH_TARGET_PATH"),
     )
 
-    multi_requested = bool(
-        args.source
-        or args.targets_dir
-        or args.targets
-        or (args.target and len(args.target) > 1)
-    )
-
-    config_targets = config.projects.targets
-    config_targets_dir = config.projects.targets_dir
-    config_indicates_multi = bool(config_targets_dir) or len(config_targets) > 1
-
-    explicit_single = bool(args.target and len(args.target) == 1) and not (
-        args.targets or args.targets_dir or args.source
-    )
-
-    if explicit_single:
-        use_multi = False
-    else:
-        use_multi = (
-            multi_requested or config_indicates_multi or len(projects_cfg.targets) > 1
-        )
-
-    if use_multi:
-        if args.format == "markdown" and not args.output:
-            parser.error(
-                "Multi-target markdown reporting requires --output <directory>."
-            )
-        run_state, target_states = run_multi(
-            config=config,
-            projects=projects_cfg,
-            source_path=args.source,
-            targets=explicit_targets or None,
-            targets_dir=args.targets_dir,
-            reference_modules=reference_modules or None,
-            project_pattern=project_pattern,
-            exclude_patterns=exclude_patterns,
-            validation_scope=args.validation_scope,
-            load_config_first=False,
-        )
-        report = generate_multi_target_report(
-            run_state, target_states, args.format, config, args.output,
-            markdown_mode=getattr(args, "markdown_mode", None),
-        )
-        if args.output and args.format == "json":
-            with open(args.output, "w", encoding="utf-8") as f:
-                f.write(report)
-            print(f"Report written to {args.output}")
-        elif args.output and args.format == "markdown":
-            print(f"Report written to {report}")
-        else:
-            print(report)
-        return get_multi_exit_code(run_state, target_states, config)
-
-    target_path = projects_cfg.targets[0].path
-    return _run_single_target(
+    if args.format == "markdown" and not args.output:
+        parser.error("Markdown reporting requires --output <directory>.")
+    run_state, target_states = run_multi(
         config=config,
-        target_path=str(target_path),
-        reference_modules=reference_modules,
-        output_file=args.output,
-        output_format=args.format,
+        projects=projects_cfg,
+        source_path=args.source,
+        targets=explicit_targets or None,
+        targets_dir=args.targets_dir,
+        reference_modules=reference_modules or None,
+        project_pattern=project_pattern,
+        exclude_patterns=exclude_patterns,
         validation_scope=args.validation_scope,
-        markdown_mode=getattr(args, "markdown_mode", None),
+        load_config_first=False,
     )
+    report = generate_multi_target_report(
+        run_state, target_states, args.format, config, args.output
+    )
+    if args.output and args.format == "json":
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(report)
+        print(f"Report written to {args.output}")
+    elif args.output and args.format == "markdown":
+        print(f"Report written to {report}")
+    else:
+        print(report)
+    return get_multi_exit_code(run_state, target_states, config)
 
 
 if __name__ == "__main__":

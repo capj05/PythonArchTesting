@@ -1,6 +1,6 @@
 """Typed intermediate representation for reporting."""
 
-from .builder import build_multi_target_report_ir, build_report_ir
+from .builder import build_multi_target_report_ir
 from .models import (
     AggregateSummary,
     EntityRef,
@@ -26,7 +26,6 @@ __all__ = [
     "ResultsSummary",
     "RunMeta",
     "TargetReport",
-    "build_report_ir",
     "build_multi_target_report_ir",
     "to_legacy_schema_v2",
 ]

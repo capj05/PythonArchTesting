@@ -4,7 +4,6 @@ Tests for configuration validation functionality.
 
 import builtins
 import configparser
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -15,7 +14,6 @@ from pythonarchtesting.config import (
     validate_configuration,
     validate_value,
 )
-from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.config.schema_data import CONFIGURATION_SCHEMA
 from pythonarchtesting.config.schema_rules import ValidationRule, ValueType
 from pythonarchtesting.config.validator import get_schema_info
@@ -459,33 +457,3 @@ class TestConfigurationValidator:
 
         with pytest.raises(ValueError):
             get_schema_info("unknown_section")
-
-
-def test_build_report_snapshot_does_not_include_removed_type_check_section(tmp_path):
-    from pythonarchtesting.report.api import build_report
-    from pythonarchtesting.state import ProjectState, ValidationResult, ValidationStatus
-
-    cfg = replace(
-        create_config_from_dict({"report": {"include_config_snapshot": True}}),
-        raw={},
-    )
-    state = ProjectState(target_path=str(tmp_path), reference_modules=[], config=cfg)
-    state.add_validation_result(
-        ValidationResult(
-            status=ValidationStatus.OK,
-            description="ok",
-            check_type="alpha",
-            src_function_name="a_func",
-            src_package="pkg_a",
-            src_line_num=1,
-            src_file="a.py",
-            target_function_name="a_ref",
-            target_package="ref_a",
-            details={},
-        )
-    )
-
-    report = build_report(state, cfg)
-
-    assert report["run"]["config_snapshot"] is not None
-    assert "type_check" not in report["run"]["config_snapshot"]

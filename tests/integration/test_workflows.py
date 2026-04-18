@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 
-import pythonarchtesting.cli as cli_module
 from pythonarchtesting.cli import main
 
 
@@ -164,59 +163,3 @@ def test_multi_target_rejects_non_text_json_format(monkeypatch, tmp_path):
                 "html",
             ]
         )
-
-
-def test_multi_target_cli_does_not_use_project_state_singleton(monkeypatch, tmp_path):
-    config_path = _write_smoke_config(tmp_path)
-    source, target_ok, target_bad = _smoke_paths()
-    monkeypatch.chdir(Path(__file__).resolve().parents[2])
-
-    monkeypatch.setattr(
-        cli_module,
-        "ProjectState",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("ProjectState should not be used for multi-target CLI")
-        ),
-    )
-    exit_code = main(
-        [
-            "--config",
-            str(config_path),
-            "--source",
-            str(source),
-            "--target",
-            str(target_ok),
-            "--target",
-            str(target_bad),
-            "--format",
-            "json",
-        ]
-    )
-
-    assert exit_code == 1
-
-
-def test_single_target_cli_does_not_use_project_state_singleton(monkeypatch, tmp_path):
-    config_path = _write_smoke_config(tmp_path)
-    _, target_ok, _ = _smoke_paths()
-    monkeypatch.chdir(Path(__file__).resolve().parents[2])
-
-    monkeypatch.setattr(
-        cli_module,
-        "ProjectState",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("ProjectState should not be used for single-target CLI")
-        ),
-    )
-    exit_code = main(
-        [
-            "--config",
-            str(config_path),
-            "--target",
-            str(target_ok),
-            "--format",
-            "json",
-        ]
-    )
-
-    assert exit_code in (0, 1)

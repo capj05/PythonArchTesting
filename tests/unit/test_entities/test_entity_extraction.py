@@ -5,8 +5,34 @@ Tests for entity extraction and determinism.
 import textwrap
 from pathlib import Path
 
-from pythonarchtesting.entities_extraction import extract_entities_from_source
-from pythonarchtesting.state import ProjectState
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.config.projects import TargetSpec
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.entities_extraction import (
+    extract_entities_from_source,
+    extract_entities_from_source_with_nonmatchable,
+)
+from pythonarchtesting.runner_multi import evaluate_target
+from pythonarchtesting.state_multi import RunState
+
+
+def _empty_run_state(config) -> RunState:
+    empty_index = build_entity_index([])
+    return RunState(
+        config=config,
+        source_path=Path("."),
+        reference_modules=[],
+        source_entities=[],
+        source_index=empty_index,
+        source_by_id={},
+        rules=[],
+        compiler_results=[],
+        compiler_validations=[],
+        run_generated_at=__import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        ),
+        framework_version="test",
+    )
 
 
 def test_entity_extraction_deterministic(tmp_path: Path) -> None:
@@ -22,19 +48,23 @@ def test_entity_extraction_deterministic(tmp_path: Path) -> None:
                 return x + y
             """).strip() + "\n")
 
-    state = ProjectState(str(tmp_path), [])
-    state.initialize(str(tmp_path))
-    state.build_entity_indexes()
-    ids_first = [e.canonical_id for e in state.target_entities]
+    config = create_config_from_dict({})
+    run_state = _empty_run_state(config)
+    spec = TargetSpec(target_id="target", path=tmp_path)
 
-    state.build_entity_indexes()
-    ids_second = [e.canonical_id for e in state.target_entities]
+    target_state_first = evaluate_target(run_state=run_state, spec=spec)
+    ids_first = [e.canonical_id for e in target_state_first.target_entities]
+
+    target_state_second = evaluate_target(run_state=run_state, spec=spec)
+    ids_second = [e.canonical_id for e in target_state_second.target_entities]
 
     assert ids_first == ids_second
-    assert all("\\" not in e.filepath_rel for e in state.target_entities)
-    assert any(e.kind == "module" for e in state.target_entities)
+    assert all("\\" not in e.filepath_rel for e in target_state_first.target_entities)
+    assert any(e.kind == "module" for e in target_state_first.target_entities)
 
-    mod_entities = [e for e in state.target_entities if e.module_path == "pkg.mod"]
+    mod_entities = [
+        e for e in target_state_first.target_entities if e.module_path == "pkg.mod"
+    ]
     assert mod_entities
 
 
@@ -46,14 +76,20 @@ def test_nested_function_evidence(tmp_path: Path) -> None:
                 return inner()
             """).strip() + "\n")
 
-    state = ProjectState(str(tmp_path), [])
-    state.initialize(str(tmp_path))
-    state.build_entity_indexes()
+    source = (tmp_path / "nested.py").read_text(encoding="utf-8")
+    matchable, non_matchable = extract_entities_from_source_with_nonmatchable(
+        source,
+        tmp_path / "nested.py",
+        tmp_path,
+        None,
+        role="target",
+        include_nested_functions=False,
+    )
 
-    assert all(e.name != "inner" for e in state.target_entities)
-    assert any(e.name == "inner" for e in state.target_non_matchable_entities)
+    assert all(e.name != "inner" for e in matchable)
+    assert any(e.name == "inner" for e in non_matchable)
 
-    outer = next(e for e in state.target_entities if e.name == "outer")
+    outer = next(e for e in matchable if e.name == "outer")
     meta = outer.surface_meta
     assert meta.get("nested") is True
     assert outer.decorators_meta is meta

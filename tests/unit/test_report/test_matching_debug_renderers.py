@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from pythonarchtesting.report.ir.normalize import report_dict_to_ir
-from pythonarchtesting.report.renderers.markdown import render_markdown
 from pythonarchtesting.report.renderers.markdown_multi import render_markdown_bundle
 from pythonarchtesting.report.renderers.matching_debug import (
     build_matching_debug_blocks_for_target,
@@ -192,18 +191,6 @@ def test_metric_union_and_deterministic_column_order():
     ]
 
 
-def test_markdown_matching_debug_renders_and_escapes_problematic_content():
-    md = render_markdown(
-        report_dict_to_ir(_single_report_with_matching(), kind="single"),
-        matching_debug_context=_single_context(),
-        markdown_mode="debug",
-    )
-    assert "## Matching Candidates (Debug)" in md
-    assert "No candidates recorded." in md
-    assert "Src <A>\\|\\`tick\\`" in md
-    assert "runner up line2" in md
-
-
 def test_html_metric_heatmap_normalization_modes():
     report = _single_report_with_matching()
     ctx = _single_context()["targets"]["__single__"]
@@ -233,20 +220,6 @@ def test_module_distance_is_inverted_for_debug_display():
     assert module_distances[0] == 1.0
     assert module_distances[1] == 0.5
     assert module_distances[2] == pytest.approx(1.0 / 3.0, rel=1e-6)
-
-
-def test_markdown_metric_table_optional_when_many_metrics_points_to_html():
-    report = _single_report_with_matching()
-    # Add many extra metrics to trigger markdown omission note
-    report["matching"]["matches"][0]["candidates"][0]["breakdown"].update(
-        {"m1": 1, "m2": 2, "m3": 3, "m4": 4, "m5": 5}
-    )
-    md = render_markdown(
-        report_dict_to_ir(report, kind="single"),
-        matching_debug_context=_single_context(),
-        markdown_mode="debug",
-    )
-    assert "Metric heatmap omitted in Markdown output" in md
 
 
 def test_multi_target_markdown_matching_debug_isolated_per_target(tmp_path: Path):
@@ -354,7 +327,6 @@ def test_multi_target_markdown_matching_debug_isolated_per_target(tmp_path: Path
         report_dict_to_ir(report, kind="multi"),
         md_root,
         matching_debug_context=ctx,
-        markdown_mode="debug",
     )
 
     a_md = (md_root / "targets" / "a.md").read_text(encoding="utf-8")

@@ -28,7 +28,7 @@ class BaseReportGenerator(ABC):
         Initialize the report generator.
 
         Args:
-            report_data: Canonical report dict or ProjectState instance
+            report_data: Canonical report dict
         """
         self._state = None
         self.document: Optional[ReportDocument] = None

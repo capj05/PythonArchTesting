@@ -11,13 +11,6 @@ from importlib import import_module
 from typing import Any
 
 
-def generate_validation_report(*args: Any, **kwargs: Any) -> str:
-    """Lazy wrapper for generate_validation_report function."""
-    from .api import generate_validation_report as _func
-
-    return _func(*args, **kwargs)
-
-
 def create_reporter(*args: Any, **kwargs: Any) -> Any:
     """Lazy wrapper for dispatcher reporter creation."""
     from .dispatcher import create_reporter as _func
@@ -54,7 +47,6 @@ def __getattr__(name: str) -> Any:
 
 __all__ = [
     "BaseReportGenerator",
-    "generate_validation_report",
     "create_reporter",
     "get_available_sinks",
     "is_sink_available",

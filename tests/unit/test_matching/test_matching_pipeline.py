@@ -9,7 +9,6 @@ from pythonarchtesting.entities import build_entity_index
 from pythonarchtesting.entities_extraction import extract_entities_from_source
 from pythonarchtesting.matching import MatchingConfig, MatchStatus, run_matching
 from pythonarchtesting.matching.metrics import module_distance, name_similarity
-from pythonarchtesting.state import ProjectState
 
 
 def _extract(source: str, file_path: Path, root_path: Path, role: str) -> list:
@@ -196,60 +195,6 @@ def test_stage2_breakdown_includes_real_name_similarity() -> None:
     assert any(reason.get("code") == "stage3_not_run" for reason in match.reasons)
     assert candidate.breakdown["name"] == expected
     assert 0.0 < candidate.breakdown["name"] < 1.0
-
-
-def test_legacy_fallback_audit() -> None:
-    state = ProjectState("/test", [])
-
-    root_source = Path.cwd() / "source_legacy"
-    root_target = Path.cwd() / "target_legacy"
-
-    source_entities = _extract(
-        """
-        def f(x):
-            return x
-        """,
-        root_source / "legacy_pythonarchtesting.py",
-        root_source,
-        "source",
-    )
-    target_entities = _extract(
-        """
-        def f(x, y):
-            return x
-        """,
-        root_target / "legacy_tgt.py",
-        root_target,
-        "target",
-    )
-
-    source_index = build_entity_index(source_entities)
-    target_index = build_entity_index(target_entities)
-    config = MatchingConfig(
-        threshold=0.99,
-        delta=0.03,
-        min_candidate=0.99,
-        top_n=5,
-        max_fuzzy_candidates=5,
-    )
-
-    results, by_source = run_matching(source_index, target_index, config)
-    state.target_index = target_index
-    state.source_by_id = {e.canonical_id: e for e in source_entities}
-
-    _, updated_by_source = state._apply_legacy_fallback(results, by_source, config)
-    match = updated_by_source[source_entities[0].canonical_id]
-
-    assert match.status == MatchStatus.UNMATCHED
-    assert any(reason.get("code") == "legacy_fallback_used" for reason in match.reasons)
-
-    legacy_candidates = [
-        candidate
-        for candidate in match.candidates
-        if candidate.breakdown.get("legacy_name_match") == 1.0
-    ]
-    assert legacy_candidates
-    assert all(candidate.confidence <= 0.60 + 1e-6 for candidate in legacy_candidates)
 
 
 def test_stage3_selected_on_ambiguous_stage2() -> None:
