@@ -1,4 +1,4 @@
-"""Multi-target markdown bundle renderer."""
+"""Markdown bundle renderer for run reports."""
 
 from __future__ import annotations
 
@@ -150,7 +150,7 @@ def render_markdown_bundle(
     *,
     matching_debug_context: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Write a deterministic multi-target markdown bundle and return index path."""
+    """Write a deterministic Markdown bundle for a run report and return the index path."""
     root = resolve_bundle_root(output_root)
     root.mkdir(parents=True, exist_ok=True)
 

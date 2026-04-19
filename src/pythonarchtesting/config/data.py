@@ -93,7 +93,7 @@ class ReportConfig:
     warnings_as_fail: bool = False
     include_config_snapshot: bool = False
     max_evidence_items_text: int = 3
-    multi_target_exit_policy: str = "any_fail"
+    run_exit_policy: str = "any_fail"
     fail_threshold: int = 1
 
 

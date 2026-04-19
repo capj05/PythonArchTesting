@@ -35,7 +35,7 @@ include_config_snapshot = true
     return config_path
 
 
-def test_multi_target_smoke_json(capsys, monkeypatch, tmp_path):
+def test_run_smoke_json(capsys, monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
 
     source, target_ok, target_bad = _smoke_paths()
@@ -70,7 +70,7 @@ def test_multi_target_smoke_json(capsys, monkeypatch, tmp_path):
     )
 
 
-def test_multi_target_cli_rejects_removed_runtime_overrides(monkeypatch, tmp_path):
+def test_run_cli_rejects_removed_runtime_overrides(monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
 
     source, target_ok, target_bad = _smoke_paths()
@@ -96,7 +96,7 @@ def test_multi_target_cli_rejects_removed_runtime_overrides(monkeypatch, tmp_pat
         )
 
 
-def test_multi_target_cli_rejects_removed_runtime_isolation(monkeypatch, tmp_path):
+def test_run_cli_rejects_removed_runtime_isolation(monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
     source, target_ok, target_bad = _smoke_paths()
     monkeypatch.chdir(Path(__file__).resolve().parents[2])
@@ -120,7 +120,7 @@ def test_multi_target_cli_rejects_removed_runtime_isolation(monkeypatch, tmp_pat
         )
 
 
-def test_multi_target_cli_rejects_removed_allow_unsafe_flag(monkeypatch, tmp_path):
+def test_run_cli_rejects_removed_allow_unsafe_flag(monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
     source, target_ok, target_bad = _smoke_paths()
     monkeypatch.chdir(Path(__file__).resolve().parents[2])
@@ -143,7 +143,7 @@ def test_multi_target_cli_rejects_removed_allow_unsafe_flag(monkeypatch, tmp_pat
         )
 
 
-def test_multi_target_rejects_non_text_json_format(monkeypatch, tmp_path):
+def test_run_rejects_non_text_json_format(monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
     source, target_ok, target_bad = _smoke_paths()
     monkeypatch.chdir(Path(__file__).resolve().parents[2])

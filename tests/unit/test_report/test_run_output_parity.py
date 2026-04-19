@@ -11,11 +11,11 @@ from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.entities import build_entity_index
 from pythonarchtesting.exceptions import ReportGenerationError
 from pythonarchtesting.report.api import (
-    build_multi_target_report,
-    generate_multi_target_report,
+    build_run_report_payload,
+    generate_run_report,
 )
+from pythonarchtesting.run_state import RunState, TargetRunState
 from pythonarchtesting.state import ValidationResult, ValidationStatus
-from pythonarchtesting.state_multi import RunState, TargetRunState
 
 
 def _golden(name: str) -> str:
@@ -108,16 +108,14 @@ def _golden_targets():
     return cfg, run_state, targets
 
 
-def test_multi_target_json_golden():
+def test_run_report_json_golden():
     cfg, run_state, targets = _golden_targets()
-    rendered = generate_multi_target_report(
-        run_state, targets, output_format="json", config=cfg
-    )
-    expected = json.loads(_golden("multi_json.golden"))
+    rendered = generate_run_report(run_state, targets, output_format="json", config=cfg)
+    expected = json.loads(_golden("run_json.golden"))
     assert _normalize_paths(json.loads(rendered)) == _normalize_paths(expected)
 
 
-def test_multi_target_markdown_bundle_writes_index_and_target_pages(tmp_path):
+def test_markdown_bundle_writes_index_and_target_pages(tmp_path):
     cfg = _cfg()
     run_state = _run_state(cfg)
     targets = [
@@ -125,7 +123,7 @@ def test_multi_target_markdown_bundle_writes_index_and_target_pages(tmp_path):
         _target("A Project", tmp_path / "a", ValidationStatus.OK, "arch/ok"),
     ]
 
-    out = generate_multi_target_report(
+    out = generate_run_report(
         run_state,
         targets,
         output_format="markdown",
@@ -144,9 +142,9 @@ def test_multi_target_markdown_bundle_writes_index_and_target_pages(tmp_path):
     assert "targets/b-project.md" in index
 
 
-def test_multi_target_markdown_index_golden(tmp_path):
+def test_markdown_bundle_index_golden(tmp_path):
     cfg, run_state, targets = _golden_targets()
-    out = generate_multi_target_report(
+    out = generate_run_report(
         run_state,
         targets,
         output_format="markdown",
@@ -156,17 +154,17 @@ def test_multi_target_markdown_index_golden(tmp_path):
 
     index = Path(out).read_text(encoding="utf-8")
     assert _normalize_text(index) == _normalize_text(
-        _golden("multi_markdown_index.golden")
+        _golden("run_markdown_index.golden")
     )
 
 
-def test_multi_target_report_rejects_removed_html_format(tmp_path):
+def test_run_report_rejects_removed_html_format(tmp_path):
     cfg, run_state, targets = _golden_targets()
     with pytest.raises(
         ReportGenerationError,
-        match="Unsupported multi-target format 'html'. Available formats: json, markdown",
+        match="Unsupported run report format 'html'. Available formats: json, markdown",
     ):
-        generate_multi_target_report(
+        generate_run_report(
             run_state,
             targets,
             output_format="html",
@@ -182,7 +180,7 @@ def test_target_id_slug_collision_resolution_uses_hash_suffix(tmp_path):
         _target("Same Name", tmp_path / "x1", ValidationStatus.OK, "arch/ok"),
         _target("Same_Name", tmp_path / "x2", ValidationStatus.OK, "arch/ok"),
     ]
-    report = build_multi_target_report(run_state, targets, cfg)
+    report = build_run_report_payload(run_state, targets, cfg)
     ids = [t["target_id"] for t in report["targets"]]
     assert len(ids) == 2
     assert ids[0] != ids[1]

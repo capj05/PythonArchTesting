@@ -18,7 +18,7 @@ def test_module_logger_writes_to_configured_file(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
     configure_logging(cfg, force=True)
-    logger = get_logger("pythonarchtesting.runner_multi")
+    logger = get_logger("pythonarchtesting.runner")
     logger.info("module log line")
     _flush_handlers()
 
@@ -33,7 +33,7 @@ def test_logging_file_disabled_does_not_create_log_file(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
     configure_logging(cfg, force=True)
-    logger = get_logger("pythonarchtesting.runner_multi")
+    logger = get_logger("pythonarchtesting.runner")
     logger.info("should not be persisted")
     _flush_handlers()
 
@@ -51,7 +51,7 @@ def test_force_reconfiguration_switches_log_file(monkeypatch, tmp_path):
     )
 
     configure_logging(cfg1, force=True)
-    logger = get_logger("pythonarchtesting.runner_multi")
+    logger = get_logger("pythonarchtesting.runner")
     logger.info("first file")
     _flush_handlers()
 

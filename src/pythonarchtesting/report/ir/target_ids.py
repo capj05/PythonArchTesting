@@ -1,4 +1,4 @@
-"""Stable target-id normalization helpers for multi-target reports."""
+"""Stable target-id normalization helpers for run reports."""
 
 from __future__ import annotations
 

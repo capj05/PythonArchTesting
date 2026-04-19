@@ -81,7 +81,7 @@ def show_page(request):
     return source, target
 
 
-def test_multi_target_smoke_json(capsys, monkeypatch, tmp_path):
+def test_run_smoke_json(capsys, monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
 
     source, target_ok, target_bad = _smoke_paths()
@@ -153,7 +153,7 @@ def test_annotation_style_smoke_source_emits_required_signature_rule_ids(
     }.issubset(rule_ids)
 
 
-def test_multi_target_cli_rejects_removed_runtime_overrides(monkeypatch, tmp_path):
+def test_run_cli_rejects_removed_runtime_overrides(monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
 
     source, target_ok, target_bad = _smoke_paths()
@@ -179,7 +179,7 @@ def test_multi_target_cli_rejects_removed_runtime_overrides(monkeypatch, tmp_pat
         )
 
 
-def test_multi_target_cli_rejects_removed_runtime_isolation(monkeypatch, tmp_path):
+def test_run_cli_rejects_removed_runtime_isolation(monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
     source, target_ok, target_bad = _smoke_paths()
     monkeypatch.chdir(Path(__file__).resolve().parents[2])
@@ -203,7 +203,7 @@ def test_multi_target_cli_rejects_removed_runtime_isolation(monkeypatch, tmp_pat
         )
 
 
-def test_multi_target_cli_rejects_removed_allow_unsafe_flag(monkeypatch, tmp_path):
+def test_run_cli_rejects_removed_allow_unsafe_flag(monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
     source, target_ok, target_bad = _smoke_paths()
     monkeypatch.chdir(Path(__file__).resolve().parents[2])
@@ -226,7 +226,7 @@ def test_multi_target_cli_rejects_removed_allow_unsafe_flag(monkeypatch, tmp_pat
         )
 
 
-def test_multi_target_rejects_non_text_json_format(monkeypatch, tmp_path):
+def test_run_rejects_non_text_json_format(monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
     source, target_ok, target_bad = _smoke_paths()
     monkeypatch.chdir(Path(__file__).resolve().parents[2])
@@ -248,7 +248,7 @@ def test_multi_target_rejects_non_text_json_format(monkeypatch, tmp_path):
         )
 
 
-def test_one_target_cli_produces_multi_target_json(capsys, monkeypatch, tmp_path):
+def test_one_target_cli_produces_run_report_json(capsys, monkeypatch, tmp_path):
     config_path = _write_smoke_config(tmp_path)
     source, target_ok, _ = _smoke_paths()
     monkeypatch.chdir(Path(__file__).resolve().parents[2])

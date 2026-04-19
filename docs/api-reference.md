@@ -5,7 +5,7 @@
 The supported module entrypoints are:
 
 - `pythonarchtesting.state`
-- `pythonarchtesting.runner_multi`
+- `pythonarchtesting.runner`
 
 Supported symbols under `pythonarchtesting.state`:
 
@@ -16,11 +16,11 @@ Supported symbols under `pythonarchtesting.state`:
 - `ModuleDiscovery`
 - `ProjectState`
 
-Supported symbols under `pythonarchtesting.runner_multi`:
+Supported symbols under `pythonarchtesting.runner`:
 
 - `prepare_source`
 - `evaluate_target`
-- `run_multi`
+- `run_projects`
 
 Deep import paths and historical compatibility aliases are not part of the
 supported public API.

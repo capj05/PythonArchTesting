@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .base_generator import BaseReportGenerator
-from .renderers.markdown_multi import render_markdown_bundle
+from .renderers.markdown_bundle import render_markdown_bundle
 
 
 class MarkdownReportGenerator(BaseReportGenerator):

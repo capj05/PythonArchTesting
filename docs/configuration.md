@@ -90,12 +90,12 @@ Controls exit behavior and report payload options.
 Common fields:
 
 - `warnings_as_fail`
-- `multi_target_exit_policy`
+- `run_exit_policy`
 - `fail_threshold`
 - `include_config_snapshot`
 - `validate_schema_v2`
 
-`multi_target_exit_policy` supports:
+`run_exit_policy` supports:
 
 - `any_fail`: the run fails if any target fails
 - `all_fail`: the run fails only if every target fails
@@ -123,7 +123,7 @@ error_detail_level = standard
 
 [report]
 warnings_as_fail = false
-multi_target_exit_policy = any_fail
+run_exit_policy = any_fail
 include_config_snapshot = false
 ```
 

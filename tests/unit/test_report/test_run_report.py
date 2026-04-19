@@ -8,9 +8,9 @@ from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.entities import build_entity_index
 from pythonarchtesting.exceptions import ReportGenerationError
 from pythonarchtesting.matching import MatchResult, MatchStatus
-from pythonarchtesting.report.api import build_multi_target_report
+from pythonarchtesting.report.api import build_run_report_payload
+from pythonarchtesting.run_state import RunState, TargetRunState
 from pythonarchtesting.state import ValidationResult, ValidationStatus
-from pythonarchtesting.state_multi import RunState, TargetRunState
 
 
 def _cfg(report: dict | None = None):
@@ -55,7 +55,7 @@ def _target_state(
     )
 
 
-def test_multi_target_json_schema_v2_fields_and_sorted_targets(tmp_path):
+def test_run_report_schema_v2_fields_and_sorted_targets(tmp_path):
     cfg = _cfg()
     generated_at = datetime(2026, 2, 12, 12, 0, 0, tzinfo=timezone.utc)
     run_state = _empty_run_state(cfg, generated_at)
@@ -73,7 +73,7 @@ def test_multi_target_json_schema_v2_fields_and_sorted_targets(tmp_path):
     target_b = _target_state("b", tmp_path / "b", validation_results=[failing])
     target_a = _target_state("a", tmp_path / "a")
 
-    report = build_multi_target_report(run_state, [target_b, target_a], cfg)
+    report = build_run_report_payload(run_state, [target_b, target_a], cfg)
 
     assert report["schema_version"] == "2"
     assert "run" in report
@@ -86,36 +86,36 @@ def test_multi_target_json_schema_v2_fields_and_sorted_targets(tmp_path):
     assert report["exit_code"] == 1
 
 
-def test_multi_target_generated_at_uses_run_state_timestamp(tmp_path):
+def test_run_report_generated_at_uses_run_state_timestamp(tmp_path):
     cfg = _cfg()
     generated_at = datetime(2026, 2, 12, 8, 30, 0, tzinfo=timezone.utc)
     run_state = _empty_run_state(cfg, generated_at)
 
-    report = build_multi_target_report(
+    report = build_run_report_payload(
         run_state, [_target_state("a", tmp_path / "a")], cfg
     )
     expected = generated_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     assert report["generated_at"] == expected
 
 
-def test_multi_target_config_snapshot_optional(tmp_path):
+def test_run_report_config_snapshot_optional(tmp_path):
     cfg = _cfg()
     run_state = _empty_run_state(cfg, datetime.now(timezone.utc))
 
-    report = build_multi_target_report(
+    report = build_run_report_payload(
         run_state, [_target_state("a", tmp_path / "a")], cfg
     )
     assert report["run"]["config_snapshot"] is None
 
     cfg = _cfg({"include_config_snapshot": True})
     run_state = _empty_run_state(cfg, datetime.now(timezone.utc))
-    report_with_snapshot = build_multi_target_report(
+    report_with_snapshot = build_run_report_payload(
         run_state, [_target_state("a", tmp_path / "a")], cfg
     )
     assert report_with_snapshot["run"]["config_snapshot"] is not None
 
 
-def test_multi_target_matching_isolated(tmp_path):
+def test_run_report_matching_isolated(tmp_path):
     cfg = _cfg()
     run_state = _empty_run_state(cfg, datetime.now(timezone.utc))
 
@@ -139,28 +139,28 @@ def test_multi_target_matching_isolated(tmp_path):
     target_a = _target_state("a", tmp_path / "a", match_results=[match_a])
     target_b = _target_state("b", tmp_path / "b", match_results=[match_b])
 
-    report = build_multi_target_report(run_state, [target_b, target_a], cfg)
+    report = build_run_report_payload(run_state, [target_b, target_a], cfg)
     targets = {t["target_id"]: t for t in report["targets"]}
 
     assert targets["a"]["matching"]["matches"][0]["source_entity_id"] == "s1"
     assert targets["b"]["matching"]["matches"][0]["source_entity_id"] == "s2"
 
 
-def test_multi_target_schema_validation_toggle(tmp_path, monkeypatch):
+def test_run_report_schema_validation_toggle(tmp_path, monkeypatch):
     cfg = _cfg({"validate_schema_v2": True})
     run_state = _empty_run_state(cfg, datetime.now(timezone.utc))
     target_states = [_target_state("a", tmp_path / "a")]
 
     monkeypatch.setattr(report_api, "validate_report_schema_v2", lambda report: [])
-    report = build_multi_target_report(run_state, target_states, cfg)
+    report = build_run_report_payload(run_state, target_states, cfg)
     assert report["schema_version"] == "2"
 
     monkeypatch.setattr(report_api, "validate_report_schema_v2", lambda report: ["bad"])
     with pytest.raises(ReportGenerationError):
-        build_multi_target_report(run_state, target_states, cfg)
+        build_run_report_payload(run_state, target_states, cfg)
 
 
-def test_multi_target_results_sorted(tmp_path):
+def test_run_report_results_sorted(tmp_path):
     cfg = _cfg()
     run_state = _empty_run_state(cfg, datetime.now(timezone.utc))
 
@@ -189,6 +189,6 @@ def test_multi_target_results_sorted(tmp_path):
         validation_results=[warning, failing],
     )
 
-    report = build_multi_target_report(run_state, [target], cfg)
+    report = build_run_report_payload(run_state, [target], cfg)
     results = report["targets"][0]["results"]
     assert [item["rule_id"] for item in results] == ["error_rule", "warn_rule"]

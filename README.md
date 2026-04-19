@@ -96,7 +96,7 @@ python-arch-test --source path/to/reference --targets-dir path/to/assignments --
 Read reports in this order:
 
 1. `exit_code` and `summary`
-2. `targets[*].summary` for multi-target runs
+2. `targets[*].summary` for run reports
 3. `results[*].status`, `results[*].severity`, and `results[*].message`
 4. `fix_hints`, `locations`, and `evidence` for remediation details
 

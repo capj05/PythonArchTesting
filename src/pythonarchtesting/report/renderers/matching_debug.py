@@ -88,7 +88,7 @@ def _fallback_identity(entity_id: Optional[str], *, kind: str) -> MatchingDebugI
     )
 
 
-def build_multi_matching_debug_context(
+def build_run_matching_debug_context(
     run_state: Any, target_states: Sequence[Any]
 ) -> Dict[str, Any]:
     source_by_id = getattr(run_state, "source_by_id", {}) or {}
@@ -114,7 +114,7 @@ def build_multi_matching_debug_context(
                 if value is not None
             },
         }
-    return {"kind": "multi", "targets": targets_ctx}
+    return {"kind": "run", "targets": targets_ctx}
 
 
 def get_target_debug_context(

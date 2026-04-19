@@ -18,26 +18,26 @@ def _get_report_module() -> ModuleType:
     return import_module("pythonarchtesting.report.api")
 
 
-def generate_multi_target_report(
+def generate_run_report(
     run_state: Any,
     target_states: List[Any],
     output_format: str = "json",
     config: Optional[Any] = None,
     output_path: Optional[str | Path] = None,
 ) -> str:
-    """Lazy wrapper for generate_multi_target_report function."""
+    """Lazy wrapper for generate_run_report function."""
     module = _get_report_module()
     return cast(
         str,
-        module.generate_multi_target_report(
+        module.generate_run_report(
             run_state, target_states, output_format, config, output_path
         ),
     )
 
 
-def get_multi_exit_code(
+def get_run_exit_code(
     run_state: Any, target_states: List[Any], config: Optional[Any] = None
 ) -> int:
-    """Lazy wrapper for get_multi_exit_code function."""
+    """Lazy wrapper for get_run_exit_code function."""
     module = _get_report_module()
-    return cast(int, module.get_multi_exit_code(run_state, target_states, config))
+    return cast(int, module.get_run_exit_code(run_state, target_states, config))

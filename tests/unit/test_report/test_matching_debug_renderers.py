@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from pythonarchtesting.report.ir.normalize import report_dict_to_ir
-from pythonarchtesting.report.renderers.markdown_multi import render_markdown_bundle
+from pythonarchtesting.report.renderers.markdown_bundle import render_markdown_bundle
 from pythonarchtesting.report.renderers.matching_debug import (
     build_matching_debug_blocks_for_target,
     collect_metric_columns,
@@ -222,7 +222,7 @@ def test_module_distance_is_inverted_for_debug_display():
     assert module_distances[2] == pytest.approx(1.0 / 3.0, rel=1e-6)
 
 
-def test_multi_target_markdown_matching_debug_isolated_per_target(tmp_path: Path):
+def test_markdown_bundle_matching_debug_isolated_per_target(tmp_path: Path):
     report = {
         "generated_at": "2026-02-22T00:00:00Z",
         "framework_version": "test",
@@ -281,7 +281,7 @@ def test_multi_target_markdown_matching_debug_isolated_per_target(tmp_path: Path
         ],
     }
     ctx = {
-        "kind": "multi",
+        "kind": "run",
         "targets": {
             ("A Project", "/targets/a"): {
                 "sources": {
@@ -324,7 +324,7 @@ def test_multi_target_markdown_matching_debug_isolated_per_target(tmp_path: Path
 
     md_root = tmp_path / "md"
     render_markdown_bundle(
-        report_dict_to_ir(report, kind="multi"),
+        report_dict_to_ir(report, kind="run"),
         md_root,
         matching_debug_context=ctx,
     )

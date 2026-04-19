@@ -5,7 +5,7 @@ Tests for source module resolution handling.
 from pathlib import Path
 
 from pythonarchtesting.config.data import create_config_from_dict
-from pythonarchtesting.runner_multi.source_prep import prepare_source
+from pythonarchtesting.runner.source_prep import prepare_source
 from pythonarchtesting.state.source_resolution import resolve_source_module_files
 
 
@@ -77,9 +77,7 @@ def test_source_module_resolution_failure(tmp_path: Path) -> None:
     source_path = tmp_path / "reference"
     source_path.mkdir()
 
-    config = create_config_from_dict(
-        {"projects": {"source_path": str(source_path)}}
-    )
+    config = create_config_from_dict({"projects": {"source_path": str(source_path)}})
 
     run_state = prepare_source(
         config=config,

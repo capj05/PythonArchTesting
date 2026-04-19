@@ -12,7 +12,7 @@ import pytest
 
 from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.config.projects import resolve_projects_config
-from pythonarchtesting.runner_multi import run_multi
+from pythonarchtesting.runner import run_projects
 
 
 def _median_runtime(fn, runs: int = 3) -> float:
@@ -34,7 +34,7 @@ def {name}(x):
     )
 
 
-def _build_multi_target_fixture(root: Path) -> tuple[Path, Path, Path]:
+def _build_run_fixture(root: Path) -> tuple[Path, Path, Path]:
     source = root / "source"
     target_a = root / "target_a"
     target_b = root / "target_b"
@@ -58,8 +58,8 @@ def test_benchmarks_suite_does_not_use_time_sleep():
 
 
 @pytest.mark.performance
-def test_multi_target_runner_real_path_benchmark(temp_dir: Path):
-    source, target_a, target_b = _build_multi_target_fixture(temp_dir / "bench")
+def test_run_projects_real_path_benchmark(temp_dir: Path):
+    source, target_a, target_b = _build_run_fixture(temp_dir / "bench")
     cfg = create_config_from_dict(
         {
             "matching": {"max_stage2_candidates": "0", "max_stage3_candidates": "0"},
@@ -72,7 +72,7 @@ def test_multi_target_runner_real_path_benchmark(temp_dir: Path):
     )
 
     def _run():
-        run_state, target_states = run_multi(
+        run_state, target_states = run_projects(
             config=cfg,
             projects=projects,
             load_config_first=False,

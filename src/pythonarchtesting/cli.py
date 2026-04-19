@@ -14,16 +14,16 @@ from typing import Any, List, Optional
 from pythonarchtesting.config import Config, load_config, resolve_projects_config
 from pythonarchtesting.infrastructure.logging import configure_logging
 from pythonarchtesting.report.lazy import (
-    generate_multi_target_report,
-    get_multi_exit_code,
+    generate_run_report,
+    get_run_exit_code,
 )
 from pythonarchtesting.validation_scope import VALIDATION_SCOPE_ALL, VALIDATION_SCOPES
 
 
-def run_multi(*args: Any, **kwargs: Any) -> Any:
-    from pythonarchtesting.runner_multi import run_multi as _run_multi
+def run_projects(*args: Any, **kwargs: Any) -> Any:
+    from pythonarchtesting.runner import run_projects as _run_projects
 
-    return _run_multi(*args, **kwargs)
+    return _run_projects(*args, **kwargs)
 
 
 def _parse_csv(value: Optional[str]) -> List[str]:
@@ -103,7 +103,7 @@ def _run_declaration_validation(
         build_declaration_validation_report,
         get_declaration_validation_exit_code,
     )
-    from pythonarchtesting.runner_multi.source_prep import prepare_source
+    from pythonarchtesting.runner.source_prep import prepare_source
 
     run_state = prepare_source(
         config=config,
@@ -194,7 +194,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.format == "markdown" and not args.output:
         parser.error("Markdown reporting requires --output <directory>.")
-    run_state, target_states = run_multi(
+    run_state, target_states = run_projects(
         config=config,
         projects=projects_cfg,
         source_path=args.source,
@@ -206,7 +206,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         validation_scope=args.validation_scope,
         load_config_first=False,
     )
-    report = generate_multi_target_report(
+    report = generate_run_report(
         run_state, target_states, args.format, config, args.output
     )
     if args.output and args.format == "json":
@@ -217,7 +217,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Report written to {report}")
     else:
         print(report)
-    return get_multi_exit_code(run_state, target_states, config)
+    return get_run_exit_code(run_state, target_states, config)
 
 
 if __name__ == "__main__":

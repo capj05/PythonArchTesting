@@ -1,6 +1,4 @@
-"""
-Multi-target runner implementation (source once, N targets).
-"""
+"""Runner implementation for source-once target-set execution."""
 
 from __future__ import annotations
 
@@ -9,9 +7,9 @@ from typing import List, Optional, Tuple
 from pythonarchtesting.config import Config
 from pythonarchtesting.config.projects import ProjectsConfig, TargetSpec
 from pythonarchtesting.evidence.collection import parse_python_modules
-from pythonarchtesting.state_multi import RunState, TargetRunState
+from pythonarchtesting.run_state import RunState, TargetRunState
 
-from .orchestrator import run_multi as _run_multi_impl
+from .orchestrator import run_projects as _run_projects_impl
 from .source_prep import prepare_source
 from .target_eval import evaluate_target as _evaluate_target_impl
 
@@ -28,7 +26,7 @@ def evaluate_target(
     )
 
 
-def run_multi(
+def run_projects(
     config: Optional[Config] = None,
     projects: Optional[ProjectsConfig] = None,
     *,
@@ -42,7 +40,7 @@ def run_multi(
     custom_config: Optional[str] = None,
     load_config_first: bool = True,
 ) -> Tuple[RunState, List[TargetRunState]]:
-    return _run_multi_impl(
+    return _run_projects_impl(
         config=config,
         projects=projects,
         source_path=source_path,
@@ -58,4 +56,4 @@ def run_multi(
     )
 
 
-__all__ = ["prepare_source", "evaluate_target", "run_multi"]
+__all__ = ["prepare_source", "evaluate_target", "run_projects"]

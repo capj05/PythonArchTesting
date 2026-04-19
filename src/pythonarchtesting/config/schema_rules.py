@@ -235,7 +235,9 @@ class ValidationRule:
                 f"[{self.min_value}, {self.max_value}]"
             )
         elif self.min_value is not None:
-            return f"{section}.{key}: Value {value} is less than minimum {self.min_value}"
+            return (
+                f"{section}.{key}: Value {value} is less than minimum {self.min_value}"
+            )
         else:
             return f"{section}.{key}: Value {value} is greater than maximum {self.max_value}"
 
@@ -254,7 +256,9 @@ class ValidationRule:
         return f"{section}.{key}: Value '{value}' not in allowed values: {self.allowed_values}"
 
     def _pattern_error(self, section: str, key: str, value: Any) -> str:
-        return f"{section}.{key}: Value '{value}' does not match pattern '{self.pattern}'"
+        return (
+            f"{section}.{key}: Value '{value}' does not match pattern '{self.pattern}'"
+        )
 
     def _path_error(self, section: str, key: str, value: Any) -> str:
         if self.must_exist:

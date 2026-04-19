@@ -1,6 +1,4 @@
-"""
-Multi-target runner orchestration.
-"""
+"""Runner orchestration for source-once target-set execution."""
 
 from __future__ import annotations
 
@@ -17,8 +15,8 @@ from pythonarchtesting.config.projects import (
 )
 from pythonarchtesting.entities import build_entity_index
 from pythonarchtesting.infrastructure.logging import get_logger
+from pythonarchtesting.run_state import RunState, TargetRunState
 from pythonarchtesting.state import ValidationResult, ValidationStatus
-from pythonarchtesting.state_multi import RunState, TargetRunState
 
 from .source_prep import _framework_version, prepare_source
 from .target_eval import evaluate_target
@@ -86,7 +84,7 @@ def _evaluate_target_safe(
     return target_state
 
 
-def run_multi(
+def run_projects(
     config: Optional[Config] = None,
     projects: Optional[ProjectsConfig] = None,
     *,
@@ -108,7 +106,7 @@ def run_multi(
         config = load_config(config_path=custom_config, cli_args={})
 
     if config is None:
-        raise ValueError("Config is required for run_multi")
+        raise ValueError("Config is required for run_projects")
 
     projects_cfg = projects or resolve_projects_config(
         config,
@@ -128,7 +126,7 @@ def run_multi(
     )
 
     logger.info(
-        "Multi-target run started: source_path=%s targets=%d",
+        "Run started: source_path=%s targets=%d",
         run_state.source_path,
         len(projects_cfg.targets),
     )

@@ -9,7 +9,7 @@ from typing import Any
 
 _LAZY_SUBMODULES = {
     "state": "pythonarchtesting.state",
-    "runner_multi": "pythonarchtesting.runner_multi",
+    "runner": "pythonarchtesting.runner",
 }
 
 

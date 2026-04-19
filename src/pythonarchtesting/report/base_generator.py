@@ -6,18 +6,55 @@ should inherit from, ensuring consistent interface and behavior.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any, Dict, List, Optional
 
 from pythonarchtesting.constants import ReportingConstants
 from pythonarchtesting.report.ir.models import ReportDocument
 from pythonarchtesting.report.ir.normalize import report_dict_to_ir
 from pythonarchtesting.report.ir.serialize import to_legacy_schema_v2
+from pythonarchtesting.run_state import RunState, TargetRunState
 
 
 def _infer_report_kind(report: Dict[str, Any]) -> str:
     if report.get("targets") is not None and report.get("results") is None:
-        return "multi"
+        return "run"
     return "single"
+
+
+def _build_document_from_state(state: Any) -> ReportDocument:
+    from pythonarchtesting.report.api import build_run_report
+
+    if not isinstance(state, tuple):
+        raise TypeError(
+            "Raw report state must be a tuple of "
+            "(run_state, target_states[, config])."
+        )
+    if len(state) == 2:
+        run_state, target_states = state
+        config = None
+    elif len(state) == 3:
+        run_state, target_states, config = state
+    else:
+        raise TypeError(
+            "Raw report state must be a tuple of "
+            "(run_state, target_states[, config])."
+        )
+    if not isinstance(run_state, RunState):
+        raise TypeError("Expected report state tuple to start with a RunState.")
+    if not isinstance(target_states, Sequence) or isinstance(
+        target_states, (str, bytes)
+    ):
+        raise TypeError(
+            "Expected report state tuple to include a sequence of TargetRunState "
+            "values."
+        )
+    target_state_list = list(target_states)
+    if not all(isinstance(state, TargetRunState) for state in target_state_list):
+        raise TypeError(
+            "Expected report state tuple to include only TargetRunState values."
+        )
+    return build_run_report(run_state, target_state_list, config)
 
 
 class BaseReportGenerator(ABC):
@@ -28,7 +65,8 @@ class BaseReportGenerator(ABC):
         Initialize the report generator.
 
         Args:
-            report_data: Canonical report dict
+            report_data: ReportDocument, canonical report dict, or a tuple of
+                (run_state, target_states[, config])
         """
         self._state = None
         self.document: Optional[ReportDocument] = None
@@ -72,9 +110,7 @@ class BaseReportGenerator(ABC):
                     self.report, kind=_infer_report_kind(self.report)
                 )
             elif self._state is not None:
-                from pythonarchtesting.report.api import build_report_document
-
-                self.document = build_report_document(self._state)
+                self.document = _build_document_from_state(self._state)
             else:
                 raise ValueError("Report data is not available.")
         return self.document

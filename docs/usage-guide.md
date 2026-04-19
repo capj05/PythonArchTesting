@@ -165,7 +165,7 @@ python-arch-test --validate-declarations --source path/to/reference --validation
 
 ## 7. Read Results In This Order
 
-For multi-target JSON, start with:
+For run-report JSON, start with:
 
 ```json
 {

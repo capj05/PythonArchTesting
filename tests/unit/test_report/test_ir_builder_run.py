@@ -5,11 +5,11 @@ from pathlib import Path
 
 from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.entities import build_entity_index
-from pythonarchtesting.report.api import build_multi_target_report
-from pythonarchtesting.report.ir.builder import build_multi_target_report_ir
+from pythonarchtesting.report.api import build_run_report_payload
+from pythonarchtesting.report.ir.builder import build_run_report_ir
 from pythonarchtesting.report.ir.serialize import to_legacy_schema_v2
+from pythonarchtesting.run_state import RunState, TargetRunState
 from pythonarchtesting.state import ValidationResult, ValidationStatus
-from pythonarchtesting.state_multi import RunState, TargetRunState
 
 
 def _cfg():
@@ -58,17 +58,15 @@ def _target(target_id: str, failed: bool) -> TargetRunState:
     )
 
 
-def test_build_multi_target_ir_roundtrip():
+def test_build_run_report_ir_roundtrip():
     cfg = _cfg()
     run_state = _run_state(cfg)
     targets = [_target("b", True), _target("a", False)]
 
-    doc = build_multi_target_report_ir(run_state, targets, cfg)
-    assert doc.kind == "multi"
+    doc = build_run_report_ir(run_state, targets, cfg)
+    assert doc.kind == "run"
     assert [t.target_id for t in doc.targets] == ["a", "b"]
     assert doc.summary.targets_total == 2
     assert doc.run.mode == "static-only"
 
-    assert to_legacy_schema_v2(doc) == build_multi_target_report(
-        run_state, targets, cfg
-    )
+    assert to_legacy_schema_v2(doc) == build_run_report_payload(run_state, targets, cfg)

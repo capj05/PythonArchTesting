@@ -7,8 +7,8 @@ from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.entities import build_entity_index
 from pythonarchtesting.infrastructure.logging import configure_logging
 from pythonarchtesting.matching import MatchingConfig
-from pythonarchtesting.report.api import build_multi_target_report
-from pythonarchtesting.state_multi import RunState, TargetRunState
+from pythonarchtesting.report.api import build_run_report_payload
+from pythonarchtesting.run_state import RunState, TargetRunState
 
 
 def _config():
@@ -66,6 +66,6 @@ def test_config_propagates_matching_and_reporting_without_runtime_compat(
         validation_results=[],
     )
 
-    report = build_multi_target_report(run_state, [target_state], cfg)
+    report = build_run_report_payload(run_state, [target_state], cfg)
     assert report["run"]["mode"] == "static-only"
     assert report["run"]["config_snapshot"] is not None

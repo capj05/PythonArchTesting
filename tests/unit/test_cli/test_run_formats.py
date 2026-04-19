@@ -24,13 +24,15 @@ def _stub_projects_cfg():
     )
 
 
-def _stub_run_multi_result():
-    from pythonarchtesting.entities import build_entity_index
-    from pythonarchtesting.state_multi import RunState, TargetRunState
+def _stub_run_projects_result():
     from datetime import datetime, timezone
+
+    from pythonarchtesting.entities import build_entity_index
+    from pythonarchtesting.run_state import RunState, TargetRunState
 
     empty_index = build_entity_index([])
     from pythonarchtesting.config.data import create_config_from_dict
+
     cfg = create_config_from_dict({})
     run_state = RunState(
         config=cfg,
@@ -60,7 +62,7 @@ def _stub_run_multi_result():
     return run_state, [target_state]
 
 
-def test_cli_multi_target_markdown_requires_output(monkeypatch):
+def test_cli_markdown_bundle_requires_output(monkeypatch):
     monkeypatch.setattr(cli, "load_config", lambda **kwargs: _stub_config())
     monkeypatch.setattr(cli, "configure_logging", lambda config: None)
     monkeypatch.setattr(
@@ -82,7 +84,7 @@ def test_cli_multi_target_markdown_requires_output(monkeypatch):
         )
 
 
-def test_cli_multi_target_rejects_removed_html_format(monkeypatch):
+def test_cli_rejects_removed_html_format(monkeypatch):
     monkeypatch.setattr(cli, "load_config", lambda **kwargs: _stub_config())
     monkeypatch.setattr(cli, "configure_logging", lambda config: None)
     monkeypatch.setattr(
@@ -124,8 +126,8 @@ def test_cli_main_explicitly_enables_cwd_discovery_and_logs_buffered_warnings(
         assert events == ["configure_logging"]
         events.append(message % args)
 
-    def _run_multi(*args, **kwargs):
-        return _stub_run_multi_result()
+    def _run_projects(*args, **kwargs):
+        return _stub_run_projects_result()
 
     def _generate_report(run_state, target_states, fmt, config, output):
         return "{}"
@@ -140,9 +142,9 @@ def test_cli_main_explicitly_enables_cwd_discovery_and_logs_buffered_warnings(
         "resolve_projects_config",
         lambda **kwargs: SimpleNamespace(targets=[SimpleNamespace(path=Path("/t1"))]),
     )
-    monkeypatch.setattr(cli, "run_multi", _run_multi)
-    monkeypatch.setattr(cli, "generate_multi_target_report", _generate_report)
-    monkeypatch.setattr(cli, "get_multi_exit_code", _get_exit_code)
+    monkeypatch.setattr(cli, "run_projects", _run_projects)
+    monkeypatch.setattr(cli, "generate_run_report", _generate_report)
+    monkeypatch.setattr(cli, "get_run_exit_code", _get_exit_code)
     monkeypatch.setattr(cli.os, "getcwd", lambda: "C:/repo")
     monkeypatch.setattr(cli.logging, "warning", _warning)
 
@@ -177,9 +179,9 @@ def test_cli_main_autoloads_dotfile_config_without_explicit_config(
 
     seen = {}
 
-    def _run_multi(*args, **kwargs):
+    def _run_projects(*args, **kwargs):
         seen["timeout"] = kwargs["config"].performance.default_timeout
-        return _stub_run_multi_result()
+        return _stub_run_projects_result()
 
     def _generate_report(run_state, target_states, fmt, config, output):
         return "{}"
@@ -187,9 +189,9 @@ def test_cli_main_autoloads_dotfile_config_without_explicit_config(
     def _get_exit_code(run_state, target_states, config):
         return 0
 
-    monkeypatch.setattr(cli, "run_multi", _run_multi)
-    monkeypatch.setattr(cli, "generate_multi_target_report", _generate_report)
-    monkeypatch.setattr(cli, "get_multi_exit_code", _get_exit_code)
+    monkeypatch.setattr(cli, "run_projects", _run_projects)
+    monkeypatch.setattr(cli, "generate_run_report", _generate_report)
+    monkeypatch.setattr(cli, "get_run_exit_code", _get_exit_code)
 
     exit_code = cli.main(["--target", "a"])
 

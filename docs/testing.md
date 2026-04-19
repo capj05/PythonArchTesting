@@ -74,7 +74,7 @@ Phase 0 (bootstrap):
 - `src/pythonarchtesting/constants`
 - `src/pythonarchtesting/__init__.py`
 - `src/pythonarchtesting/exceptions.py`
-- `src/pythonarchtesting/state_multi.py`
+- `src/pythonarchtesting/run_state.py`
 
 Phase 1 (quick wins):
 
@@ -83,7 +83,7 @@ Phase 1 (quick wins):
 - `src/pythonarchtesting/execution`
 - `src/pythonarchtesting/entities.py`
 - `src/pythonarchtesting/entities_extraction`
-- `src/pythonarchtesting/runner_multi`
+- `src/pythonarchtesting/runner`
 - `src/pythonarchtesting/evidence`
 - `src/pythonarchtesting/wrappers`
 
@@ -121,7 +121,7 @@ Enrollment rule per PR:
 
 ## Transitional Notes
 
-- Multi-target and parallel execution paths are isolated and do not rely on the
+- Run execution and parallel execution paths are isolated and do not rely on the
   `ProjectState` singleton constructor path.
 - Legacy singleton/config compatibility tests remain to guard deprecated behavior
   until removal in a future minor release.

@@ -1,6 +1,4 @@
-"""
-Multi-target runner target evaluation.
-"""
+"""Runner target evaluation."""
 
 from __future__ import annotations
 
@@ -19,9 +17,9 @@ from pythonarchtesting.evidence.collection import (
     parse_python_modules,
 )
 from pythonarchtesting.matching import MatchingConfig, run_matching
+from pythonarchtesting.run_state import RunState, TargetRunState
 from pythonarchtesting.state import ValidationResult, ValidationStatus
 from pythonarchtesting.state.validation import rule_result_to_validation
-from pythonarchtesting.state_multi import RunState, TargetRunState
 from pythonarchtesting.validation_scope import filter_entities_for_scope
 
 ParsePythonModulesFn = Callable[

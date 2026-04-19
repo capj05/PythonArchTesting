@@ -12,8 +12,8 @@ from pythonarchtesting.entities_extraction import (
     extract_entities_from_source,
     extract_entities_from_source_with_nonmatchable,
 )
-from pythonarchtesting.runner_multi import evaluate_target
-from pythonarchtesting.state_multi import RunState
+from pythonarchtesting.run_state import RunState
+from pythonarchtesting.runner import evaluate_target
 
 
 def _empty_run_state(config) -> RunState:

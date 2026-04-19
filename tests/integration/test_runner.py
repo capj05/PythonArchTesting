@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-import pythonarchtesting.runner_multi as runner_multi_module
+import pythonarchtesting.runner as runner_module
 from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.config.projects import resolve_projects_config
-from pythonarchtesting.report.api import build_multi_target_report
-from pythonarchtesting.runner_multi import run_multi
+from pythonarchtesting.report.api import build_run_report_payload
+from pythonarchtesting.runner import run_projects
 
 
 def _smoke_paths() -> tuple[Path, Path, Path]:
@@ -24,7 +24,7 @@ def _fresh_config():
     return create_config_from_dict({})
 
 
-def test_run_multi_stable_target_ordering(monkeypatch) -> None:
+def test_run_projects_stable_target_ordering(monkeypatch) -> None:
     monkeypatch.chdir(Path(__file__).resolve().parents[2])
     cfg = _fresh_config()
     source, target_ok, target_bad = _smoke_paths()
@@ -34,19 +34,19 @@ def test_run_multi_stable_target_ordering(monkeypatch) -> None:
         source_path=str(source),
         targets=[str(target_bad), str(target_ok)],
     )
-    run_state, target_states = run_multi(
+    run_state, target_states = run_projects(
         config=cfg,
         projects=projects,
         load_config_first=False,
     )
-    report = build_multi_target_report(run_state, target_states, cfg)
+    report = build_run_report_payload(run_state, target_states, cfg)
 
     target_ids = [item["target_id"] for item in report["targets"]]
     assert target_ids == sorted(target_ids)
     assert not hasattr(run_state, "arch_rules")
 
 
-def test_run_multi_target_isolation_and_no_arch_output(monkeypatch) -> None:
+def test_run_projects_target_isolation_and_no_arch_output(monkeypatch) -> None:
     monkeypatch.chdir(Path(__file__).resolve().parents[2])
     cfg = _fresh_config()
     source, target_ok, target_bad = _smoke_paths()
@@ -56,12 +56,12 @@ def test_run_multi_target_isolation_and_no_arch_output(monkeypatch) -> None:
         source_path=str(source),
         targets=[str(target_ok), str(target_bad)],
     )
-    run_state, target_states = run_multi(
+    run_state, target_states = run_projects(
         config=cfg,
         projects=projects,
         load_config_first=False,
     )
-    report = build_multi_target_report(run_state, target_states, cfg)
+    report = build_run_report_payload(run_state, target_states, cfg)
     exit_codes = {item["target_id"]: item["exit_code"] for item in report["targets"]}
 
     assert exit_codes["target_ok"] == 0
@@ -73,8 +73,8 @@ def test_run_multi_target_isolation_and_no_arch_output(monkeypatch) -> None:
     )
 
 
-def test_runner_multi_alias_contract_removed() -> None:
-    assert not hasattr(runner_multi_module, "runner_multi")
+def test_runner_alias_contract_removed() -> None:
+    assert not hasattr(runner_module, "run_multi")
 
     with pytest.raises(AttributeError):
-        _ = runner_multi_module.runner_multi
+        _ = runner_module.run_multi

@@ -44,7 +44,7 @@ def test_report_modules_do_not_import_sqlalchemy():
         Path("src/pythonarchtesting/report/json_generator.py"),
         Path("src/pythonarchtesting/report/markdown_generator.py"),
         Path("src/pythonarchtesting/report/renderers/json.py"),
-        Path("src/pythonarchtesting/report/renderers/markdown_multi.py"),
+        Path("src/pythonarchtesting/report/renderers/markdown_bundle.py"),
     ]
     offenders: list[str] = []
     for path in paths:
@@ -58,6 +58,4 @@ def test_report_modules_do_not_import_sqlalchemy():
                 if (node.module or "").startswith("sqlalchemy"):
                     offenders.append(f"{path}:{node.module}")
 
-    assert not offenders, (
-        "Non-DB report modules import sqlalchemy: " f"{offenders}"
-    )
+    assert not offenders, "Non-DB report modules import sqlalchemy: " f"{offenders}"

@@ -110,7 +110,7 @@ class TargetReport:
 
 @dataclass(frozen=True, slots=True)
 class RunMeta:
-    """Run-level metadata shared by single and multi reports."""
+    """Run-level metadata shared by single and run reports."""
 
     generated_at: str
     target_path: Optional[str]
@@ -143,4 +143,4 @@ class ReportDocument:
     targets: Tuple[TargetReport, ...]
     summary: AggregateSummary
     exit_code: int
-    kind: Literal["multi"]
+    kind: Literal["run"]

@@ -8,8 +8,8 @@ from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.config.projects import TargetSpec
 from pythonarchtesting.entities import build_entity_index
 from pythonarchtesting.evidence.collection import ParsedModule
-from pythonarchtesting.runner_multi import evaluate_target, run_multi
-from pythonarchtesting.state_multi import RunState
+from pythonarchtesting.run_state import RunState
+from pythonarchtesting.runner import evaluate_target, run_projects
 
 
 def _run_state(config) -> RunState:
@@ -49,7 +49,7 @@ def test_evaluate_target_reuses_parsed_modules_for_static_evidence(
         return [parsed], []
 
     monkeypatch.setattr(
-        "pythonarchtesting.runner_multi.parse_python_modules",
+        "pythonarchtesting.runner.parse_python_modules",
         fake_parse_python_modules,
     )
 
@@ -60,7 +60,7 @@ def test_evaluate_target_reuses_parsed_modules_for_static_evidence(
     assert not hasattr(run_state, "arch_rules")
 
 
-def test_run_multi_one_target_returns_one_target_state(tmp_path) -> None:
+def test_run_projects_one_target_returns_one_target_state(tmp_path) -> None:
     source_dir = tmp_path / "source"
     target_dir = tmp_path / "target"
     source_dir.mkdir()
@@ -74,7 +74,7 @@ def test_run_multi_one_target_returns_one_target_state(tmp_path) -> None:
 
     cfg = create_config_from_dict({"projects": {"source_path": str(source_dir)}})
 
-    run_state, target_states = run_multi(
+    run_state, target_states = run_projects(
         config=cfg,
         targets=[str(target_dir)],
         source_path=str(source_dir),
@@ -85,7 +85,7 @@ def test_run_multi_one_target_returns_one_target_state(tmp_path) -> None:
     assert target_states[0].target_id == target_dir.name
 
 
-def test_run_multi_one_target_prepares_source_once(monkeypatch, tmp_path) -> None:
+def test_run_projects_one_target_prepares_source_once(monkeypatch, tmp_path) -> None:
     source_dir = tmp_path / "source"
     target_dir = tmp_path / "target"
     source_dir.mkdir()
@@ -99,7 +99,7 @@ def test_run_multi_one_target_prepares_source_once(monkeypatch, tmp_path) -> Non
 
     cfg = create_config_from_dict({"projects": {"source_path": str(source_dir)}})
 
-    run_state, target_states = run_multi(
+    run_state, target_states = run_projects(
         config=cfg,
         targets=[str(target_dir)],
         source_path=str(source_dir),
@@ -108,10 +108,12 @@ def test_run_multi_one_target_prepares_source_once(monkeypatch, tmp_path) -> Non
 
     # Source should have been prepared — source_entities must be populated
     assert run_state.source_entities
-    assert any(entity.module_path == "reference" for entity in run_state.source_entities)
+    assert any(
+        entity.module_path == "reference" for entity in run_state.source_entities
+    )
 
 
-def test_run_multi_one_target_uses_ordinary_target_id(tmp_path) -> None:
+def test_run_projects_one_target_uses_ordinary_target_id(tmp_path) -> None:
     source_dir = tmp_path / "source"
     target_dir = tmp_path / "my_target"
     source_dir.mkdir()
@@ -119,13 +121,11 @@ def test_run_multi_one_target_uses_ordinary_target_id(tmp_path) -> None:
     (source_dir / "reference.py").write_text(
         "def rule():\n    return 1\n", encoding="utf-8"
     )
-    (target_dir / "impl.py").write_text(
-        "def rule():\n    return 1\n", encoding="utf-8"
-    )
+    (target_dir / "impl.py").write_text("def rule():\n    return 1\n", encoding="utf-8")
 
     cfg = create_config_from_dict({"projects": {"source_path": str(source_dir)}})
 
-    run_state, target_states = run_multi(
+    run_state, target_states = run_projects(
         config=cfg,
         targets=[str(target_dir)],
         source_path=str(source_dir),

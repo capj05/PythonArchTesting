@@ -6,10 +6,10 @@ import pytest
 from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.entities import build_entity_index
 from pythonarchtesting.exceptions import ReportGenerationError
-from pythonarchtesting.report.api import build_multi_target_report
-from pythonarchtesting.report.ir.builder import build_multi_target_report_ir
+from pythonarchtesting.report.api import build_run_report_payload
+from pythonarchtesting.report.ir.builder import build_run_report_ir
+from pythonarchtesting.run_state import RunState, TargetRunState
 from pythonarchtesting.state import ValidationResult, ValidationStatus
-from pythonarchtesting.state_multi import RunState, TargetRunState
 
 
 def _mk_run_state(cfg):
@@ -55,12 +55,12 @@ def _mk_target(target_id: str, failed: bool) -> TargetRunState:
     )
 
 
-def test_multi_report_summary_and_determinism():
+def test_run_report_summary_and_determinism():
     cfg = create_config_from_dict({})
     run_state = _mk_run_state(cfg)
     targets = [_mk_target("b", True), _mk_target("a", False)]
-    first = build_multi_target_report(run_state, targets, cfg)
-    second = build_multi_target_report(run_state, targets, cfg)
+    first = build_run_report_payload(run_state, targets, cfg)
+    second = build_run_report_payload(run_state, targets, cfg)
 
     assert first == second
     assert [t["target_id"] for t in first["targets"]] == ["a", "b"]
@@ -69,13 +69,13 @@ def test_multi_report_summary_and_determinism():
     assert first["summary"]["targets_failed"] == 1
 
 
-def test_build_multi_target_report_ir_injection_uses_schema_validator():
+def test_build_run_report_ir_injection_uses_schema_validator():
     cfg = create_config_from_dict({"report": {"validate_schema_v2": True}})
     run_state = _mk_run_state(cfg)
     targets = [_mk_target("a", False)]
 
     with pytest.raises(ReportGenerationError):
-        build_multi_target_report_ir(
+        build_run_report_ir(
             run_state,
             targets,
             cfg,

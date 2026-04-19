@@ -18,7 +18,7 @@ from pythonarchtesting.config.accessors import (
 )
 from pythonarchtesting.exceptions import ReportGenerationError
 from pythonarchtesting.matching import MatchingConfig
-from pythonarchtesting.state_multi import RunState, TargetRunState
+from pythonarchtesting.run_state import RunState, TargetRunState
 
 from ..policy import (
     compute_aggregate_exit_code,
@@ -906,7 +906,7 @@ def _format_datetime_z(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _build_multi_target_report_document(
+def _build_run_report_document(
     run_state: RunState,
     target_states: List[TargetRunState],
     config: Optional[Any],
@@ -990,13 +990,13 @@ def _build_multi_target_report_document(
             ),
         ),
         exit_code=aggregate_exit_code,
-        kind="multi",
+        kind="run",
     )
     _validate_report_document(document, cfg, validate_report_schema_v2_fn)
     return document
 
 
-def build_multi_target_report_document(
+def build_run_report_document(
     run_state: RunState,
     target_states: List[TargetRunState],
     config: Optional[Any] = None,
@@ -1005,8 +1005,8 @@ def build_multi_target_report_document(
         validate_report_schema_v2
     ),
 ) -> ReportDocument:
-    """Build typed IR document for a multi-target run."""
-    return _build_multi_target_report_document(
+    """Build the typed IR document for a run report."""
+    return _build_run_report_document(
         run_state,
         target_states,
         config,

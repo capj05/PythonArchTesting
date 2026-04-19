@@ -1,6 +1,4 @@
-"""
-Multi-target runner source preparation.
-"""
+"""Runner source preparation."""
 
 from __future__ import annotations
 
@@ -19,13 +17,13 @@ from pythonarchtesting.entities_extraction import (
     root_path_from_module_path,
 )
 from pythonarchtesting.rules.compilation.orchestrator import compile_rules
+from pythonarchtesting.run_state import RunState
 from pythonarchtesting.state import ValidationResult, ValidationStatus
 from pythonarchtesting.state.source_resolution import resolve_source_module_files
 from pythonarchtesting.state.validation import (
     compiler_evidence_to_validation,
     rule_result_to_validation,
 )
-from pythonarchtesting.state_multi import RunState
 from pythonarchtesting.util.discovery_utils import discover_python_files
 from pythonarchtesting.validation_scope import (
     VALIDATION_SCOPE_ALL,

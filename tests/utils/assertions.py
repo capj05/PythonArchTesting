@@ -233,9 +233,7 @@ def assert_no_circular_imports(project_dir: Path) -> None:
     def has_cycle(file_path: str, path: List[str]) -> bool:
         if file_path in rec_stack:
             cycle_path = path[path.index(file_path) :] + [file_path]
-            raise AssertionError(
-                f"Circular import detected: {' -> '.join(cycle_path)}"
-            )
+            raise AssertionError(f"Circular import detected: {' -> '.join(cycle_path)}")
 
         if file_path in visited:
             return False

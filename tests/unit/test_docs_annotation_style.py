@@ -105,10 +105,22 @@ def test_public_docs_use_current_cli_surface() -> None:
 def test_tracked_reference_fixtures_use_current_rule_markers() -> None:
     root = _repo_root()
     calculator = (
-        root / "tests" / "fixtures" / "e2e" / "project_1" / "reference" / "calculator.py"
+        root
+        / "tests"
+        / "fixtures"
+        / "e2e"
+        / "project_1"
+        / "reference"
+        / "calculator.py"
     ).read_text(encoding="utf-8")
     data_processor = (
-        root / "tests" / "fixtures" / "e2e" / "project_1" / "reference" / "data_processor.py"
+        root
+        / "tests"
+        / "fixtures"
+        / "e2e"
+        / "project_1"
+        / "reference"
+        / "data_processor.py"
     ).read_text(encoding="utf-8")
 
     assert (

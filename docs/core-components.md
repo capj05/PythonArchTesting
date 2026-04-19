@@ -18,7 +18,7 @@ Compilation is annotation-driven. The canonical compiler namespace is `pythonarc
 
 ## Execution
 
-- `pythonarchtesting.runner_multi`
+- `pythonarchtesting.runner`
 - `pythonarchtesting.execution.evaluators.api_signature`
 - `pythonarchtesting.execution.evaluators.import_policy`
 - `pythonarchtesting.execution.evaluators.protocol_conformance`

@@ -13,7 +13,7 @@ This is the current high-level pipeline for PythonArchTesting.
 5. Compiled rules are evaluated in `pythonarchtesting.execution.evaluators`.
 6. Reports are built and rendered in `pythonarchtesting.report`.
 
-For multi-target runs, `pythonarchtesting.runner_multi` prepares the shared source state once
+For run execution, `pythonarchtesting.runner` prepares the shared source state once
 and evaluates each target separately.
 
 ## Key Modules

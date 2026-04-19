@@ -19,7 +19,10 @@ import pytest
         "pythonarchtesting.state.project_state",
         "pythonarchtesting.state.project_state.discovery_bridge",
         "pythonarchtesting.state.state",
-        "pythonarchtesting.runner_multi.runner_multi",
+        "pythonarchtesting.state_multi",
+        "pythonarchtesting.runner_multi",
+        "pythonarchtesting.runner.runner",
+        "pythonarchtesting.report.renderers.markdown_multi",
     ],
 )
 def test_removed_modules_are_not_importable(module_name: str):

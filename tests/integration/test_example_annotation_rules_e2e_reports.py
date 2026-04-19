@@ -384,9 +384,7 @@ def test_real_example_reference_passes_declaration_validation(monkeypatch) -> No
     assert payload["diagnostics"] == []
 
 
-def test_real_example_multi_target_json_report_is_accurate(
-    tmp_path, monkeypatch
-) -> None:
+def test_real_example_run_report_json_is_accurate(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(_repo_root())
     source, targets_dir = _real_example_source_targets()
     config_path = _write_static_only_config(tmp_path)
@@ -475,9 +473,7 @@ def test_real_example_multi_target_json_report_is_accurate(
         )
 
 
-def test_real_example_multi_target_markdown_bundle_is_written(
-    tmp_path, monkeypatch
-) -> None:
+def test_real_example_markdown_bundle_is_written(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(_repo_root())
     source, targets_dir = _real_example_source_targets()
     config_path = _write_static_only_config(tmp_path)

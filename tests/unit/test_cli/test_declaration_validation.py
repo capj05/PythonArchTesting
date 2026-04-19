@@ -9,7 +9,7 @@ import pytest
 import pythonarchtesting.cli as cli
 from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.declaration_validation import collect_declaration_diagnostics
-from pythonarchtesting.runner_multi.source_prep import prepare_source
+from pythonarchtesting.runner.source_prep import prepare_source
 
 
 def _write_source_file(root: Path, body: str, filename: str = "rules.py") -> Path:

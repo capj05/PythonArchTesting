@@ -1,6 +1,4 @@
-"""
-Multi-target project configuration resolution.
-"""
+"""Project configuration resolution for target-set runs."""
 
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
 from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.report.api import (
     compute_aggregate_exit_code,
-    compute_target_exit_code as compute_exit_code,
 )
+from pythonarchtesting.report.api import compute_target_exit_code as compute_exit_code
 
 
 class _DummyConfig:
@@ -32,15 +32,15 @@ class _ExitState:
 def test_compute_aggregate_exit_code_policies():
     targets = [_ExitState(1), _ExitState(0)]
 
-    cfg = create_config_from_dict({"report": {"multi_target_exit_policy": "any_fail"}})
+    cfg = create_config_from_dict({"report": {"run_exit_policy": "any_fail"}})
     assert compute_aggregate_exit_code(targets, cfg) == 1
 
-    cfg = create_config_from_dict({"report": {"multi_target_exit_policy": "all_fail"}})
+    cfg = create_config_from_dict({"report": {"run_exit_policy": "all_fail"}})
     assert compute_aggregate_exit_code(targets, cfg) == 0
     assert compute_aggregate_exit_code([_ExitState(1), _ExitState(1)], cfg) == 1
 
     cfg = create_config_from_dict(
-        {"report": {"multi_target_exit_policy": "threshold", "fail_threshold": 2}}
+        {"report": {"run_exit_policy": "threshold", "fail_threshold": 2}}
     )
     assert compute_aggregate_exit_code(targets, cfg) == 0
     assert compute_aggregate_exit_code([_ExitState(1), _ExitState(1)], cfg) == 1

@@ -214,7 +214,7 @@ def _results_summary(payload: Optional[Dict[str, Any]]) -> ResultsSummary:
 
 def report_dict_to_ir(report: Dict[str, Any], kind: str) -> ReportDocument:
     """Convert a schema-v2 legacy dict into a typed report document."""
-    if kind != "multi":
+    if kind != "run":
         raise ValueError(f"Unsupported report kind: {kind}")
 
     run_payload = dict(report.get("run") or {})
@@ -312,5 +312,5 @@ def report_dict_to_ir(report: Dict[str, Any], kind: str) -> ReportDocument:
         targets=tuple(targets),
         summary=aggregate,
         exit_code=int(report.get("exit_code", 0)),
-        kind="multi",
+        kind="run",
     )

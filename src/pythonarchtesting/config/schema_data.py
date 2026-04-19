@@ -172,7 +172,7 @@ CONFIGURATION_SCHEMA: Dict[str, Dict[str, ValidationRule]] = {
             max_value=1000,
             default_value=3,
         ),
-        "multi_target_exit_policy": ValidationRule(
+        "run_exit_policy": ValidationRule(
             value_type=ValueType.STRING,
             allowed_values=["any_fail", "all_fail", "threshold"],
             default_value="any_fail",

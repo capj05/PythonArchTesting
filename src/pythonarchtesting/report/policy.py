@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from pythonarchtesting.config.accessors import get_bool, get_int, get_str
-from pythonarchtesting.state_multi import TargetRunState
+from pythonarchtesting.run_state import TargetRunState
 
 
 def compute_exit_code(results: List[Dict[str, Any]], config: Any) -> int:
@@ -33,9 +33,9 @@ def compute_target_exit_code(  # noqa: E501
 def compute_aggregate_exit_code(
     target_states: List[TargetRunState], config: Any
 ) -> int:
-    """Compute aggregate multi-target exit code using configured policy."""
+    """Compute aggregate run exit code using configured policy."""
     policy = get_str(  # noqa: E501
-        config, "report", "multi_target_exit_policy", "any_fail"
+        config, "report", "run_exit_policy", "any_fail"
     ).strip()
     threshold = get_int(config, "report", "fail_threshold", 1)
 

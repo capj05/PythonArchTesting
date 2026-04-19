@@ -7,8 +7,8 @@ from pythonarchtesting.rules.compilation.declarations import (
     is_invalid_annotation_declaration,
     normalize_declaration_entries,
 )
+from pythonarchtesting.run_state import RunState
 from pythonarchtesting.state.validation import ValidationResult
-from pythonarchtesting.state_multi import RunState
 
 
 def _entry_diagnostic(entity: Any, entry: Any) -> dict[str, Any]:

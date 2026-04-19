@@ -23,7 +23,7 @@ Each target gets its own `exit_code`:
 Warnings fail a target only when `[report].warnings_as_fail = true`.
 
 The top-level run also gets an aggregate `exit_code`. The aggregate policy comes
-from `[report].multi_target_exit_policy`:
+from `[report].run_exit_policy`:
 
 - `any_fail` (default): `1` if any target failed
 - `all_fail`: `1` only when every target failed

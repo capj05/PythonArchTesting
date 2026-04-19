@@ -3,7 +3,7 @@ import importlib.util
 
 
 def test_orchestrator_has_no_run_single_target():
-    import pythonarchtesting.runner_multi.orchestrator as m
+    import pythonarchtesting.runner.orchestrator as m
 
     assert not hasattr(m, "run_single_target")
 
