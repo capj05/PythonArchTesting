@@ -6,7 +6,9 @@ from .decorators import (
     compile_forbid_imports,
     compile_implements_protocol,
     compile_required_entity_signature,
+    compile_required_factory,
     compile_required_method,
+    compile_subclass_of,
 )
 from .orchestrator import compile_rules
 
@@ -15,9 +17,11 @@ __all__ = [
     "evidence_id",
     "with_rule_id_suffix",
     "compile_required_entity_signature",
+    "compile_required_factory",
     "compile_required_method",
     "compile_enforce_flow",
     "compile_forbid_imports",
     "compile_implements_protocol",
+    "compile_subclass_of",
     "compile_rules",
 ]

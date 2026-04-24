@@ -71,12 +71,34 @@ def class_attributes(
     )
 
 
+def declared_class_attributes(
+    entity: Entity, entities: Sequence[Entity]
+) -> list[ProtocolAttribute]:
+    lookup = ProtocolEntityLookup.from_entities(entities)
+    return _collect_class_attributes(
+        entity,
+        entities,
+        include_base=lambda _: False,
+        lookup=lookup,
+    )
+
+
 def class_methods(entity: Entity, entities: Sequence[Entity]) -> list[Entity]:
     lookup = ProtocolEntityLookup.from_entities(entities)
     return _collect_class_methods(
         entity,
         entities,
         include_base=lambda _: True,
+        lookup=lookup,
+    )
+
+
+def declared_class_methods(entity: Entity, entities: Sequence[Entity]) -> list[Entity]:
+    lookup = ProtocolEntityLookup.from_entities(entities)
+    return _collect_class_methods(
+        entity,
+        entities,
+        include_base=lambda _: False,
         lookup=lookup,
     )
 
@@ -342,6 +364,8 @@ __all__ = [
     "ProtocolAttribute",
     "class_attributes",
     "class_methods",
+    "declared_class_attributes",
+    "declared_class_methods",
     "is_protocol_entity",
     "protocol_attributes",
     "protocol_methods",

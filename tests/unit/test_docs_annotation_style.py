@@ -12,6 +12,7 @@ def _assert_no_decorator_syntax(path: Path) -> None:
     for marker in (
         "@type_check",
         "@required_entity_signature",
+        "@required_factory",
         "@required_method",
         "@forbid_imports",
     ):
@@ -36,6 +37,7 @@ def test_public_docs_are_annotation_only() -> None:
     assert "signature" in combined.lower()
     assert "pythonarchtesting.rules" in combined
     assert "required_method(" in combined
+    assert "required_factory(" in combined
     assert "forbid_imports(" in combined
     assert "pythonarchtesting.rules.compilation" in combined
     assert "pythonarchtesting.wrappers" not in combined
@@ -123,10 +125,9 @@ def test_tracked_reference_fixtures_use_current_rule_markers() -> None:
         / "data_processor.py"
     ).read_text(encoding="utf-8")
 
-    assert (
-        "from pythonarchtesting.rules import required_entity_signature, required_method"
-        in calculator
-    )
+    assert "from pythonarchtesting.rules import" in calculator
+    assert "required_entity_signature" in calculator
+    assert "required_method" in calculator
     assert "from src.rules" not in calculator
     assert "__archtest__: Annotated[" in calculator
     assert (

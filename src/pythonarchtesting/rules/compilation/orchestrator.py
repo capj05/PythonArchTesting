@@ -20,9 +20,24 @@ from pythonarchtesting.rules.compilation.decorators.api_signature import (
     compile_required_entity_signature,
     compile_required_method,
 )
+from pythonarchtesting.rules.compilation.decorators.attributes import (
+    compile_required_attribute,
+)
+from pythonarchtesting.rules.compilation.decorators.constructors import (
+    compile_required_constructor,
+)
+from pythonarchtesting.rules.compilation.decorators.factories import (
+    compile_required_factory,
+)
 from pythonarchtesting.rules.compilation.decorators.flow import compile_enforce_flow
 from pythonarchtesting.rules.compilation.decorators.import_policy import (
     compile_forbid_imports,
+)
+from pythonarchtesting.rules.compilation.decorators.member_absence import (
+    compile_does_not_have,
+)
+from pythonarchtesting.rules.compilation.decorators.nominal_type import (
+    compile_subclass_of,
 )
 from pythonarchtesting.rules.compilation.decorators.protocols import (
     compile_implements_protocol,
@@ -65,9 +80,14 @@ def compile_rules(
     declaration_compilers: dict[str, Any] = {
         "required_entity_signature": compile_required_entity_signature,
         "required_method": compile_required_method,
+        "required_constructor": compile_required_constructor,
+        "required_factory": compile_required_factory,
+        "required_attribute": compile_required_attribute,
+        "does_not_have": compile_does_not_have,
         "enforce_flow": compile_enforce_flow,
         "forbid_imports": compile_forbid_imports,
         "implements_protocol": compile_implements_protocol,
+        "subclass_of": compile_subclass_of,
     }
 
     rules: List[Any] = []
@@ -95,7 +115,11 @@ def compile_rules(
         ):
             compiler = declaration_compilers[declaration.kind]
             compiler_kwargs: dict[str, Any] = {"rule_id_suffix": rule_id_suffix}
-            if declaration.kind == "implements_protocol":
+            if declaration.kind in {
+                "implements_protocol",
+                "subclass_of",
+                "required_constructor",
+            }:
                 compiler_kwargs["source_entities"] = source_entities
             compiled_rules, evidence_items, results = compiler(
                 source_entity,

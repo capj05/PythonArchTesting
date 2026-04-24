@@ -16,17 +16,25 @@ _POSITIONAL_LIST_ARG_NAMES = {
     "forbid_imports": "forbidden",
 }
 _POSITIONAL_SINGLE_ARG_NAMES = {
+    "does_not_have": "name",
     "implements_protocol": "protocol",
+    "required_attribute": "name",
+    "subclass_of": "base",
     "flow": "stage",
     "enforce_flow": "stages",
 }
 _SUPPORTED_MARKER_NAMES = {
+    "does_not_have",
     "enforce_flow",
     "forbid_imports",
     "flow",
     "implements_protocol",
+    "required_attribute",
+    "required_constructor",
     "required_entity_signature",
+    "required_factory",
     "required_method",
+    "subclass_of",
 }
 _SIGNATURE_SUPPORTED_MARKER_NAMES = {
     "required_entity_signature",

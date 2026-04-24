@@ -75,11 +75,19 @@ def required_method(
     *,
     signature_mode: str = "compatible",
     enforce_method_kind: bool = True,
+    allow_missing: bool = False,
+    declared_only: bool = False,
+    name_match: str = "exact",
+    aliases: list[str] | None = None,
+    pattern: str | None = None,
     severity: str = "error",
     message: str | None = None,
 ) -> RuleMarker:
     """
     Capture required method intent for the rule engine.
+
+    ``signature_mode`` accepts ``"compatible"``, ``"exact"``, and ``"any"``.
+    ``"any"`` keeps the method existence check but ignores parameter shape.
 
     This helper is declaration-only and returns passive annotation metadata.
     """
@@ -87,6 +95,11 @@ def required_method(
         {
             "signature_mode": signature_mode,
             "enforce_method_kind": enforce_method_kind,
+            "allow_missing": allow_missing,
+            "declared_only": declared_only,
+            "name_match": name_match,
+            "aliases": list(aliases) if aliases is not None else None,
+            "pattern": pattern,
             "severity": severity,
         }
     )
@@ -97,6 +110,141 @@ def required_method(
         severity=_resolve_severity(severity),
     )
     return marker
+
+
+def required_constructor(
+    *,
+    signature_mode: str = "compatible",
+    constructor_kind: str = "auto",
+    allow_inherited: bool = True,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture required constructor intent for the rule engine.
+
+    Place on a class-level ``__archtest__`` annotation. The evaluator resolves
+    the source class constructor (``__init__`` or ``__new__`` depending on
+    ``constructor_kind``) and checks that the matched target class exposes a
+    compatible constructor.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "signature_mode": signature_mode,
+            "constructor_kind": constructor_kind,
+            "allow_inherited": allow_inherited,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "required_constructor",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def required_factory(
+    *,
+    signature_mode: str = "compatible",
+    satisfy_with: tuple[str, ...] = ("constructor", "classmethod", "staticmethod"),
+    allow_inherited: bool = True,
+    name_match: str = "any",
+    aliases: list[str] | None = None,
+    pattern: str | None = None,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture required factory intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "signature_mode": signature_mode,
+            "satisfy_with": list(satisfy_with),
+            "allow_inherited": allow_inherited,
+            "name_match": name_match,
+            "aliases": list(aliases) if aliases is not None else None,
+            "pattern": pattern,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "required_factory",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def required_attribute(
+    name: str,
+    *,
+    annotation: str | None = None,
+    storage: str = "any",
+    allow_property: bool = False,
+    require_writable: bool = False,
+    declared_only: bool = False,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture required attribute intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "name": name,
+            "annotation": annotation,
+            "storage": storage,
+            "allow_property": allow_property,
+            "require_writable": require_writable,
+            "declared_only": declared_only,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "required_attribute",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def does_not_have(
+    name: str,
+    *,
+    member_kind: str = "any",
+    storage: str = "any",
+    declared_only: bool = False,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture forbidden class-member intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "name": name,
+            "member_kind": member_kind,
+            "storage": storage,
+            "declared_only": declared_only,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "does_not_have",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
 
 
 def forbid_imports(
@@ -168,6 +316,31 @@ def implements_protocol(
     )
     return _make_rule_marker(
         "implements_protocol",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def subclass_of(
+    base: str,
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture nominal inheritance intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "base": base,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "subclass_of",
         cleaned,
         message=message,
         severity=_resolve_severity(severity),

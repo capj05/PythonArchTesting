@@ -11,12 +11,17 @@ from pythonarchtesting.rules.compilation.common import canonicalize_payload
 
 _SUPPORTED_DECLARATION_KINDS = frozenset(
     {
+        "does_not_have",
         "enforce_flow",
         "forbid_imports",
         "flow",
         "implements_protocol",
+        "required_attribute",
+        "required_constructor",
         "required_entity_signature",
+        "required_factory",
         "required_method",
+        "subclass_of",
     }
 )
 _INVALID_ANNOTATION_ISSUES = frozenset(
@@ -24,11 +29,16 @@ _INVALID_ANNOTATION_ISSUES = frozenset(
 )
 _DEDUPE_DECLARATION_KINDS = frozenset(
     {
+        "does_not_have",
         "enforce_flow",
         "forbid_imports",
         "implements_protocol",
+        "required_attribute",
+        "required_constructor",
         "required_entity_signature",
+        "required_factory",
         "required_method",
+        "subclass_of",
     }
 )
 

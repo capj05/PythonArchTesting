@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pythonarchtesting.protocols.introspection import (
+    declared_class_methods,
     is_protocol_entity,
     protocol_attributes,
     protocol_methods,
@@ -156,6 +157,29 @@ class Repository(BaseRepository):
 
     assert [method.name for method in methods] == ["get"]
     assert methods[0].extras["annotations"]["args"][1]["annotation"] == "int"
+
+
+def test_declared_class_methods_excludes_inherited_members() -> None:
+    source = """
+class BaseRepository:
+    def get(self, item_id: str) -> str:
+        return item_id
+
+
+class Repository(BaseRepository):
+    def save(self, item_id: str) -> None:
+        return None
+"""
+    source_entities = extract_entities(source, role="source")
+    repository = next(
+        entity
+        for entity in source_entities
+        if entity.kind == "class" and entity.name == "Repository"
+    )
+
+    assert [
+        method.name for method in declared_class_methods(repository, source_entities)
+    ] == ["save"]
 
 
 def test_pro001_protocol_collector_treats_property_as_attribute() -> None:

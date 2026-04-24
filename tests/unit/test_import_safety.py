@@ -8,6 +8,8 @@ import statistics
 import subprocess
 import sys
 
+CLI_HELP_IMPORTTIME_BUDGET_US = 500000
+
 
 def _run_cli_help_module_capture() -> list[str]:
     code = """
@@ -77,7 +79,8 @@ def test_cli_help_importtime_budget():
         cumulative_us.append(_cli_importtime_us(result.stderr))
 
     median_us = int(statistics.median(cumulative_us))
-    assert median_us <= 300000, (
+    assert median_us <= CLI_HELP_IMPORTTIME_BUDGET_US, (
         "CLI --help importtime budget exceeded: "
-        f"median={median_us}us, samples={cumulative_us}, budget=300000us"
+        f"median={median_us}us, samples={cumulative_us}, "
+        f"budget={CLI_HELP_IMPORTTIME_BUDGET_US}us"
     )

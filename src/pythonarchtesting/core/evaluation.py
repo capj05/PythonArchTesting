@@ -11,6 +11,9 @@ from typing import Any, Dict, List, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.entities import Entity, EntityIndex
+from pythonarchtesting.execution.evaluators.member_name_resolution import (
+    matched_target_parent_class,
+)
 from pythonarchtesting.matching import MatchResult, MatchStatus
 
 
@@ -75,6 +78,19 @@ def evaluate_rule(
                 )
             )
             return evaluator.evaluate(rule, source_entity, fallback_target, match, ctx)
+
+        if rule.rule_type == "api_signature" and rule.name in {
+            "required_method",
+            "required_factory",
+        }:
+            from pythonarchtesting.execution.evaluators import get_rule_evaluator
+
+            evaluator = get_rule_evaluator(rule.rule_type)
+            fallback_target = matched_target_parent_class(source_entity, ctx)
+            if evaluator is not None and fallback_target is not None:
+                return evaluator.evaluate(
+                    rule, source_entity, fallback_target, match, ctx
+                )
 
         if bool(rule.params.get("fail_on_unmatched", False)):
             return RuleResult(

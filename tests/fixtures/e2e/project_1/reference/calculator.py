@@ -6,7 +6,11 @@ This module demonstrates basic arithmetic operations with proper error handling.
 import numbers
 from typing import Annotated, List, Union
 
-from pythonarchtesting.rules import required_entity_signature, required_method
+from pythonarchtesting.rules import (
+    required_constructor,
+    required_entity_signature,
+    required_method,
+)
 
 # Type annotations for better type checking
 Number = Union[int, float]
@@ -28,6 +32,11 @@ class Calculator:
     Attributes:
         history (List[str]): Stores calculation history
     """
+
+    __archtest__: Annotated[  # noqa: F842
+        None,
+        required_constructor(signature_mode="compatible"),
+    ]
 
     def __init__(self):
         """Initialize calculator with empty history."""

@@ -20,6 +20,9 @@ from pythonarchtesting.rules.compilation.decorators.api_signature import (
     compile_required_entity_signature,
     compile_required_method,
 )
+from pythonarchtesting.rules.compilation.decorators.attributes import (
+    compile_required_attribute,
+)
 from pythonarchtesting.rules.compilation.decorators.flow import compile_enforce_flow
 from pythonarchtesting.rules.compilation.decorators.import_policy import (
     compile_forbid_imports,
@@ -65,6 +68,7 @@ def compile_rules(
     declaration_compilers: dict[str, Any] = {
         "required_entity_signature": compile_required_entity_signature,
         "required_method": compile_required_method,
+        "required_attribute": compile_required_attribute,
         "enforce_flow": compile_enforce_flow,
         "forbid_imports": compile_forbid_imports,
         "implements_protocol": compile_implements_protocol,

@@ -3,14 +3,20 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from .api_signature import ApiSignatureEvaluator
+from .attribute_contract import AttributeContractEvaluator
 from .import_policy import ImportPolicyEvaluator
+from .member_absence import MemberAbsenceEvaluator
+from .nominal_type_relationship import NominalTypeRelationshipEvaluator
 from .protocol_conformance import ProtocolConformanceEvaluator
 from .variable_flow import VariableFlowEvaluator
 
 # Registry of evaluators for different rule types.
 _EVALUATORS: Dict[str, Any] = {
+    "attribute_contract": AttributeContractEvaluator(),
     "api_signature": ApiSignatureEvaluator(),
     "import_policy": ImportPolicyEvaluator(),
+    "member_absence": MemberAbsenceEvaluator(),
+    "nominal_type_relationship": NominalTypeRelationshipEvaluator(),
     "protocol_conformance": ProtocolConformanceEvaluator(),
     "variable_flow": VariableFlowEvaluator(),
 }

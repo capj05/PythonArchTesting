@@ -49,6 +49,138 @@ def test_normalize_annotation_only_entries() -> None:
     assert entries[0].params == {"signature_mode": "exact"}
 
 
+def test_required_method_declared_only_annotation_normalizes() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_method
+
+        class Processor:
+            def run(self, value: int) -> int:
+                __archtest__: Annotated[
+                    None,
+                    required_method(signature_mode="exact", declared_only=True),
+                ]
+                return value
+        """)
+
+    method_entity = next(entity for entity in entities if entity.kind == "method")
+    entries = normalize_declaration_entries(method_entity)
+
+    assert [entry.kind for entry in entries] == ["required_method"]
+    assert entries[0].params == {
+        "signature_mode": "exact",
+        "declared_only": True,
+    }
+
+
+def test_required_method_allow_missing_annotation_normalizes() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_method
+
+        class Processor:
+            def run(self, value: int) -> int:
+                __archtest__: Annotated[
+                    None,
+                    required_method(signature_mode="exact", allow_missing=True),
+                ]
+                return value
+        """)
+
+    method_entity = next(entity for entity in entities if entity.kind == "method")
+    entries = normalize_declaration_entries(method_entity)
+
+    assert [entry.kind for entry in entries] == ["required_method"]
+    assert entries[0].params == {
+        "signature_mode": "exact",
+        "allow_missing": True,
+    }
+
+
+def test_required_method_any_signature_mode_annotation_normalizes() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_method
+
+        class Processor:
+            def run(self, value: int) -> int:
+                __archtest__: Annotated[
+                    None,
+                    required_method(signature_mode="any"),
+                ]
+                return value
+        """)
+
+    method_entity = next(entity for entity in entities if entity.kind == "method")
+    entries = normalize_declaration_entries(method_entity)
+
+    assert [entry.kind for entry in entries] == ["required_method"]
+    assert entries[0].params == {"signature_mode": "any"}
+
+
+def test_required_method_flexible_name_annotation_normalizes() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_method
+
+        class Processor:
+            def run(self, value: int) -> int:
+                __archtest__: Annotated[
+                    None,
+                    required_method(
+                        signature_mode="compatible",
+                        name_match="alias",
+                        aliases=["get", "load"],
+                    ),
+                ]
+                return value
+        """)
+
+    method_entity = next(entity for entity in entities if entity.kind == "method")
+    entries = normalize_declaration_entries(method_entity)
+
+    assert [entry.kind for entry in entries] == ["required_method"]
+    assert entries[0].params == {
+        "signature_mode": "compatible",
+        "name_match": "alias",
+        "aliases": ["get", "load"],
+    }
+
+
+def test_required_factory_annotation_normalizes() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_factory
+
+        class Processor:
+            @classmethod
+            def build(cls, value: int) -> "Processor":
+                __archtest__: Annotated[
+                    None,
+                    required_factory(
+                        signature_mode="exact",
+                        satisfy_with=("classmethod",),
+                        allow_inherited=False,
+                        name_match="alias",
+                        aliases=["create"],
+                    ),
+                ]
+                return cls()
+        """)
+
+    method_entity = next(entity for entity in entities if entity.kind == "method")
+    entries = normalize_declaration_entries(method_entity)
+
+    assert [entry.kind for entry in entries] == ["required_factory"]
+    assert entries[0].params == {
+        "signature_mode": "exact",
+        "satisfy_with": ("classmethod",),
+        "allow_inherited": False,
+        "name_match": "alias",
+        "aliases": ["create"],
+    }
+
+
 def test_normalize_same_annotation_keeps_one_entry() -> None:
     entities = _extract_entities("""
         from typing import Annotated
@@ -84,6 +216,31 @@ def test_normalize_same_kind_annotations_keep_stable_order_and_suffixes() -> Non
 
     assert [entry.params["mode"] for entry in entries] == ["compatible", "exact"]
     assert declaration_rule_id_suffixes(entries) == ["/d0", "/d1"]
+
+
+def test_subclass_of_annotation_normalizes_and_dedupes() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import subclass_of
+
+        class BaseRepository:
+            pass
+
+        class CsvRepository(BaseRepository):
+            __archtest__: Annotated[None, subclass_of("sample.BaseRepository")]
+            __archtest__: Annotated[None, ("subclass_of", {"base": "sample.BaseRepository"})]
+        """)
+
+    class_entity = next(
+        entity
+        for entity in entities
+        if entity.kind == "class" and entity.name == "CsvRepository"
+    )
+    entries = normalize_declaration_entries(class_entity)
+
+    assert len(entries) == 1
+    assert entries[0].kind == "subclass_of"
+    assert entries[0].params["base"] == "sample.BaseRepository"
 
 
 def test_invalid_annotation_declarations_emit_compiler_evidence_without_rules() -> None:
@@ -377,6 +534,237 @@ def test_compile_rules_surface_matches_supported_canonical_import() -> None:
     assert [item.type for item in canonical[1]] == [item.type for item in direct[1]]
     assert [result.rule_id for result in canonical[2]] == [
         result.rule_id for result in direct[2]
+    ]
+
+
+def test_required_attribute_annotation_declaration_normalizes() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_attribute
+
+        class User:
+            __archtest__: Annotated[
+                None,
+                required_attribute("email", annotation="str", storage="instance"),
+            ]
+        """)
+    class_entity = next(entity for entity in entities if entity.kind == "class")
+
+    entries = normalize_declaration_entries(class_entity)
+
+    assert [entry.kind for entry in entries] == ["required_attribute"]
+    assert entries[0].params == {
+        "name": "email",
+        "annotation": "str",
+        "storage": "instance",
+    }
+
+
+def test_required_attribute_annotation_declaration_compiles_supported_rule() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_attribute
+
+        class User:
+            __archtest__: Annotated[None, required_attribute("email")]
+        """)
+    class_entity = next(entity for entity in entities if entity.kind == "class")
+
+    rules, evidence, compiler_results = compile_rules([class_entity], Mock())
+
+    assert evidence == []
+    assert compiler_results == []
+    assert [rule.rule_id for rule in rules] == ["API003/required_attribute/v1"]
+
+
+def test_multiple_required_attribute_declarations_get_unique_rule_ids() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_attribute
+
+        class User:
+            __archtest__: Annotated[None, required_attribute("email")]
+            __archtest__: Annotated[
+                None,
+                required_attribute("VERSION", storage="class"),
+            ]
+        """)
+    class_entity = next(entity for entity in entities if entity.kind == "class")
+
+    rules, evidence, compiler_results = compile_rules([class_entity], Mock())
+
+    assert evidence == []
+    assert compiler_results == []
+    assert [rule.rule_id for rule in rules] == [
+        "API003/required_attribute/v1/d0",
+        "API003/required_attribute/v1/d1",
+    ]
+
+
+def test_required_attribute_allow_property_params_survive_normalization() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_attribute
+
+        class User:
+            __archtest__: Annotated[
+                None,
+                required_attribute(
+                    "x",
+                    allow_property=True,
+                    require_writable=True,
+                    declared_only=True,
+                ),
+            ]
+        """)
+    class_entity = next(entity for entity in entities if entity.kind == "class")
+
+    entries = normalize_declaration_entries(class_entity)
+
+    assert [entry.kind for entry in entries] == ["required_attribute"]
+    assert entries[0].params.get("allow_property") is True
+    assert entries[0].params.get("require_writable") is True
+    assert entries[0].params.get("declared_only") is True
+
+    rules, evidence, compiler_results = compile_rules([class_entity], Mock())
+
+    assert evidence == []
+    assert compiler_results == []
+    assert len(rules) == 1
+    rule = rules[0]
+    assert rule.rule_id == "API003/required_attribute/v1"
+    assert rule.rule_type == "attribute_contract"
+    assert rule.params.get("allow_property") is True
+    assert rule.params.get("require_writable") is True
+    assert rule.params.get("declared_only") is True
+
+
+def test_required_constructor_annotation_declaration_normalizes() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_constructor
+
+        class User:
+            __archtest__: Annotated[
+                None,
+                required_constructor(signature_mode="compatible"),
+            ]
+
+            def __init__(self, name: str) -> None:
+                self.name = name
+        """)
+    class_entity = next(entity for entity in entities if entity.kind == "class")
+
+    entries = normalize_declaration_entries(class_entity)
+
+    kinds = [entry.kind for entry in entries]
+    assert "required_constructor" in kinds
+    ctor_entry = next(e for e in entries if e.kind == "required_constructor")
+    assert ctor_entry.params == {"signature_mode": "compatible"}
+
+
+def test_required_constructor_annotation_declaration_compiles_supported_rule() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_constructor
+
+        class User:
+            __archtest__: Annotated[None, required_constructor()]
+
+            def __init__(self, name: str) -> None:
+                self.name = name
+        """)
+
+    rules, evidence, compiler_results = compile_rules(entities, Mock())
+
+    assert evidence == []
+    assert compiler_results == []
+    ctor_rule_ids = [
+        rule.rule_id
+        for rule in rules
+        if rule.rule_id.startswith("API003/required_constructor")
+    ]
+    assert ctor_rule_ids == ["API003/required_constructor/v1"]
+
+
+def test_does_not_have_annotation_declaration_normalizes() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import does_not_have
+
+        class User:
+            __archtest__: Annotated[
+                None,
+                does_not_have(
+                    "debug_dump",
+                    member_kind="method",
+                    declared_only=True,
+                ),
+            ]
+        """)
+    class_entity = next(entity for entity in entities if entity.kind == "class")
+
+    entries = normalize_declaration_entries(class_entity)
+
+    assert [entry.kind for entry in entries] == ["does_not_have"]
+    assert entries[0].params == {
+        "name": "debug_dump",
+        "member_kind": "method",
+        "declared_only": True,
+    }
+
+
+def test_normalize_same_does_not_have_annotation_keeps_one_entry() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import does_not_have
+
+        class User:
+            __archtest__: Annotated[
+                None,
+                does_not_have("debug_dump", member_kind="method"),
+            ]
+            __archtest__: Annotated[
+                None,
+                does_not_have("debug_dump", member_kind="method"),
+            ]
+        """)
+    class_entity = next(entity for entity in entities if entity.kind == "class")
+
+    entries = normalize_declaration_entries(class_entity)
+
+    assert len(entries) == 1
+    assert entries[0].kind == "does_not_have"
+    assert entries[0].params == {
+        "name": "debug_dump",
+        "member_kind": "method",
+    }
+
+
+def test_multiple_does_not_have_declarations_get_unique_rule_ids() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import does_not_have
+
+        class User:
+            __archtest__: Annotated[
+                None,
+                does_not_have("debug_dump", member_kind="method"),
+            ]
+            __archtest__: Annotated[
+                None,
+                does_not_have("password", member_kind="attribute", storage="instance"),
+            ]
+        """)
+    class_entity = next(entity for entity in entities if entity.kind == "class")
+
+    rules, evidence, compiler_results = compile_rules([class_entity], Mock())
+
+    assert evidence == []
+    assert compiler_results == []
+    assert [rule.rule_id for rule in rules] == [
+        "NEG001/does_not_have/v1/d0",
+        "NEG001/does_not_have/v1/d1",
     ]
 
 

@@ -86,8 +86,17 @@ class ProtocolEntityLookup:
             return None
         return matches[0]
 
+    def class_matches_by_name(self, name: str) -> tuple[Entity, ...]:
+        return self._classes_by_name.get(name, ())
+
+    def unique_class_by_name(self, name: str) -> Entity | None:
+        matches = self.class_matches_by_name(name)
+        if len(matches) != 1:
+            return None
+        return matches[0]
+
     def class_by_name(self, name: str) -> Entity | None:
-        matches = self._classes_by_name.get(name, ())
+        matches = self.class_matches_by_name(name)
         return matches[0] if matches else None
 
     def resolved_bases(self, entity: Entity) -> tuple[Entity, ...]:

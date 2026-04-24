@@ -33,19 +33,29 @@ class _LazyMarkerFactory:
 
 def _get_core_decorators() -> dict[str, Any]:
     from pythonarchtesting.rules.declaration.core import (
+        does_not_have,
         enforce_flow,
         flow,
         forbid_imports,
         implements_protocol,
+        required_attribute,
+        required_constructor,
         required_entity_signature,
+        required_factory,
         required_method,
+        subclass_of,
     )
 
     return {
         "required_entity_signature": required_entity_signature,
         "required_method": required_method,
+        "required_factory": required_factory,
+        "required_constructor": required_constructor,
+        "required_attribute": required_attribute,
+        "does_not_have": does_not_have,
         "forbid_imports": forbid_imports,
         "implements_protocol": implements_protocol,
+        "subclass_of": subclass_of,
         "flow": flow,
         "enforce_flow": enforce_flow,
     }
@@ -55,16 +65,26 @@ required_entity_signature = _LazyMarkerFactory(
     "required_entity_signature", _get_core_decorators
 )
 required_method = _LazyMarkerFactory("required_method", _get_core_decorators)
+required_factory = _LazyMarkerFactory("required_factory", _get_core_decorators)
+required_constructor = _LazyMarkerFactory("required_constructor", _get_core_decorators)
+required_attribute = _LazyMarkerFactory("required_attribute", _get_core_decorators)
+does_not_have = _LazyMarkerFactory("does_not_have", _get_core_decorators)
 forbid_imports = _LazyMarkerFactory("forbid_imports", _get_core_decorators)
 implements_protocol = _LazyMarkerFactory("implements_protocol", _get_core_decorators)
+subclass_of = _LazyMarkerFactory("subclass_of", _get_core_decorators)
 flow = _LazyMarkerFactory("flow", _get_core_decorators)
 enforce_flow = _LazyMarkerFactory("enforce_flow", _get_core_decorators)
 
 __all__ = [
     "required_entity_signature",
     "required_method",
+    "required_factory",
+    "required_constructor",
+    "required_attribute",
+    "does_not_have",
     "forbid_imports",
     "implements_protocol",
+    "subclass_of",
     "flow",
     "enforce_flow",
 ]

@@ -32,8 +32,13 @@ def test_rules_public_surface_is_core_only() -> None:
     expected = {
         "required_entity_signature",
         "required_method",
+        "required_factory",
+        "required_constructor",
+        "required_attribute",
+        "does_not_have",
         "forbid_imports",
         "implements_protocol",
+        "subclass_of",
         "flow",
         "enforce_flow",
     }

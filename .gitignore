@@ -28,4 +28,5 @@ log.txt
 pytest_full.log
 coverage.xml
 .claude/
+.worktrees/
 CLAUDE.md
