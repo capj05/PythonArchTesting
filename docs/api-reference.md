@@ -261,23 +261,36 @@ Common options:
 | `allow_property` | `bool` | `False` | Accept `@property` descriptor as satisfying the rule |
 | `require_writable` | `bool` | `False` | Require property to have a setter (only checked when `allow_property=True`) |
 | `declared_only` | `bool` | `False` | Exclude inherited members |
+| `descriptor_kinds` | `tuple[str, ...] \| None` | `None` | Accept supported non-property descriptors: `"cached_property"` and `"classproperty"` |
+| `include_dynamic_attributes` | `bool` | `False` | Opt in to literal `setattr(...)` discovery |
+| `interpret_dataclass_fields` | `bool` | `False` | Treat dataclass field declarations as instance attributes |
 | `severity` | `str` | `"error"` | Violation severity level |
 | `message` | `str \| None` | `None` | Custom violation message |
 
 Notes:
 
-- v1 supports only class-body `__archtest__: Annotated[...]` declarations.
+- v1 and v2 both support only class-body `__archtest__: Annotated[...]` declarations.
+- Unchanged declarations still compile to `API003/required_attribute/v1`.
+- A declaration compiles to `API003/required_attribute/v2` when it uses `descriptor_kinds`, `include_dynamic_attributes=True`, or `interpret_dataclass_fields=True`.
 - `storage="any"` accepts either a class attribute or an instance attribute.
 - `storage="class"` requires a class-body attribute.
 - `storage="instance"` requires an instance attribute discovered from `self.<name> = ...`.
-- `allow_property=False` (default): `required_attribute(...)` only accepts concrete attributes (class or instance).
+- `allow_property=False` (default): `required_attribute(...)` only accepts concrete attributes unless a v2 descriptor kind is explicitly enabled.
 - `allow_property=True`: rule can be satisfied by a `@property` descriptor **or** a concrete attribute.
 - `allow_property=True` is rejected by the compiler when combined with `storage="class"` (properties are instance-facing).
 - `require_writable=True` only applies when `allow_property=True` and is ignored otherwise; requires the property to have a `@<name>.setter` method.
+- `require_writable=True` also rejects read-only v2 descriptors such as `cached_property` and `classproperty`.
 - `declared_only=True` excludes inherited members; `declared_only=False` (default) includes them.
-- The rule accepts: concrete attributes (class or instance level) and `@property` descriptors (when `allow_property=True`).
-- The rule does NOT accept: ordinary methods, getter-named methods like `get_value()`, `classproperty`, or any other descriptor.
-- dynamic `setattr(...)` detection is not supported in v1.
+- v1 accepts: concrete attributes (class or instance level) and `@property` descriptors (when `allow_property=True`).
+- v1 does NOT accept: ordinary methods, getter-named methods like `get_value()`, `classproperty`, other descriptors, or dynamic `setattr(...)`.
+- v2 additionally supports:
+  - decorator-based or assignment-based `cached_property`
+  - decorator-based or assignment-based `classproperty`
+  - dataclass field declarations as instance attributes when `interpret_dataclass_fields=True`
+  - literal-name `setattr(self, "name", value)` and `setattr(cls, "NAME", value)` when `include_dynamic_attributes=True`
+- Getter-named methods are still not attributes.
+- Descriptor detection is static and name-based for the supported patterns only.
+- Dynamic detection is literal-only and opt-in; computed names and helper wrappers are ignored.
 
 Examples:
 
@@ -337,6 +350,77 @@ class Container:
             "value",
             allow_property=True,
             require_writable=True,
+        ),
+    ]
+```
+
+Cached-property requirement (v2):
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+
+class CacheBackedUser:
+    __archtest__: Annotated[
+        None,
+        required_attribute(
+            "profile",
+            descriptor_kinds=("cached_property",),
+        ),
+    ]
+```
+
+Class-facing descriptor requirement (v2):
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+
+class Settings:
+    __archtest__: Annotated[
+        None,
+        required_attribute(
+            "VERSION",
+            storage="class",
+            descriptor_kinds=("classproperty",),
+        ),
+    ]
+```
+
+Dataclass field as instance attribute (v2):
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+
+class UserContract:
+    __archtest__: Annotated[
+        None,
+        required_attribute(
+            "email",
+            storage="instance",
+            interpret_dataclass_fields=True,
+        ),
+    ]
+```
+
+Dynamic attribute requirement (v2):
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+
+class DynamicTarget:
+    __archtest__: Annotated[
+        None,
+        required_attribute(
+            "email",
+            storage="instance",
+            include_dynamic_attributes=True,
         ),
     ]
 ```
@@ -470,25 +554,38 @@ class Session:
 
 ### `does_not_have(...)`
 
-Common options:
+`does_not_have(...)` stays in the existing `NEG001` rule family and now has a
+backward-compatible v1/v2 surface.
 
-- `name`
-- `member_kind`
-- `storage`
-- `declared_only`
-- `severity`
-- `message`
+Options:
+
+| Option | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `name` | `str \| None` | `None` | Required for `name_match="exact"` unless a method-body declaration derives it from the source method name |
+| `member_kind` | `"any" \| "method" \| "attribute" \| "property"` | `"any"` | Filters which member kinds count as forbidden hits |
+| `storage` | `"any" \| "instance" \| "class"` | `"any"` | Applies only to attribute hits |
+| `declared_only` | `bool` | `False` | Restricts hits to members declared directly on the matched target class |
+| `name_match` | `"exact" \| "alias" \| "regex"` | `"exact"` | v2 option for name filtering |
+| `aliases` | `list[str] \| None` | `None` | Required when `name_match="alias"` |
+| `pattern` | `str \| None` | `None` | Required when `name_match="regex"` |
+| `signature_mode` | `"any" \| "compatible" \| "exact"` | `"any"` | v2 option for forbidden method signatures |
+| `include_descriptors` | `bool` | `False` | v2 opt-in for descriptor-backed class attributes |
+| `include_dynamic_attributes` | `bool` | `False` | v2 opt-in for literal `setattr(self\|cls, "...", ...)` detection |
+| `severity` | `"error" \| "warning" \| "info"` | `"error"` | Report severity |
+| `message` | `str \| None` | `None` | Override the default report message |
 
 Notes:
 
-- v1 supports only class-body `__archtest__: Annotated[...]` declarations.
-- `member_kind` accepts `any`, `method`, `attribute`, or `property`.
-- `storage` accepts `any`, `instance`, or `class` and only filters attribute hits.
+- v1 class-body declarations keep the exact-name behavior and still compile to `NEG001/does_not_have/v1`.
+- v2 is activated when a v2-only option is used or when `does_not_have(...)` is declared inside a source method body.
+- class-body declarations support name-only, alias, and regex absence checks.
+- method-body declarations support forbidden methods with optional `signature_mode="compatible"` or `signature_mode="exact"`.
 - inherited forbidden members count by default.
-- `declared_only=True` restricts the check to members declared directly on the matched target class.
-- properties are distinct from attributes unless `member_kind="any"`.
+- properties remain distinct from attributes unless `member_kind="any"`.
+- `storage` still filters only attribute hits.
+- dynamic attribute detection is conservative and literal-only: only `setattr(self, "name", value)` and `setattr(cls, "name", value)` are recognized.
+- descriptor detection is opt-in and static-only; v2 does not attempt import-time or runtime descriptor resolution.
 - import absence remains the responsibility of `forbid_imports(...)`.
-- dynamic `setattr(...)`, regex matching, aliases, and signature-sensitive forbidden method checks are not supported in v1.
 
 Examples:
 
@@ -501,6 +598,39 @@ class Repository:
     __archtest__: Annotated[
         None,
         does_not_have("debug_dump", member_kind="method"),
+    ]
+
+```
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+
+class Repository:
+    __archtest__: Annotated[
+        None,
+        does_not_have(
+            member_kind="method",
+            name_match="alias",
+            aliases=["debug_dump", "trace_dump"],
+        ),
+    ]
+```
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+
+class Repository:
+    __archtest__: Annotated[
+        None,
+        does_not_have(
+            member_kind="method",
+            name_match="regex",
+            pattern="debug_.+",
+        ),
     ]
 ```
 
@@ -517,6 +647,37 @@ class Credentials:
             member_kind="attribute",
             storage="instance",
             declared_only=True,
+        ),
+    ]
+```
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+
+class Repository:
+    def debug_dump(self, verbose: bool) -> str:
+        __archtest__: Annotated[
+            None,
+            does_not_have(signature_mode="exact"),
+        ]
+        return "trace"
+```
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+
+class Credentials:
+    __archtest__: Annotated[
+        None,
+        does_not_have(
+            "token",
+            member_kind="attribute",
+            storage="instance",
+            include_dynamic_attributes=True,
         ),
     ]
 ```

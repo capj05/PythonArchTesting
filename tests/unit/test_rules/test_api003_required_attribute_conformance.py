@@ -608,3 +608,343 @@ class User:
 
     assert errors == []
     assert [result.status for result in results] == ["OK"]
+
+
+def test_api003_cached_property_passes_when_descriptor_kind_enabled() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("email", descriptor_kinds=("cached_property",)),
+    ]
+"""
+    target = """
+from functools import cached_property
+
+class User:
+    @cached_property
+    def email(self) -> str:
+        return "user@example.com"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api003_cached_property_fails_without_descriptor_kind_opt_in() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("email"),
+    ]
+"""
+    target = """
+from functools import cached_property
+
+class User:
+    @cached_property
+    def email(self) -> str:
+        return "user@example.com"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert "missing required attribute 'email'" in results[0].message
+
+
+def test_api003_plain_method_still_does_not_satisfy_cached_property_rule() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("email", descriptor_kinds=("cached_property",)),
+    ]
+"""
+    target = """
+class User:
+    def email(self) -> str:
+        return "user@example.com"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert "missing required attribute 'email'" in results[0].message
+
+
+def test_api003_classproperty_passes_when_enabled_for_class_storage() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute(
+            "VERSION",
+            storage="class",
+            descriptor_kinds=("classproperty",),
+        ),
+    ]
+"""
+    target = """
+def classproperty(func):
+    return func
+
+
+class User:
+    @classproperty
+    def VERSION(cls) -> str:
+        return "1"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api003_cached_property_fails_require_writable() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute(
+            "email",
+            descriptor_kinds=("cached_property",),
+            require_writable=True,
+        ),
+    ]
+"""
+    target = """
+from functools import cached_property
+
+class User:
+    @cached_property
+    def email(self) -> str:
+        return "user@example.com"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert "cached_property 'email' is read-only" in results[0].message
+
+
+def test_api003_classproperty_fails_require_writable() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute(
+            "VERSION",
+            storage="class",
+            descriptor_kinds=("classproperty",),
+            require_writable=True,
+        ),
+    ]
+"""
+    target = """
+def classproperty(func):
+    return func
+
+
+class User:
+    @classproperty
+    def VERSION(cls) -> str:
+        return "1"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert "classproperty 'VERSION' is read-only" in results[0].message
+
+
+def test_api003_dataclass_field_passes_only_with_opt_in() -> None:
+    source_v1 = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("email", storage="instance"),
+    ]
+"""
+    source_v2 = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute(
+            "email",
+            storage="instance",
+            interpret_dataclass_fields=True,
+        ),
+    ]
+"""
+    target = """
+from dataclasses import dataclass
+
+@dataclass
+class User:
+    email: str
+"""
+
+    v1_results, v1_errors, _ = evaluate_single_rule(
+        source_text=source_v1,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+    v2_results, v2_errors, _ = evaluate_single_rule(
+        source_text=source_v2,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v2",
+    )
+
+    assert v1_errors == []
+    assert [result.status for result in v1_results] == ["FAILED"]
+    assert "attribute storage mismatch" in v1_results[0].message
+
+    assert v2_errors == []
+    assert [result.status for result in v2_results] == ["OK"]
+
+
+def test_api003_dynamic_attribute_passes_only_with_opt_in() -> None:
+    source_v1 = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("email", storage="instance"),
+    ]
+"""
+    source_v2 = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute(
+            "email",
+            storage="instance",
+            include_dynamic_attributes=True,
+        ),
+    ]
+"""
+    target = """
+class User:
+    def __init__(self, value: str) -> None:
+        setattr(self, "email", value)
+"""
+
+    v1_results, v1_errors, _ = evaluate_single_rule(
+        source_text=source_v1,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+    v2_results, v2_errors, _ = evaluate_single_rule(
+        source_text=source_v2,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v2",
+    )
+
+    assert v1_errors == []
+    assert [result.status for result in v1_results] == ["FAILED"]
+    assert "missing required attribute 'email'" in v1_results[0].message
+
+    assert v2_errors == []
+    assert [result.status for result in v2_results] == ["OK"]

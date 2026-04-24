@@ -2,6 +2,12 @@ import importlib
 import importlib.util
 
 
+def test_rules_package_exports_does_not_have():
+    from pythonarchtesting.rules import does_not_have
+
+    assert callable(does_not_have)
+
+
 def test_orchestrator_has_no_run_single_target():
     import pythonarchtesting.runner.orchestrator as m
 

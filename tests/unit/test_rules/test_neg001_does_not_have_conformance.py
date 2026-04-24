@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from tests.unit.test_rules.protocol_rule_test_helpers import evaluate_single_rule
+from unittest.mock import Mock
+
+from pythonarchtesting.core.evaluation import evaluate_rules_for_target
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.matching import MatchResult, MatchStatus
+from pythonarchtesting.rules.compilation import compile_rules
+from tests.unit.test_rules.protocol_rule_test_helpers import (
+    evaluate_single_rule,
+    extract_entities,
+)
 
 
 def test_neg001_evaluation_passes_when_forbidden_method_is_absent() -> None:
@@ -336,3 +345,234 @@ class User:
 
     assert errors == []
     assert [result.status for result in results] == ["FAILED"]
+
+
+def test_neg001_alias_name_matching_fails_for_alias_hit() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+class User:
+    __archtest__: Annotated[
+        None,
+        does_not_have(
+            member_kind="method",
+            name_match="alias",
+            aliases=["debug_dump", "trace_dump"],
+        ),
+    ]
+"""
+    target = """
+class User:
+    def trace_dump(self) -> str:
+        return "trace"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="NEG001/does_not_have/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["name_match"] == "alias"
+    assert results[0].details["aliases"] == ["debug_dump", "trace_dump"]
+    assert results[0].details["hits"][0]["matched_name"] == "trace_dump"
+    assert results[0].details["hits"][0]["matched_via"] == "alias"
+
+
+def test_neg001_regex_name_matching_fails_for_matching_member() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+class User:
+    __archtest__: Annotated[
+        None,
+        does_not_have(
+            member_kind="method",
+            name_match="regex",
+            pattern="debug_.+",
+        ),
+    ]
+"""
+    target = """
+class User:
+    def debug_dump(self) -> str:
+        return "trace"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="NEG001/does_not_have/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["name_match"] == "regex"
+    assert results[0].details["pattern"] == "debug_.+"
+    assert results[0].details["hits"][0]["matched_via"] == "regex"
+
+
+def test_neg001_signature_sensitive_method_exact_match_fails() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+class User:
+    def debug_dump(self, verbose: bool) -> str:
+        __archtest__: Annotated[None, does_not_have(signature_mode="exact")]
+        return "trace"
+"""
+    target = """
+class User:
+    def debug_dump(self, verbose: bool) -> str:
+        return "trace"
+"""
+    source_entities = extract_entities(source, role="source")
+    target_entities = extract_entities(target, role="target")
+    source_class = next(
+        entity
+        for entity in source_entities
+        if entity.kind == "class" and entity.name == "User"
+    )
+    target_class = next(
+        entity
+        for entity in target_entities
+        if entity.kind == "class" and entity.name == "User"
+    )
+
+    rules, _, _ = compile_rules(source_entities, Mock())
+    results, errors = evaluate_rules_for_target(
+        rules=rules,
+        source_index=build_entity_index(source_entities),
+        target_index=build_entity_index(target_entities),
+        matches={
+            source_class.canonical_id: MatchResult(
+                source_id=source_class.canonical_id,
+                status=MatchStatus.MATCHED,
+                target_id=target_class.canonical_id,
+                confidence=1.0,
+                reasons=[],
+                candidates=[],
+            )
+        },
+        config=Mock(),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["signature_mode"] == "exact"
+
+
+def test_neg001_signature_sensitive_method_compatible_match_fails() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+class User:
+    def debug_dump(self, verbose: bool) -> str:
+        __archtest__: Annotated[None, does_not_have(signature_mode="compatible")]
+        return "trace"
+"""
+    target = """
+class User:
+    def debug_dump(self, verbose: bool = False) -> str:
+        return "trace"
+"""
+    source_entities = extract_entities(source, role="source")
+    target_entities = extract_entities(target, role="target")
+    source_class = next(
+        entity
+        for entity in source_entities
+        if entity.kind == "class" and entity.name == "User"
+    )
+    target_class = next(
+        entity
+        for entity in target_entities
+        if entity.kind == "class" and entity.name == "User"
+    )
+
+    rules, _, _ = compile_rules(source_entities, Mock())
+    results, errors = evaluate_rules_for_target(
+        rules=rules,
+        source_index=build_entity_index(source_entities),
+        target_index=build_entity_index(target_entities),
+        matches={
+            source_class.canonical_id: MatchResult(
+                source_id=source_class.canonical_id,
+                status=MatchStatus.MATCHED,
+                target_id=target_class.canonical_id,
+                confidence=1.0,
+                reasons=[],
+                candidates=[],
+            )
+        },
+        config=Mock(),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["signature_mode"] == "compatible"
+
+
+def test_neg001_signature_sensitive_method_ignores_same_name_with_different_signature() -> (
+    None
+):
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+class User:
+    def debug_dump(self, verbose: bool) -> str:
+        __archtest__: Annotated[None, does_not_have(signature_mode="exact")]
+        return "trace"
+"""
+    target = """
+class User:
+    def debug_dump(self) -> str:
+        return "trace"
+"""
+    source_entities = extract_entities(source, role="source")
+    target_entities = extract_entities(target, role="target")
+    source_class = next(
+        entity
+        for entity in source_entities
+        if entity.kind == "class" and entity.name == "User"
+    )
+    target_class = next(
+        entity
+        for entity in target_entities
+        if entity.kind == "class" and entity.name == "User"
+    )
+
+    rules, _, _ = compile_rules(source_entities, Mock())
+    results, errors = evaluate_rules_for_target(
+        rules=rules,
+        source_index=build_entity_index(source_entities),
+        target_index=build_entity_index(target_entities),
+        matches={
+            source_class.canonical_id: MatchResult(
+                source_id=source_class.canonical_id,
+                status=MatchStatus.MATCHED,
+                target_id=target_class.canonical_id,
+                confidence=1.0,
+                reasons=[],
+                candidates=[],
+            )
+        },
+        config=Mock(),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]

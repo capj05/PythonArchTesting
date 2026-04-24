@@ -22,6 +22,15 @@ def _is_factory_capable_method(entity: Entity) -> bool:
     return method_kind in {"class", "static"}
 
 
+def _bool_param(
+    params: dict[str, Any], name: str, *, default: bool
+) -> tuple[bool, bool]:
+    value = params.get(name, default)
+    if isinstance(value, bool):
+        return value, True
+    return default, False
+
+
 def compile_required_factory(
     source_entity: Entity,
     declaration: DeclarationEntry,
@@ -104,7 +113,9 @@ def compile_required_factory(
         }
         compiler_evidence.append(
             Evidence(
-                evidence_id=evidence_id("compiler_invalid_param", invalid_param_payload),
+                evidence_id=evidence_id(
+                    "compiler_invalid_param", invalid_param_payload
+                ),
                 type="compiler_invalid_param",
                 source="compiler",
                 role="source",
@@ -116,6 +127,30 @@ def compile_required_factory(
         return [], compiler_evidence, []
 
     allow_inherited = bool(params_kwargs.get("allow_inherited", True))
+    allow_missing, allow_missing_valid = _bool_param(
+        params_kwargs,
+        "allow_missing",
+        default=False,
+    )
+    if not allow_missing_valid:
+        payload = {
+            "decorator": "required_factory",
+            "issue": "compiler_invalid_param",
+            "param": "allow_missing",
+            "reason": "allow_missing must be a boolean",
+        }
+        compiler_evidence.append(
+            Evidence(
+                evidence_id=evidence_id("compiler_invalid_param", payload),
+                type="compiler_invalid_param",
+                source="compiler",
+                role="source",
+                entity_id=source_entity.canonical_id,
+                payload=canonicalize_payload(payload),
+                location=location,
+            )
+        )
+        return [], compiler_evidence, []
     name_match = str(params_kwargs.get("name_match", "any")).lower()
     if name_match not in _VALID_NAME_MATCH:
         name_match = "any"
@@ -178,8 +213,9 @@ def compile_required_factory(
         "mode": signature_mode,
         "satisfy_with": satisfy_with,
         "allow_inherited": allow_inherited,
+        "allow_missing": allow_missing,
         "name_match": name_match,
-        "fail_on_unmatched": True,
+        "fail_on_unmatched": not allow_missing,
         "check_return": False,
     }
     if aliases is not None:

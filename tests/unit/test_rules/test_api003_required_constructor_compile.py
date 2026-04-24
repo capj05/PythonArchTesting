@@ -30,6 +30,7 @@ class User:
     assert params["constructor_kind"] == "auto"
     assert params["resolved_constructor_kind"] == "__init__"
     assert params["allow_inherited"] is True
+    assert params["allow_missing"] is False
     assert params["enforce_method_kind"] is False
     assert params["check_return"] is False
     assert params["fail_on_unmatched"] is True
@@ -164,6 +165,54 @@ class User:
     assert compiler_results == []
     assert evidence == []
     assert rules[0].severity == "warning"
+
+
+def test_api003_compile_threads_allow_missing_flag() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+class User:
+    __archtest__: Annotated[
+        None, required_constructor(allow_missing=True)
+    ]
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+"""
+    source_entities = extract_entities(source, role="source")
+
+    rules, evidence, compiler_results = compile_rules(source_entities, Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert len(rules) == 1
+    assert rules[0].params["allow_missing"] is True
+    assert rules[0].params["fail_on_unmatched"] is False
+
+
+def test_api003_compile_invalid_allow_missing_emits_compiler_evidence() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+class User:
+    __archtest__: Annotated[
+        None, required_constructor(allow_missing="yes")
+    ]
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+"""
+    source_entities = extract_entities(source, role="source")
+
+    rules, evidence, compiler_results = compile_rules(source_entities, Mock())
+
+    assert rules == []
+    assert compiler_results == []
+    assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
+    assert evidence[0].payload["decorator"] == "required_constructor"
+    assert "allow_missing must be a boolean" in evidence[0].payload["reason"]
 
 
 def test_api003_compile_multiple_required_constructors_dedupe_and_suffix() -> None:

@@ -38,6 +38,7 @@ def test_public_docs_are_annotation_only() -> None:
     assert "pythonarchtesting.rules" in combined
     assert "required_method(" in combined
     assert "required_factory(" in combined
+    assert "does_not_have(" in combined
     assert "forbid_imports(" in combined
     assert "pythonarchtesting.rules.compilation" in combined
     assert "pythonarchtesting.wrappers" not in combined
@@ -136,3 +137,20 @@ def test_tracked_reference_fixtures_use_current_rule_markers() -> None:
     )
     assert "from pythonarchtesting.rules import forbid_imports" in data_processor
     assert "from src.rules" not in data_processor
+
+
+def test_api_reference_documents_neg001_v2_options() -> None:
+    root = _repo_root()
+    text = (root / "docs" / "api-reference.md").read_text(encoding="utf-8")
+    neg001_section = text.split("### `does_not_have(...)`", 1)[1].split(
+        "### `forbid_imports(...)`",
+        1,
+    )[0]
+
+    assert "NEG001/does_not_have/v1" in neg001_section
+    assert 'name_match="alias"' in neg001_section
+    assert 'name_match="regex"' in neg001_section
+    assert 'signature_mode="exact"' in neg001_section
+    assert "include_dynamic_attributes=True" in neg001_section
+    assert "include_descriptors" in neg001_section
+    assert "not supported in v1" not in neg001_section

@@ -78,6 +78,15 @@ def _find_declared_method(
     return None
 
 
+def _bool_param(
+    params: dict[str, Any], name: str, *, default: bool
+) -> tuple[bool, bool]:
+    value = params.get(name, default)
+    if isinstance(value, bool):
+        return value, True
+    return default, False
+
+
 def compile_required_constructor(
     source_entity: Entity,
     declaration: DeclarationEntry,
@@ -94,9 +103,7 @@ def compile_required_constructor(
     compiler_evidence: List[Evidence] = []
 
     if source_entity.kind != "class":
-        compiler_evidence.append(
-            _invalid_target_evidence(source_entity, declaration)
-        )
+        compiler_evidence.append(_invalid_target_evidence(source_entity, declaration))
         return [], compiler_evidence, []
 
     signature_mode = str(params_kwargs.get("signature_mode", "compatible")).lower()
@@ -109,15 +116,28 @@ def compile_required_constructor(
             _invalid_declaration_evidence(
                 source_entity,
                 declaration,
-                reason=(
-                    "constructor_kind must be one of: auto, __init__, __new__"
-                ),
+                reason=("constructor_kind must be one of: auto, __init__, __new__"),
                 params=params_kwargs,
             )
         )
         return [], compiler_evidence, []
 
     allow_inherited = bool(params_kwargs.get("allow_inherited", True))
+    allow_missing, allow_missing_valid = _bool_param(
+        params_kwargs,
+        "allow_missing",
+        default=False,
+    )
+    if not allow_missing_valid:
+        compiler_evidence.append(
+            _invalid_declaration_evidence(
+                source_entity,
+                declaration,
+                reason="allow_missing must be a boolean",
+                params=params_kwargs,
+            )
+        )
+        return [], compiler_evidence, []
 
     base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
     if base_severity_raw in {"error", "warning", "info"}:
@@ -128,9 +148,7 @@ def compile_required_constructor(
     source_ctor: Entity | None = None
     resolved_kind: str = constructor_kind
     if constructor_kind == "auto":
-        source_ctor = _find_declared_method(
-            source_entity, source_entities, "__init__"
-        )
+        source_ctor = _find_declared_method(source_entity, source_entities, "__init__")
         if source_ctor is not None:
             resolved_kind = "__init__"
         else:
@@ -164,9 +182,7 @@ def compile_required_constructor(
     )
 
     rule = Rule(
-        rule_id=with_rule_id_suffix(
-            "API003/required_constructor/v1", rule_id_suffix
-        ),
+        rule_id=with_rule_id_suffix("API003/required_constructor/v1", rule_id_suffix),
         rule_type="api_signature",
         name="required_constructor",
         severity=base_severity,
@@ -178,11 +194,12 @@ def compile_required_constructor(
             "allow_extra_params": True,
             "allow_param_rename": False,
             "check_return": False,
-            "fail_on_unmatched": True,
+            "fail_on_unmatched": not allow_missing,
             "enforce_method_kind": False,
             "constructor_kind": constructor_kind,
             "resolved_constructor_kind": resolved_kind,
             "allow_inherited": allow_inherited,
+            "allow_missing": allow_missing,
             "expected_source_constructor_id": source_ctor.canonical_id,
         },
         message_template=(

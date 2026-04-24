@@ -117,6 +117,7 @@ def required_constructor(
     signature_mode: str = "compatible",
     constructor_kind: str = "auto",
     allow_inherited: bool = True,
+    allow_missing: bool = False,
     severity: str = "error",
     message: str | None = None,
 ) -> RuleMarker:
@@ -135,6 +136,7 @@ def required_constructor(
             "signature_mode": signature_mode,
             "constructor_kind": constructor_kind,
             "allow_inherited": allow_inherited,
+            "allow_missing": allow_missing,
             "severity": severity,
         }
     )
@@ -154,6 +156,7 @@ def required_factory(
     name_match: str = "any",
     aliases: list[str] | None = None,
     pattern: str | None = None,
+    allow_missing: bool = False,
     severity: str = "error",
     message: str | None = None,
 ) -> RuleMarker:
@@ -170,6 +173,7 @@ def required_factory(
             "name_match": name_match,
             "aliases": list(aliases) if aliases is not None else None,
             "pattern": pattern,
+            "allow_missing": allow_missing,
             "severity": severity,
         }
     )
@@ -189,6 +193,10 @@ def required_attribute(
     allow_property: bool = False,
     require_writable: bool = False,
     declared_only: bool = False,
+    allow_missing: bool = False,
+    descriptor_kinds: tuple[str, ...] | None = None,
+    include_dynamic_attributes: bool = False,
+    interpret_dataclass_fields: bool = False,
     severity: str = "error",
     message: str | None = None,
 ) -> RuleMarker:
@@ -205,9 +213,16 @@ def required_attribute(
             "allow_property": allow_property,
             "require_writable": require_writable,
             "declared_only": declared_only,
+            "allow_missing": allow_missing,
             "severity": severity,
         }
     )
+    if descriptor_kinds is not None:
+        cleaned["descriptor_kinds"] = tuple(descriptor_kinds)
+    if include_dynamic_attributes:
+        cleaned["include_dynamic_attributes"] = True
+    if interpret_dataclass_fields:
+        cleaned["interpret_dataclass_fields"] = True
     return _make_rule_marker(
         "required_attribute",
         cleaned,
@@ -217,11 +232,17 @@ def required_attribute(
 
 
 def does_not_have(
-    name: str,
+    name: str | None = None,
     *,
     member_kind: str = "any",
     storage: str = "any",
     declared_only: bool = False,
+    name_match: str = "exact",
+    aliases: list[str] | None = None,
+    pattern: str | None = None,
+    signature_mode: str = "any",
+    include_descriptors: bool = False,
+    include_dynamic_attributes: bool = False,
     severity: str = "error",
     message: str | None = None,
 ) -> RuleMarker:
@@ -239,6 +260,18 @@ def does_not_have(
             "severity": severity,
         }
     )
+    if name_match != "exact":
+        cleaned["name_match"] = name_match
+    if aliases is not None:
+        cleaned["aliases"] = list(aliases)
+    if pattern is not None:
+        cleaned["pattern"] = pattern
+    if signature_mode != "any":
+        cleaned["signature_mode"] = signature_mode
+    if include_descriptors:
+        cleaned["include_descriptors"] = True
+    if include_dynamic_attributes:
+        cleaned["include_dynamic_attributes"] = True
     return _make_rule_marker(
         "does_not_have",
         cleaned,

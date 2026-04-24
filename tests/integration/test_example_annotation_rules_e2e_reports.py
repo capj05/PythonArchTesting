@@ -564,6 +564,7 @@ def test_example_annotation_rules_e2e_json_contains_only_supported_rule_families
         "API003/required_constructor/v1",
         "API004/required_factory/v1",
         "DEP001/forbid_imports/v2",
+        "FLW001/enforce_flow/v1",
         "NEG001/does_not_have/v1",
         "NOM001/subclass_of/v1",
         "PRO001/implements_protocol/v1",
@@ -1194,11 +1195,31 @@ def test_real_example_run_report_json_is_accurate(tmp_path, monkeypatch) -> None
 
     report = json.loads(json_out.read_text(encoding="utf-8"))
     targets = {target["display_name"]: target for target in report.get("targets") or []}
+    all_rule_ids = {
+        item["rule_id"]
+        for target in report.get("targets") or []
+        for item in target.get("results") or []
+    }
 
     assert set(targets) == {"target1", "target2", "target3", "target4", "target5"}
     assert report["summary"]["targets_total"] == 5
     assert report["summary"]["targets_passed"] == 1
     assert report["summary"]["targets_failed"] == 4
+    assert all_rule_ids == {
+        "API001/required_entity_signature/v1",
+        "API001/required_entity_signature_return/v1",
+        "API002/required_method/v1",
+        "API003/required_attribute/v1",
+        "API003/required_constructor/v1",
+        "API004/required_factory/v1",
+        "DEP001/forbid_imports/v2",
+        "FLW001/enforce_flow/v1",
+        "NEG001/does_not_have/v1",
+        "NOM001/subclass_of/v1",
+        "PRO001/implements_protocol/v1",
+        "PRO002/implements_protocol_signature/v1/d0",
+        "PRO002/implements_protocol_signature/v1/d1",
+    }
 
     for target in targets.values():
         assert all(
@@ -1208,7 +1229,7 @@ def test_real_example_run_report_json_is_accurate(tmp_path, monkeypatch) -> None
 
     target1 = targets["target1"]
     assert target1["exit_code"] == 0
-    assert target1["summary"]["status_counts"] == {"OK": 8}
+    assert target1["summary"]["status_counts"] == {"OK": 14}
 
     target2 = targets["target2"]
     assert target2["exit_code"] == 1
@@ -1216,6 +1237,18 @@ def test_real_example_run_report_json_is_accurate(tmp_path, monkeypatch) -> None
         item["rule_id"] == "API002/required_method/v1"
         and item["status"] == "FAILED"
         and "parameter annotation mismatch" in item["message"]
+        for item in target2["results"]
+    )
+    assert any(
+        item["rule_id"] == "API003/required_attribute/v1"
+        and item["status"] == "FAILED"
+        and "attribute annotation mismatch" in item["message"]
+        for item in target2["results"]
+    )
+    assert any(
+        item["rule_id"] == "API004/required_factory/v1"
+        and item["status"] == "FAILED"
+        and item["details"]["reason"] == "no_compatible_factory_candidate"
         for item in target2["results"]
     )
 
@@ -1231,6 +1264,18 @@ def test_real_example_run_report_json_is_accurate(tmp_path, monkeypatch) -> None
         item["rule_id"] == "PRO001/implements_protocol/v1"
         and item["status"] == "FAILED"
         and "missing protocol methods: load" in item["message"]
+        for item in target3["results"]
+    )
+    assert any(
+        item["rule_id"] == "PRO002/implements_protocol_signature/v1/d0"
+        and item["status"] == "FAILED"
+        and item["details"]["failure_reason"] == "protocol_mismatch"
+        for item in target3["results"]
+    )
+    assert any(
+        item["rule_id"] == "PRO002/implements_protocol_signature/v1/d1"
+        and item["status"] == "FAILED"
+        and item["details"]["failure_reason"] == "protocol_mismatch"
         for item in target3["results"]
     )
 
@@ -1257,6 +1302,12 @@ def test_real_example_run_report_json_is_accurate(tmp_path, monkeypatch) -> None
         assert any(
             item["rule_id"] == "API001/required_entity_signature_return/v1"
             and item["status"] == "SKIPPED"
+            for item in targets[name]["results"]
+        )
+        assert any(
+            item["rule_id"] == "FLW001/enforce_flow/v1"
+            and item["status"] == "FAILED"
+            and item["details"]["match_status"] == "unmatched"
             for item in targets[name]["results"]
         )
 

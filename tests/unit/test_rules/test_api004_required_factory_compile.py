@@ -150,6 +150,47 @@ class MyFactory:
     ]
 
 
+def test_api004_compile_threads_allow_missing_flag() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[None, required_factory(allow_missing=True)]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert len(rules) == 1
+    assert rules[0].params["allow_missing"] is True
+    assert rules[0].params["fail_on_unmatched"] is False
+
+
+def test_api004_invalid_allow_missing_emits_compiler_invalid_param() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[None, required_factory(allow_missing="yes")]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert rules == []
+    assert compiler_results == []
+    assert [item.type for item in evidence] == ["compiler_invalid_param"]
+    assert evidence[0].payload["param"] == "allow_missing"
+
+
 def test_api004_params_survive_compilation() -> None:
     source = """
 from typing import Annotated
@@ -178,4 +219,5 @@ class MyFactory:
     assert rules[0].params["mode"] == "exact"
     assert rules[0].params["satisfy_with"] == ["constructor"]
     assert rules[0].params["allow_inherited"] is False
+    assert rules[0].params["allow_missing"] is False
     assert rules[0].params["name_match"] == "exact"

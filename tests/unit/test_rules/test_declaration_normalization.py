@@ -161,6 +161,7 @@ def test_required_factory_annotation_normalizes() -> None:
                         signature_mode="exact",
                         satisfy_with=("classmethod",),
                         allow_inherited=False,
+                        allow_missing=True,
                         name_match="alias",
                         aliases=["create"],
                     ),
@@ -176,6 +177,7 @@ def test_required_factory_annotation_normalizes() -> None:
         "signature_mode": "exact",
         "satisfy_with": ("classmethod",),
         "allow_inherited": False,
+        "allow_missing": True,
         "name_match": "alias",
         "aliases": ["create"],
     }
@@ -614,6 +616,7 @@ def test_required_attribute_allow_property_params_survive_normalization() -> Non
                     allow_property=True,
                     require_writable=True,
                     declared_only=True,
+                    allow_missing=True,
                 ),
             ]
         """)
@@ -625,6 +628,7 @@ def test_required_attribute_allow_property_params_survive_normalization() -> Non
     assert entries[0].params.get("allow_property") is True
     assert entries[0].params.get("require_writable") is True
     assert entries[0].params.get("declared_only") is True
+    assert entries[0].params.get("allow_missing") is True
 
     rules, evidence, compiler_results = compile_rules([class_entity], Mock())
 
@@ -637,6 +641,44 @@ def test_required_attribute_allow_property_params_survive_normalization() -> Non
     assert rule.params.get("allow_property") is True
     assert rule.params.get("require_writable") is True
     assert rule.params.get("declared_only") is True
+    assert rule.params.get("allow_missing") is True
+
+
+def test_required_attribute_v2_params_survive_normalization() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import required_attribute
+
+        class User:
+            __archtest__: Annotated[
+                None,
+                required_attribute(
+                    "x",
+                    descriptor_kinds=("cached_property",),
+                    include_dynamic_attributes=True,
+                    interpret_dataclass_fields=True,
+                ),
+            ]
+        """)
+    class_entity = next(entity for entity in entities if entity.kind == "class")
+
+    entries = normalize_declaration_entries(class_entity)
+
+    assert [entry.kind for entry in entries] == ["required_attribute"]
+    assert entries[0].params.get("descriptor_kinds") == ("cached_property",)
+    assert entries[0].params.get("include_dynamic_attributes") is True
+    assert entries[0].params.get("interpret_dataclass_fields") is True
+
+    rules, evidence, compiler_results = compile_rules([class_entity], Mock())
+
+    assert evidence == []
+    assert compiler_results == []
+    assert len(rules) == 1
+    rule = rules[0]
+    assert rule.rule_id == "API003/required_attribute/v2"
+    assert rule.params.get("descriptor_kinds") == ("cached_property",)
+    assert rule.params.get("include_dynamic_attributes") is True
+    assert rule.params.get("interpret_dataclass_fields") is True
 
 
 def test_required_constructor_annotation_declaration_normalizes() -> None:
@@ -647,7 +689,7 @@ def test_required_constructor_annotation_declaration_normalizes() -> None:
         class User:
             __archtest__: Annotated[
                 None,
-                required_constructor(signature_mode="compatible"),
+                required_constructor(signature_mode="compatible", allow_missing=True),
             ]
 
             def __init__(self, name: str) -> None:
@@ -660,7 +702,7 @@ def test_required_constructor_annotation_declaration_normalizes() -> None:
     kinds = [entry.kind for entry in entries]
     assert "required_constructor" in kinds
     ctor_entry = next(e for e in entries if e.kind == "required_constructor")
-    assert ctor_entry.params == {"signature_mode": "compatible"}
+    assert ctor_entry.params == {"signature_mode": "compatible", "allow_missing": True}
 
 
 def test_required_constructor_annotation_declaration_compiles_supported_rule() -> None:
