@@ -84,7 +84,7 @@ def compile_does_not_have(
 
     name = params_kwargs.get("name")
     if not isinstance(name, str) or not name.strip():
-        payload = {
+        invalid_name_payload: dict[str, Any] = {
             "declaration": "does_not_have",
             "issue": "invalid_name",
             "name": name,
@@ -94,7 +94,7 @@ def compile_does_not_have(
                 source_entity,
                 declaration,
                 evidence_type="compiler_invalid_member_absence_declaration",
-                payload=payload,
+                payload=invalid_name_payload,
             )
         )
         return [], compiler_evidence, []

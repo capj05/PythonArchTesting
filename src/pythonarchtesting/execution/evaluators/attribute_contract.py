@@ -31,7 +31,9 @@ def _storage_matches(
     member: ResolvedAttribute, storage: str, *, allow_property: bool
 ) -> bool:
     if storage == "instance":
-        return member.storage == "instance" or (allow_property and member.storage == "property")
+        return member.storage == "instance" or (
+            allow_property and member.storage == "property"
+        )
     if storage == "class":
         return member.storage == "class"
     # storage == "any"
@@ -132,7 +134,11 @@ class AttributeContractEvaluator:
                     continue
 
             # Check require_writable (only meaningful for properties)
-            if require_writable and member.storage == "property" and not member.is_writable:
+            if (
+                require_writable
+                and member.storage == "property"
+                and not member.is_writable
+            ):
                 if last_fail_reason is None:
                     last_fail_reason = _read_only_msg
                 continue
@@ -142,7 +148,7 @@ class AttributeContractEvaluator:
             break
 
         if passing_candidate is not None:
-            details = {
+            success_details: dict[str, Any] = {
                 "reason": "attribute requirement satisfied",
                 "required_attribute": required_attribute_payload,
                 "matched_attribute": _attribute_payload(passing_candidate),
@@ -150,7 +156,9 @@ class AttributeContractEvaluator:
                     _attribute_payload(member) for member in all_candidates
                 ],
             }
-            return _build_rule_result(rule, source, target, match, "OK", details, ())
+            return _build_rule_result(
+                rule, source, target, match, "OK", success_details, ()
+            )
 
         # Build failure reason
         if not all_candidates:
@@ -195,7 +203,7 @@ class AttributeContractEvaluator:
                 reason = last_fail_reason  # type: ignore[assignment]
                 fail_code = "attribute_present_but_annotation_mismatch"
 
-        details = {
+        details: dict[str, Any] = {
             "reason": reason,
             "fail_code": fail_code,
             "required_attribute": required_attribute_payload,

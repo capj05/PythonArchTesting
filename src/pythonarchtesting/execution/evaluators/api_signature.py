@@ -564,7 +564,7 @@ def _evaluate_required_factory_rule(
         target_class = matched_target_parent_class(source, ctx)
 
     if target_class is None:
-        details = {
+        details: Dict[str, Any] = {
             "reason": "no_factory_candidate_found",
             "factory_rule": {
                 "satisfy_with": satisfy_with,

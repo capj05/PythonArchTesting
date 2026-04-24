@@ -95,7 +95,7 @@ def compile_required_factory(
         value for value in satisfy_with if value not in _VALID_SATISFY_WITH
     ]
     if invalid_satisfy or not satisfy_with:
-        payload: dict[str, Any] = {
+        invalid_param_payload: dict[str, Any] = {
             "decorator": "required_factory",
             "issue": "compiler_invalid_param",
             "param": "satisfy_with",
@@ -104,12 +104,12 @@ def compile_required_factory(
         }
         compiler_evidence.append(
             Evidence(
-                evidence_id=evidence_id("compiler_invalid_param", payload),
+                evidence_id=evidence_id("compiler_invalid_param", invalid_param_payload),
                 type="compiler_invalid_param",
                 source="compiler",
                 role="source",
                 entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(payload),
+                payload=canonicalize_payload(invalid_param_payload),
                 location=location,
             )
         )

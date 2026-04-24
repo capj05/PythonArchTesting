@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
+from pythonarchtesting.core.models import EvalContext, Rule, RuleResult, RuleStatus
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 from pythonarchtesting.protocols.attribute_introspection import collect_attributes
@@ -107,7 +107,7 @@ class MemberAbsenceEvaluator:
         declared_only = bool(rule.params.get("declared_only", False))
 
         if target.kind != "class":
-            details = {
+            invalid_target_details: dict[str, Any] = {
                 "reason": (
                     f"matched target kind '{target.kind}' "
                     "does not support member absence checks"
@@ -122,7 +122,7 @@ class MemberAbsenceEvaluator:
                 "match_status": match.status.value,
             }
             return _build_rule_result(
-                rule, source, target, match, "FAILED", details, ()
+                rule, source, target, match, "FAILED", invalid_target_details, ()
             )
 
         hits: list[ForbiddenMemberHit] = []
@@ -162,7 +162,7 @@ class MemberAbsenceEvaluator:
                 hits.append(hit)
 
         hits.sort(key=_hit_sort_key)
-        details = {
+        details: dict[str, Any] = {
             "reason": ("forbidden member absent" if not hits else _reason(name, hits)),
             "forbidden_member": {
                 "name": name,
@@ -173,7 +173,7 @@ class MemberAbsenceEvaluator:
             "hits": [_hit_payload(hit) for hit in hits],
             "match_status": match.status.value,
         }
-        status = "OK" if not hits else "FAILED"
+        status: RuleStatus = "OK" if not hits else "FAILED"
         return _build_rule_result(rule, source, target, match, status, details, ())
 
 

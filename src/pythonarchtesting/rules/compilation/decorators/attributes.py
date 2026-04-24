@@ -81,7 +81,7 @@ def compile_required_attribute(
 
     name = params_kwargs.get("name")
     if not isinstance(name, str) or not name.strip():
-        payload = {
+        invalid_name_payload: dict[str, Any] = {
             "declaration": "required_attribute",
             "issue": "invalid_name",
             "name": name,
@@ -91,7 +91,7 @@ def compile_required_attribute(
                 source_entity,
                 declaration,
                 evidence_type="compiler_invalid_attribute_declaration",
-                payload=payload,
+                payload=invalid_name_payload,
             )
         )
         return [], compiler_evidence, []
@@ -118,7 +118,7 @@ def compile_required_attribute(
     declared_only = bool(params_kwargs.get("declared_only", False))
 
     if allow_property and storage == "class":
-        payload = {
+        invalid_storage_payload: dict[str, Any] = {
             "declaration": "required_attribute",
             "issue": "property_incompatible_with_class_storage",
             "allow_property": True,
@@ -129,7 +129,7 @@ def compile_required_attribute(
                 source_entity,
                 declaration,
                 evidence_type="compiler_invalid_attribute_declaration",
-                payload=payload,
+                payload=invalid_storage_payload,
             )
         )
         return [], compiler_evidence, []
