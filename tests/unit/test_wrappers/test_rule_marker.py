@@ -85,6 +85,27 @@ def test_rule_markers_convert_to_rule_specs() -> None:
     assert spec.severity == RuleSeverity.WARNING
 
 
+def test_required_factory_v2_helper_params_are_opt_in() -> None:
+    rules = _rules_api()
+
+    default_marker = rules.required_factory()
+    explicit_defaults_marker = rules.required_factory(
+        return_annotation_mode="ignore",
+        detection_mode="strict",
+    )
+    v2_marker = rules.required_factory(
+        return_annotation_mode="compatible",
+        detection_mode="extended",
+    )
+
+    assert "return_annotation_mode" not in default_marker.params
+    assert "detection_mode" not in default_marker.params
+    assert explicit_defaults_marker.params["return_annotation_mode"] == "ignore"
+    assert explicit_defaults_marker.params["detection_mode"] == "strict"
+    assert v2_marker.params["return_annotation_mode"] == "compatible"
+    assert v2_marker.params["detection_mode"] == "extended"
+
+
 def test_rule_spec_helpers_remain_compatibility_only_imports() -> None:
     rules = importlib.import_module("pythonarchtesting.rules")
     utils = importlib.import_module("pythonarchtesting.rules.declaration.utils")

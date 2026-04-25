@@ -11,6 +11,14 @@ from typing import Any
 from pythonarchtesting.rules.declaration.utils import RuleMarker, RuleSeverity
 
 
+class _HelperDefaultStr(str):
+    """Sentinel string that preserves readable signatures for omitted args."""
+
+
+_REQUIRED_FACTORY_RETURN_DEFAULT = _HelperDefaultStr("ignore")
+_REQUIRED_FACTORY_DETECTION_DEFAULT = _HelperDefaultStr("strict")
+
+
 def _clean_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in kwargs.items() if value is not None}
 
@@ -197,8 +205,8 @@ def required_factory(
     aliases: list[str] | None = None,
     pattern: str | None = None,
     allow_missing: bool = False,
-    return_annotation_mode: str = "ignore",
-    detection_mode: str = "strict",
+    return_annotation_mode: str = _REQUIRED_FACTORY_RETURN_DEFAULT,
+    detection_mode: str = _REQUIRED_FACTORY_DETECTION_DEFAULT,
     severity: str = "error",
     message: str | None = None,
 ) -> RuleMarker:
@@ -207,20 +215,21 @@ def required_factory(
 
     This helper is declaration-only and returns passive annotation metadata.
     """
-    cleaned = _clean_kwargs(
-        {
-            "signature_mode": signature_mode,
-            "satisfy_with": list(satisfy_with),
-            "allow_inherited": allow_inherited,
-            "name_match": name_match,
-            "aliases": list(aliases) if aliases is not None else None,
-            "pattern": pattern,
-            "allow_missing": allow_missing,
-            "return_annotation_mode": return_annotation_mode,
-            "detection_mode": detection_mode,
-            "severity": severity,
-        }
-    )
+    cleaned_payload = {
+        "signature_mode": signature_mode,
+        "satisfy_with": list(satisfy_with),
+        "allow_inherited": allow_inherited,
+        "name_match": name_match,
+        "aliases": list(aliases) if aliases is not None else None,
+        "pattern": pattern,
+        "allow_missing": allow_missing,
+        "severity": severity,
+    }
+    if type(return_annotation_mode) is not _HelperDefaultStr:
+        cleaned_payload["return_annotation_mode"] = return_annotation_mode
+    if type(detection_mode) is not _HelperDefaultStr:
+        cleaned_payload["detection_mode"] = detection_mode
+    cleaned = _clean_kwargs(cleaned_payload)
     return _make_rule_marker(
         "required_factory",
         cleaned,
