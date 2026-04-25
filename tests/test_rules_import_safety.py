@@ -42,6 +42,7 @@ def test_rules_public_surface_is_core_only() -> None:
         "exact_type",
         "not_subclass_of",
         "inherits_directly_from",
+        "is_enum",
         "flow",
         "enforce_flow",
     }

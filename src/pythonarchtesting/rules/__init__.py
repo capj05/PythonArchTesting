@@ -40,6 +40,7 @@ def _get_core_decorators() -> dict[str, Any]:
         forbid_imports,
         implements_protocol,
         inherits_directly_from,
+        is_enum,
         not_subclass_of,
         required_attribute,
         required_constructor,
@@ -62,6 +63,7 @@ def _get_core_decorators() -> dict[str, Any]:
         "exact_type": exact_type,
         "not_subclass_of": not_subclass_of,
         "inherits_directly_from": inherits_directly_from,
+        "is_enum": is_enum,
         "flow": flow,
         "enforce_flow": enforce_flow,
     }
@@ -83,6 +85,7 @@ not_subclass_of = _LazyMarkerFactory("not_subclass_of", _get_core_decorators)
 inherits_directly_from = _LazyMarkerFactory(
     "inherits_directly_from", _get_core_decorators
 )
+is_enum = _LazyMarkerFactory("is_enum", _get_core_decorators)
 flow = _LazyMarkerFactory("flow", _get_core_decorators)
 enforce_flow = _LazyMarkerFactory("enforce_flow", _get_core_decorators)
 
@@ -99,6 +102,7 @@ __all__ = [
     "exact_type",
     "not_subclass_of",
     "inherits_directly_from",
+    "is_enum",
     "flow",
     "enforce_flow",
 ]

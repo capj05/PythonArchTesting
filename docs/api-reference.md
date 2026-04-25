@@ -77,6 +77,7 @@ Strict tuple metadata also remains supported as a compatibility form:
 | `exact_type(...)` | Require the target class to be exactly the matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
 | `not_subclass_of(...)` | Forbid nominal inheritance from a matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
 | `inherits_directly_from(...)` | Require direct nominal inheritance from a matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
+| `is_enum(...)` | Require the matched target class to classify as a stdlib enum-like class | Class-level `__archtest__: Annotated[...]` |
 | `flow(...)` | Mark a statement as a named flow stage | Statement-level `__archtest__: Annotated[...]` immediately after the statement |
 | `enforce_flow(...)` | Require ordered flow stages for a variable | `__archtest__: Annotated[...]` in a function or method body |
 
@@ -1101,6 +1102,53 @@ class CsvRepository(BaseRepository):
         inherits_directly_from("reference.BaseRepository"),
     ]
 ```
+
+### `is_enum(...)`
+
+Require the matched target class to classify as enum-like based on stdlib enum
+inheritance.
+
+`is_enum(...)` is a dedicated classification rule. It passes when the matched
+target class directly inherits from `enum.Enum`, `enum.IntEnum`,
+`enum.StrEnum`, `enum.Flag`, or `enum.IntFlag`, or when it inherits from a
+local class that is itself enum-like.
+
+It does not treat uppercase constants as enum evidence, and it does not act as
+a hidden alias for nominal base matching such as `subclass_of(...)`.
+
+Common options:
+
+- `severity`
+- `message`
+
+Examples:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import is_enum
+
+
+class StatusContract:
+    __archtest__: Annotated[None, is_enum()]
+```
+
+```python
+from enum import Enum
+
+
+class BaseStatus(Enum):
+    OK = "ok"
+
+
+class DeploymentStatus(BaseStatus):
+    READY = "ready"
+```
+
+Non-goals in v1:
+
+- No enum-family discriminator parameter
+- No support for unresolved third-party enum base classes
+- No classification based only on enum-like member names
 
 ### `flow(...)`
 

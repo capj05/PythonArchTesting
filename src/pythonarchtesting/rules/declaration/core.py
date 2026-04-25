@@ -461,6 +461,29 @@ def inherits_directly_from(
     )
 
 
+def is_enum(
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture enum-classification intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "is_enum",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
 def flow(
     stage: str,
     *,

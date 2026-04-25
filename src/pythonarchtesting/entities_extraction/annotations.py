@@ -34,6 +34,7 @@ _SUPPORTED_MARKER_NAMES = {
     "flow",
     "inherits_directly_from",
     "implements_protocol",
+    "is_enum",
     "not_subclass_of",
     "required_attribute",
     "required_constructor",

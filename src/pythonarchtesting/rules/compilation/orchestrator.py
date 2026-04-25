@@ -26,6 +26,7 @@ from pythonarchtesting.rules.compilation.decorators.attributes import (
 from pythonarchtesting.rules.compilation.decorators.constructors import (
     compile_required_constructor,
 )
+from pythonarchtesting.rules.compilation.decorators.enum_type import compile_is_enum
 from pythonarchtesting.rules.compilation.decorators.factories import (
     compile_required_factory,
 )
@@ -94,6 +95,7 @@ def compile_rules(
         "exact_type": compile_exact_type,
         "not_subclass_of": compile_not_subclass_of,
         "inherits_directly_from": compile_inherits_directly_from,
+        "is_enum": compile_is_enum,
     }
 
     rules: List[Any] = []

@@ -23,6 +23,7 @@ def test_configured_helpers_return_rule_markers() -> None:
     factory_marker = rules.required_factory(name_match="exact")
     import_marker = rules.forbid_imports("statistics", scope="package")
     protocol_marker = rules.implements_protocol("sample.Repository")
+    enum_marker = rules.is_enum()
 
     for marker in (
         signature_marker,
@@ -30,12 +31,14 @@ def test_configured_helpers_return_rule_markers() -> None:
         factory_marker,
         import_marker,
         protocol_marker,
+        enum_marker,
     ):
         assert marker.__class__.__name__ == "RuleMarker"
         assert get_rule_specs(marker) == []
 
     assert method_marker.params["declared_only"] is True
     assert factory_marker.kind == "required_factory"
+    assert enum_marker.kind == "is_enum"
 
 
 def test_rule_markers_are_passive_metadata_objects() -> None:
