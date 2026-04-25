@@ -5,7 +5,9 @@ from typing import Any, List, Literal, Sequence, Tuple, cast
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
-from pythonarchtesting.protocols.introspection import declared_class_methods
+from pythonarchtesting.execution.evaluators.construction_resolution import (
+    resolve_source_constructor,
+)
 
 from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
 
@@ -65,17 +67,6 @@ def _invalid_target_evidence(
         payload=canonicalize_payload(payload),
         location=location,
     )
-
-
-def _find_declared_method(
-    source_entity: Entity,
-    source_entities: Sequence[Entity],
-    name: str,
-) -> Entity | None:
-    for method in declared_class_methods(source_entity, list(source_entities)):
-        if method.name == name:
-            return method
-    return None
 
 
 def _bool_param(
@@ -145,22 +136,11 @@ def compile_required_constructor(
     else:
         base_severity = "error"
 
-    source_ctor: Entity | None = None
-    resolved_kind: str = constructor_kind
-    if constructor_kind == "auto":
-        source_ctor = _find_declared_method(source_entity, source_entities, "__init__")
-        if source_ctor is not None:
-            resolved_kind = "__init__"
-        else:
-            source_ctor = _find_declared_method(
-                source_entity, source_entities, "__new__"
-            )
-            if source_ctor is not None:
-                resolved_kind = "__new__"
-    else:
-        source_ctor = _find_declared_method(
-            source_entity, source_entities, constructor_kind
-        )
+    source_ctor = resolve_source_constructor(
+        source_entity,
+        source_entities,
+        constructor_kind=constructor_kind,
+    )
 
     if source_ctor is None:
         compiler_evidence.append(
@@ -168,7 +148,8 @@ def compile_required_constructor(
                 source_entity,
                 declaration,
                 reason=(
-                    "source class has no declared constructor matching "
+                    "source class has no declared constructor or dataclass-generated "
+                    "__init__ matching "
                     f"constructor_kind={constructor_kind}"
                 ),
                 params=params_kwargs,
@@ -181,27 +162,44 @@ def compile_required_constructor(
         explicit_target=None,
     )
 
+    rule_id_version = (
+        "API003/required_constructor/v2"
+        if source_ctor.origin == "generated_dataclass_init"
+        else "API003/required_constructor/v1"
+    )
+
+    rule_params = {
+        "mode": signature_mode,
+        "allow_extra_params": True,
+        "allow_param_rename": False,
+        "check_return": False,
+        "fail_on_unmatched": not allow_missing,
+        "enforce_method_kind": False,
+        "constructor_kind": constructor_kind,
+        "resolved_constructor_kind": source_ctor.kind,
+        "allow_inherited": allow_inherited,
+        "allow_missing": allow_missing,
+        "source_constructor_origin": source_ctor.origin,
+    }
+    if source_ctor.origin == "generated_dataclass_init":
+        rule_params["expected_source_constructor_context_id"] = (
+            source_entity.canonical_id
+        )
+        rule_params["expected_source_constructor_model"] = (
+            source_ctor.entity.extras.get("synthetic_param_model")
+        )
+    else:
+        rule_params["expected_source_constructor_id"] = source_ctor.entity.canonical_id
+
     rule = Rule(
-        rule_id=with_rule_id_suffix("API003/required_constructor/v1", rule_id_suffix),
+        rule_id=with_rule_id_suffix(rule_id_version, rule_id_suffix),
         rule_type="api_signature",
         name="required_constructor",
         severity=base_severity,
         scope=source_entity.kind,
         evidence_type="static",
         selector=selector,
-        params={
-            "mode": signature_mode,
-            "allow_extra_params": True,
-            "allow_param_rename": False,
-            "check_return": False,
-            "fail_on_unmatched": not allow_missing,
-            "enforce_method_kind": False,
-            "constructor_kind": constructor_kind,
-            "resolved_constructor_kind": resolved_kind,
-            "allow_inherited": allow_inherited,
-            "allow_missing": allow_missing,
-            "expected_source_constructor_id": source_ctor.canonical_id,
-        },
+        params=rule_params,
         message_template=(
             "Required constructor mismatch for "
             "{target.module_path}:{target.qualname}: {details.reason}"
@@ -211,6 +209,7 @@ def compile_required_constructor(
             "Match the required parameter names, kinds, and required/optional shape.",
         ),
         enabled=True,
+        version="v2" if source_ctor.origin == "generated_dataclass_init" else "v1",
     )
 
     return [rule], compiler_evidence, []

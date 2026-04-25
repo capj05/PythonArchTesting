@@ -7,7 +7,12 @@ from .factories import compile_required_factory
 from .flow import compile_enforce_flow
 from .import_policy import compile_forbid_imports
 from .member_absence import compile_does_not_have
-from .nominal_type import compile_subclass_of
+from .nominal_type import (
+    compile_exact_type,
+    compile_inherits_directly_from,
+    compile_not_subclass_of,
+    compile_subclass_of,
+)
 from .protocols import compile_implements_protocol
 
 __all__ = [
@@ -20,5 +25,8 @@ __all__ = [
     "compile_enforce_flow",
     "compile_forbid_imports",
     "compile_implements_protocol",
+    "compile_exact_type",
+    "compile_inherits_directly_from",
+    "compile_not_subclass_of",
     "compile_subclass_of",
 ]

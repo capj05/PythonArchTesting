@@ -245,6 +245,45 @@ def test_subclass_of_annotation_normalizes_and_dedupes() -> None:
     assert entries[0].params["base"] == "sample.BaseRepository"
 
 
+def test_nominal_family_annotations_normalize_and_dedupe() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+        from pythonarchtesting.rules import (
+            exact_type,
+            inherits_directly_from,
+            not_subclass_of,
+        )
+
+        class BaseRepository:
+            pass
+
+        class CsvRepository(BaseRepository):
+            __archtest__: Annotated[None, exact_type("sample.BaseRepository")]
+            __archtest__: Annotated[None, ("exact_type", {"base": "sample.BaseRepository"})]
+            __archtest__: Annotated[None, not_subclass_of("sample.LegacyRepository")]
+            __archtest__: Annotated[
+                None,
+                inherits_directly_from("sample.ImmediateRepositoryBase"),
+            ]
+        """)
+
+    class_entity = next(
+        entity
+        for entity in entities
+        if entity.kind == "class" and entity.name == "CsvRepository"
+    )
+    entries = normalize_declaration_entries(class_entity)
+
+    assert [entry.kind for entry in entries] == [
+        "exact_type",
+        "not_subclass_of",
+        "inherits_directly_from",
+    ]
+    assert entries[0].params["base"] == "sample.BaseRepository"
+    assert entries[1].params["base"] == "sample.LegacyRepository"
+    assert entries[2].params["base"] == "sample.ImmediateRepositoryBase"
+
+
 def test_invalid_annotation_declarations_emit_compiler_evidence_without_rules() -> None:
     entities = _extract_entities("""
         from typing import Annotated

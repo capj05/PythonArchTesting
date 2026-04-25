@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 from pythonarchtesting.entities import Entity
 
+from .construction_resolution import (
+    constructor_candidates_for_class,
+    constructor_origin_for_entity,
+)
 from .member_name_resolution import (
     matched_target_parent_class,
     target_methods_for_class,
 )
+
+if TYPE_CHECKING:
+    from pythonarchtesting.core.models import EvalContext
 
 _FACTORY_CONSTRUCTOR_NAMES = frozenset({"__init__", "__new__"})
 
@@ -31,19 +39,47 @@ def _is_factory_candidate(entity: Entity) -> bool:
 
 def factory_candidates_for_class(
     target_class: Entity,
-    ctx: object,
+    ctx: EvalContext,
     *,
     allow_inherited: bool,
 ) -> list[Entity]:
-    return [
+    target_entities = ctx.target_index.all_sorted
+    constructor_entities = [
+        candidate.entity
+        for candidate in constructor_candidates_for_class(
+            target_class,
+            target_entities,
+            allow_inherited=allow_inherited,
+        )
+    ]
+    method_entities = [
         method
         for method in target_methods_for_class(
             target_class,
-            ctx,  # type: ignore[arg-type]
+            ctx,
             include_inherited=allow_inherited,
         )
         if _is_factory_candidate(method)
+        and method.name not in _FACTORY_CONSTRUCTOR_NAMES
     ]
+    return [*constructor_entities, *method_entities]
+
+
+def factory_candidate_origin(
+    entity: Entity,
+    target_class: Entity,
+    ctx: EvalContext,
+) -> str:
+    if entity.name in _FACTORY_CONSTRUCTOR_NAMES:
+        target_entities = ctx.target_index.all_sorted
+        return constructor_origin_for_entity(
+            entity,
+            target_class,
+            target_entities,
+        )
+    from .member_name_resolution import member_origin
+
+    return member_origin(entity, target_class, ctx)
 
 
 def filter_factory_candidates(
@@ -77,6 +113,7 @@ def filter_factory_candidates(
 
 
 __all__ = [
+    "factory_candidate_origin",
     "factory_candidates_for_class",
     "factory_kind",
     "filter_factory_candidates",

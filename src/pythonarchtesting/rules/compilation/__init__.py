@@ -3,8 +3,11 @@
 from .common import canonicalize_payload, evidence_id, with_rule_id_suffix
 from .decorators import (
     compile_enforce_flow,
+    compile_exact_type,
     compile_forbid_imports,
     compile_implements_protocol,
+    compile_inherits_directly_from,
+    compile_not_subclass_of,
     compile_required_entity_signature,
     compile_required_factory,
     compile_required_method,
@@ -22,6 +25,9 @@ __all__ = [
     "compile_enforce_flow",
     "compile_forbid_imports",
     "compile_implements_protocol",
+    "compile_exact_type",
+    "compile_inherits_directly_from",
+    "compile_not_subclass_of",
     "compile_subclass_of",
     "compile_rules",
 ]

@@ -37,6 +37,9 @@ from pythonarchtesting.rules.compilation.decorators.member_absence import (
     compile_does_not_have,
 )
 from pythonarchtesting.rules.compilation.decorators.nominal_type import (
+    compile_exact_type,
+    compile_inherits_directly_from,
+    compile_not_subclass_of,
     compile_subclass_of,
 )
 from pythonarchtesting.rules.compilation.decorators.protocols import (
@@ -88,6 +91,9 @@ def compile_rules(
         "forbid_imports": compile_forbid_imports,
         "implements_protocol": compile_implements_protocol,
         "subclass_of": compile_subclass_of,
+        "exact_type": compile_exact_type,
+        "not_subclass_of": compile_not_subclass_of,
+        "inherits_directly_from": compile_inherits_directly_from,
     }
 
     rules: List[Any] = []
@@ -118,6 +124,9 @@ def compile_rules(
             if declaration.kind in {
                 "implements_protocol",
                 "subclass_of",
+                "exact_type",
+                "not_subclass_of",
+                "inherits_directly_from",
                 "required_constructor",
             }:
                 compiler_kwargs["source_entities"] = source_entities

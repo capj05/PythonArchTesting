@@ -127,7 +127,9 @@ def required_constructor(
     Place on a class-level ``__archtest__`` annotation. The evaluator resolves
     the source class constructor (``__init__`` or ``__new__`` depending on
     ``constructor_kind``) and checks that the matched target class exposes a
-    compatible constructor.
+    compatible constructor. Statically recognizable dataclass-generated
+    ``__init__`` methods participate as constructor contracts and target
+    candidates.
 
     This helper is declaration-only and returns passive annotation metadata.
     """
@@ -374,6 +376,81 @@ def subclass_of(
     )
     return _make_rule_marker(
         "subclass_of",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def exact_type(
+    base: str,
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture exact nominal type identity intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "base": base,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "exact_type",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def not_subclass_of(
+    base: str,
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture forbidden nominal inheritance intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "base": base,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "not_subclass_of",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def inherits_directly_from(
+    base: str,
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture direct nominal inheritance intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "base": base,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "inherits_directly_from",
         cleaned,
         message=message,
         severity=_resolve_severity(severity),

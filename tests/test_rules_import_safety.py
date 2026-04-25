@@ -39,6 +39,9 @@ def test_rules_public_surface_is_core_only() -> None:
         "forbid_imports",
         "implements_protocol",
         "subclass_of",
+        "exact_type",
+        "not_subclass_of",
+        "inherits_directly_from",
         "flow",
         "enforce_flow",
     }

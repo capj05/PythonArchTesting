@@ -35,9 +35,12 @@ def _get_core_decorators() -> dict[str, Any]:
     from pythonarchtesting.rules.declaration.core import (
         does_not_have,
         enforce_flow,
+        exact_type,
         flow,
         forbid_imports,
         implements_protocol,
+        inherits_directly_from,
+        not_subclass_of,
         required_attribute,
         required_constructor,
         required_entity_signature,
@@ -56,6 +59,9 @@ def _get_core_decorators() -> dict[str, Any]:
         "forbid_imports": forbid_imports,
         "implements_protocol": implements_protocol,
         "subclass_of": subclass_of,
+        "exact_type": exact_type,
+        "not_subclass_of": not_subclass_of,
+        "inherits_directly_from": inherits_directly_from,
         "flow": flow,
         "enforce_flow": enforce_flow,
     }
@@ -72,6 +78,11 @@ does_not_have = _LazyMarkerFactory("does_not_have", _get_core_decorators)
 forbid_imports = _LazyMarkerFactory("forbid_imports", _get_core_decorators)
 implements_protocol = _LazyMarkerFactory("implements_protocol", _get_core_decorators)
 subclass_of = _LazyMarkerFactory("subclass_of", _get_core_decorators)
+exact_type = _LazyMarkerFactory("exact_type", _get_core_decorators)
+not_subclass_of = _LazyMarkerFactory("not_subclass_of", _get_core_decorators)
+inherits_directly_from = _LazyMarkerFactory(
+    "inherits_directly_from", _get_core_decorators
+)
 flow = _LazyMarkerFactory("flow", _get_core_decorators)
 enforce_flow = _LazyMarkerFactory("enforce_flow", _get_core_decorators)
 
@@ -85,6 +96,9 @@ __all__ = [
     "forbid_imports",
     "implements_protocol",
     "subclass_of",
+    "exact_type",
+    "not_subclass_of",
+    "inherits_directly_from",
     "flow",
     "enforce_flow",
 ]

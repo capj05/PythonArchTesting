@@ -263,6 +263,74 @@ class CsvRepository(IntermediateRepository):
     assert [result.status for result in results] == ["OK"]
 
 
+def test_nom001_evaluation_fails_when_target_is_exactly_matched_base() -> None:
+    source_modules = [
+        (
+            "source_module.py",
+            """
+from typing import Annotated
+from pythonarchtesting.rules import subclass_of
+
+class BaseRepository:
+    pass
+
+
+class CsvRepository(BaseRepository):
+    __archtest__: Annotated[None, subclass_of("source_module.BaseRepository")]
+""",
+        )
+    ]
+    target_modules = [
+        (
+            "target_module.py",
+            """
+class AssignmentRepositoryBase:
+    pass
+""",
+        )
+    ]
+
+    source_entities = [
+        entity
+        for path, text in source_modules
+        for entity in _extract_entities(text, role="source", path=path)
+    ]
+    target_entities = [
+        entity
+        for path, text in target_modules
+        for entity in _extract_entities(text, role="target", path=path)
+    ]
+    source_class = _entity(
+        source_entities, kind="class", module_path="source_module", name="CsvRepository"
+    )
+    source_base = _entity(
+        source_entities,
+        kind="class",
+        module_path="source_module",
+        name="BaseRepository",
+    )
+    target_base = _entity(
+        target_entities,
+        kind="class",
+        module_path="target_module",
+        name="AssignmentRepositoryBase",
+    )
+
+    results, errors = _evaluate(
+        source_modules=source_modules,
+        target_modules=target_modules,
+        source_module_path="source_module",
+        matches=[
+            _matched(source_class, target_base),
+            _matched(source_base, target_base),
+        ],
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert "strict subclass required" in results[0].message
+
+
 def test_nom001_evaluation_fails_when_expected_base_counterpart_is_unmatched() -> None:
     source_modules = [
         (

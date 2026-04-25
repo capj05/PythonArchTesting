@@ -74,6 +74,9 @@ Strict tuple metadata also remains supported as a compatibility form:
 | `forbid_imports(...)` | Forbid imports in a declared scope | `__archtest__: Annotated[...]`, commonly at module level |
 | `implements_protocol(...)` | Require structural protocol conformance | Class-level `__archtest__: Annotated[...]` or signature-level `Annotated[...]` |
 | `subclass_of(...)` | Require nominal inheritance from a matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
+| `exact_type(...)` | Require the target class to be exactly the matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
+| `not_subclass_of(...)` | Forbid nominal inheritance from a matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
+| `inherits_directly_from(...)` | Require direct nominal inheritance from a matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
 | `flow(...)` | Mark a statement as a named flow stage | Statement-level `__archtest__: Annotated[...]` immediately after the statement |
 | `enforce_flow(...)` | Require ordered flow stages for a variable | `__archtest__: Annotated[...]` in a function or method body |
 
@@ -261,6 +264,7 @@ Common options:
 | `allow_property` | `bool` | `False` | Accept `@property` descriptor as satisfying the rule |
 | `require_writable` | `bool` | `False` | Require property to have a setter (only checked when `allow_property=True`) |
 | `declared_only` | `bool` | `False` | Exclude inherited members |
+| `allow_missing` | `bool` | `False` | Skip instead of fail when the matched target does not expose the attribute in scope |
 | `descriptor_kinds` | `tuple[str, ...] \| None` | `None` | Accept supported non-property descriptors: `"cached_property"` and `"classproperty"` |
 | `include_dynamic_attributes` | `bool` | `False` | Opt in to literal `setattr(...)` discovery |
 | `interpret_dataclass_fields` | `bool` | `False` | Treat dataclass field declarations as instance attributes |
@@ -277,6 +281,9 @@ Notes:
 - `storage="instance"` requires an instance attribute discovered from `self.<name> = ...`.
 - `allow_property=False` (default): `required_attribute(...)` only accepts concrete attributes unless a v2 descriptor kind is explicitly enabled.
 - `allow_property=True`: rule can be satisfied by a `@property` descriptor **or** a concrete attribute.
+- `allow_missing=False` (default) keeps the current required-member behavior.
+- `allow_missing=True` validates the attribute when present and returns `SKIPPED` only when the matched target does not expose the attribute in the current scope.
+- A present but incompatible attribute still fails even when `allow_missing=True`.
 - `allow_property=True` is rejected by the compiler when combined with `storage="class"` (properties are instance-facing).
 - `require_writable=True` only applies when `allow_property=True` and is ignored otherwise; requires the property to have a `@<name>.setter` method.
 - `require_writable=True` also rejects read-only v2 descriptors such as `cached_property` and `classproperty`.
@@ -439,6 +446,20 @@ class Service:
     ]
 ```
 
+Optional attribute requirement (skip if absent, fail if present but incompatible):
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("email", storage="instance", allow_missing=True),
+    ]
+```
+
 ### `required_constructor(...)`
 
 Common options:
@@ -446,16 +467,30 @@ Common options:
 - `signature_mode` — `"compatible"` (default) or `"exact"`; compared via the same signature check used by `required_method(...)`.
 - `constructor_kind` — `"auto"` (default: prefer `__init__`, fall back to `__new__`), `"__init__"`, or `"__new__"`.
 - `allow_inherited` — when `True` (default), a constructor inherited from a base class in the target satisfies the rule; when `False`, the constructor must be declared directly on the target class.
+- `allow_missing` — when `True`, skip instead of fail when no constructor candidate exists under the current `constructor_kind` / `allow_inherited` scope.
 - `severity`
 - `message`
 
 Notes:
 
-- v1 only matches declared `__init__` / `__new__` on the source class. Factory classmethods, staticmethods, metaclass `__call__`, and dataclass-generated `__init__` are not inferred.
+- Declared `__init__` / `__new__` continue to work as before.
+- Statically recognizable dataclass-generated `__init__` is inferred on the
+  source side when the source class is decorated with `@dataclass` or
+  `@dataclasses.dataclass`, does not declare its own `__init__`, and does not
+  disable generation with `init=False`.
+- The matched target class also treats a statically recognizable
+  dataclass-generated `__init__` as a constructor candidate.
+- Factory classmethods and staticmethods are still not part of
+  `required_constructor(...)`.
+- Metaclass `__call__` is still not inferred.
 - Return annotations are not compared.
 - Method-kind (regular/classmethod/staticmethod) is not enforced; only the parameter shape is checked (after stripping the `self` / `cls` receiver).
 - Extra required parameters on the target constructor fail the `compatible` check; extra *optional* parameters are allowed.
-- If `constructor_kind="auto"` and neither `__init__` nor `__new__` is declared on the source class, the rule is not emitted and a compiler evidence item is produced.
+- `allow_missing=False` (default) keeps the current required-constructor behavior.
+- `allow_missing=True` only skips when no constructor candidate exists in the current scope; a present but incompatible constructor still fails.
+- If `constructor_kind="auto"` and the source class has neither a declared
+  constructor nor a dataclass-generated `__init__`, the rule is not emitted and
+  a compiler evidence item is produced.
 - Placement is class-level only; a non-class placement emits `compiler_invalid_target` evidence.
 
 Example — reference with a constructor contract:
@@ -489,6 +524,50 @@ class Session:
         self.user_id = user_id
 ```
 
+Example — optional constructor requirement:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+
+class Plugin:
+    __archtest__: Annotated[
+        None,
+        required_constructor(allow_missing=True),
+    ]
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+```
+
+Example — dataclass-generated constructor contract:
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+
+@dataclass
+class User:
+    __archtest__: Annotated[None, required_constructor()]
+    name: str
+    email: str | None = None
+```
+
+Example — dataclass target satisfying a constructor rule:
+
+```python
+from dataclasses import dataclass
+
+
+@dataclass
+class User:
+    name: str
+    email: str | None = None
+```
+
 ### `required_factory(...)`
 
 Common options:
@@ -501,6 +580,7 @@ Common options:
 | `name_match` | `"any" \| "exact" \| "alias" \| "regex"` | `"any"` | How the factory method name is matched |
 | `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"` |
 | `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"` |
+| `allow_missing` | `bool` | `False` | Skip instead of fail when no accepted factory candidate exists in scope |
 | `severity` | `str` | `"error"` | Violation severity level |
 | `message` | `str \| None` | `None` | Custom violation message |
 
@@ -514,7 +594,13 @@ Notes:
 - `name_match="alias"` requires `aliases`.
 - `name_match="regex"` requires `pattern`.
 - `allow_inherited=True` allows inherited target factory methods to satisfy the rule.
+- `allow_missing=False` (default) keeps the current required-factory behavior.
+- `allow_missing=True` only skips when no accepted target factory candidate exists under the current `satisfy_with` / `name_match` / `allow_inherited` scope.
+- A present but incompatible accepted candidate still fails even when `allow_missing=True`.
 - The rule is emitted as `API004/required_factory/v1`.
+- When `satisfy_with` includes `"constructor"`, constructor matching reuses the
+  same constructor resolution as `required_constructor(...)`, including support
+  for statically recognizable dataclass-generated `__init__`.
 - Return annotations are not compared.
 
 Example:
@@ -550,6 +636,48 @@ class Session:
             ),
         ]
         return cls()
+```
+
+Optional factory example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str) -> "Session":
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                allow_missing=True,
+            ),
+        ]
+        return cls()
+```
+
+Example — constructor-backed factory satisfaction on a dataclass target:
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+
+class Session:
+    def __init__(self, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(satisfy_with=("constructor",)),
+        ]
+        self.user_id = user_id
+
+
+@dataclass
+class SessionTarget:
+    user_id: str
 ```
 
 ### `does_not_have(...)`
@@ -759,6 +887,10 @@ def build(
 Require the matched target class to inherit from the matched target counterpart
 of a source base class.
 
+This is a strict subclass check. The target class must inherit from the matched
+counterpart of the declared source base either directly or transitively. The
+matched base itself does not satisfy the rule.
+
 Common options:
 
 - `base`
@@ -780,12 +912,95 @@ class CsvRepository(BaseRepository):
     __archtest__: Annotated[None, subclass_of("reference.BaseRepository")]
 ```
 
-V1 limitations:
+### `exact_type(...)`
 
-- Source-reference classes only.
-- Class-level declarations only.
-- No exact-type mode.
-- No signature-level parameter or return nominal checks.
+Require the matched target class to be exactly the matched target counterpart
+of a source base class.
+
+Subclassing does not satisfy this rule. The target must be the counterpart
+itself.
+
+Common options:
+
+- `base`
+- `severity`
+- `message`
+
+Example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import exact_type
+
+
+class BaseRepository:
+    pass
+
+
+class CsvRepository(BaseRepository):
+    __archtest__: Annotated[None, exact_type("reference.BaseRepository")]
+```
+
+### `not_subclass_of(...)`
+
+Require the matched target class to neither inherit from nor equal the matched
+target counterpart of a source base class.
+
+This is the negated form of the nominal subclass rule. Direct subclasses,
+transitive subclasses, and the forbidden base counterpart itself all fail.
+
+Common options:
+
+- `base`
+- `severity`
+- `message`
+
+Example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import not_subclass_of
+
+
+class BaseRepository:
+    pass
+
+
+class CsvRepository:
+    __archtest__: Annotated[None, not_subclass_of("reference.BaseRepository")]
+```
+
+### `inherits_directly_from(...)`
+
+Require the matched target class to list the matched target counterpart of a
+source base class among its immediate bases.
+
+Only direct bases are considered. A deeper transitive ancestor does not satisfy
+this rule, and the matched base itself does not satisfy it either.
+
+Common options:
+
+- `base`
+- `severity`
+- `message`
+
+Example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import inherits_directly_from
+
+
+class BaseRepository:
+    pass
+
+
+class CsvRepository(BaseRepository):
+    __archtest__: Annotated[
+        None,
+        inherits_directly_from("reference.BaseRepository"),
+    ]
+```
 
 ### `flow(...)`
 

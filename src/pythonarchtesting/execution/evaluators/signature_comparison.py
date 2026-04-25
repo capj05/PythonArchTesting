@@ -17,6 +17,10 @@ def function_node(entity: Entity) -> ast.FunctionDef | ast.AsyncFunctionDef | No
 
 
 def param_model(entity: Entity) -> dict[str, Any]:
+    synthetic_model = entity.extras.get("synthetic_param_model")
+    if isinstance(synthetic_model, dict):
+        return synthetic_model
+
     node = function_node(entity)
     annotations = entity.extras.get("annotations", {}) or {}
     annotation_args = (

@@ -7,35 +7,17 @@ from typing import Any, List, Tuple
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
-from pythonarchtesting.rules.compilation.common import (
-    canonicalize_payload,
-    evidence_id,
-)
-from pythonarchtesting.rules.compilation.declarations import (
-    declaration_rule_id_suffixes,
-    is_invalid_annotation_declaration,
-    normalize_declaration_entries,
-)
-from pythonarchtesting.rules.compilation.decorators.api_signature import (
-    compile_required_entity_signature,
-    compile_required_method,
-)
-from pythonarchtesting.rules.compilation.decorators.attributes import (
-    compile_required_attribute,
-)
-from pythonarchtesting.rules.compilation.decorators.flow import compile_enforce_flow
-from pythonarchtesting.rules.compilation.decorators.import_policy import (
-    compile_forbid_imports,
-)
-from pythonarchtesting.rules.compilation.decorators.protocols import (
-    compile_implements_protocol,
-)
 
 
 def _invalid_declaration_evidence(
     source_entity: Entity,
     declaration: DeclarationEntry,
 ) -> Evidence:
+    from pythonarchtesting.rules.compilation.common import (
+        canonicalize_payload,
+        evidence_id,
+    )
+
     payload = {
         "declaration": declaration.kind,
         "issue": "invalid_declaration",
@@ -65,6 +47,26 @@ def compile_rules(
     cfg: Config,
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     """Compile entity-scoped rules from annotation declarations."""
+    from pythonarchtesting.rules.compilation.declarations import (
+        declaration_rule_id_suffixes,
+        is_invalid_annotation_declaration,
+        normalize_declaration_entries,
+    )
+    from pythonarchtesting.rules.compilation.decorators.api_signature import (
+        compile_required_entity_signature,
+        compile_required_method,
+    )
+    from pythonarchtesting.rules.compilation.decorators.attributes import (
+        compile_required_attribute,
+    )
+    from pythonarchtesting.rules.compilation.decorators.flow import compile_enforce_flow
+    from pythonarchtesting.rules.compilation.decorators.import_policy import (
+        compile_forbid_imports,
+    )
+    from pythonarchtesting.rules.compilation.decorators.protocols import (
+        compile_implements_protocol,
+    )
+
     declaration_compilers: dict[str, Any] = {
         "required_entity_signature": compile_required_entity_signature,
         "required_method": compile_required_method,

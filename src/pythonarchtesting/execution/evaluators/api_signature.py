@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
 
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult, RuleStatus
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 
+from .construction_resolution import (
+    constructor_candidates_for_class,
+    resolve_target_constructor,
+)
 from .factory_resolution import (
+    factory_candidate_origin,
     factory_candidates_for_class,
     factory_kind,
     filter_factory_candidates,
@@ -14,9 +19,7 @@ from .factory_resolution import (
 from .member_name_resolution import (
     filter_methods_by_name_match,
     matched_target_parent_class,
-)
-from .member_name_resolution import member_origin as resolved_member_origin
-from .member_name_resolution import (
+    member_origin as resolved_member_origin,
     target_methods_for_class,
     target_parent_class,
 )
@@ -255,7 +258,7 @@ def _evaluate_required_factory_rule(
                 "name": candidate.name,
                 "factory_kind": candidate_kind,
                 "method_kind": _method_kind(candidate),
-                "inherited": resolved_member_origin(candidate, target_class, ctx)
+                "inherited": factory_candidate_origin(candidate, target_class, ctx)
                 != "declared",
                 "accepted": candidate_accepted,
                 "errors": (
@@ -447,11 +450,41 @@ def _evaluate_required_constructor_rule(
             rule_evidence,
         )
 
-    source_ctor = (
-        ctx.source_by_id.get(str(expected_source_id))
-        if expected_source_id is not None
-        else None
-    )
+    source_ctor = None
+    if expected_source_id is not None:
+        resolved_source = ctx.source_by_id.get(str(expected_source_id))
+        if isinstance(resolved_source, Entity) and resolved_source.kind == "method":
+            source_ctor = resolved_source
+
+    if source_ctor is None:
+        source_model = rule.params.get("expected_source_constructor_model")
+        source_context_id = rule.params.get("expected_source_constructor_context_id")
+        source_origin = str(
+            rule.params.get(
+                "source_constructor_origin",
+                "generated_dataclass_init",
+            )
+        )
+        source_context = (
+            ctx.source_by_id.get(str(source_context_id))
+            if source_context_id is not None
+            else None
+        )
+        if (
+            isinstance(source_context, Entity)
+            and source_context.kind == "class"
+            and isinstance(source_model, dict)
+        ):
+            from .construction_resolution import build_synthetic_constructor_entity
+
+            source_ctor = build_synthetic_constructor_entity(
+                source_context,
+                name="__init__",
+                origin=source_origin,  # type: ignore[arg-type]
+                inherited=False,
+                param_model=source_model,
+            )
+
     if not isinstance(source_ctor, Entity) or source_ctor.kind != "method":
         details = {
             "reason": (
@@ -479,31 +512,31 @@ def _evaluate_required_constructor_rule(
             rule_evidence,
         )
 
-    declared_targets = {
-        method.name: method
-        for method in target_methods_for_class(
-            target_class, ctx, include_inherited=False
-        )
-    }
-    all_targets = {
-        method.name: method
-        for method in target_methods_for_class(
-            target_class, ctx, include_inherited=True
-        )
-    }
-
-    target_ctor: Entity | None = declared_targets.get(resolved_kind)
-    member_origin = "declared" if target_ctor is not None else "missing"
-
-    if target_ctor is None and allow_inherited:
-        target_ctor = all_targets.get(resolved_kind)
-        if target_ctor is not None:
-            member_origin = "inherited"
+    target_entities = ctx.target_index.all_sorted
+    resolved_kind_name: Literal["__init__", "__new__"] = (
+        "__new__" if resolved_kind == "__new__" else "__init__"
+    )
+    target_candidate = resolve_target_constructor(
+        target_class,
+        target_entities,
+        constructor_kind=resolved_kind_name,
+        allow_inherited=allow_inherited,
+    )
+    target_ctor = target_candidate.entity if target_candidate is not None else None
+    member_origin = "missing"
+    if target_candidate is not None:
+        member_origin = "inherited" if target_candidate.inherited else "declared"
 
     if target_ctor is None:
-        inherited_only = (
-            resolved_kind in all_targets and resolved_kind not in declared_targets
-        )
+        inherited_only = False
+        for candidate in constructor_candidates_for_class(
+            target_class,
+            target_entities,
+            allow_inherited=True,
+        ):
+            if candidate.kind == resolved_kind_name and candidate.inherited:
+                inherited_only = True
+                break
         if allow_missing:
             details = {
                 "reason": (

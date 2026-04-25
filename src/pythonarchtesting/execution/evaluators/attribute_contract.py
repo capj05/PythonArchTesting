@@ -208,7 +208,7 @@ class AttributeContractEvaluator:
         }
 
         if not all_candidates and allow_missing:
-            details = {
+            skip_details = {
                 "reason": f"Optional attribute '{name}' is not present on target class",
                 "failure_reason": "optional_member_absent",
                 "allow_missing": True,
@@ -221,7 +221,7 @@ class AttributeContractEvaluator:
                 source,
                 target,
                 match,
-                details=details,
+                details=skip_details,
             )
 
         # Existential evaluation: return OK at the first passing candidate.

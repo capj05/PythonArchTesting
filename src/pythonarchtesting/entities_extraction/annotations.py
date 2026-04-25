@@ -17,7 +17,10 @@ _POSITIONAL_LIST_ARG_NAMES = {
 }
 _POSITIONAL_SINGLE_ARG_NAMES = {
     "does_not_have": "name",
+    "exact_type": "base",
     "implements_protocol": "protocol",
+    "inherits_directly_from": "base",
+    "not_subclass_of": "base",
     "required_attribute": "name",
     "subclass_of": "base",
     "flow": "stage",
@@ -26,9 +29,12 @@ _POSITIONAL_SINGLE_ARG_NAMES = {
 _SUPPORTED_MARKER_NAMES = {
     "does_not_have",
     "enforce_flow",
+    "exact_type",
     "forbid_imports",
     "flow",
+    "inherits_directly_from",
     "implements_protocol",
+    "not_subclass_of",
     "required_attribute",
     "required_constructor",
     "required_entity_signature",

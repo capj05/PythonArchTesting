@@ -61,6 +61,102 @@ class Tuple2:
     assert rules[0].params["resolved_constructor_kind"] == "__new__"
 
 
+def test_api003_compile_dataclass_generated_init_emits_v2_rule() -> None:
+    source = """
+from dataclasses import dataclass
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+@dataclass
+class User:
+    __archtest__: Annotated[None, required_constructor()]
+    name: str
+    email: str | None = None
+"""
+    source_entities = extract_entities(source, role="source")
+
+    rules, evidence, compiler_results = compile_rules(source_entities, Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert [rule.rule_id for rule in rules] == ["API003/required_constructor/v2"]
+    assert rules[0].params["resolved_constructor_kind"] == "__init__"
+    assert rules[0].params["source_constructor_origin"] == "generated_dataclass_init"
+    assert "expected_source_constructor_model" in rules[0].params
+    assert "expected_source_constructor_id" not in rules[0].params
+
+
+def test_api003_compile_dataclass_init_kind_emits_generated_constructor_rule() -> None:
+    source = """
+from dataclasses import dataclass
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+@dataclass
+class User:
+    __archtest__: Annotated[
+        None, required_constructor(constructor_kind="__init__")
+    ]
+    name: str
+"""
+    source_entities = extract_entities(source, role="source")
+
+    rules, evidence, compiler_results = compile_rules(source_entities, Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert [rule.rule_id for rule in rules] == ["API003/required_constructor/v2"]
+    assert rules[0].params["constructor_kind"] == "__init__"
+    assert rules[0].params["resolved_constructor_kind"] == "__init__"
+
+
+def test_api003_compile_declared_init_wins_over_dataclass_generated_init() -> None:
+    source = """
+from dataclasses import dataclass
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+@dataclass
+class User:
+    __archtest__: Annotated[None, required_constructor()]
+    name: str
+
+    def __init__(self, name: str, handle: str) -> None:
+        self.name = name
+        self.handle = handle
+"""
+    source_entities = extract_entities(source, role="source")
+
+    rules, evidence, compiler_results = compile_rules(source_entities, Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert [rule.rule_id for rule in rules] == ["API003/required_constructor/v1"]
+    assert rules[0].params["source_constructor_origin"] == "declared_init"
+    assert isinstance(rules[0].params["expected_source_constructor_id"], str)
+
+
+def test_api003_compile_dataclass_init_false_emits_compiler_evidence() -> None:
+    source = """
+from dataclasses import dataclass
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+@dataclass(init=False)
+class User:
+    __archtest__: Annotated[None, required_constructor()]
+    name: str
+"""
+    source_entities = extract_entities(source, role="source")
+
+    rules, evidence, compiler_results = compile_rules(source_entities, Mock())
+
+    assert rules == []
+    assert compiler_results == []
+    assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
+    assert "no declared constructor" in evidence[0].payload["reason"]
+
+
 def test_api003_compile_explicit_new_targets_new() -> None:
     source = """
 from typing import Annotated

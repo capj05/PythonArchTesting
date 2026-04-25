@@ -126,6 +126,41 @@ class User:
     assert "missing required attribute 'email'" in results[0].message
 
 
+def test_api003_optional_missing_attribute_skips() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("email", storage="instance", allow_missing=True),
+    ]
+"""
+    target = """
+class User:
+    pass
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["SKIPPED"]
+    assert results[0].details["failure_reason"] == "optional_member_absent"
+    assert (
+        "Optional attribute 'email' is not present on target class"
+        in results[0].message
+    )
+
+
 def test_api003_evaluation_fails_for_wrong_storage() -> None:
     source = """
 from typing import Annotated
@@ -158,6 +193,38 @@ class User:
     assert "attribute storage mismatch" in results[0].message
 
 
+def test_api003_optional_attribute_still_fails_for_wrong_storage() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("email", annotation="str", storage="class", allow_missing=True),
+    ]
+"""
+    target = """
+class User:
+    def __init__(self) -> None:
+        self.email: str = "user@example.com"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert "attribute storage mismatch" in results[0].message
+
+
 def test_api003_evaluation_fails_for_annotation_mismatch() -> None:
     source = """
 from typing import Annotated
@@ -167,6 +234,37 @@ class User:
     __archtest__: Annotated[
         None,
         required_attribute("VERSION", annotation="int", storage="class"),
+    ]
+"""
+    target = """
+class User:
+    VERSION: str = "1"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert "attribute annotation mismatch" in results[0].message
+
+
+def test_api003_optional_attribute_still_fails_for_annotation_mismatch() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("VERSION", annotation="int", storage="class", allow_missing=True),
     ]
 """
     target = """
@@ -290,6 +388,39 @@ class User:
     __archtest__: Annotated[
         None,
         required_attribute("email", allow_property=False),
+    ]
+"""
+    target = """
+class User:
+    @property
+    def email(self) -> str:
+        return "user@example.com"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert "properties do not satisfy" in results[0].message
+
+
+def test_api003_optional_property_still_fails_when_allow_property_false() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("email", allow_property=False, allow_missing=True),
     ]
 """
     target = """
@@ -449,6 +580,47 @@ class User(Base):
     assert "missing required attribute 'VERSION'" in results[0].message
 
 
+def test_api003_declared_only_optional_attribute_skips_if_only_inherited() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute(
+            "VERSION",
+            storage="class",
+            declared_only=True,
+            allow_missing=True,
+        ),
+    ]
+"""
+    target = """
+class Base:
+    VERSION: str = "1"
+
+
+class User(Base):
+    pass
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["SKIPPED"]
+    assert results[0].details["failure_reason"] == "optional_member_absent"
+    assert results[0].details["required_attribute"]["declared_only"] is True
+
+
 def test_api003_declared_only_passes_if_directly_declared() -> None:
     source = """
 from typing import Annotated
@@ -562,6 +734,37 @@ class User:
     @property
     def email(self) -> str:  # type: ignore[override]
         return self.__dict__.get("_email", "")
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api003_optional_present_attribute_still_passes() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("email", annotation="str", storage="instance", allow_missing=True),
+    ]
+"""
+    target = """
+class User:
+    def __init__(self) -> None:
+        self.email: str = "user@example.com"
 """
 
     results, errors, _ = evaluate_single_rule(
