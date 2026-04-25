@@ -39,6 +39,31 @@ def _decorator_name(node: ast.AST) -> str | None:
     return None
 
 
+def _decorator_ref(
+    node: ast.AST,
+    *,
+    module_path: str,
+    aliases: dict[str, str],
+) -> str | None:
+    target = node.func if isinstance(node, ast.Call) else node
+    try:
+        target_expr = ast.unparse(target)
+    except Exception:
+        target_expr = _decorator_name(target) or ""
+
+    if not target_expr:
+        return None
+
+    normalized, _ = normalize_reference(
+        target_expr,
+        module_path=module_path,
+        aliases=aliases,
+    )
+    if normalized is not None:
+        return normalized
+    return target_expr
+
+
 class _EntityExtractor(ast.NodeVisitor):
     def __init__(
         self,
@@ -139,6 +164,18 @@ class _EntityExtractor(ast.NodeVisitor):
 
     def _build_entity_meta(self, decorator_list: Sequence[ast.AST]) -> dict[str, Any]:
         names = {_decorator_name(node) for node in decorator_list}
+        decorator_refs = [
+            ref
+            for ref in (
+                _decorator_ref(
+                    node,
+                    module_path=self.module_path,
+                    aliases=self._module_aliases,
+                )
+                for node in decorator_list
+            )
+            if ref is not None
+        ]
         meta: dict[str, Any] = {}
         if "property" in names:
             meta["property"] = True
@@ -146,6 +183,8 @@ class _EntityExtractor(ast.NodeVisitor):
             meta["method_kind"] = "static"
         elif "classmethod" in names:
             meta["method_kind"] = "class"
+        if decorator_refs:
+            meta["decorator_refs"] = tuple(decorator_refs)
         return meta
 
     def _class_bases(self, node: ast.ClassDef) -> list[str]:

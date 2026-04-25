@@ -118,6 +118,39 @@ def test_surface_meta_aliases_decorators_meta() -> None:
 
     assert method.surface_meta is method.decorators_meta
     assert method.surface_meta["method_kind"] == "static"
+    assert method.surface_meta["decorator_refs"] == ("module.staticmethod",)
+
+
+def test_entity_extraction_preserves_normalized_decorator_refs() -> None:
+    source = textwrap.dedent("""
+            from abc import abstractmethod as abstract
+            from typing_extensions import final as ext_final
+
+            @ext_final
+            class Example:
+                @abstract
+                def render(self) -> str:
+                    raise NotImplementedError
+            """).strip() + "\n"
+
+    entities = extract_entities_from_source(
+        source,
+        Path("module.py"),
+        Path("."),
+        None,
+        role="target",
+        include_nested_functions=False,
+    )
+
+    example = next(
+        entity
+        for entity in entities
+        if entity.kind == "class" and entity.name == "Example"
+    )
+    render = next(entity for entity in entities if entity.qualname == "Example.render")
+
+    assert example.surface_meta["decorator_refs"] == ("typing_extensions.final",)
+    assert render.surface_meta["decorator_refs"] == ("abc.abstractmethod",)
 
 
 def test_class_extraction_preserves_normalized_bases() -> None:

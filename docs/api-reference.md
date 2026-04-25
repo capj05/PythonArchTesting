@@ -79,6 +79,9 @@ Strict tuple metadata also remains supported as a compatibility form:
 | `not_subclass_of(...)` | Forbid nominal inheritance from a matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
 | `inherits_directly_from(...)` | Require direct nominal inheritance from a matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
 | `is_enum(...)` | Require the matched target class to classify as a stdlib enum-like class | Class-level `__archtest__: Annotated[...]` |
+| `is_abstract_class(...)` | Require the matched target class to have unresolved abstract members under the local static model | Class-level `__archtest__: Annotated[...]` |
+| `is_concrete_class(...)` | Require the matched target class to have no unresolved abstract members under the local static model | Class-level `__archtest__: Annotated[...]` |
+| `is_final_class(...)` | Require the matched target class to be decorated with a recognized `final` decorator | Class-level `__archtest__: Annotated[...]` |
 | `flow(...)` | Mark a statement as a named flow stage | Statement-level `__archtest__: Annotated[...]` immediately after the statement |
 | `enforce_flow(...)` | Require ordered flow stages for a variable | `__archtest__: Annotated[...]` in a function or method body |
 
@@ -280,6 +283,7 @@ Notes:
 - `method_kind` accepts `any`, `instance`, `classmethod`, and `staticmethod`.
 - `min_count` sets the minimum number of matching methods required.
 - `max_count`, when provided, sets the maximum number of matching methods allowed.
+- Method kind already has dedicated support through `required_method(..., enforce_method_kind=True)` and `require_method_set(method_kind=...)`; the modifier subset only adds class-level abstract/concrete/final checks.
 - v1 does not apply nested per-method rules.
 - Public API visibility semantics are out of scope in v1.
 
@@ -1231,6 +1235,95 @@ Non-goals in v1:
 - No enum-family discriminator parameter
 - No support for unresolved third-party enum base classes
 - No classification based only on enum-like member names
+
+### `is_abstract_class(...)`
+
+Require the matched target class to classify as abstract under a conservative
+local static analysis.
+
+`is_abstract_class(...)` is class-level only. It treats a class as abstract
+when it has one or more unresolved abstract member names after combining:
+
+- abstract methods declared on the class
+- unresolved abstract member names inherited from local base classes
+- concrete overrides declared on the class
+
+Recognized abstract decorators include `abstractmethod`,
+`abc.abstractmethod`, and the legacy `abstractclassmethod`,
+`abstractstaticmethod`, and `abstractproperty` forms.
+
+This rule uses project-local class resolution only. External abstract base
+classes are not expanded into inferred obligations in v1, so the classifier is
+conservative by design.
+
+Common options:
+
+- `severity`
+- `message`
+
+Example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import is_abstract_class
+
+
+class RepositoryContract:
+    __archtest__: Annotated[None, is_abstract_class()]
+```
+
+### `is_concrete_class(...)`
+
+Require the matched target class to classify as concrete under the same local
+static model used by `is_abstract_class(...)`.
+
+`is_concrete_class(...)` passes when the matched class has no unresolved
+abstract member names after local-base propagation and concrete overrides are
+applied.
+
+Common options:
+
+- `severity`
+- `message`
+
+Example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import is_concrete_class
+
+
+class RepositoryImplementationContract:
+    __archtest__: Annotated[None, is_concrete_class()]
+```
+
+### `is_final_class(...)`
+
+Require the matched target class to be decorated with a recognized final-class
+decorator.
+
+`is_final_class(...)` is class-level only. Recognized decorators are
+`final`, `typing.final`, and `typing_extensions.final` after import alias
+normalization where available.
+
+This rule does not infer finality from comments or naming, and method-level
+`@final` usage does not satisfy the class rule.
+
+Common options:
+
+- `severity`
+- `message`
+
+Example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import is_final_class
+
+
+class ValueObjectContract:
+    __archtest__: Annotated[None, is_final_class()]
+```
 
 ### `flow(...)`
 

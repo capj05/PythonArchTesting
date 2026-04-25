@@ -49,6 +49,11 @@ from pythonarchtesting.rules.compilation.decorators.nominal_type import (
 from pythonarchtesting.rules.compilation.decorators.protocols import (
     compile_implements_protocol,
 )
+from pythonarchtesting.rules.compilation.decorators.python_modifiers import (
+    compile_is_abstract_class,
+    compile_is_concrete_class,
+    compile_is_final_class,
+)
 
 
 def _invalid_declaration_evidence(
@@ -100,6 +105,9 @@ def compile_rules(
         "not_subclass_of": compile_not_subclass_of,
         "inherits_directly_from": compile_inherits_directly_from,
         "is_enum": compile_is_enum,
+        "is_abstract_class": compile_is_abstract_class,
+        "is_concrete_class": compile_is_concrete_class,
+        "is_final_class": compile_is_final_class,
     }
 
     rules: List[Any] = []

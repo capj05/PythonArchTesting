@@ -40,7 +40,10 @@ def _get_core_decorators() -> dict[str, Any]:
         forbid_imports,
         implements_protocol,
         inherits_directly_from,
+        is_abstract_class,
+        is_concrete_class,
         is_enum,
+        is_final_class,
         not_subclass_of,
         require_method_set,
         required_attribute,
@@ -66,6 +69,9 @@ def _get_core_decorators() -> dict[str, Any]:
         "not_subclass_of": not_subclass_of,
         "inherits_directly_from": inherits_directly_from,
         "is_enum": is_enum,
+        "is_abstract_class": is_abstract_class,
+        "is_concrete_class": is_concrete_class,
+        "is_final_class": is_final_class,
         "flow": flow,
         "enforce_flow": enforce_flow,
     }
@@ -89,6 +95,9 @@ inherits_directly_from = _LazyMarkerFactory(
     "inherits_directly_from", _get_core_decorators
 )
 is_enum = _LazyMarkerFactory("is_enum", _get_core_decorators)
+is_abstract_class = _LazyMarkerFactory("is_abstract_class", _get_core_decorators)
+is_concrete_class = _LazyMarkerFactory("is_concrete_class", _get_core_decorators)
+is_final_class = _LazyMarkerFactory("is_final_class", _get_core_decorators)
 flow = _LazyMarkerFactory("flow", _get_core_decorators)
 enforce_flow = _LazyMarkerFactory("enforce_flow", _get_core_decorators)
 
@@ -107,6 +116,9 @@ __all__ = [
     "not_subclass_of",
     "inherits_directly_from",
     "is_enum",
+    "is_abstract_class",
+    "is_concrete_class",
+    "is_final_class",
     "flow",
     "enforce_flow",
 ]

@@ -14,6 +14,7 @@ from .messages import render_message
 from .method_set import MethodSetEvaluator
 from .nominal_type_relationship import NominalTypeRelationshipEvaluator
 from .protocol_conformance import ProtocolConformanceEvaluator
+from .python_modifiers import PythonModifierEvaluator
 from .registry import get_rule_evaluator, register_rule_evaluator
 from .variable_flow import VariableFlowEvaluator
 
@@ -25,6 +26,7 @@ __all__ = [
     "MemberAbsenceEvaluator",
     "MethodSetEvaluator",
     "NominalTypeRelationshipEvaluator",
+    "PythonModifierEvaluator",
     "ProtocolConformanceEvaluator",
     "VariableFlowEvaluator",
     "get_rule_evaluator",

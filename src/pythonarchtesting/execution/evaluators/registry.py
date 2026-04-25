@@ -10,6 +10,7 @@ from .member_absence import MemberAbsenceEvaluator
 from .method_set import MethodSetEvaluator
 from .nominal_type_relationship import NominalTypeRelationshipEvaluator
 from .protocol_conformance import ProtocolConformanceEvaluator
+from .python_modifiers import PythonModifierEvaluator
 from .variable_flow import VariableFlowEvaluator
 
 # Registry of evaluators for different rule types.
@@ -21,6 +22,7 @@ _EVALUATORS: Dict[str, Any] = {
     "member_absence": MemberAbsenceEvaluator(),
     "method_set": MethodSetEvaluator(),
     "nominal_type_relationship": NominalTypeRelationshipEvaluator(),
+    "python_modifier": PythonModifierEvaluator(),
     "protocol_conformance": ProtocolConformanceEvaluator(),
     "variable_flow": VariableFlowEvaluator(),
 }

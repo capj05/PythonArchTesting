@@ -531,6 +531,75 @@ def is_enum(
     )
 
 
+def is_abstract_class(
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture abstract-class intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "is_abstract_class",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def is_concrete_class(
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture concrete-class intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "is_concrete_class",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def is_final_class(
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture final-class intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "is_final_class",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
 def flow(
     stage: str,
     *,

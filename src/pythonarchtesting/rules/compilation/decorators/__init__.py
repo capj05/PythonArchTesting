@@ -16,6 +16,11 @@ from .nominal_type import (
     compile_subclass_of,
 )
 from .protocols import compile_implements_protocol
+from .python_modifiers import (
+    compile_is_abstract_class,
+    compile_is_concrete_class,
+    compile_is_final_class,
+)
 
 __all__ = [
     "compile_does_not_have",
@@ -33,4 +38,7 @@ __all__ = [
     "compile_inherits_directly_from",
     "compile_not_subclass_of",
     "compile_subclass_of",
+    "compile_is_abstract_class",
+    "compile_is_concrete_class",
+    "compile_is_final_class",
 ]
