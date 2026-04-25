@@ -24,6 +24,7 @@ _SUPPORTED_DECLARATION_KINDS = frozenset(
         "required_constructor",
         "required_entity_signature",
         "required_factory",
+        "require_method_set",
         "required_method",
         "subclass_of",
     }
@@ -45,6 +46,7 @@ _DEDUPE_DECLARATION_KINDS = frozenset(
         "required_constructor",
         "required_entity_signature",
         "required_factory",
+        "require_method_set",
         "required_method",
         "subclass_of",
     }

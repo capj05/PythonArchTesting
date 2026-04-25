@@ -11,6 +11,7 @@ from .enum_type import EnumTypeEvaluator
 from .import_policy import ImportPolicyEvaluator
 from .member_absence import MemberAbsenceEvaluator
 from .messages import render_message
+from .method_set import MethodSetEvaluator
 from .nominal_type_relationship import NominalTypeRelationshipEvaluator
 from .protocol_conformance import ProtocolConformanceEvaluator
 from .registry import get_rule_evaluator, register_rule_evaluator
@@ -22,6 +23,7 @@ __all__ = [
     "EnumTypeEvaluator",
     "ImportPolicyEvaluator",
     "MemberAbsenceEvaluator",
+    "MethodSetEvaluator",
     "NominalTypeRelationshipEvaluator",
     "ProtocolConformanceEvaluator",
     "VariableFlowEvaluator",

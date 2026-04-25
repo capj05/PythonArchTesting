@@ -40,6 +40,7 @@ _SUPPORTED_MARKER_NAMES = {
     "required_constructor",
     "required_entity_signature",
     "required_factory",
+    "require_method_set",
     "required_method",
     "subclass_of",
 }

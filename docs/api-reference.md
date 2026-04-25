@@ -67,6 +67,7 @@ Strict tuple metadata also remains supported as a compatibility form:
 | --- | --- | --- |
 | `required_entity_signature(...)` | Require a compatible function or method signature | Signature-level `Annotated[...]` on parameters or return annotations |
 | `required_method(...)` | Require a method with a compatible signature | `__archtest__: Annotated[...]` inside a method body |
+| `require_method_set(...)` | Require a set of matching methods on the matched class | Class-level `__archtest__: Annotated[...]` |
 | `required_attribute(...)` | Require a class or instance attribute on the matched class | Class-level `__archtest__: Annotated[...]` |
 | `required_constructor(...)` | Require a compatible constructor (`__init__` or `__new__`) on the matched class | Class-level `__archtest__: Annotated[...]` |
 | `required_factory(...)` | Require a factory method (constructor, classmethod, or staticmethod) on the matched class | `__archtest__: Annotated[...]` inside a factory-capable method body |
@@ -251,6 +252,87 @@ class Repository:
             required_method(signature_mode="any"),
         ]
         return object()
+```
+
+### `require_method_set(...)`
+
+Common options:
+
+- `name_match`
+- `names`
+- `pattern`
+- `declared_only`
+- `method_kind`
+- `min_count`
+- `max_count`
+- `severity`
+- `message`
+
+Notes:
+
+- `require_method_set(...)` is class-level only in v1.
+- v1 is methods-only and validates the selected method set by cardinality.
+- `name_match="any"` selects all target methods in scope.
+- `name_match="regex"` uses `re.fullmatch(pattern, target_method_name)`.
+- `name_match="names"` selects target methods whose names are present in `names`.
+- `declared_only=False` allows inherited target methods to participate.
+- `declared_only=True` counts only methods declared directly on the matched target class.
+- `method_kind` accepts `any`, `instance`, `classmethod`, and `staticmethod`.
+- `min_count` sets the minimum number of matching methods required.
+- `max_count`, when provided, sets the maximum number of matching methods allowed.
+- v1 does not apply nested per-method rules.
+- Public API visibility semantics are out of scope in v1.
+
+Regex example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import require_method_set
+
+
+class TestContract:
+    __archtest__: Annotated[
+        None,
+        require_method_set(name_match="regex", pattern=r"test_.*", min_count=1),
+    ]
+```
+
+Explicit names example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import require_method_set
+
+
+class LifecycleContract:
+    __archtest__: Annotated[
+        None,
+        require_method_set(
+            name_match="names",
+            names=["setUp", "tearDown"],
+            min_count=2,
+            max_count=2,
+        ),
+    ]
+```
+
+Declared-only example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import require_method_set
+
+
+class HandlerContract:
+    __archtest__: Annotated[
+        None,
+        require_method_set(
+            name_match="regex",
+            pattern=r"handle_.*",
+            declared_only=True,
+            min_count=1,
+        ),
+    ]
 ```
 
 ### `required_attribute(...)`

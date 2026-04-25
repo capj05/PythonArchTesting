@@ -37,6 +37,9 @@ from pythonarchtesting.rules.compilation.decorators.import_policy import (
 from pythonarchtesting.rules.compilation.decorators.member_absence import (
     compile_does_not_have,
 )
+from pythonarchtesting.rules.compilation.decorators.method_set import (
+    compile_require_method_set,
+)
 from pythonarchtesting.rules.compilation.decorators.nominal_type import (
     compile_exact_type,
     compile_inherits_directly_from,
@@ -84,6 +87,7 @@ def compile_rules(
     declaration_compilers: dict[str, Any] = {
         "required_entity_signature": compile_required_entity_signature,
         "required_method": compile_required_method,
+        "require_method_set": compile_require_method_set,
         "required_constructor": compile_required_constructor,
         "required_factory": compile_required_factory,
         "required_attribute": compile_required_attribute,

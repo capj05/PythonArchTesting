@@ -91,10 +91,11 @@ def target_methods_for_class(
 def filter_methods_by_name_match(
     methods: list[Entity],
     *,
-    source_name: str,
+    source_name: str | None = None,
     name_match: str,
     aliases: list[str] | None,
     pattern: str | None,
+    names: list[str] | None = None,
 ) -> list[Entity]:
     if name_match == "any":
         return list(methods)
@@ -102,8 +103,13 @@ def filter_methods_by_name_match(
         if pattern is None:
             return []
         return [method for method in methods if re.fullmatch(pattern, method.name)]
+    if name_match == "names":
+        accepted_names = {name for name in names or [] if name}
+        if not accepted_names:
+            return []
+        return [method for method in methods if method.name in accepted_names]
 
-    accepted_names = {source_name}
+    accepted_names = {source_name} if source_name else set()
     if name_match == "alias":
         accepted_names.update(alias for alias in aliases or [])
     return [method for method in methods if method.name in accepted_names]

@@ -112,6 +112,44 @@ def required_method(
     return marker
 
 
+def require_method_set(
+    *,
+    name_match: str = "any",
+    names: list[str] | None = None,
+    pattern: str | None = None,
+    declared_only: bool = False,
+    method_kind: str = "any",
+    min_count: int = 1,
+    max_count: int | None = None,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture bulk method-selection intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "name_match": name_match,
+            "names": list(names) if names is not None else None,
+            "pattern": pattern,
+            "declared_only": declared_only,
+            "method_kind": method_kind,
+            "min_count": min_count,
+            "max_count": max_count,
+            "severity": severity,
+        }
+    )
+    marker = _make_rule_marker(
+        "require_method_set",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+    return marker
+
+
 def required_constructor(
     *,
     signature_mode: str = "compatible",

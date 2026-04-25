@@ -20,6 +20,10 @@ def test_configured_helpers_return_rule_markers() -> None:
     rules = _rules_api()
     signature_marker = rules.required_entity_signature(mode="exact")
     method_marker = rules.required_method(signature_mode="exact", declared_only=True)
+    method_set_marker = rules.require_method_set(
+        name_match="names",
+        names=["setUp", "tearDown"],
+    )
     factory_marker = rules.required_factory(name_match="exact")
     import_marker = rules.forbid_imports("statistics", scope="package")
     protocol_marker = rules.implements_protocol("sample.Repository")
@@ -28,6 +32,7 @@ def test_configured_helpers_return_rule_markers() -> None:
     for marker in (
         signature_marker,
         method_marker,
+        method_set_marker,
         factory_marker,
         import_marker,
         protocol_marker,
@@ -37,6 +42,7 @@ def test_configured_helpers_return_rule_markers() -> None:
         assert get_rule_specs(marker) == []
 
     assert method_marker.params["declared_only"] is True
+    assert method_set_marker.kind == "require_method_set"
     assert factory_marker.kind == "required_factory"
     assert enum_marker.kind == "is_enum"
 

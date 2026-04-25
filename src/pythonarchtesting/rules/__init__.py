@@ -42,6 +42,7 @@ def _get_core_decorators() -> dict[str, Any]:
         inherits_directly_from,
         is_enum,
         not_subclass_of,
+        require_method_set,
         required_attribute,
         required_constructor,
         required_entity_signature,
@@ -53,6 +54,7 @@ def _get_core_decorators() -> dict[str, Any]:
     return {
         "required_entity_signature": required_entity_signature,
         "required_method": required_method,
+        "require_method_set": require_method_set,
         "required_factory": required_factory,
         "required_constructor": required_constructor,
         "required_attribute": required_attribute,
@@ -73,6 +75,7 @@ required_entity_signature = _LazyMarkerFactory(
     "required_entity_signature", _get_core_decorators
 )
 required_method = _LazyMarkerFactory("required_method", _get_core_decorators)
+require_method_set = _LazyMarkerFactory("require_method_set", _get_core_decorators)
 required_factory = _LazyMarkerFactory("required_factory", _get_core_decorators)
 required_constructor = _LazyMarkerFactory("required_constructor", _get_core_decorators)
 required_attribute = _LazyMarkerFactory("required_attribute", _get_core_decorators)
@@ -92,6 +95,7 @@ enforce_flow = _LazyMarkerFactory("enforce_flow", _get_core_decorators)
 __all__ = [
     "required_entity_signature",
     "required_method",
+    "require_method_set",
     "required_factory",
     "required_constructor",
     "required_attribute",
