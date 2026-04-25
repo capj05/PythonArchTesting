@@ -111,10 +111,57 @@ def strip_method_receiver(
     return params
 
 
-def method_kind(entity: Entity) -> str:
+def _decorator_ref_name(node: ast.AST) -> str | None:
+    target = node.func if isinstance(node, ast.Call) else node
+    if isinstance(target, ast.Name):
+        return target.id
+    if isinstance(target, ast.Attribute):
+        try:
+            return ast.unparse(target)
+        except Exception:
+            return target.attr
+    return None
+
+
+def _decorator_contains_builtin_method_wrapper(node: ast.AST) -> str | None:
+    direct_name = _decorator_ref_name(node)
+    if direct_name is not None and direct_name.rsplit(".", 1)[-1] in {
+        "classmethod",
+        "staticmethod",
+    }:
+        return direct_name.rsplit(".", 1)[-1]
+
+    for child in ast.iter_child_nodes(node):
+        nested_name = _decorator_contains_builtin_method_wrapper(child)
+        if nested_name is not None:
+            return nested_name
+    return None
+
+
+def method_kind(entity: Entity, *, detection_mode: str = "strict") -> str:
     kind = entity.surface_meta.get("method_kind")
     if kind in {"static", "class"}:
         return str(kind)
+    if detection_mode != "extended":
+        return "instance"
+
+    node = function_node(entity)
+    if node is None:
+        return "instance"
+
+    detected_kind: str | None = None
+    for decorator in node.decorator_list:
+        wrapper_name = _decorator_contains_builtin_method_wrapper(decorator)
+        if wrapper_name == "classmethod":
+            if detected_kind == "static":
+                return "instance"
+            detected_kind = "class"
+        elif wrapper_name == "staticmethod":
+            if detected_kind == "class":
+                return "instance"
+            detected_kind = "static"
+    if detected_kind is not None:
+        return detected_kind
     return "instance"
 
 

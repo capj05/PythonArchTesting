@@ -221,3 +221,122 @@ class MyFactory:
     assert rules[0].params["allow_inherited"] is False
     assert rules[0].params["allow_missing"] is False
     assert rules[0].params["name_match"] == "exact"
+    assert rules[0].params["check_return"] is False
+    assert rules[0].params["return_annotation_mode"] == "ignore"
+    assert rules[0].params["detection_mode"] == "strict"
+
+
+def test_api004_return_annotation_mode_compiles_to_v2_rule() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(return_annotation_mode="compatible"),
+        ]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert [rule.rule_id for rule in rules] == ["API004/required_factory/v2"]
+    assert rules[0].params["check_return"] is True
+    assert rules[0].params["return_annotation_mode"] == "compatible"
+
+
+def test_api004_return_annotation_mode_exact_compiles() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(return_annotation_mode="exact"),
+        ]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert [rule.rule_id for rule in rules] == ["API004/required_factory/v2"]
+    assert rules[0].params["return_annotation_mode"] == "exact"
+
+
+def test_api004_invalid_return_annotation_mode_emits_compiler_invalid_param() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(return_annotation_mode="approximate"),
+        ]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert rules == []
+    assert compiler_results == []
+    assert [item.type for item in evidence] == ["compiler_invalid_param"]
+    assert evidence[0].payload["param"] == "return_annotation_mode"
+
+
+def test_api004_detection_mode_compiles_to_v2_rule() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(detection_mode="extended"),
+        ]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert [rule.rule_id for rule in rules] == ["API004/required_factory/v2"]
+    assert rules[0].params["detection_mode"] == "extended"
+
+
+def test_api004_invalid_detection_mode_emits_compiler_invalid_param() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(detection_mode="dynamic"),
+        ]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert rules == []
+    assert compiler_results == []
+    assert [item.type for item in evidence] == ["compiler_invalid_param"]
+    assert evidence[0].payload["param"] == "detection_mode"

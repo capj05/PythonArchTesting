@@ -159,6 +159,8 @@ def required_factory(
     aliases: list[str] | None = None,
     pattern: str | None = None,
     allow_missing: bool = False,
+    return_annotation_mode: str = "ignore",
+    detection_mode: str = "strict",
     severity: str = "error",
     message: str | None = None,
 ) -> RuleMarker:
@@ -176,6 +178,8 @@ def required_factory(
             "aliases": list(aliases) if aliases is not None else None,
             "pattern": pattern,
             "allow_missing": allow_missing,
+            "return_annotation_mode": return_annotation_mode,
+            "detection_mode": detection_mode,
             "severity": severity,
         }
     )

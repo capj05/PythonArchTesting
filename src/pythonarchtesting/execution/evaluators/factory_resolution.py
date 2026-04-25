@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import ast
 import re
 from typing import TYPE_CHECKING
 
-from pythonarchtesting.entities import Entity
+from pythonarchtesting.entities import Entity, build_canonical_id
+from pythonarchtesting.protocols.entity_lookup import ProtocolEntityLookup
 
 from .construction_resolution import (
     constructor_candidates_for_class,
@@ -18,14 +20,18 @@ if TYPE_CHECKING:
     from pythonarchtesting.core.models import EvalContext
 
 _FACTORY_CONSTRUCTOR_NAMES = frozenset({"__init__", "__new__"})
+_ASSIGNMENT_FACTORY_WRAPPERS = {
+    "classmethod": "class",
+    "staticmethod": "static",
+}
 
 
-def factory_kind(entity: Entity) -> str:
+def factory_kind(entity: Entity, *, detection_mode: str = "strict") -> str:
     from pythonarchtesting.execution.evaluators.api_signature import _method_kind
 
     if entity.name in _FACTORY_CONSTRUCTOR_NAMES:
         return "constructor"
-    kind = _method_kind(entity)
+    kind = _method_kind(entity, detection_mode=detection_mode)
     if kind == "class":
         return "classmethod"
     if kind == "static":
@@ -33,8 +39,148 @@ def factory_kind(entity: Entity) -> str:
     return "unknown"
 
 
-def _is_factory_candidate(entity: Entity) -> bool:
-    return factory_kind(entity) != "unknown"
+def _is_factory_candidate(entity: Entity, *, detection_mode: str) -> bool:
+    return factory_kind(entity, detection_mode=detection_mode) != "unknown"
+
+
+def _decorator_ref_name(node: ast.AST) -> str | None:
+    target = node.func if isinstance(node, ast.Call) else node
+    if isinstance(target, ast.Name):
+        return target.id
+    if isinstance(target, ast.Attribute):
+        try:
+            return ast.unparse(target)
+        except Exception:
+            return target.attr
+    return None
+
+
+def _assignment_method_kind(value: ast.AST) -> str | None:
+    if not isinstance(value, ast.Call) or len(value.args) != 1 or value.keywords:
+        return None
+    ref_name = _decorator_ref_name(value.func)
+    if ref_name is None:
+        return None
+    return _ASSIGNMENT_FACTORY_WRAPPERS.get(ref_name.rsplit(".", 1)[-1])
+
+
+def _synthetic_assignment_factory_candidate(
+    method: Entity,
+    *,
+    alias_name: str,
+    method_kind: str,
+    owner_class: Entity,
+    lineno: int,
+) -> Entity:
+    qualname = f"{owner_class.qualname}.{alias_name}"
+    decorators_meta = dict(method.decorators_meta)
+    decorators_meta["method_kind"] = method_kind
+    extras = dict(method.extras)
+    extras["synthetic_factory_assignment"] = True
+    extras["synthetic_factory_owner_id"] = owner_class.canonical_id
+    extras["synthetic_factory_assignment_name"] = alias_name
+    extras["synthetic_factory_assignment_lineno"] = lineno
+    canonical_id = (
+        build_canonical_id(
+            method.role,
+            method.root_label,
+            method.module_path,
+            qualname,
+            method.kind,
+            method.signature_key,
+        )
+        + f"#factory-{method_kind}"
+    )
+    return Entity(
+        role=method.role,
+        kind=method.kind,
+        root_label=method.root_label,
+        module_path=method.module_path,
+        qualname=qualname,
+        name=alias_name,
+        filepath_rel=method.filepath_rel,
+        lineno=lineno,
+        signature=method.signature,
+        signature_key=method.signature_key,
+        ast_fingerprint=method.ast_fingerprint,
+        source_hash=method.source_hash,
+        doc_hash=method.doc_hash,
+        decorators_meta=decorators_meta,
+        canonical_id=canonical_id,
+        annotation_declarations=list(method.annotation_declarations),
+        extras=extras,
+    )
+
+
+def _declared_assignment_factory_candidates(
+    owner_class: Entity,
+    ctx: EvalContext,
+) -> list[Entity]:
+    node = owner_class.extras.get("ast_node")
+    if not isinstance(node, ast.ClassDef):
+        return []
+
+    declared_methods = {
+        method.name: method
+        for method in target_methods_for_class(
+            owner_class,
+            ctx,
+            include_inherited=False,
+        )
+    }
+
+    candidates: dict[str, Entity] = {}
+    for stmt in node.body:
+        if not isinstance(stmt, ast.Assign):
+            continue
+        if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+            continue
+        assignment_name = stmt.targets[0].id
+        method_kind = _assignment_method_kind(stmt.value)
+        if method_kind is None:
+            continue
+        wrapped = stmt.value.args[0]
+        if not isinstance(wrapped, ast.Name):
+            continue
+        wrapped_method = declared_methods.get(wrapped.id)
+        if wrapped_method is None:
+            continue
+        candidates[assignment_name] = _synthetic_assignment_factory_candidate(
+            wrapped_method,
+            alias_name=assignment_name,
+            method_kind=method_kind,
+            owner_class=owner_class,
+            lineno=getattr(stmt, "lineno", wrapped_method.lineno),
+        )
+    return sorted(
+        candidates.values(),
+        key=lambda candidate: (candidate.name, candidate.qualname, candidate.lineno),
+    )
+
+
+def _candidate_owner_classes(
+    target_class: Entity,
+    ctx: EvalContext,
+    *,
+    include_inherited: bool,
+) -> list[Entity]:
+    if not include_inherited:
+        return [target_class]
+
+    lookup = ProtocolEntityLookup.from_entities(ctx.target_index.all_sorted)
+    ordered: list[Entity] = []
+    visited: set[str] = set()
+
+    def visit(candidate_class: Entity) -> None:
+        if candidate_class.canonical_id in visited:
+            return
+        visited.add(candidate_class.canonical_id)
+        for base_class in lookup.resolved_bases(candidate_class):
+            visit(base_class)
+        ordered.append(candidate_class)
+
+    visit(target_class)
+    return ordered
 
 
 def factory_candidates_for_class(
@@ -42,6 +188,7 @@ def factory_candidates_for_class(
     ctx: EvalContext,
     *,
     allow_inherited: bool,
+    detection_mode: str = "strict",
 ) -> list[Entity]:
     target_entities = ctx.target_index.all_sorted
     constructor_entities = [
@@ -52,17 +199,31 @@ def factory_candidates_for_class(
             allow_inherited=allow_inherited,
         )
     ]
-    method_entities = [
-        method
+    method_candidates = {
+        method.name: method
         for method in target_methods_for_class(
             target_class,
             ctx,
             include_inherited=allow_inherited,
         )
-        if _is_factory_candidate(method)
+        if _is_factory_candidate(method, detection_mode=detection_mode)
         and method.name not in _FACTORY_CONSTRUCTOR_NAMES
+    }
+    if detection_mode == "extended":
+        for owner_class in _candidate_owner_classes(
+            target_class,
+            ctx,
+            include_inherited=allow_inherited,
+        ):
+            for candidate in _declared_assignment_factory_candidates(owner_class, ctx):
+                method_candidates[candidate.name] = candidate
+    return [
+        *constructor_entities,
+        *sorted(
+            method_candidates.values(),
+            key=lambda candidate: (candidate.name, candidate.qualname, candidate.lineno),
+        ),
     ]
-    return [*constructor_entities, *method_entities]
 
 
 def factory_candidate_origin(
@@ -77,6 +238,13 @@ def factory_candidate_origin(
             target_class,
             target_entities,
         )
+    synthetic_owner_id = entity.extras.get("synthetic_factory_owner_id")
+    if synthetic_owner_id is not None:
+        return (
+            "declared"
+            if str(synthetic_owner_id) == target_class.canonical_id
+            else "inherited"
+        )
     from .member_name_resolution import member_origin
 
     return member_origin(entity, target_class, ctx)
@@ -90,10 +258,11 @@ def filter_factory_candidates(
     source_name: str,
     aliases: list[str] | None,
     pattern: str | None,
+    detection_mode: str = "strict",
 ) -> list[Entity]:
     result: list[Entity] = []
     for candidate in candidates:
-        candidate_kind = factory_kind(candidate)
+        candidate_kind = factory_kind(candidate, detection_mode=detection_mode)
         if candidate_kind not in satisfy_with:
             continue
         if candidate_kind == "constructor":

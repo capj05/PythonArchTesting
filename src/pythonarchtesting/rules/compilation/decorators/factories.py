@@ -10,6 +10,8 @@ from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
 
 _VALID_SATISFY_WITH = frozenset({"constructor", "classmethod", "staticmethod"})
 _VALID_NAME_MATCH = frozenset({"any", "exact", "alias", "regex"})
+_VALID_RETURN_ANNOTATION_MODE = frozenset({"ignore", "compatible", "exact"})
+_VALID_DETECTION_MODE = frozenset({"strict", "extended"})
 _FACTORY_METHOD_NAMES = frozenset({"__init__", "__new__"})
 
 
@@ -157,6 +159,51 @@ def compile_required_factory(
 
     aliases = params_kwargs.get("aliases")
     pattern = params_kwargs.get("pattern")
+    return_annotation_mode = str(
+        params_kwargs.get("return_annotation_mode", "ignore")
+    ).lower()
+    if return_annotation_mode not in _VALID_RETURN_ANNOTATION_MODE:
+        payload = {
+            "decorator": "required_factory",
+            "issue": "compiler_invalid_param",
+            "param": "return_annotation_mode",
+            "value": return_annotation_mode,
+            "valid": sorted(_VALID_RETURN_ANNOTATION_MODE),
+        }
+        compiler_evidence.append(
+            Evidence(
+                evidence_id=evidence_id("compiler_invalid_param", payload),
+                type="compiler_invalid_param",
+                source="compiler",
+                role="source",
+                entity_id=source_entity.canonical_id,
+                payload=canonicalize_payload(payload),
+                location=location,
+            )
+        )
+        return [], compiler_evidence, []
+
+    detection_mode = str(params_kwargs.get("detection_mode", "strict")).lower()
+    if detection_mode not in _VALID_DETECTION_MODE:
+        payload = {
+            "decorator": "required_factory",
+            "issue": "compiler_invalid_param",
+            "param": "detection_mode",
+            "value": detection_mode,
+            "valid": sorted(_VALID_DETECTION_MODE),
+        }
+        compiler_evidence.append(
+            Evidence(
+                evidence_id=evidence_id("compiler_invalid_param", payload),
+                type="compiler_invalid_param",
+                source="compiler",
+                role="source",
+                entity_id=source_entity.canonical_id,
+                payload=canonicalize_payload(payload),
+                location=location,
+            )
+        )
+        return [], compiler_evidence, []
 
     if name_match == "alias" and not aliases:
         payload = {
@@ -216,15 +263,25 @@ def compile_required_factory(
         "allow_missing": allow_missing,
         "name_match": name_match,
         "fail_on_unmatched": not allow_missing,
-        "check_return": False,
+        "check_return": return_annotation_mode != "ignore",
+        "return_annotation_mode": return_annotation_mode,
+        "detection_mode": detection_mode,
     }
     if aliases is not None:
         rule_params["aliases"] = list(aliases)
     if pattern is not None:
         rule_params["pattern"] = str(pattern)
 
+    rule_version = (
+        "v2"
+        if return_annotation_mode != "ignore" or detection_mode != "strict"
+        else "v1"
+    )
     rule = Rule(
-        rule_id=with_rule_id_suffix("API004/required_factory/v1", rule_id_suffix),
+        rule_id=with_rule_id_suffix(
+            f"API004/required_factory/{rule_version}",
+            rule_id_suffix,
+        ),
         rule_type="api_signature",
         name="required_factory",
         severity=base_severity,

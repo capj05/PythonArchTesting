@@ -164,6 +164,8 @@ def test_required_factory_annotation_normalizes() -> None:
                         allow_missing=True,
                         name_match="alias",
                         aliases=["create"],
+                        return_annotation_mode="exact",
+                        detection_mode="extended",
                     ),
                 ]
                 return cls()
@@ -180,6 +182,8 @@ def test_required_factory_annotation_normalizes() -> None:
         "allow_missing": True,
         "name_match": "alias",
         "aliases": ["create"],
+        "return_annotation_mode": "exact",
+        "detection_mode": "extended",
     }
 
 

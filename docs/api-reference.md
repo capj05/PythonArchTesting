@@ -581,6 +581,8 @@ Common options:
 | `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"` |
 | `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"` |
 | `allow_missing` | `bool` | `False` | Skip instead of fail when no accepted factory candidate exists in scope |
+| `return_annotation_mode` | `"ignore" \| "compatible" \| "exact"` | `"ignore"` | Optional return-annotation checking for method-backed factories |
+| `detection_mode` | `"strict" \| "extended"` | `"strict"` | Factory candidate discovery breadth |
 | `severity` | `str` | `"error"` | Violation severity level |
 | `message` | `str \| None` | `None` | Custom violation message |
 
@@ -597,11 +599,16 @@ Notes:
 - `allow_missing=False` (default) keeps the current required-factory behavior.
 - `allow_missing=True` only skips when no accepted target factory candidate exists under the current `satisfy_with` / `name_match` / `allow_inherited` scope.
 - A present but incompatible accepted candidate still fails even when `allow_missing=True`.
-- The rule is emitted as `API004/required_factory/v1`.
+- `return_annotation_mode="ignore"` preserves the existing behavior.
+- When `return_annotation_mode` is enabled, return checking applies only to method-backed factories (`classmethod` and `staticmethod`).
+- Constructor-backed satisfaction treats the return contract as implicitly satisfied, so constructor candidates still work under return checking.
+- `detection_mode="strict"` preserves the current candidate set.
+- `detection_mode="extended"` adds conservative support for assignment-based `classmethod(...)` / `staticmethod(...)` definitions and builtin wrapper visibility in decorator stacks.
+- Dynamic singleton retrieval patterns remain unsupported: instance caches, registries, service locators, descriptor-returned callables, and module-level factory functions are not considered factory candidates.
+- The rule is emitted as `API004/required_factory/v1` by default and `API004/required_factory/v2` when `return_annotation_mode != "ignore"` or `detection_mode != "strict"`.
 - When `satisfy_with` includes `"constructor"`, constructor matching reuses the
   same constructor resolution as `required_constructor(...)`, including support
   for statically recognizable dataclass-generated `__init__`.
-- Return annotations are not compared.
 
 Example:
 
@@ -615,6 +622,48 @@ class UserService:
         __archtest__: Annotated[None, required_factory()]
         self.name = name
         self.value = value
+```
+
+Return-checked classmethod example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str) -> "Session":
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                return_annotation_mode="compatible",
+            ),
+        ]
+        return cls()
+```
+
+Exact return-checked staticmethod example:
+
+```python
+from typing import Annotated, Self
+from pythonarchtesting.rules import required_factory
+
+
+class Session:
+    @staticmethod
+    def parse(user_id: str) -> Self:
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("staticmethod",),
+                name_match="exact",
+                return_annotation_mode="exact",
+            ),
+        ]
+        return Session(user_id)
 ```
 
 Alias example:
@@ -638,6 +687,34 @@ class Session:
         return cls()
 ```
 
+Extended detection example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+
+class Session:
+    @classmethod
+    def build(cls, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                detection_mode="extended",
+            ),
+        ]
+        return cls()
+
+
+class SessionTarget:
+    def _build_impl(cls, user_id: str) -> "SessionTarget":
+        return cls()
+
+    build = classmethod(_build_impl)
+```
+
 Optional factory example:
 
 ```python
@@ -653,6 +730,29 @@ class Session:
             required_factory(
                 satisfy_with=("classmethod",),
                 allow_missing=True,
+            ),
+        ]
+        return cls()
+```
+
+Optional regex example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str) -> "Session":
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="regex",
+                pattern="from_.*",
+                allow_missing=True,
+                detection_mode="extended",
             ),
         ]
         return cls()

@@ -591,3 +591,581 @@ class Child(Base):
     assert errors == []
     assert [result.status for result in results] == ["SKIPPED"]
     assert results[0].details["failure_reason"] == "optional_member_absent"
+
+
+def test_api004_return_annotation_compatible_passes_for_classmethod_factory() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                return_annotation_mode="compatible",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    @classmethod
+    def create(cls, user_id: str) -> "Session":
+        return cls()
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api004_return_annotation_exact_accepts_self_like_staticmethod() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @staticmethod
+    def parse(user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("staticmethod",),
+                name_match="exact",
+                return_annotation_mode="exact",
+            ),
+        ]
+        return Session(user_id)
+
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+"""
+    target = """
+from typing import Self
+
+class Session:
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+
+    @staticmethod
+    def parse(user_id: str) -> Self:
+        return Session(user_id)
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="parse",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api004_return_annotation_missing_fails_when_enabled() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                return_annotation_mode="compatible",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    @classmethod
+    def create(cls, user_id: str):
+        return cls()
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["reason"] == "factory_return_annotation_missing"
+
+
+def test_api004_return_annotation_incompatible_fails_for_classmethod() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                return_annotation_mode="compatible",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Other:
+    pass
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str) -> Other:
+        return Other()
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["reason"] == "factory_return_annotation_incompatible"
+
+
+def test_api004_return_annotation_exact_mismatch_fails_for_subclass_return() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                return_annotation_mode="exact",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    @classmethod
+    def create(cls, user_id: str) -> PremiumSession:
+        return PremiumSession()
+
+class PremiumSession(Session):
+    pass
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["reason"] == "factory_return_annotation_exact_mismatch"
+
+
+def test_api004_constructor_satisfaction_ignores_return_checking() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    def __init__(self, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("constructor",),
+                return_annotation_mode="exact",
+            ),
+        ]
+        self.user_id = user_id
+"""
+    target = """
+class Session:
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="__init__",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api004_constructor_can_satisfy_mixed_factory_rule_under_return_checking() -> (
+    None
+):
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    def __init__(self, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("constructor", "classmethod"),
+                return_annotation_mode="compatible",
+            ),
+        ]
+        self.user_id = user_id
+"""
+    target = """
+class Session:
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+
+    @classmethod
+    def create(cls, user_id: str):
+        return cls(user_id)
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="__init__",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api004_assignment_based_classmethod_requires_extended_detection() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def build(cls, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                detection_mode="extended",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    def _build_impl(cls, user_id: str):
+        return cls()
+
+    build = classmethod(_build_impl)
+"""
+    strict_results, strict_errors = _evaluate_factory_rule(
+        source.replace('detection_mode="extended"', 'detection_mode="strict"'),
+        target,
+        source_method_name="build",
+        source_class_name="Session",
+        target_class_name="Session",
+    )
+    extended_results, extended_errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="build",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert strict_errors == []
+    assert [result.status for result in strict_results] == ["FAILED"]
+    assert strict_results[0].details["reason"] == "no_factory_candidate_found"
+    assert extended_errors == []
+    assert [result.status for result in extended_results] == ["OK"]
+
+
+def test_api004_assignment_based_staticmethod_supports_alias_matching() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @staticmethod
+    def parse(user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("staticmethod",),
+                name_match="alias",
+                aliases=["from_text"],
+                detection_mode="extended",
+            ),
+        ]
+        return Session(user_id)
+
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+"""
+    target = """
+class Session:
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+
+    def _parse_impl(user_id: str):
+        return Session(user_id)
+
+    from_text = staticmethod(_parse_impl)
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="parse",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api004_assignment_based_factory_supports_regex_matching() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="regex",
+                pattern="from_.*",
+                detection_mode="extended",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    def _build_impl(cls, user_id: str):
+        return cls()
+
+    from_user = classmethod(_build_impl)
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api004_assignment_based_factory_supports_any_name_matching() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    def __init__(self, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="any",
+                detection_mode="extended",
+            ),
+        ]
+        self.user_id = user_id
+"""
+    target = """
+class Session:
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+
+    def _build_impl(cls, user_id: str):
+        return cls(user_id)
+
+    create = classmethod(_build_impl)
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="__init__",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api004_extended_factory_optional_skip_still_applies_when_absent() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="alias",
+                aliases=["build"],
+                allow_missing=True,
+                detection_mode="extended",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    @classmethod
+    def create(cls, user_id: str):
+        return cls()
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["SKIPPED"]
+    assert results[0].details["failure_reason"] == "optional_member_absent"
+
+
+def test_api004_extended_factory_present_but_incompatible_still_fails() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def build(cls, user_id: str, enabled: bool):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                detection_mode="extended",
+                allow_missing=True,
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    def _build_impl(cls, user_id: str):
+        return cls()
+
+    build = classmethod(_build_impl)
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="build",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["reason"] == "no_compatible_factory_candidate"
+
+
+def test_api004_decorator_stack_factory_requires_extended_detection() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                detection_mode="extended",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+def passthrough(decorator):
+    return decorator
+
+class Session:
+    @passthrough(classmethod)
+    def create(cls, user_id: str):
+        return cls()
+"""
+    strict_results, strict_errors = _evaluate_factory_rule(
+        source.replace('detection_mode="extended"', 'detection_mode="strict"'),
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+    )
+    extended_results, extended_errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert strict_errors == []
+    assert [result.status for result in strict_results] == ["FAILED"]
+    assert strict_results[0].details["reason"] == "no_factory_candidate_found"
+    assert extended_errors == []
+    assert [result.status for result in extended_results] == ["OK"]

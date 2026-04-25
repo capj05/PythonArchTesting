@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import ast
 from typing import Any, Dict, List, Literal
 
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult, RuleStatus
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 
+from .annotation_compatibility import compare_annotation_text
 from .construction_resolution import (
     constructor_candidates_for_class,
     resolve_target_constructor,
@@ -178,6 +180,113 @@ def _flexible_match_reason(
     return "no compatible candidate found with unconstrained name matching"
 
 
+def _factory_rule_details(
+    *,
+    satisfy_with: list[str],
+    allow_inherited: bool,
+    allow_missing: bool,
+    name_match: str,
+    aliases: list[str] | None,
+    pattern: str | None,
+    detection_mode: str,
+    check_return: bool,
+    return_annotation_mode: str,
+) -> dict[str, Any]:
+    return {
+        "satisfy_with": satisfy_with,
+        "allow_inherited": allow_inherited,
+        "allow_missing": allow_missing,
+        "name_match": name_match,
+        "aliases": aliases,
+        "pattern": pattern,
+        "detection_mode": detection_mode,
+        "check_return": check_return,
+        "return_annotation_mode": return_annotation_mode,
+    }
+
+
+def _unwrap_string_annotation(annotation: str | None) -> str | None:
+    if annotation is None:
+        return None
+    text = str(annotation).strip()
+    if not text:
+        return None
+    try:
+        parsed = ast.parse(text, mode="eval").body
+    except SyntaxError:
+        return text
+    if isinstance(parsed, ast.Constant) and isinstance(parsed.value, str):
+        return parsed.value.strip() or None
+    return text
+
+
+def _normalize_factory_return_annotation(
+    annotation: str | None,
+    *,
+    target_class: Entity,
+) -> str | None:
+    text = _unwrap_string_annotation(annotation)
+    if text is None:
+        return None
+    if text in {
+        "Self",
+        "typing.Self",
+        "typing_extensions.Self",
+        target_class.name,
+        target_class.qualname,
+    }:
+        return target_class.name
+    return text
+
+
+def _factory_return_mismatch(
+    candidate: Entity,
+    *,
+    target_class: Entity,
+    ctx: EvalContext,
+    return_annotation_mode: str,
+    detection_mode: str,
+) -> tuple[str | None, list[str]]:
+    if factory_kind(candidate, detection_mode=detection_mode) == "constructor":
+        return None, []
+
+    candidate_return = _normalize_factory_return_annotation(
+        _param_model(candidate).get("return_annotation"),
+        target_class=target_class,
+    )
+    if candidate_return is None:
+        return (
+            "factory_return_annotation_missing",
+            ["factory candidate is missing a return annotation"],
+        )
+
+    comparison = compare_annotation_text(
+        expected=target_class.name,
+        found=candidate_return,
+        expected_entity=target_class,
+        found_entity=candidate,
+        ctx=ctx,
+        variance="invariant" if return_annotation_mode == "exact" else "covariant",
+    )
+    if comparison.compatible:
+        return None, []
+    if return_annotation_mode == "exact":
+        return (
+            "factory_return_annotation_exact_mismatch",
+            [
+                "factory return annotation mismatch: "
+                f"expected {comparison.expected}, found {comparison.found}"
+            ],
+        )
+    return (
+        "factory_return_annotation_incompatible",
+        [
+            "factory return annotation mismatch: "
+            f"expected {comparison.expected}, found {comparison.found}"
+        ],
+    )
+
+
 def _evaluate_required_factory_rule(
     rule: Rule,
     source: Entity,
@@ -200,6 +309,11 @@ def _evaluate_required_factory_rule(
     allow_inherited = bool(rule.params.get("allow_inherited", True))
     allow_missing = bool(rule.params.get("allow_missing", False))
     name_match = str(rule.params.get("name_match", "any")).lower()
+    detection_mode = str(rule.params.get("detection_mode", "strict")).lower()
+    check_return = bool(rule.params.get("check_return", False))
+    return_annotation_mode = str(
+        rule.params.get("return_annotation_mode", "ignore")
+    ).lower()
     target_class: Entity | None
 
     if target.kind == "class":
@@ -212,14 +326,17 @@ def _evaluate_required_factory_rule(
     if target_class is None:
         details: Dict[str, Any] = {
             "reason": "no_factory_candidate_found",
-            "factory_rule": {
-                "satisfy_with": satisfy_with,
-                "allow_inherited": allow_inherited,
-                "allow_missing": allow_missing,
-                "name_match": name_match,
-                "aliases": aliases,
-                "pattern": pattern,
-            },
+            "factory_rule": _factory_rule_details(
+                satisfy_with=satisfy_with,
+                allow_inherited=allow_inherited,
+                allow_missing=allow_missing,
+                name_match=name_match,
+                aliases=aliases,
+                pattern=pattern,
+                detection_mode=detection_mode,
+                check_return=check_return,
+                return_annotation_mode=return_annotation_mode,
+            ),
             "candidate_factories": [],
             "selected_candidate": None,
         }
@@ -237,6 +354,7 @@ def _evaluate_required_factory_rule(
         target_class,
         ctx,
         allow_inherited=allow_inherited,
+        detection_mode=detection_mode,
     )
     filtered_candidates = filter_factory_candidates(
         candidates,
@@ -245,11 +363,12 @@ def _evaluate_required_factory_rule(
         source_name=source.name,
         aliases=aliases,
         pattern=pattern,
+        detection_mode=detection_mode,
     )
 
     candidate_details: list[dict[str, Any]] = []
     for candidate in candidates:
-        candidate_kind = factory_kind(candidate)
+        candidate_kind = factory_kind(candidate, detection_mode=detection_mode)
         candidate_accepted = candidate in filtered_candidates
         candidate_details.append(
             {
@@ -257,10 +376,14 @@ def _evaluate_required_factory_rule(
                 "qualname": candidate.qualname,
                 "name": candidate.name,
                 "factory_kind": candidate_kind,
-                "method_kind": _method_kind(candidate),
+                "method_kind": _method_kind(
+                    candidate,
+                    detection_mode=detection_mode,
+                ),
                 "inherited": factory_candidate_origin(candidate, target_class, ctx)
                 != "declared",
                 "accepted": candidate_accepted,
+                "failure_reason": None,
                 "errors": (
                     []
                     if candidate_accepted
@@ -272,14 +395,17 @@ def _evaluate_required_factory_rule(
     if not filtered_candidates:
         details = {
             "reason": "no_factory_candidate_found",
-            "factory_rule": {
-                "satisfy_with": satisfy_with,
-                "allow_inherited": allow_inherited,
-                "allow_missing": allow_missing,
-                "name_match": name_match,
-                "aliases": aliases,
-                "pattern": pattern,
-            },
+            "factory_rule": _factory_rule_details(
+                satisfy_with=satisfy_with,
+                allow_inherited=allow_inherited,
+                allow_missing=allow_missing,
+                name_match=name_match,
+                aliases=aliases,
+                pattern=pattern,
+                detection_mode=detection_mode,
+                check_return=check_return,
+                return_annotation_mode=return_annotation_mode,
+            ),
             "candidate_factories": candidate_details,
             "selected_candidate": None,
         }
@@ -308,6 +434,8 @@ def _evaluate_required_factory_rule(
         )
 
     compatible_candidates: list[tuple[Entity, list[str]]] = []
+    signature_compatible_candidates = 0
+    return_failure_reasons: list[str] = []
     for candidate in filtered_candidates:
         candidate_result = evaluate_method_compatibility(
             source,
@@ -318,25 +446,47 @@ def _evaluate_required_factory_rule(
             check_return=False,
         )
         errors = list(candidate_result["errors"])
+        failure_reason: str | None = None
+        if not errors:
+            signature_compatible_candidates += 1
+            if check_return and return_annotation_mode != "ignore":
+                failure_reason, return_errors = _factory_return_mismatch(
+                    candidate,
+                    target_class=target_class,
+                    ctx=ctx,
+                    return_annotation_mode=return_annotation_mode,
+                    detection_mode=detection_mode,
+                )
+                errors.extend(return_errors)
+                if failure_reason is not None:
+                    return_failure_reasons.append(failure_reason)
         for item in candidate_details:
             if item["entity_id"] == candidate.canonical_id:
                 item["accepted"] = not errors
+                item["failure_reason"] = failure_reason
                 item["errors"] = errors
                 break
         if not errors:
             compatible_candidates.append((candidate, errors))
 
     if not compatible_candidates:
+        failure_reason = "no_compatible_factory_candidate"
+        unique_return_reasons = set(return_failure_reasons)
+        if signature_compatible_candidates and len(unique_return_reasons) == 1:
+            failure_reason = next(iter(unique_return_reasons))
         details = {
-            "reason": "no_compatible_factory_candidate",
-            "factory_rule": {
-                "satisfy_with": satisfy_with,
-                "allow_inherited": allow_inherited,
-                "allow_missing": allow_missing,
-                "name_match": name_match,
-                "aliases": aliases,
-                "pattern": pattern,
-            },
+            "reason": failure_reason,
+            "factory_rule": _factory_rule_details(
+                satisfy_with=satisfy_with,
+                allow_inherited=allow_inherited,
+                allow_missing=allow_missing,
+                name_match=name_match,
+                aliases=aliases,
+                pattern=pattern,
+                detection_mode=detection_mode,
+                check_return=check_return,
+                return_annotation_mode=return_annotation_mode,
+            ),
             "candidate_factories": candidate_details,
             "selected_candidate": None,
         }
@@ -353,14 +503,17 @@ def _evaluate_required_factory_rule(
     if len(compatible_candidates) > 1:
         details = {
             "reason": "multiple_compatible_factory_candidates",
-            "factory_rule": {
-                "satisfy_with": satisfy_with,
-                "allow_inherited": allow_inherited,
-                "allow_missing": allow_missing,
-                "name_match": name_match,
-                "aliases": aliases,
-                "pattern": pattern,
-            },
+            "factory_rule": _factory_rule_details(
+                satisfy_with=satisfy_with,
+                allow_inherited=allow_inherited,
+                allow_missing=allow_missing,
+                name_match=name_match,
+                aliases=aliases,
+                pattern=pattern,
+                detection_mode=detection_mode,
+                check_return=check_return,
+                return_annotation_mode=return_annotation_mode,
+            ),
             "candidate_factories": candidate_details,
             "selected_candidate": None,
         }
@@ -377,14 +530,17 @@ def _evaluate_required_factory_rule(
     selected_candidate, _ = compatible_candidates[0]
     details = {
         "reason": "Factory requirement satisfied.",
-        "factory_rule": {
-            "satisfy_with": satisfy_with,
-            "allow_inherited": allow_inherited,
-            "allow_missing": allow_missing,
-            "name_match": name_match,
-            "aliases": aliases,
-            "pattern": pattern,
-        },
+        "factory_rule": _factory_rule_details(
+            satisfy_with=satisfy_with,
+            allow_inherited=allow_inherited,
+            allow_missing=allow_missing,
+            name_match=name_match,
+            aliases=aliases,
+            pattern=pattern,
+            detection_mode=detection_mode,
+            check_return=check_return,
+            return_annotation_mode=return_annotation_mode,
+        ),
         "candidate_factories": candidate_details,
         "selected_candidate": {
             "entity_id": selected_candidate.canonical_id,
