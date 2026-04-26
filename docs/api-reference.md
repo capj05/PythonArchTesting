@@ -61,6 +61,9 @@ Strict tuple metadata also remains supported as a compatibility form:
 
 ## Marker Factories From `pythonarchtesting.rules`
 
+Pattern recipes and copy-ready examples built from these public markers are
+documented in [pattern-recipes.md](pattern-recipes.md).
+
 ### Placement Summary
 
 | Marker | Purpose | Valid placement |

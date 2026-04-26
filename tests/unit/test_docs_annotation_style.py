@@ -27,6 +27,7 @@ def test_public_docs_are_annotation_only() -> None:
         root / "docs" / "overview.md",
         root / "docs" / "usage-guide.md",
         root / "docs" / "api-reference.md",
+        root / "docs" / "pattern-recipes.md",
         root / "docs" / "architecture.md",
         root / "docs" / "core-components.md",
     ]
@@ -62,8 +63,13 @@ def test_public_examples_and_default_reference_fixtures_are_annotation_first() -
         root / "docs" / "overview.md",
         root / "docs" / "usage-guide.md",
         root / "docs" / "api-reference.md",
+        root / "docs" / "pattern-recipes.md",
         root / "docs" / "architecture.md",
         root / "docs" / "core-components.md",
+        root / "docs" / "snippets" / "patterns" / "immutable_value_object.py",
+        root / "docs" / "snippets" / "patterns" / "enum_domain_type.py",
+        root / "docs" / "snippets" / "patterns" / "repository_contract.py",
+        root / "docs" / "snippets" / "patterns" / "lifecycle_hooks.py",
         root / "tests" / "fixtures" / "smoke" / "source" / "reference.py",
         root
         / "tests"
