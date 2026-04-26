@@ -8,7 +8,9 @@ from pythonarchtesting.entities import DeclarationEntry, Entity
 
 from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
 
-_VALID_SATISFY_WITH = frozenset({"constructor", "classmethod", "staticmethod"})
+_VALID_SATISFY_WITH = frozenset(
+    {"constructor", "classmethod", "staticmethod", "static_attribute"}
+)
 _VALID_NAME_MATCH = frozenset({"any", "exact", "alias", "regex"})
 _VALID_RETURN_ANNOTATION_MODE = frozenset({"ignore", "compatible", "exact"})
 _VALID_DETECTION_MODE = frozenset({"strict", "extended"})
@@ -270,6 +272,31 @@ def compile_required_factory(
         )
         return [], compiler_evidence, []
 
+    if "static_attribute" in satisfy_with and name_match == "any":
+        payload = {
+            "decorator": "required_factory",
+            "issue": "compiler_invalid_param",
+            "param": "name_match",
+            "value": "any",
+            "reason": (
+                "static_attribute factory satisfaction requires constrained "
+                "name matching: exact, alias, or regex"
+            ),
+            "valid": ["exact", "alias", "regex"],
+        }
+        compiler_evidence.append(
+            Evidence(
+                evidence_id=evidence_id("compiler_invalid_param", payload),
+                type="compiler_invalid_param",
+                source="compiler",
+                role="source",
+                entity_id=source_entity.canonical_id,
+                payload=canonicalize_payload(payload),
+                location=location,
+            )
+        )
+        return [], compiler_evidence, []
+
     base_severity_raw = str(
         params_kwargs.get("severity", "error")
     ).lower()  # noqa: E501
@@ -299,11 +326,12 @@ def compile_required_factory(
     if pattern is not None:
         rule_params["pattern"] = str(pattern)
 
-    rule_version = (
-        "v2"
-        if return_annotation_mode != "ignore" or detection_mode != "strict"
-        else "v1"
-    )
+    if "static_attribute" in satisfy_with:
+        rule_version = "v3"
+    elif return_annotation_mode != "ignore" or detection_mode != "strict":
+        rule_version = "v2"
+    else:
+        rule_version = "v1"
     rule = Rule(
         rule_id=with_rule_id_suffix(
             f"API004/required_factory/{rule_version}",

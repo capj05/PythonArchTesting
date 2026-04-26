@@ -1332,3 +1332,376 @@ class Session:
     assert strict_results[0].details["reason"] == "no_factory_candidate_found"
     assert extended_errors == []
     assert [result.status for result in extended_results] == ["OK"]
+
+
+def test_api004_static_attribute_satisfies_factory_with_alias() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("static_attribute",),
+                name_match="alias",
+                aliases=["INSTANCE"],
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    INSTANCE: "Session"
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api004_static_attribute_satisfies_factory_with_signature_mode_any() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str, enabled: bool):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                signature_mode="any",
+                satisfy_with=("static_attribute",),
+                name_match="alias",
+                aliases=["INSTANCE"],
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    INSTANCE = object()
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["params_ignored"] is True
+
+
+def test_api004_static_attribute_fails_parameterized_factory_in_compatible_mode() -> (
+    None
+):
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("static_attribute",),
+                name_match="alias",
+                aliases=["INSTANCE"],
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    INSTANCE: "Session"
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert (
+        results[0].details["reason"] == "static_attribute_parameterized_factory_mismatch"
+    )
+
+
+def test_api004_static_attribute_return_annotation_compatible_passes() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("static_attribute",),
+                name_match="alias",
+                aliases=["INSTANCE"],
+                return_annotation_mode="compatible",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    INSTANCE: "Session"
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api004_static_attribute_return_annotation_missing_fails_when_checked() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("static_attribute",),
+                name_match="alias",
+                aliases=["INSTANCE"],
+                return_annotation_mode="compatible",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    INSTANCE = object()
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["reason"] == "factory_static_attribute_annotation_missing"
+
+
+def test_api004_static_attribute_return_annotation_wrong_type_fails() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("static_attribute",),
+                name_match="alias",
+                aliases=["INSTANCE"],
+                return_annotation_mode="compatible",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Other:
+    pass
+
+class Session:
+    INSTANCE: "Other"
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["reason"] == "factory_static_attribute_annotation_incompatible"
+
+
+def test_api004_static_attribute_absent_optional_skips() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("static_attribute",),
+                name_match="alias",
+                aliases=["INSTANCE"],
+                allow_missing=True,
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    current = object()
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["SKIPPED"]
+    assert results[0].details["failure_reason"] == "optional_member_absent"
+
+
+def test_api004_static_attribute_absent_required_fails() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("static_attribute",),
+                name_match="alias",
+                aliases=["INSTANCE"],
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    current = object()
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["reason"] == "no_factory_candidate_found"
+
+
+def test_api004_static_attribute_ambiguous_with_constructor_fails() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    def __init__(self):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("constructor", "static_attribute"),
+                name_match="alias",
+                aliases=["INSTANCE"],
+            ),
+        ]
+"""
+    target = """
+class Session:
+    def __init__(self):
+        pass
+
+    INSTANCE: "Session"
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="__init__",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["reason"] == "multiple_compatible_factory_candidates"
+
+
+def test_api004_static_attribute_reports_candidate_details() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("static_attribute",),
+                name_match="alias",
+                aliases=["INSTANCE"],
+                return_annotation_mode="compatible",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    INSTANCE: "Session"
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["candidate_factories"][0]["factory_kind"] == "static_attribute"
+    assert results[0].details["selected_candidate"]["factory_kind"] == "static_attribute"

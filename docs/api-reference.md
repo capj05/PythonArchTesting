@@ -667,8 +667,8 @@ Common options:
 | --- | --- | --- | --- |
 | `signature_mode` | `"compatible" \| "exact" \| "any"` | `"compatible"` | Signature comparison mode |
 | `satisfy_with` | `tuple[str, ...]` | `("constructor", "classmethod", "staticmethod")` | Which factory kinds are accepted |
-| `allow_inherited` | `bool` | `True` | Allow factory methods inherited from a base class |
-| `name_match` | `"any" \| "exact" \| "alias" \| "regex"` | `"any"` | How the factory method name is matched |
+| `allow_inherited` | `bool` | `True` | Allow inherited factory candidates from a base class |
+| `name_match` | `"any" \| "exact" \| "alias" \| "regex"` | `"any"` | How the factory candidate name is matched |
 | `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"` |
 | `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"` |
 | `allow_missing` | `bool` | `False` | Skip instead of fail when no accepted factory candidate exists in scope |
@@ -681,23 +681,27 @@ Notes:
 
 - Place `required_factory(...)` on a factory-capable source method only:
   `__init__`, `__new__`, `@classmethod`, or `@staticmethod`.
-- `satisfy_with` accepts `"constructor"`, `"classmethod"`, and `"staticmethod"`.
+- `satisfy_with` accepts `"constructor"`, `"classmethod"`, `"staticmethod"`, and `"static_attribute"`.
 - `name_match="any"` accepts any matching non-constructor factory name.
 - `name_match="exact"` requires the factory name to match the source method name.
 - `name_match="alias"` requires `aliases`.
 - `name_match="regex"` requires `pattern`.
+- `satisfy_with=("static_attribute",)` enables class-body static attribute candidates such as `INSTANCE`, `default`, or `current`.
+- Static-attribute candidates require constrained name matching. `name_match="any"` is rejected when `satisfy_with` includes `"static_attribute"`.
 - `allow_inherited=True` allows inherited target factory methods to satisfy the rule.
+- `allow_inherited=True` also allows inherited class-body static attributes to satisfy the rule.
 - `allow_missing=False` (default) keeps the current required-factory behavior.
 - `allow_missing=True` only skips when no accepted target factory candidate exists under the current `satisfy_with` / `name_match` / `allow_inherited` scope.
 - A present but incompatible accepted candidate still fails even when `allow_missing=True`.
 - `signature_mode="any"` requires an accepted factory candidate to exist under the current `satisfy_with` / `name_match` / `allow_inherited` scope and ignores parameter-shape differences.
+- Static attributes are treated as zero-parameter providers. Parameterized source factories therefore require `signature_mode="any"` to be satisfied by a static attribute.
 - `return_annotation_mode="ignore"` preserves the existing behavior.
-- When `return_annotation_mode` is enabled, return checking applies only to method-backed factories (`classmethod` and `staticmethod`).
+- When `return_annotation_mode` is enabled, method-backed factories use callable return annotations and static attributes use the class-body attribute annotation.
 - Constructor-backed satisfaction treats the return contract as implicitly satisfied, so constructor candidates still work under return checking.
 - `detection_mode="strict"` preserves the current candidate set.
 - `detection_mode="extended"` adds conservative support for assignment-based `classmethod(...)` / `staticmethod(...)` definitions and builtin wrapper visibility in decorator stacks.
-- Dynamic singleton retrieval patterns remain unsupported: instance caches, registries, service locators, descriptor-returned callables, and module-level factory functions are not considered factory candidates.
-- The rule is emitted as `API004/required_factory/v1` by default and `API004/required_factory/v2` when `return_annotation_mode != "ignore"` or `detection_mode != "strict"`.
+- Static-attribute support is limited to deterministic class-body assignments and annotations. Dynamic registries, service locators, module-level singletons, post-class assignments, `setattr(...)`, and runtime descriptor behavior are not considered factory candidates.
+- The rule is emitted as `API004/required_factory/v1` by default, `API004/required_factory/v2` when `return_annotation_mode != "ignore"` or `detection_mode != "strict"`, and `API004/required_factory/v3` when `satisfy_with` includes `"static_attribute"`.
 - When `satisfy_with` includes `"constructor"`, constructor matching reuses the
   same constructor resolution as `required_constructor(...)`, including support
   for statically recognizable dataclass-generated `__init__`.
@@ -778,6 +782,33 @@ class Session:
             ),
         ]
         return cls()
+```
+
+Static-attribute example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+
+class Session:
+    @classmethod
+    def create(cls):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("static_attribute",),
+                name_match="alias",
+                aliases=["INSTANCE", "default", "current"],
+                signature_mode="any",
+                return_annotation_mode="compatible",
+            ),
+        ]
+        return cls()
+
+
+class SessionTarget:
+    INSTANCE: "SessionTarget"
 ```
 
 Extended detection example:

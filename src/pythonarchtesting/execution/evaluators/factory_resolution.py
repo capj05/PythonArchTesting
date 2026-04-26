@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from pythonarchtesting.entities import Entity, build_canonical_id
@@ -24,6 +25,17 @@ _ASSIGNMENT_FACTORY_WRAPPERS = {
     "classmethod": "class",
     "staticmethod": "static",
 }
+
+
+@dataclass(frozen=True)
+class StaticAttributeFactoryCandidate:
+    name: str
+    owner_class: Entity
+    target_class: Entity
+    lineno: int
+    annotation: str | None
+    value_expr: str | None
+    inherited: bool
 
 
 def factory_kind(entity: Entity, *, detection_mode: str = "strict") -> str:
@@ -62,6 +74,19 @@ def _assignment_method_kind(value: ast.AST) -> str | None:
     if ref_name is None:
         return None
     return _ASSIGNMENT_FACTORY_WRAPPERS.get(ref_name.rsplit(".", 1)[-1])
+
+
+def _safe_unparse(node: ast.AST | None) -> str | None:
+    if node is None:
+        return None
+    try:
+        return ast.unparse(node)
+    except Exception:
+        return None
+
+
+def _is_dunder_name(name: str) -> bool:
+    return name.startswith("__") and name.endswith("__")
 
 
 def _synthetic_assignment_factory_candidate(
@@ -226,6 +251,65 @@ def factory_candidates_for_class(
     ]
 
 
+def static_attribute_factory_candidates_for_class(
+    target_class: Entity,
+    ctx: EvalContext,
+    *,
+    allow_inherited: bool,
+) -> list[StaticAttributeFactoryCandidate]:
+    candidates: dict[str, StaticAttributeFactoryCandidate] = {}
+    for owner_class in _candidate_owner_classes(
+        target_class,
+        ctx,
+        include_inherited=allow_inherited,
+    ):
+        node = owner_class.extras.get("ast_node")
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for stmt in node.body:
+            name: str | None = None
+            annotation: str | None = None
+            value: ast.AST | None = None
+            lineno = getattr(stmt, "lineno", owner_class.lineno)
+            if isinstance(stmt, ast.Assign):
+                if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+                    continue
+                name = stmt.targets[0].id
+                value = stmt.value
+            elif isinstance(stmt, ast.AnnAssign):
+                if stmt.simple != 1 or not isinstance(stmt.target, ast.Name):
+                    continue
+                name = stmt.target.id
+                annotation = _safe_unparse(stmt.annotation)
+                value = stmt.value
+            else:
+                continue
+
+            if name == "__archtest__" or _is_dunder_name(name):
+                continue
+            if value is not None and _assignment_method_kind(value) is not None:
+                continue
+
+            candidates[name] = StaticAttributeFactoryCandidate(
+                name=name,
+                owner_class=owner_class,
+                target_class=target_class,
+                lineno=lineno,
+                annotation=annotation,
+                value_expr=_safe_unparse(value),
+                inherited=owner_class.canonical_id != target_class.canonical_id,
+            )
+
+    return sorted(
+        candidates.values(),
+        key=lambda candidate: (
+            candidate.name,
+            candidate.owner_class.qualname,
+            candidate.lineno,
+        ),
+    )
+
+
 def factory_candidate_origin(
     entity: Entity,
     target_class: Entity,
@@ -281,10 +365,32 @@ def filter_factory_candidates(
     return result
 
 
+def filter_static_attribute_factory_candidates(
+    candidates: list[StaticAttributeFactoryCandidate],
+    *,
+    name_match: str,
+    source_name: str,
+    aliases: list[str] | None,
+    pattern: str | None,
+) -> list[StaticAttributeFactoryCandidate]:
+    result: list[StaticAttributeFactoryCandidate] = []
+    for candidate in candidates:
+        if name_match == "exact" and candidate.name == source_name:
+            result.append(candidate)
+        elif name_match == "alias" and aliases and candidate.name in aliases:
+            result.append(candidate)
+        elif name_match == "regex" and pattern and re.fullmatch(pattern, candidate.name):
+            result.append(candidate)
+    return result
+
+
 __all__ = [
     "factory_candidate_origin",
     "factory_candidates_for_class",
     "factory_kind",
     "filter_factory_candidates",
+    "filter_static_attribute_factory_candidates",
     "matched_target_parent_class",
+    "StaticAttributeFactoryCandidate",
+    "static_attribute_factory_candidates_for_class",
 ]

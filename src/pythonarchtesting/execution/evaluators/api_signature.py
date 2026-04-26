@@ -13,10 +13,13 @@ from .construction_resolution import (
     resolve_target_constructor,
 )
 from .factory_resolution import (
+    StaticAttributeFactoryCandidate,
     factory_candidate_origin,
     factory_candidates_for_class,
     factory_kind,
     filter_factory_candidates,
+    filter_static_attribute_factory_candidates,
+    static_attribute_factory_candidates_for_class,
 )
 from .member_name_resolution import (
     filter_methods_by_name_match,
@@ -289,6 +292,68 @@ def _factory_return_mismatch(
     )
 
 
+def _static_attribute_candidate_qualname(
+    candidate: StaticAttributeFactoryCandidate,
+) -> str:
+    return f"{candidate.owner_class.qualname}.{candidate.name}"
+
+
+def _static_attribute_param_errors(
+    source: Entity,
+    *,
+    mode: str,
+) -> list[str]:
+    if mode == "any":
+        return []
+
+    source_model = _param_model(source)
+    source_params = _strip_method_receiver(source_model.get("params", []), source)
+    if source_params or source_model.get("vararg") or source_model.get("kwarg"):
+        return [
+            "static attribute factory cannot satisfy a parameterized factory signature"
+        ]
+    return []
+
+
+def _static_attribute_return_mismatch(
+    candidate: StaticAttributeFactoryCandidate,
+    *,
+    target_class: Entity,
+    ctx: EvalContext,
+    return_annotation_mode: str,
+) -> tuple[str | None, list[str]]:
+    candidate_annotation = _normalize_factory_return_annotation(
+        candidate.annotation,
+        target_class=target_class,
+    )
+    if candidate_annotation is None:
+        return (
+            "factory_static_attribute_annotation_missing",
+            [
+                "static attribute factory candidate is missing a "
+                "class-compatible annotation"
+            ],
+        )
+
+    comparison = compare_annotation_text(
+        expected=target_class.name,
+        found=candidate_annotation,
+        expected_entity=target_class,
+        found_entity=candidate.owner_class,
+        ctx=ctx,
+        variance="invariant" if return_annotation_mode == "exact" else "covariant",
+    )
+    if comparison.compatible:
+        return None, []
+    return (
+        "factory_static_attribute_annotation_incompatible",
+        [
+            "static attribute factory annotation mismatch: "
+            f"expected {comparison.expected}, found {comparison.found}"
+        ],
+    )
+
+
 def _evaluate_required_factory_rule(
     rule: Rule,
     source: Entity,
@@ -369,33 +434,87 @@ def _evaluate_required_factory_rule(
         detection_mode=detection_mode,
     )
 
+    static_attribute_candidates: list[StaticAttributeFactoryCandidate] = []
+    matched_static_attribute_candidates: list[StaticAttributeFactoryCandidate] = []
+    filtered_static_attribute_candidates: list[StaticAttributeFactoryCandidate] = []
+    if "static_attribute" in satisfy_with:
+        static_attribute_candidates = static_attribute_factory_candidates_for_class(
+            target_class,
+            ctx,
+            allow_inherited=True,
+        )
+        matched_static_attribute_candidates = filter_static_attribute_factory_candidates(
+            static_attribute_candidates,
+            name_match=name_match,
+            source_name=source.name,
+            aliases=aliases,
+            pattern=pattern,
+        )
+        filtered_static_attribute_candidates = [
+            candidate
+            for candidate in matched_static_attribute_candidates
+            if allow_inherited or not candidate.inherited
+        ]
+
     candidate_details: list[dict[str, Any]] = []
+    candidate_details_by_key: dict[tuple[str, str], dict[str, Any]] = {}
     for candidate in candidates:
         candidate_kind = factory_kind(candidate, detection_mode=detection_mode)
-        candidate_accepted = candidate in filtered_candidates
-        candidate_details.append(
-            {
-                "entity_id": candidate.canonical_id,
-                "qualname": candidate.qualname,
-                "name": candidate.name,
-                "factory_kind": candidate_kind,
-                "method_kind": _method_kind(
-                    candidate,
-                    detection_mode=detection_mode,
-                ),
-                "inherited": factory_candidate_origin(candidate, target_class, ctx)
-                != "declared",
-                "accepted": candidate_accepted,
-                "failure_reason": None,
-                "errors": (
-                    []
-                    if candidate_accepted
-                    else ["filtered out by satisfy_with or name_match"]
-                ),
-            }
-        )
+        detail = {
+            "entity_id": candidate.canonical_id,
+            "qualname": candidate.qualname,
+            "name": candidate.name,
+            "factory_kind": candidate_kind,
+            "method_kind": _method_kind(
+                candidate,
+                detection_mode=detection_mode,
+            ),
+            "inherited": factory_candidate_origin(candidate, target_class, ctx)
+            != "declared",
+            "accepted": candidate in filtered_candidates,
+            "failure_reason": None,
+            "errors": (
+                []
+                if candidate in filtered_candidates
+                else ["filtered out by satisfy_with or name_match"]
+            ),
+        }
+        candidate_details.append(detail)
+        candidate_details_by_key[("entity", candidate.canonical_id)] = detail
 
-    if not filtered_candidates:
+    for candidate in static_attribute_candidates:
+        qualname = _static_attribute_candidate_qualname(candidate)
+        matched = candidate in matched_static_attribute_candidates
+        accepted = candidate in filtered_static_attribute_candidates
+        failure_reason: str | None = None
+        if matched and candidate.inherited and not allow_inherited:
+            failure_reason = "static_attribute_inherited_not_allowed"
+            errors = [
+                "static attribute is inherited but not declared directly on target "
+                "class"
+            ]
+        elif matched:
+            errors = []
+        else:
+            errors = ["filtered out by name_match"]
+        detail = {
+            "entity_id": None,
+            "qualname": qualname,
+            "name": candidate.name,
+            "factory_kind": "static_attribute",
+            "method_kind": None,
+            "inherited": candidate.inherited,
+            "accepted": accepted,
+            "failure_reason": failure_reason,
+            "errors": errors,
+            "annotation": candidate.annotation,
+            "value_expr": candidate.value_expr,
+            "lineno": candidate.lineno,
+        }
+        candidate_details.append(detail)
+        candidate_details_by_key[("static_attribute", qualname)] = detail
+
+    if not filtered_candidates and not filtered_static_attribute_candidates:
         details = {
             "reason": "no_factory_candidate_found",
             "params_ignored": mode == "any",
@@ -437,7 +556,7 @@ def _evaluate_required_factory_rule(
             rule_evidence,
         )
 
-    compatible_candidates: list[tuple[Entity, list[str]]] = []
+    compatible_candidates: list[dict[str, Any]] = []
     signature_compatible_candidates = 0
     return_failure_reasons: list[str] = []
     for candidate in filtered_candidates:
@@ -464,20 +583,64 @@ def _evaluate_required_factory_rule(
                 errors.extend(return_errors)
                 if failure_reason is not None:
                     return_failure_reasons.append(failure_reason)
-        for item in candidate_details:
-            if item["entity_id"] == candidate.canonical_id:
-                item["accepted"] = not errors
-                item["failure_reason"] = failure_reason
-                item["errors"] = errors
-                break
+        detail = candidate_details_by_key[("entity", candidate.canonical_id)]
+        detail["accepted"] = not errors
+        detail["failure_reason"] = failure_reason
+        detail["errors"] = errors
         if not errors:
-            compatible_candidates.append((candidate, errors))
+            compatible_candidates.append(
+                {
+                    "factory_kind": factory_kind(
+                        candidate,
+                        detection_mode=detection_mode,
+                    ),
+                    "candidate": candidate,
+                }
+            )
+
+    for candidate in filtered_static_attribute_candidates:
+        errors = _static_attribute_param_errors(source, mode=mode)
+        failure_reason: str | None = None
+        if not errors:
+            signature_compatible_candidates += 1
+            if check_return and return_annotation_mode != "ignore":
+                failure_reason, return_errors = _static_attribute_return_mismatch(
+                    candidate,
+                    target_class=target_class,
+                    ctx=ctx,
+                    return_annotation_mode=return_annotation_mode,
+                )
+                errors.extend(return_errors)
+                if failure_reason is not None:
+                    return_failure_reasons.append(failure_reason)
+        else:
+            failure_reason = "static_attribute_parameterized_factory_mismatch"
+        qualname = _static_attribute_candidate_qualname(candidate)
+        detail = candidate_details_by_key[("static_attribute", qualname)]
+        detail["accepted"] = not errors
+        detail["failure_reason"] = failure_reason
+        detail["errors"] = errors
+        if not errors:
+            compatible_candidates.append(
+                {
+                    "factory_kind": "static_attribute",
+                    "candidate": candidate,
+                }
+            )
 
     if not compatible_candidates:
         failure_reason = "no_compatible_factory_candidate"
         unique_return_reasons = set(return_failure_reasons)
         if signature_compatible_candidates and len(unique_return_reasons) == 1:
             failure_reason = next(iter(unique_return_reasons))
+        else:
+            candidate_failure_reasons = {
+                str(item["failure_reason"])
+                for item in candidate_details
+                if item.get("failure_reason")
+            }
+            if len(candidate_failure_reasons) == 1:
+                failure_reason = next(iter(candidate_failure_reasons))
         details = {
             "reason": failure_reason,
             "params_ignored": mode == "any",
@@ -533,7 +696,31 @@ def _evaluate_required_factory_rule(
             rule_evidence,
         )
 
-    selected_candidate, _ = compatible_candidates[0]
+    selected_candidate = compatible_candidates[0]
+    selected_factory_kind = str(selected_candidate["factory_kind"])
+    selected_entity: Entity = target_class
+    if selected_factory_kind == "static_attribute":
+        selected_static_attribute = selected_candidate["candidate"]
+        selected_candidate_details = {
+            "entity_id": None,
+            "qualname": _static_attribute_candidate_qualname(
+                selected_static_attribute
+            ),
+            "name": selected_static_attribute.name,
+            "factory_kind": "static_attribute",
+            "owner_class": selected_static_attribute.owner_class.qualname,
+            "annotation": selected_static_attribute.annotation,
+        }
+    else:
+        selected_method_candidate = selected_candidate["candidate"]
+        selected_entity = selected_method_candidate
+        selected_candidate_details = {
+            "entity_id": selected_method_candidate.canonical_id,
+            "qualname": selected_method_candidate.qualname,
+            "name": selected_method_candidate.name,
+            "factory_kind": selected_factory_kind,
+        }
+
     details = {
         "reason": "Factory requirement satisfied.",
         "params_ignored": mode == "any",
@@ -549,16 +736,12 @@ def _evaluate_required_factory_rule(
             return_annotation_mode=return_annotation_mode,
         ),
         "candidate_factories": candidate_details,
-        "selected_candidate": {
-            "entity_id": selected_candidate.canonical_id,
-            "qualname": selected_candidate.qualname,
-            "name": selected_candidate.name,
-        },
+        "selected_candidate": selected_candidate_details,
     }
     return _build_rule_result(
         rule,
         source,
-        selected_candidate,
+        selected_entity,
         match,
         "OK",
         details,
