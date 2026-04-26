@@ -287,6 +287,29 @@ class User:
     assert rules[0].params["fail_on_unmatched"] is False
 
 
+def test_api003_compile_accepts_any_signature_mode() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+class User:
+    __archtest__: Annotated[
+        None, required_constructor(signature_mode="any")
+    ]
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+"""
+    source_entities = extract_entities(source, role="source")
+
+    rules, evidence, compiler_results = compile_rules(source_entities, Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert len(rules) == 1
+    assert rules[0].params["mode"] == "any"
+
+
 def test_api003_compile_invalid_allow_missing_emits_compiler_evidence() -> None:
     source = """
 from typing import Annotated
@@ -309,6 +332,30 @@ class User:
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
     assert evidence[0].payload["decorator"] == "required_constructor"
     assert "allow_missing must be a boolean" in evidence[0].payload["reason"]
+
+
+def test_api003_compile_invalid_signature_mode_emits_compiler_evidence() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+class User:
+    __archtest__: Annotated[
+        None, required_constructor(signature_mode="wildcard")
+    ]
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+"""
+    source_entities = extract_entities(source, role="source")
+
+    rules, evidence, compiler_results = compile_rules(source_entities, Mock())
+
+    assert rules == []
+    assert compiler_results == []
+    assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
+    assert evidence[0].payload["decorator"] == "required_constructor"
+    assert "signature_mode must be one of" in evidence[0].payload["reason"]
 
 
 def test_api003_compile_multiple_required_constructors_dedupe_and_suffix() -> None:

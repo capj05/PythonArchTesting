@@ -12,6 +12,7 @@ _VALID_SATISFY_WITH = frozenset({"constructor", "classmethod", "staticmethod"})
 _VALID_NAME_MATCH = frozenset({"any", "exact", "alias", "regex"})
 _VALID_RETURN_ANNOTATION_MODE = frozenset({"ignore", "compatible", "exact"})
 _VALID_DETECTION_MODE = frozenset({"strict", "extended"})
+_VALID_SIGNATURE_MODES = frozenset({"compatible", "exact", "any"})
 _FACTORY_METHOD_NAMES = frozenset({"__init__", "__new__"})
 
 
@@ -94,8 +95,28 @@ def compile_required_factory(
         return [], compiler_evidence, []
 
     signature_mode = str(params_kwargs.get("signature_mode", "compatible")).lower()
-    if signature_mode not in {"compatible", "exact"}:
-        signature_mode = "compatible"
+    if signature_mode not in _VALID_SIGNATURE_MODES:
+        signature_mode_payload: dict[str, Any] = {
+            "decorator": "required_factory",
+            "issue": "compiler_invalid_param",
+            "param": "signature_mode",
+            "value": signature_mode,
+            "valid": sorted(_VALID_SIGNATURE_MODES),
+        }
+        compiler_evidence.append(
+            Evidence(
+                evidence_id=evidence_id(
+                    "compiler_invalid_param", signature_mode_payload
+                ),
+                type="compiler_invalid_param",
+                source="compiler",
+                role="source",
+                entity_id=source_entity.canonical_id,
+                payload=canonicalize_payload(signature_mode_payload),
+                location=location,
+            )
+        )
+        return [], compiler_evidence, []
 
     satisfy_with_raw = params_kwargs.get(
         "satisfy_with",
@@ -163,7 +184,7 @@ def compile_required_factory(
         params_kwargs.get("return_annotation_mode", "ignore")
     ).lower()
     if return_annotation_mode not in _VALID_RETURN_ANNOTATION_MODE:
-        payload = {
+        return_annotation_payload: dict[str, Any] = {
             "decorator": "required_factory",
             "issue": "compiler_invalid_param",
             "param": "return_annotation_mode",
@@ -172,12 +193,14 @@ def compile_required_factory(
         }
         compiler_evidence.append(
             Evidence(
-                evidence_id=evidence_id("compiler_invalid_param", payload),
+                evidence_id=evidence_id(
+                    "compiler_invalid_param", return_annotation_payload
+                ),
                 type="compiler_invalid_param",
                 source="compiler",
                 role="source",
                 entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(payload),
+                payload=canonicalize_payload(return_annotation_payload),
                 location=location,
             )
         )
@@ -185,7 +208,7 @@ def compile_required_factory(
 
     detection_mode = str(params_kwargs.get("detection_mode", "strict")).lower()
     if detection_mode not in _VALID_DETECTION_MODE:
-        payload = {
+        detection_mode_payload: dict[str, Any] = {
             "decorator": "required_factory",
             "issue": "compiler_invalid_param",
             "param": "detection_mode",
@@ -194,12 +217,14 @@ def compile_required_factory(
         }
         compiler_evidence.append(
             Evidence(
-                evidence_id=evidence_id("compiler_invalid_param", payload),
+                evidence_id=evidence_id(
+                    "compiler_invalid_param", detection_mode_payload
+                ),
                 type="compiler_invalid_param",
                 source="compiler",
                 role="source",
                 entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(payload),
+                payload=canonicalize_payload(detection_mode_payload),
                 location=location,
             )
         )
@@ -245,7 +270,9 @@ def compile_required_factory(
         )
         return [], compiler_evidence, []
 
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
+    base_severity_raw = str(
+        params_kwargs.get("severity", "error")
+    ).lower()  # noqa: E501
     if base_severity_raw in {"error", "warning", "info"}:
         base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
     else:

@@ -402,6 +402,129 @@ class MyService:
     assert results[0].details["reason"] == "no_compatible_factory_candidate"
 
 
+def test_api004_any_mode_passes_for_constructor_candidate_with_mismatched_params() -> (
+    None
+):
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyService:
+    def __init__(self, name: str, enabled: bool):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                signature_mode="any",
+                satisfy_with=("constructor",),
+            ),
+        ]
+        self.name = name
+        self.enabled = enabled
+"""
+    target = """
+class MyService:
+    def __init__(self, user_id: int):
+        self.user_id = user_id
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="__init__",
+        source_class_name="MyService",
+        target_class_name="MyService",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["params_ignored"] is True
+
+
+def test_api004_any_mode_passes_for_classmethod_alias_candidate_with_mismatched_params() -> (
+    None
+):
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str, enabled: bool):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                signature_mode="any",
+                satisfy_with=("classmethod",),
+                name_match="alias",
+                aliases=["build"],
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    @classmethod
+    def build(cls, token: int):
+        return cls()
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["params_ignored"] is True
+
+
+def test_api004_any_mode_passes_for_staticmethod_regex_candidate_with_mismatched_params() -> (
+    None
+):
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @staticmethod
+    def parse(user_id: str, enabled: bool):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                signature_mode="any",
+                satisfy_with=("staticmethod",),
+                name_match="regex",
+                pattern="from_.*",
+            ),
+        ]
+        return Session(user_id)
+
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+"""
+    target = """
+class Session:
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+
+    @staticmethod
+    def from_token(token: int):
+        return Session(str(token))
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="parse",
+        source_class_name="Session",
+        target_class_name="Session",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["params_ignored"] is True
+
+
 def test_api004_fail_multiple_compatible_candidates_is_ambiguous() -> None:
     source = """
 from typing import Annotated
@@ -710,6 +833,46 @@ class Session:
 
     assert errors == []
     assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["reason"] == "factory_return_annotation_missing"
+
+
+def test_api004_any_mode_still_checks_return_annotation_when_enabled() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    @classmethod
+    def create(cls, user_id: str, enabled: bool):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                signature_mode="any",
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                return_annotation_mode="compatible",
+            ),
+        ]
+        return cls()
+"""
+    target = """
+class Session:
+    @classmethod
+    def create(cls, token: int):
+        return cls()
+"""
+    results, errors = _evaluate_factory_rule(
+        source,
+        target,
+        source_method_name="create",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v2",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["params_ignored"] is True
     assert results[0].details["reason"] == "factory_return_annotation_missing"
 
 

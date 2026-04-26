@@ -171,6 +171,26 @@ class MyFactory:
     assert rules[0].params["fail_on_unmatched"] is False
 
 
+def test_api004_compile_accepts_any_signature_mode() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[None, required_factory(signature_mode="any")]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert len(rules) == 1
+    assert rules[0].params["mode"] == "any"
+
+
 def test_api004_invalid_allow_missing_emits_compiler_invalid_param() -> None:
     source = """
 from typing import Annotated
@@ -189,6 +209,29 @@ class MyFactory:
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_param"]
     assert evidence[0].payload["param"] == "allow_missing"
+
+
+def test_api004_invalid_signature_mode_emits_compiler_invalid_param() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(signature_mode="wildcard"),
+        ]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert rules == []
+    assert compiler_results == []
+    assert [item.type for item in evidence] == ["compiler_invalid_param"]
+    assert evidence[0].payload["param"] == "signature_mode"
 
 
 def test_api004_params_survive_compilation() -> None:

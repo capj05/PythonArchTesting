@@ -551,7 +551,7 @@ class User:
 
 Common options:
 
-- `signature_mode` — `"compatible"` (default) or `"exact"`; compared via the same signature check used by `required_method(...)`.
+- `signature_mode` — `"compatible"` (default), `"exact"`, or `"any"`; compared via the same callable matching model used by `required_method(...)`.
 - `constructor_kind` — `"auto"` (default: prefer `__init__`, fall back to `__new__`), `"__init__"`, or `"__new__"`.
 - `allow_inherited` — when `True` (default), a constructor inherited from a base class in the target satisfies the rule; when `False`, the constructor must be declared directly on the target class.
 - `allow_missing` — when `True`, skip instead of fail when no constructor candidate exists under the current `constructor_kind` / `allow_inherited` scope.
@@ -572,6 +572,7 @@ Notes:
 - Metaclass `__call__` is still not inferred.
 - Return annotations are not compared.
 - Method-kind (regular/classmethod/staticmethod) is not enforced; only the parameter shape is checked (after stripping the `self` / `cls` receiver).
+- `signature_mode="any"` requires a constructor candidate to exist under the current `constructor_kind` / `allow_inherited` scope and ignores parameter-shape differences.
 - Extra required parameters on the target constructor fail the `compatible` check; extra *optional* parameters are allowed.
 - `allow_missing=False` (default) keeps the current required-constructor behavior.
 - `allow_missing=True` only skips when no constructor candidate exists in the current scope; a present but incompatible constructor still fails.
@@ -661,7 +662,7 @@ Common options:
 
 | Option | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `signature_mode` | `"compatible" \| "exact"` | `"compatible"` | Signature comparison mode |
+| `signature_mode` | `"compatible" \| "exact" \| "any"` | `"compatible"` | Signature comparison mode |
 | `satisfy_with` | `tuple[str, ...]` | `("constructor", "classmethod", "staticmethod")` | Which factory kinds are accepted |
 | `allow_inherited` | `bool` | `True` | Allow factory methods inherited from a base class |
 | `name_match` | `"any" \| "exact" \| "alias" \| "regex"` | `"any"` | How the factory method name is matched |
@@ -686,6 +687,7 @@ Notes:
 - `allow_missing=False` (default) keeps the current required-factory behavior.
 - `allow_missing=True` only skips when no accepted target factory candidate exists under the current `satisfy_with` / `name_match` / `allow_inherited` scope.
 - A present but incompatible accepted candidate still fails even when `allow_missing=True`.
+- `signature_mode="any"` requires an accepted factory candidate to exist under the current `satisfy_with` / `name_match` / `allow_inherited` scope and ignores parameter-shape differences.
 - `return_annotation_mode="ignore"` preserves the existing behavior.
 - When `return_annotation_mode` is enabled, return checking applies only to method-backed factories (`classmethod` and `staticmethod`).
 - Constructor-backed satisfaction treats the return contract as implicitly satisfied, so constructor candidates still work under return checking.
@@ -696,6 +698,7 @@ Notes:
 - When `satisfy_with` includes `"constructor"`, constructor matching reuses the
   same constructor resolution as `required_constructor(...)`, including support
   for statically recognizable dataclass-generated `__init__`.
+- Callable rule families now share the same three-way parameter model for parameter comparison: methods, constructors, factories, and negative callable forbids all use `"compatible"`, `"exact"`, and `"any"` where applicable.
 
 Example:
 

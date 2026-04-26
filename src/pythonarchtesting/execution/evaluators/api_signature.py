@@ -21,7 +21,9 @@ from .factory_resolution import (
 from .member_name_resolution import (
     filter_methods_by_name_match,
     matched_target_parent_class,
-    member_origin as resolved_member_origin,
+)
+from .member_name_resolution import member_origin as resolved_member_origin
+from .member_name_resolution import (
     target_methods_for_class,
     target_parent_class,
 )
@@ -326,6 +328,7 @@ def _evaluate_required_factory_rule(
     if target_class is None:
         details: Dict[str, Any] = {
             "reason": "no_factory_candidate_found",
+            "params_ignored": mode == "any",
             "factory_rule": _factory_rule_details(
                 satisfy_with=satisfy_with,
                 allow_inherited=allow_inherited,
@@ -395,6 +398,7 @@ def _evaluate_required_factory_rule(
     if not filtered_candidates:
         details = {
             "reason": "no_factory_candidate_found",
+            "params_ignored": mode == "any",
             "factory_rule": _factory_rule_details(
                 satisfy_with=satisfy_with,
                 allow_inherited=allow_inherited,
@@ -476,6 +480,7 @@ def _evaluate_required_factory_rule(
             failure_reason = next(iter(unique_return_reasons))
         details = {
             "reason": failure_reason,
+            "params_ignored": mode == "any",
             "factory_rule": _factory_rule_details(
                 satisfy_with=satisfy_with,
                 allow_inherited=allow_inherited,
@@ -503,6 +508,7 @@ def _evaluate_required_factory_rule(
     if len(compatible_candidates) > 1:
         details = {
             "reason": "multiple_compatible_factory_candidates",
+            "params_ignored": mode == "any",
             "factory_rule": _factory_rule_details(
                 satisfy_with=satisfy_with,
                 allow_inherited=allow_inherited,
@@ -530,6 +536,7 @@ def _evaluate_required_factory_rule(
     selected_candidate, _ = compatible_candidates[0]
     details = {
         "reason": "Factory requirement satisfied.",
+        "params_ignored": mode == "any",
         "factory_rule": _factory_rule_details(
             satisfy_with=satisfy_with,
             allow_inherited=allow_inherited,
@@ -652,6 +659,7 @@ def _evaluate_required_constructor_rule(
                 "required_constructor"
             ],
             "mode": mode,
+            "params_ignored": mode == "any",
             "check_return": False,
             "allow_missing": allow_missing,
             "constructor": constructor_details,
@@ -701,6 +709,7 @@ def _evaluate_required_constructor_rule(
                 ),
                 "errors": [],
                 "mode": mode,
+                "params_ignored": mode == "any",
                 "check_return": False,
                 "allow_missing": True,
                 "constructor": constructor_details,
@@ -729,6 +738,7 @@ def _evaluate_required_constructor_rule(
             "reason": reason,
             "errors": [reason],
             "mode": mode,
+            "params_ignored": mode == "any",
             "check_return": False,
             "allow_missing": allow_missing,
             "constructor": constructor_details,
@@ -763,6 +773,7 @@ def _evaluate_required_constructor_rule(
         "expected": method_result["expected"],
         "found": method_result["found"],
         "mode": mode,
+        "params_ignored": mode == "any",
         "check_return": False,
         "allow_missing": allow_missing,
         "constructor": constructor_details,

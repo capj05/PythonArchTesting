@@ -12,6 +12,7 @@ from pythonarchtesting.execution.evaluators.construction_resolution import (
 from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
 
 _VALID_CONSTRUCTOR_KINDS = ("auto", "__init__", "__new__")
+_VALID_SIGNATURE_MODES = ("compatible", "exact", "any")
 
 
 def _invalid_declaration_evidence(
@@ -98,8 +99,16 @@ def compile_required_constructor(
         return [], compiler_evidence, []
 
     signature_mode = str(params_kwargs.get("signature_mode", "compatible")).lower()
-    if signature_mode not in {"compatible", "exact"}:
-        signature_mode = "compatible"
+    if signature_mode not in _VALID_SIGNATURE_MODES:
+        compiler_evidence.append(
+            _invalid_declaration_evidence(
+                source_entity,
+                declaration,
+                reason="signature_mode must be one of: compatible, exact, any",
+                params=params_kwargs,
+            )
+        )
+        return [], compiler_evidence, []
 
     constructor_kind = str(params_kwargs.get("constructor_kind", "auto")).lower()
     if constructor_kind not in _VALID_CONSTRUCTOR_KINDS:

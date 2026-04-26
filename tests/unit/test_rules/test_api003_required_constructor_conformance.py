@@ -113,6 +113,7 @@ class User:
     __archtest__: Annotated[None, required_constructor(allow_missing=True)]
 
     def __init__(self, name: str) -> None:
+
         self.name = name
 """
     target = """
@@ -165,6 +166,40 @@ class User:
     assert [result.status for result in results] == ["FAILED"]
 
 
+def test_api003_ctor_any_mode_passes_when_constructor_exists_with_mismatched_params() -> (
+    None
+):
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_constructor
+
+class User:
+    __archtest__: Annotated[None, required_constructor(signature_mode="any")]
+
+    def __init__(self, name: str, email: str) -> None:
+        self.name = name
+        self.email = email
+"""
+    target = """
+class User:
+    def __init__(self, user_id: int) -> None:
+        self.user_id = user_id
+"""
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_constructor/v1",
+    )
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+    assert results[0].details["params_ignored"] is True
+    assert results[0].details["resolved_target_constructor"] == "__init__"
+
+
 def test_api003_ctor_evaluation_passes_for_source_dataclass_against_explicit_init() -> (
     None
 ):
@@ -189,8 +224,8 @@ class User:
         source_text=source,
         target_text=target,
         source_kind="class",
-        source_name="User",
         target_kind="class",
+        source_name="User",
         target_name="User",
         rule_id="API003/required_constructor/v2",
     )
@@ -236,8 +271,9 @@ class User:
     assert results[0].details["resolved_target_constructor"] == "__init__"
 
 
-def test_api003_ctor_evaluation_fails_for_mismatched_target_explicit_init_from_dataclass_source(
-) -> None:
+def test_api003_ctor_evaluation_fails_for_mismatched_target_explicit_init_from_dataclass_source() -> (  # noqa: E501
+    None
+):
     source = """
 from dataclasses import dataclass
 from typing import Annotated
