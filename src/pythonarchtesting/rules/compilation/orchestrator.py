@@ -37,6 +37,9 @@ from pythonarchtesting.rules.compilation.decorators.import_policy import (
 from pythonarchtesting.rules.compilation.decorators.member_absence import (
     compile_does_not_have,
 )
+from pythonarchtesting.rules.compilation.decorators.member_set import (
+    compile_require_member_set,
+)
 from pythonarchtesting.rules.compilation.decorators.method_set import (
     compile_require_method_set,
 )
@@ -51,8 +54,13 @@ from pythonarchtesting.rules.compilation.decorators.protocols import (
 )
 from pythonarchtesting.rules.compilation.decorators.python_modifiers import (
     compile_is_abstract_class,
+    compile_is_abstract_method,
     compile_is_concrete_class,
     compile_is_final_class,
+    compile_is_final_method,
+    compile_is_non_abstract_method,
+    compile_is_non_final_class,
+    compile_is_non_final_method,
 )
 
 
@@ -93,6 +101,7 @@ def compile_rules(
         "required_entity_signature": compile_required_entity_signature,
         "required_method": compile_required_method,
         "require_method_set": compile_require_method_set,
+        "require_member_set": compile_require_member_set,
         "required_constructor": compile_required_constructor,
         "required_factory": compile_required_factory,
         "required_attribute": compile_required_attribute,
@@ -106,8 +115,13 @@ def compile_rules(
         "inherits_directly_from": compile_inherits_directly_from,
         "is_enum": compile_is_enum,
         "is_abstract_class": compile_is_abstract_class,
+        "is_abstract_method": compile_is_abstract_method,
         "is_concrete_class": compile_is_concrete_class,
         "is_final_class": compile_is_final_class,
+        "is_final_method": compile_is_final_method,
+        "is_non_final_class": compile_is_non_final_class,
+        "is_non_abstract_method": compile_is_non_abstract_method,
+        "is_non_final_method": compile_is_non_final_method,
     }
 
     rules: List[Any] = []

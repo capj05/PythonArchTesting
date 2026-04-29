@@ -71,6 +71,7 @@ documented in [pattern-recipes.md](pattern-recipes.md).
 | `required_entity_signature(...)` | Require a compatible function or method signature | Signature-level `Annotated[...]` on parameters or return annotations |
 | `required_method(...)` | Require a method with a compatible signature | `__archtest__: Annotated[...]` inside a method body |
 | `require_method_set(...)` | Require a set of matching methods on the matched class | Class-level `__archtest__: Annotated[...]` |
+| `require_member_set(...)` | Require a set of matching members (methods, attributes, properties, descriptors, constructors) on the matched class | Class-level `__archtest__: Annotated[...]` |
 | `required_attribute(...)` | Require a class or instance attribute on the matched class | Class-level `__archtest__: Annotated[...]` |
 | `required_constructor(...)` | Require a compatible constructor (`__init__` or `__new__`) on the matched class | Class-level `__archtest__: Annotated[...]` |
 | `required_factory(...)` | Require a factory method (constructor, classmethod, or staticmethod) on the matched class | `__archtest__: Annotated[...]` inside a factory-capable method body |
@@ -83,8 +84,13 @@ documented in [pattern-recipes.md](pattern-recipes.md).
 | `inherits_directly_from(...)` | Require direct nominal inheritance from a matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
 | `is_enum(...)` | Require the matched target class to classify as a stdlib enum-like class | Class-level `__archtest__: Annotated[...]` |
 | `is_abstract_class(...)` | Require the matched target class to have unresolved abstract members under the local static model | Class-level `__archtest__: Annotated[...]` |
+| `is_abstract_method(...)` | Require the matched target method to be decorated with a recognized abstract decorator | Method-body `__archtest__: Annotated[...]` |
 | `is_concrete_class(...)` | Require the matched target class to have no unresolved abstract members under the local static model | Class-level `__archtest__: Annotated[...]` |
 | `is_final_class(...)` | Require the matched target class to be decorated with a recognized `final` decorator | Class-level `__archtest__: Annotated[...]` |
+| `is_final_method(...)` | Require the matched target method to be decorated with a recognized final decorator | Method-body `__archtest__: Annotated[...]` |
+| `is_non_final_class(...)` | Forbid the matched target class from being decorated with a recognized `final` decorator | Class-level `__archtest__: Annotated[...]` |
+| `is_non_abstract_method(...)` | Forbid the matched target method from being decorated with a recognized abstract decorator | Method-body `__archtest__: Annotated[...]` |
+| `is_non_final_method(...)` | Forbid the matched target method from being decorated with a recognized final decorator | Method-body `__archtest__: Annotated[...]` |
 | `flow(...)` | Mark a statement as a named flow stage | Statement-level `__archtest__: Annotated[...]` immediately after the statement |
 | `enforce_flow(...)` | Require ordered flow stages for a variable | `__archtest__: Annotated[...]` in a function or method body |
 
@@ -286,7 +292,7 @@ Notes:
 - `method_kind` accepts `any`, `instance`, `classmethod`, and `staticmethod`.
 - `min_count` sets the minimum number of matching methods required.
 - `max_count`, when provided, sets the maximum number of matching methods allowed.
-- Method kind already has dedicated support through `required_method(..., enforce_method_kind=True)` and `require_method_set(method_kind=...)`; the modifier subset only adds class-level abstract/concrete/final checks.
+- Method kind already has dedicated support through `required_method(..., enforce_method_kind=True)` and `require_method_set(method_kind=...)`; modifier checks remain separate and cover class-level abstract/concrete/final plus method-level abstract/final contracts.
 - v1 does not apply nested per-method rules.
 - Public API visibility semantics are out of scope in v1.
 
@@ -338,6 +344,83 @@ class HandlerContract:
             pattern=r"handle_.*",
             declared_only=True,
             min_count=1,
+        ),
+    ]
+```
+
+### `require_member_set(...)`
+
+Common options:
+
+- `member_kinds` (default `("any",)`) — any subset of `{"any", "method", "attribute", "property", "descriptor", "constructor"}`. `"any"` cannot be combined with other kinds.
+- `name_match` / `names` / `pattern` — same selection semantics as `require_method_set(...)`.
+- `declared_only` — exclude members inherited from base classes across all families.
+- `method_kind` — when methods are selected: `"any"`, `"instance"`, `"classmethod"`, `"staticmethod"`.
+- `storage` — when attributes are selected: `"any"`, `"class"`, `"instance"`.
+- `allow_property` (default `True`) — include `@property` definitions when properties are requested.
+- `descriptor_kinds` — accept supported descriptors: `"cached_property"`, `"classproperty"`. Defaults to all supported kinds when descriptors are requested.
+- `include_dynamic_attributes` (default `False`) — opt in to literal `setattr(...)` discovery.
+- `interpret_dataclass_fields` (default `False`) — treat dataclass field declarations as instance attributes.
+- `constructor_kind` — when constructors are selected: `"auto"`, `"__init__"`, `"__new__"`.
+- `include_dataclass_constructor` (default `True`) — include the generated `__init__` of `@dataclass` classes.
+- `min_count` / `max_count` — cardinality bounds with the same semantics as `require_method_set(...)`.
+- `severity` / `message` — violation severity and custom message.
+
+Notes:
+
+- `require_member_set(...)` is class-level only in v1.
+- v1 validates the selected member set by cardinality only — no nested per-member rules.
+- `member_kinds=("any",)` expands to all five kinds and includes the property/descriptor families automatically.
+- For finer-grained per-member checks use `required_method(...)`, `required_attribute(...)`, `required_constructor(...)`, or `required_factory(...)`.
+- Compared to `require_method_set(...)`, `require_member_set(...)` covers attributes, properties, descriptors, and constructors in addition to methods; `require_method_set(...)` remains for methods-only selection.
+
+Mixed-kind example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import require_member_set
+
+
+class Contract:
+    __archtest__: Annotated[
+        None,
+        require_member_set(member_kinds=("method", "attribute"), min_count=2),
+    ]
+```
+
+Property and descriptor example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import require_member_set
+
+
+class Cache:
+    __archtest__: Annotated[
+        None,
+        require_member_set(
+            member_kinds=("descriptor",),
+            descriptor_kinds=("cached_property",),
+            min_count=1,
+        ),
+    ]
+```
+
+Any-kind regex example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import require_member_set
+
+
+class DataContract:
+    __archtest__: Annotated[
+        None,
+        require_member_set(
+            member_kinds=("any",),
+            name_match="regex",
+            pattern=r"data_.*",
+            min_count=2,
         ),
     ]
 ```
@@ -1360,6 +1443,181 @@ from pythonarchtesting.rules import is_final_class
 
 class ValueObjectContract:
     __archtest__: Annotated[None, is_final_class()]
+```
+
+### `is_abstract_method(...)` and `is_final_method(...)`
+
+Require the matched target method to be decorated with a recognized abstract or
+final decorator.
+
+Common options:
+
+- `severity`
+- `message`
+
+Notes:
+
+- These markers are method-level only.
+- They are evaluated against the matched target method.
+- `is_abstract_method(...)` recognizes `abstractmethod`, `abc.abstractmethod`,
+  `abstractclassmethod`, `abstractstaticmethod`, and `abstractproperty` after
+  import alias normalization where available.
+- `is_final_method(...)` recognizes `final`, `typing.final`, and
+  `typing_extensions.final`.
+- These rules check static decorator intent only. They do not execute target code.
+- Method kind is not checked by these markers. Use
+  `required_method(..., enforce_method_kind=True)` or
+  `require_method_set(method_kind=...)` for method-kind contracts.
+- Visibility semantics remain out of scope.
+
+Abstract-method example:
+
+```python
+from typing import Annotated
+
+from pythonarchtesting.rules import is_abstract_method
+
+
+class Renderer:
+    def render(self) -> str:
+        __archtest__: Annotated[None, is_abstract_method()]
+        raise NotImplementedError
+```
+
+```python
+from abc import abstractmethod
+
+
+class Renderer:
+    @abstractmethod
+    def render(self) -> str:
+        raise NotImplementedError
+```
+
+Final-method example:
+
+```python
+from typing import Annotated
+
+from pythonarchtesting.rules import is_final_method
+
+
+class Renderer:
+    def render(self) -> str:
+        __archtest__: Annotated[None, is_final_method()]
+        return ""
+```
+
+```python
+from typing import final
+
+
+class Renderer:
+    @final
+    def render(self) -> str:
+        return ""
+```
+
+Combined method-kind and modifier example:
+
+```python
+from typing import Annotated
+
+from pythonarchtesting.rules import is_final_method, required_method
+
+
+class Factory:
+    @classmethod
+    def create(cls) -> "Factory":
+        __archtest__: Annotated[
+            None,
+            required_method(enforce_method_kind=True),
+            is_final_method(),
+        ]
+        return cls()
+```
+
+### Negative modifiers
+
+`is_non_final_class(...)`, `is_non_abstract_method(...)`, and
+`is_non_final_method(...)` are the inverse of their positive counterparts. They
+fail when the matched target carries the recognized decorator and pass
+otherwise.
+
+Common options:
+
+- `severity`
+- `message`
+
+Notes:
+
+- `is_non_final_class(...)` is class-level only and uses the same `final`
+  decorator recognition as `is_final_class(...)` (`final`, `typing.final`,
+  `typing_extensions.final`).
+- `is_non_abstract_method(...)` is method-level only and uses the same abstract
+  decorator recognition as `is_abstract_method(...)` (`abstractmethod`,
+  `abc.abstractmethod`, `abstractclassmethod`, `abstractstaticmethod`,
+  `abstractproperty`).
+- `is_non_final_method(...)` is method-level only and uses the same `final`
+  decorator recognition as `is_final_method(...)`.
+- These rules check static decorator intent only. They do not execute target
+  code.
+
+`is_non_final_class(...)` example:
+
+```python
+from typing import Annotated
+
+from pythonarchtesting.rules import is_non_final_class
+
+
+class Plugin:
+    __archtest__: Annotated[None, is_non_final_class()]
+```
+
+```python
+class Plugin:
+    pass
+```
+
+`is_non_abstract_method(...)` example:
+
+```python
+from typing import Annotated
+
+from pythonarchtesting.rules import is_non_abstract_method
+
+
+class Renderer:
+    def render(self) -> str:
+        __archtest__: Annotated[None, is_non_abstract_method()]
+        return ""
+```
+
+```python
+class Renderer:
+    def render(self) -> str:
+        return "ok"
+```
+
+`is_non_final_method(...)` example:
+
+```python
+from typing import Annotated
+
+from pythonarchtesting.rules import is_non_final_method
+
+
+class Renderer:
+    def render(self) -> str:
+        __archtest__: Annotated[None, is_non_final_method()]
+        return ""
+```
+
+```python
+class Renderer:
+    def render(self) -> str:
+        return "ok"
 ```
 
 ### `flow(...)`

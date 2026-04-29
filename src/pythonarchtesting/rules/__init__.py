@@ -41,10 +41,16 @@ def _get_core_decorators() -> dict[str, Any]:
         implements_protocol,
         inherits_directly_from,
         is_abstract_class,
+        is_abstract_method,
         is_concrete_class,
         is_enum,
         is_final_class,
+        is_final_method,
+        is_non_abstract_method,
+        is_non_final_class,
+        is_non_final_method,
         not_subclass_of,
+        require_member_set,
         require_method_set,
         required_attribute,
         required_constructor,
@@ -58,6 +64,7 @@ def _get_core_decorators() -> dict[str, Any]:
         "required_entity_signature": required_entity_signature,
         "required_method": required_method,
         "require_method_set": require_method_set,
+        "require_member_set": require_member_set,
         "required_factory": required_factory,
         "required_constructor": required_constructor,
         "required_attribute": required_attribute,
@@ -70,8 +77,13 @@ def _get_core_decorators() -> dict[str, Any]:
         "inherits_directly_from": inherits_directly_from,
         "is_enum": is_enum,
         "is_abstract_class": is_abstract_class,
+        "is_abstract_method": is_abstract_method,
         "is_concrete_class": is_concrete_class,
         "is_final_class": is_final_class,
+        "is_final_method": is_final_method,
+        "is_non_final_class": is_non_final_class,
+        "is_non_abstract_method": is_non_abstract_method,
+        "is_non_final_method": is_non_final_method,
         "flow": flow,
         "enforce_flow": enforce_flow,
     }
@@ -82,6 +94,7 @@ required_entity_signature = _LazyMarkerFactory(
 )
 required_method = _LazyMarkerFactory("required_method", _get_core_decorators)
 require_method_set = _LazyMarkerFactory("require_method_set", _get_core_decorators)
+require_member_set = _LazyMarkerFactory("require_member_set", _get_core_decorators)
 required_factory = _LazyMarkerFactory("required_factory", _get_core_decorators)
 required_constructor = _LazyMarkerFactory("required_constructor", _get_core_decorators)
 required_attribute = _LazyMarkerFactory("required_attribute", _get_core_decorators)
@@ -96,8 +109,15 @@ inherits_directly_from = _LazyMarkerFactory(
 )
 is_enum = _LazyMarkerFactory("is_enum", _get_core_decorators)
 is_abstract_class = _LazyMarkerFactory("is_abstract_class", _get_core_decorators)
+is_abstract_method = _LazyMarkerFactory("is_abstract_method", _get_core_decorators)
 is_concrete_class = _LazyMarkerFactory("is_concrete_class", _get_core_decorators)
 is_final_class = _LazyMarkerFactory("is_final_class", _get_core_decorators)
+is_final_method = _LazyMarkerFactory("is_final_method", _get_core_decorators)
+is_non_final_class = _LazyMarkerFactory("is_non_final_class", _get_core_decorators)
+is_non_abstract_method = _LazyMarkerFactory(
+    "is_non_abstract_method", _get_core_decorators
+)
+is_non_final_method = _LazyMarkerFactory("is_non_final_method", _get_core_decorators)
 flow = _LazyMarkerFactory("flow", _get_core_decorators)
 enforce_flow = _LazyMarkerFactory("enforce_flow", _get_core_decorators)
 
@@ -105,6 +125,7 @@ __all__ = [
     "required_entity_signature",
     "required_method",
     "require_method_set",
+    "require_member_set",
     "required_factory",
     "required_constructor",
     "required_attribute",
@@ -117,8 +138,13 @@ __all__ = [
     "inherits_directly_from",
     "is_enum",
     "is_abstract_class",
+    "is_abstract_method",
     "is_concrete_class",
     "is_final_class",
+    "is_final_method",
+    "is_non_final_class",
+    "is_non_abstract_method",
+    "is_non_final_method",
     "flow",
     "enforce_flow",
 ]

@@ -158,6 +158,66 @@ def require_method_set(
     return marker
 
 
+def require_member_set(
+    *,
+    member_kinds: tuple[str, ...] = ("any",),
+    name_match: str = "any",
+    names: list[str] | None = None,
+    pattern: str | None = None,
+    declared_only: bool = False,
+    method_kind: str = "any",
+    storage: str = "any",
+    allow_property: bool = True,
+    descriptor_kinds: tuple[str, ...] | None = None,
+    include_dynamic_attributes: bool = False,
+    interpret_dataclass_fields: bool = False,
+    constructor_kind: str = "auto",
+    include_dataclass_constructor: bool = True,
+    min_count: int = 1,
+    max_count: int | None = None,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture bulk member-selection intent for the rule engine.
+
+    Generalises ``require_method_set`` to additionally select attributes,
+    properties, descriptors, and constructors. v1 is cardinality-only — no
+    nested per-member rules. Class-level only.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "member_kinds": list(member_kinds),
+            "name_match": name_match,
+            "names": list(names) if names is not None else None,
+            "pattern": pattern,
+            "declared_only": declared_only,
+            "method_kind": method_kind,
+            "storage": storage,
+            "allow_property": allow_property,
+            "descriptor_kinds": (
+                list(descriptor_kinds) if descriptor_kinds is not None else None
+            ),
+            "include_dynamic_attributes": include_dynamic_attributes,
+            "interpret_dataclass_fields": interpret_dataclass_fields,
+            "constructor_kind": constructor_kind,
+            "include_dataclass_constructor": include_dataclass_constructor,
+            "min_count": min_count,
+            "max_count": max_count,
+            "severity": severity,
+        }
+    )
+    marker = _make_rule_marker(
+        "require_member_set",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+    return marker
+
+
 def required_constructor(
     *,
     signature_mode: str = "compatible",
@@ -554,6 +614,29 @@ def is_abstract_class(
     )
 
 
+def is_abstract_method(
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture abstract-method intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "is_abstract_method",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
 def is_concrete_class(
     *,
     severity: str = "error",
@@ -594,6 +677,98 @@ def is_final_class(
     )
     return _make_rule_marker(
         "is_final_class",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def is_final_method(
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture final-method intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "is_final_method",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def is_non_final_class(
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture non-final-class intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "is_non_final_class",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def is_non_abstract_method(
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture non-abstract-method intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "is_non_abstract_method",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def is_non_final_method(
+    *,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture non-final-method intent for the rule engine.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "is_non_final_method",
         cleaned,
         message=message,
         severity=_resolve_severity(severity),

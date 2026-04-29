@@ -41,6 +41,7 @@ class Contract:
     assert rules[0].rule_type == "python_modifier"
     assert rules[0].params == {
         "modifier_kind": "abstract_class",
+        "modifier_polarity": "positive",
         "fail_on_unmatched": True,
     }
 
@@ -63,6 +64,7 @@ class Contract:
     assert rules[0].rule_type == "python_modifier"
     assert rules[0].params == {
         "modifier_kind": "concrete_class",
+        "modifier_polarity": "positive",
         "fail_on_unmatched": True,
     }
 
@@ -85,6 +87,7 @@ class Contract:
     assert rules[0].rule_type == "python_modifier"
     assert rules[0].params == {
         "modifier_kind": "final_class",
+        "modifier_polarity": "positive",
         "fail_on_unmatched": True,
     }
 

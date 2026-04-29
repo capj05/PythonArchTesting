@@ -7,6 +7,7 @@ from .attribute_contract import AttributeContractEvaluator
 from .enum_type import EnumTypeEvaluator
 from .import_policy import ImportPolicyEvaluator
 from .member_absence import MemberAbsenceEvaluator
+from .member_set import MemberSetEvaluator
 from .method_set import MethodSetEvaluator
 from .nominal_type_relationship import NominalTypeRelationshipEvaluator
 from .protocol_conformance import ProtocolConformanceEvaluator
@@ -20,6 +21,7 @@ _EVALUATORS: Dict[str, Any] = {
     "enum_type": EnumTypeEvaluator(),
     "import_policy": ImportPolicyEvaluator(),
     "member_absence": MemberAbsenceEvaluator(),
+    "member_set": MemberSetEvaluator(),
     "method_set": MethodSetEvaluator(),
     "nominal_type_relationship": NominalTypeRelationshipEvaluator(),
     "python_modifier": PythonModifierEvaluator(),
