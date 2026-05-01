@@ -326,6 +326,9 @@ def _parse_metadata_item(
             key = kw.arg if kw.arg is not None else "**"
             value_repr = safe_unparse(kw.value)
             is_lit, lit_val = _literal_value(kw.value)
+            if name == "required_attribute" and kw.arg == "annotation":
+                params["annotation"] = lit_val if is_lit else value_repr
+                continue
             if is_lit and kw.arg is not None:
                 params[kw.arg] = lit_val
                 if kw.arg == "variable":

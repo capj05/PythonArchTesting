@@ -7,12 +7,18 @@ from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity, build_canonical_id
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
+from ..common import (
+    build_invalid_param_sentinel_rule,
+    canonicalize_payload,
+    evidence_id,
+    with_rule_id_suffix,
+)
 
 _VALID_MEMBER_KINDS = {"any", "method", "attribute", "property"}
 _VALID_STORAGE_VALUES = {"any", "instance", "class"}
 _VALID_NAME_MATCH = {"exact", "alias", "regex"}
 _VALID_SIGNATURE_MODES = {"any", "compatible", "exact"}
+_SENTINEL_RULE_ID_PREFIX = "NEG001/does_not_have/invalid_declaration"
 _V2_PARAM_KEYS = frozenset(
     {
         "aliases",
@@ -99,6 +105,29 @@ def _normalized_aliases(value: Any) -> list[str] | None:
     return aliases
 
 
+def _drop(
+    source_entity: Entity,
+    *,
+    param: str,
+    value: Any,
+    valid: list[str] | None,
+    reason: str,
+    compiler_evidence: list[Evidence],
+    rule_id_suffix: str,
+) -> Tuple[List[Any], List[Evidence], List[Any]]:
+    sentinel = build_invalid_param_sentinel_rule(
+        source_entity,
+        decorator_name="does_not_have",
+        rule_id_prefix=_SENTINEL_RULE_ID_PREFIX,
+        param=param,
+        value=value,
+        valid=valid,
+        reason=reason,
+        rule_id_suffix=rule_id_suffix,
+    )
+    return [sentinel], compiler_evidence, []
+
+
 def compile_does_not_have(
     source_entity: Entity,
     declaration: DeclarationEntry,
@@ -122,7 +151,15 @@ def compile_does_not_have(
                 found_surface=declaration.surface,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="declaration_surface",
+            value=declaration.surface,
+            valid=["body"],
+            reason="does_not_have must be declared on a class or method body",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     if source_entity.kind not in {"class", "method"}:
         compiler_evidence.append(
@@ -138,7 +175,15 @@ def compile_does_not_have(
                 },
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="target_kind",
+            value=source_entity.kind,
+            valid=["class", "method"],
+            reason="does_not_have must target a class or method",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     raw_name = params_kwargs.get("name")
     if raw_name is not None and (not isinstance(raw_name, str) or not raw_name.strip()):
@@ -150,7 +195,15 @@ def compile_does_not_have(
                 name=raw_name,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="name",
+            value=raw_name,
+            valid=None,
+            reason="name must be a non-empty string",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
     name = raw_name.strip() if isinstance(raw_name, str) else None
 
     member_kind = str(params_kwargs.get("member_kind", "any")).lower()
@@ -163,7 +216,15 @@ def compile_does_not_have(
                 member_kind=member_kind,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="member_kind",
+            value=member_kind,
+            valid=sorted(_VALID_MEMBER_KINDS),
+            reason="member_kind must be one of: any, method, attribute, property",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     storage = str(params_kwargs.get("storage", "any")).lower()
     if storage not in _VALID_STORAGE_VALUES:
@@ -175,7 +236,15 @@ def compile_does_not_have(
                 storage=storage,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="storage",
+            value=storage,
+            valid=sorted(_VALID_STORAGE_VALUES),
+            reason="storage must be one of: any, instance, class",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     if member_kind in {"method", "property"} and storage != "any":
         compiler_evidence.append(
@@ -187,7 +256,17 @@ def compile_does_not_have(
                 storage=storage,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="storage",
+            value=storage,
+            valid=["any"],
+            reason=(
+                f"storage must be 'any' when member_kind is '{member_kind}'"
+            ),
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     name_match = str(params_kwargs.get("name_match", "exact")).lower()
     if name_match not in _VALID_NAME_MATCH:
@@ -199,7 +278,15 @@ def compile_does_not_have(
                 name_match=name_match,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="name_match",
+            value=name_match,
+            valid=sorted(_VALID_NAME_MATCH),
+            reason="name_match must be one of: exact, alias, regex",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     aliases = _normalized_aliases(params_kwargs.get("aliases"))
     if params_kwargs.get("aliases") is not None and aliases is None:
@@ -211,7 +298,15 @@ def compile_does_not_have(
                 aliases=params_kwargs.get("aliases"),
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="aliases",
+            value=params_kwargs.get("aliases"),
+            valid=None,
+            reason="aliases must be a list of non-empty strings",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     pattern = params_kwargs.get("pattern")
     if pattern is not None and not isinstance(pattern, str):
@@ -223,7 +318,15 @@ def compile_does_not_have(
                 pattern=pattern,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="pattern",
+            value=pattern,
+            valid=None,
+            reason="pattern must be a string",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     if name_match == "exact":
         if aliases not in (None, []):
@@ -234,7 +337,15 @@ def compile_does_not_have(
                     issue="aliases_not_allowed_for_exact_name_match",
                 )
             )
-            return [], compiler_evidence, []
+            return _drop(
+                source_entity,
+                param="aliases",
+                value=aliases,
+                valid=None,
+                reason="aliases are not allowed when name_match='exact'",
+                compiler_evidence=compiler_evidence,
+                rule_id_suffix=rule_id_suffix,
+            )
         if pattern is not None:
             compiler_evidence.append(
                 _invalid_declaration(
@@ -243,7 +354,15 @@ def compile_does_not_have(
                     issue="pattern_not_allowed_for_exact_name_match",
                 )
             )
-            return [], compiler_evidence, []
+            return _drop(
+                source_entity,
+                param="pattern",
+                value=pattern,
+                valid=None,
+                reason="pattern is not allowed when name_match='exact'",
+                compiler_evidence=compiler_evidence,
+                rule_id_suffix=rule_id_suffix,
+            )
     elif name_match == "alias":
         if not aliases:
             compiler_evidence.append(
@@ -253,7 +372,15 @@ def compile_does_not_have(
                     issue="missing_aliases",
                 )
             )
-            return [], compiler_evidence, []
+            return _drop(
+                source_entity,
+                param="aliases",
+                value=aliases,
+                valid=None,
+                reason="aliases are required when name_match='alias'",
+                compiler_evidence=compiler_evidence,
+                rule_id_suffix=rule_id_suffix,
+            )
         if pattern is not None:
             compiler_evidence.append(
                 _invalid_declaration(
@@ -262,7 +389,15 @@ def compile_does_not_have(
                     issue="pattern_not_allowed_for_alias_name_match",
                 )
             )
-            return [], compiler_evidence, []
+            return _drop(
+                source_entity,
+                param="pattern",
+                value=pattern,
+                valid=None,
+                reason="pattern is not allowed when name_match='alias'",
+                compiler_evidence=compiler_evidence,
+                rule_id_suffix=rule_id_suffix,
+            )
     elif name_match == "regex":
         if aliases not in (None, []):
             compiler_evidence.append(
@@ -272,7 +407,15 @@ def compile_does_not_have(
                     issue="aliases_not_allowed_for_regex_name_match",
                 )
             )
-            return [], compiler_evidence, []
+            return _drop(
+                source_entity,
+                param="aliases",
+                value=aliases,
+                valid=None,
+                reason="aliases are not allowed when name_match='regex'",
+                compiler_evidence=compiler_evidence,
+                rule_id_suffix=rule_id_suffix,
+            )
         if not isinstance(pattern, str) or not pattern.strip():
             compiler_evidence.append(
                 _invalid_declaration(
@@ -281,7 +424,15 @@ def compile_does_not_have(
                     issue="missing_pattern",
                 )
             )
-            return [], compiler_evidence, []
+            return _drop(
+                source_entity,
+                param="pattern",
+                value=pattern,
+                valid=None,
+                reason="pattern is required when name_match='regex'",
+                compiler_evidence=compiler_evidence,
+                rule_id_suffix=rule_id_suffix,
+            )
         try:
             re.compile(pattern)
         except re.error as exc:
@@ -294,7 +445,15 @@ def compile_does_not_have(
                     error=str(exc),
                 )
             )
-            return [], compiler_evidence, []
+            return _drop(
+                source_entity,
+                param="pattern",
+                value=pattern,
+                valid=None,
+                reason=f"pattern is not a valid regex: {exc}",
+                compiler_evidence=compiler_evidence,
+                rule_id_suffix=rule_id_suffix,
+            )
 
     signature_mode = str(params_kwargs.get("signature_mode", "any")).lower()
     if signature_mode not in _VALID_SIGNATURE_MODES:
@@ -306,7 +465,15 @@ def compile_does_not_have(
                 signature_mode=signature_mode,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="signature_mode",
+            value=signature_mode,
+            valid=sorted(_VALID_SIGNATURE_MODES),
+            reason="signature_mode must be one of: any, compatible, exact",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     include_descriptors = bool(params_kwargs.get("include_descriptors", False))
     include_dynamic_attributes = bool(
@@ -323,7 +490,17 @@ def compile_does_not_have(
                 member_kind=member_kind,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="signature_mode",
+            value=signature_mode,
+            valid=["any"],
+            reason=(
+                f"signature_mode must be 'any' when member_kind is '{member_kind}'"
+            ),
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     if include_descriptors and member_kind == "method":
         compiler_evidence.append(
@@ -334,7 +511,15 @@ def compile_does_not_have(
                 member_kind=member_kind,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="include_descriptors",
+            value=True,
+            valid=[False],
+            reason="include_descriptors is not supported when member_kind='method'",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     if include_dynamic_attributes and member_kind == "method":
         compiler_evidence.append(
@@ -345,7 +530,17 @@ def compile_does_not_have(
                 member_kind=member_kind,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="include_dynamic_attributes",
+            value=True,
+            valid=[False],
+            reason=(
+                "include_dynamic_attributes is not supported when member_kind='method'"
+            ),
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     selector_source_entity_id = source_entity.canonical_id
     signature_anchor_entity_id: str | None = None
@@ -361,7 +556,17 @@ def compile_does_not_have(
                     member_kind=member_kind,
                 )
             )
-            return [], compiler_evidence, []
+            return _drop(
+                source_entity,
+                param="member_kind",
+                value=member_kind,
+                valid=["method", "any"],
+                reason=(
+                    "member_kind must be 'method' or 'any' when declared on a method body"
+                ),
+                compiler_evidence=compiler_evidence,
+                rule_id_suffix=rule_id_suffix,
+            )
         selector_source_entity_id = _owning_class_id(source_entity) or ""
         if not selector_source_entity_id:
             compiler_evidence.append(
@@ -371,7 +576,15 @@ def compile_does_not_have(
                     issue="missing_owning_class_for_method_body",
                 )
             )
-            return [], compiler_evidence, []
+            return _drop(
+                source_entity,
+                param="target_kind",
+                value="orphan_method",
+                valid=None,
+                reason="does_not_have on a method requires an owning class",
+                compiler_evidence=compiler_evidence,
+                rule_id_suffix=rule_id_suffix,
+            )
         signature_anchor_entity_id = source_entity.canonical_id
         if name is None:
             name = source_entity.name
@@ -385,7 +598,17 @@ def compile_does_not_have(
                 signature_mode=signature_mode,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="signature_mode",
+            value=signature_mode,
+            valid=["any"],
+            reason=(
+                "signature_mode != 'any' requires the declaration to be on a method body"
+            ),
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     if name_match == "exact" and name is None:
         compiler_evidence.append(
@@ -396,7 +619,15 @@ def compile_does_not_have(
                 name=raw_name,
             )
         )
-        return [], compiler_evidence, []
+        return _drop(
+            source_entity,
+            param="name",
+            value=None,
+            valid=None,
+            reason="name is required when name_match='exact'",
+            compiler_evidence=compiler_evidence,
+            rule_id_suffix=rule_id_suffix,
+        )
 
     base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
     if base_severity_raw in {"error", "warning", "info"}:

@@ -4,6 +4,8 @@ import hashlib
 import json
 from typing import Any, Dict
 
+from pythonarchtesting.entities import Entity
+
 
 def canonicalize_payload(value: Any) -> Any:
     """Canonicalize a payload value for consistent hashing."""
@@ -50,4 +52,79 @@ def with_rule_id_suffix(rule_id: str, suffix: str = "") -> str:
     return f"{rule_id}{suffix}"
 
 
-__all__ = ["canonicalize_payload", "evidence_id", "with_rule_id_suffix"]
+def build_invalid_param_sentinel_rule(
+    source_entity: Entity,
+    *,
+    decorator_name: str,
+    rule_id_prefix: str,
+    param: str,
+    value: Any = None,
+    valid: list[str] | None = None,
+    reason: str | None = None,
+    rule_id_suffix: str = "",
+) -> Any:
+    """Build a sentinel Rule that surfaces a dropped rule at evaluation time.
+
+    Without this sentinel, an invalid-param diagnostic would emit only
+    compiler evidence, leaving the dropped rule invisible in
+    ``status_counts``. The sentinel is dispatched to
+    :class:`CompilerInvalidParamEvaluator`, which always returns FAILED.
+
+    Parameters
+    ----------
+    decorator_name:
+        Public marker name (e.g. ``"required_factory"``,
+        ``"require_method_set"``). Stamped into ``params["decorator"]``
+        and used in ``rule.name`` and the message template.
+    rule_id_prefix:
+        Stable prefix for the sentinel's ``rule_id``, e.g.
+        ``"API005/require_method_set/invalid_declaration"``. The ``param``
+        name is appended; ``rule_id_suffix`` is appended after that.
+    """
+    from pythonarchtesting.core.models import Rule, RuleSelector
+
+    selector = RuleSelector(
+        source_entity_id=source_entity.canonical_id,
+        explicit_target=None,
+    )
+    params: Dict[str, Any] = {
+        "decorator": decorator_name,
+        "param": param,
+        "value": value,
+        "valid": list(valid) if valid is not None else [],
+        "compiler_reason": reason,
+        "fail_on_unmatched": True,
+    }
+    if valid:
+        fix_hint = f"Use one of: {', '.join(sorted(valid))}"
+    elif reason:
+        fix_hint = reason
+    else:
+        fix_hint = "Provide a valid value for the parameter."
+    return Rule(
+        rule_id=with_rule_id_suffix(
+            f"{rule_id_prefix}/{param}",
+            rule_id_suffix,
+        ),
+        rule_type="compiler_invalid_param",
+        name=decorator_name,
+        severity="error",
+        scope=source_entity.kind,
+        evidence_type="static",
+        selector=selector,
+        params=params,
+        message_template=(
+            f"{decorator_name} parameter {{details.param}} is invalid; "
+            "the rule was dropped at compile time."
+        ),
+        fix_hints=(fix_hint,),
+        enabled=True,
+    )
+
+
+__all__ = [
+    "build_invalid_param_sentinel_rule",
+    "canonicalize_payload",
+    "evidence_id",
+    "with_rule_id_suffix",
+]

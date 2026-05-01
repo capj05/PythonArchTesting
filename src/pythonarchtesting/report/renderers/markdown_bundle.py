@@ -65,6 +65,7 @@ def _render_target_page(
     target: TargetReport,
     *,
     matching_debug_context: Optional[Dict[str, Any]] = None,
+    include_back_link: bool = True,
 ) -> str:
     results = target.results
     debug_target = _target_debug_report(target)
@@ -76,8 +77,10 @@ def _render_target_page(
     lines: List[str] = [
         f"# Target Report: {escape_markdown(target.target_id)}",
         "",
-        "[Back to run index](../report.md)",
-        "",
+    ]
+    if include_back_link:
+        lines.extend(["[Back to run index](../report.md)", ""])
+    lines.extend([
         "## Metadata",
         "",
         f"- Target ID: {escape_markdown(target.target_id)}",
@@ -107,7 +110,7 @@ def _render_target_page(
         "",
         "## Results",
         "",
-    ]
+    ])
 
     headers = (
         "Project",
@@ -142,6 +145,30 @@ def _render_target_page(
     lines.append(render_markdown_table(Table(headers=headers, rows=tuple(rows))))
     lines.append("")
     return "\n".join(lines)
+
+
+def render_markdown_single_target(
+    document: ReportDocument,
+    output_path: Path,
+    *,
+    matching_debug_context: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Render a single-target Markdown report to one file. Returns the path."""
+    targets = list(document.targets)
+    if len(targets) != 1:
+        raise ValueError(
+            "render_markdown_single_target requires exactly one target."
+        )
+    target = targets[0]
+    rendered = _render_target_page(
+        document,
+        target,
+        matching_debug_context=matching_debug_context,
+        include_back_link=False,
+    )
+    _ensure_parent(output_path)
+    output_path.write_text(rendered, encoding="utf-8")
+    return str(output_path)
 
 
 def render_markdown_bundle(

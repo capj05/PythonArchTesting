@@ -424,11 +424,14 @@ def _evaluate_required_factory_rule(
         allow_inherited=allow_inherited,
         detection_mode=detection_mode,
     )
+    effective_source_name = (
+        source.extras.get("assignment_wrapped_by") or source.name
+    )
     filtered_candidates = filter_factory_candidates(
         candidates,
         satisfy_with=satisfy_with,
         name_match=name_match,
-        source_name=source.name,
+        source_name=effective_source_name,
         aliases=aliases,
         pattern=pattern,
         detection_mode=detection_mode,

@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from .api_signature import ApiSignatureEvaluator
 from .attribute_contract import AttributeContractEvaluator
+from .compiler_invalid_param import CompilerInvalidParamEvaluator
 from .enum_type import EnumTypeEvaluator
 from .import_policy import ImportPolicyEvaluator
 from .member_absence import MemberAbsenceEvaluator
@@ -18,6 +19,7 @@ from .variable_flow import VariableFlowEvaluator
 _EVALUATORS: Dict[str, Any] = {
     "attribute_contract": AttributeContractEvaluator(),
     "api_signature": ApiSignatureEvaluator(),
+    "compiler_invalid_param": CompilerInvalidParamEvaluator(),
     "enum_type": EnumTypeEvaluator(),
     "import_policy": ImportPolicyEvaluator(),
     "member_absence": MemberAbsenceEvaluator(),

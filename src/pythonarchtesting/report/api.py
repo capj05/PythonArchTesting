@@ -17,7 +17,10 @@ from .ir.serialize import to_legacy_schema_v2
 from .policy import compute_aggregate_exit_code as _compute_aggregate_exit_code
 from .policy import compute_target_exit_code as _compute_target_exit_code
 from .renderers import render_json
-from .renderers.markdown_bundle import render_markdown_bundle
+from .renderers.markdown_bundle import (
+    render_markdown_bundle,
+    render_markdown_single_target,
+)
 from .schema_v2 import validate_report_schema_v2 as _validate_report_schema_v2
 
 validate_report_schema_v2 = _validate_report_schema_v2
@@ -85,12 +88,23 @@ def generate_run_report(
                 raise ValueError(
                     "Markdown bundle reporting requires an output directory path."
                 )
+            output_path_obj = Path(output_path)
+            matching_debug_context = build_run_matching_debug_context(
+                run_state, target_states
+            )
+            if (
+                output_path_obj.suffix == ".md"
+                and len(target_states) == 1
+            ):
+                return render_markdown_single_target(
+                    document,
+                    output_path_obj,
+                    matching_debug_context=matching_debug_context,
+                )
             return render_markdown_bundle(
                 document,
-                Path(output_path),
-                matching_debug_context=build_run_matching_debug_context(
-                    run_state, target_states
-                ),
+                output_path_obj,
+                matching_debug_context=matching_debug_context,
             )
         raise ValueError(output_format)
     except ValueError as e:

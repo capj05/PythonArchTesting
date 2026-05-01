@@ -65,7 +65,7 @@ def compile_forbid_imports(
     forbidden_raw = params_kwargs.get("forbidden", [])
     if isinstance(forbidden_raw, str):
         forbidden = [forbidden_raw]
-    elif isinstance(forbidden_raw, list):
+    elif isinstance(forbidden_raw, (list, tuple)):
         forbidden = [str(item) for item in forbidden_raw if isinstance(item, str)]
     else:
         forbidden = []
@@ -73,7 +73,7 @@ def compile_forbid_imports(
     allow_raw = params_kwargs.get("allow", [])
     if isinstance(allow_raw, str):
         allow = [allow_raw]
-    elif isinstance(allow_raw, list):
+    elif isinstance(allow_raw, (list, tuple)):
         allow = [str(item) for item in allow_raw if isinstance(item, str)]
     else:
         allow = []
@@ -81,7 +81,7 @@ def compile_forbid_imports(
     ignore_globs_raw = params_kwargs.get("ignore_globs", [])
     if isinstance(ignore_globs_raw, str):
         ignore_globs = [ignore_globs_raw]
-    elif isinstance(ignore_globs_raw, list):
+    elif isinstance(ignore_globs_raw, (list, tuple)):
         ignore_globs = [str(item) for item in ignore_globs_raw if isinstance(item, str)]
     else:
         ignore_globs = []

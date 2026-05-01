@@ -30,6 +30,12 @@ from .signature import (
 )
 
 
+_ASSIGNMENT_FACTORY_WRAPPERS = {
+    "classmethod": "class",
+    "staticmethod": "static",
+}
+
+
 def _decorator_name(node: ast.AST) -> str | None:
     target = node.func if isinstance(node, ast.Call) else node
     if isinstance(target, ast.Attribute):
@@ -37,6 +43,15 @@ def _decorator_name(node: ast.AST) -> str | None:
     if isinstance(target, ast.Name):
         return target.id
     return None
+
+
+def _assignment_method_kind(value: ast.AST) -> str | None:
+    if not isinstance(value, ast.Call) or len(value.args) != 1 or value.keywords:
+        return None
+    ref_name = _decorator_name(value.func)
+    if ref_name is None:
+        return None
+    return _ASSIGNMENT_FACTORY_WRAPPERS.get(ref_name.rsplit(".", 1)[-1])
 
 
 def _decorator_ref(
@@ -311,6 +326,38 @@ class _EntityExtractor(ast.NodeVisitor):
         self._scope.append((node.name, "class"))
         self.generic_visit(node)
         self._scope.pop()
+        self._propagate_assignment_method_kinds(node)
+
+    def _propagate_assignment_method_kinds(self, node: ast.ClassDef) -> None:
+        class_qualname = self._qualname(node.name)
+        prefix = f"{class_qualname}."
+        method_by_name: dict[str, Entity] = {}
+        for entity in self.entities:
+            if entity.kind != "method":
+                continue
+            if not entity.qualname.startswith(prefix):
+                continue
+            method_by_name[entity.name] = entity
+        for stmt in node.body:
+            if not isinstance(stmt, ast.Assign):
+                continue
+            if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+                continue
+            kind = _assignment_method_kind(stmt.value)
+            if kind is None:
+                continue
+            assert isinstance(stmt.value, ast.Call)
+            wrapped = stmt.value.args[0]
+            if not isinstance(wrapped, ast.Name):
+                continue
+            method = method_by_name.get(wrapped.id)
+            if method is None:
+                continue
+            alias_name = stmt.targets[0].id
+            method.extras["assignment_wrapped_by"] = alias_name
+            if method.decorators_meta.get("method_kind"):
+                continue
+            method.decorators_meta["method_kind"] = kind
 
     def _build_function_entity(
         self,

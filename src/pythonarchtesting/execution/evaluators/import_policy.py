@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fnmatch
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Literal
 
@@ -13,6 +12,7 @@ from pythonarchtesting.core.models import (
     RuleStatus,
 )
 from pythonarchtesting.entities import Entity
+from pythonarchtesting.execution.glob_match import path_matches_any_glob
 from pythonarchtesting.execution.import_edges import (
     NormalizedImportEdge,
     collect_canonical_module_entities,
@@ -339,9 +339,7 @@ def _collect_ignored_filepaths(
     return {
         entity.filepath_rel
         for entity in entities
-        if any(
-            fnmatch.fnmatch(entity.filepath_rel, pattern) for pattern in ignore_globs
-        )
+        if path_matches_any_glob(entity.filepath_rel, ignore_globs)
     }
 
 

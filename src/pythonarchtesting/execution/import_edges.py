@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import ast
-import fnmatch
 from dataclasses import dataclass
 from typing import Collection, Iterable, Literal, Sequence
 
 from pythonarchtesting.entities import Entity
+from pythonarchtesting.execution.glob_match import path_matches_any_glob
 
 
 @dataclass(frozen=True)
@@ -34,10 +34,7 @@ def _matches_ignore_globs(
     filepath_rel: str,
     ignore_globs: Sequence[str] | None,
 ) -> bool:
-    return bool(
-        ignore_globs
-        and any(fnmatch.fnmatch(filepath_rel, pattern) for pattern in ignore_globs)
-    )
+    return path_matches_any_glob(filepath_rel, ignore_globs)
 
 
 def _resolve_relative_module(

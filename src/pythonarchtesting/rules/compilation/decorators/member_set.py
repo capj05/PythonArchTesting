@@ -7,13 +7,20 @@ from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
+from ..common import (
+    build_invalid_param_sentinel_rule,
+    canonicalize_payload,
+    evidence_id,
+    with_rule_id_suffix,
+)
 from .method_set import (
     _VALID_METHOD_KINDS,
     _VALID_NAME_MATCH,
     _normalize_names,
     _normalize_nonnegative_int,
 )
+
+_SENTINEL_RULE_ID_PREFIX = "API006/require_member_set/invalid_declaration"
 
 _VALID_MEMBER_KINDS = frozenset(
     {"any", "method", "attribute", "property", "descriptor", "constructor"}
@@ -78,6 +85,37 @@ def _invalid_target_evidence(
     )
 
 
+def _drop(
+    source_entity: Entity,
+    declaration: DeclarationEntry,
+    *,
+    param: str,
+    value: Any,
+    valid: list[str] | None,
+    reason: str,
+    params_kwargs: dict[str, Any],
+    rule_id_suffix: str,
+) -> Tuple[List[Any], List[Evidence], List[Any]]:
+    """Build a (sentinel-rule, compiler-evidence) pair for a dropped declaration."""
+    evidence = _invalid_declaration_evidence(
+        source_entity,
+        declaration,
+        reason=reason,
+        params=params_kwargs,
+    )
+    sentinel = build_invalid_param_sentinel_rule(
+        source_entity,
+        decorator_name="require_member_set",
+        rule_id_prefix=_SENTINEL_RULE_ID_PREFIX,
+        param=param,
+        value=value,
+        valid=valid,
+        reason=reason,
+        rule_id_suffix=rule_id_suffix,
+    )
+    return [sentinel], [evidence], []
+
+
 def _normalize_member_kinds(raw: Any) -> tuple[tuple[str, ...] | None, bool]:
     if raw is None:
         return ("any",), True
@@ -133,212 +171,238 @@ def compile_require_member_set(
     compiler_evidence: List[Evidence] = []
 
     if source_entity.kind != "class":
-        compiler_evidence.append(_invalid_target_evidence(source_entity, declaration))
-        return [], compiler_evidence, []
+        evidence = _invalid_target_evidence(source_entity, declaration)
+        sentinel = build_invalid_param_sentinel_rule(
+            source_entity,
+            decorator_name="require_member_set",
+            rule_id_prefix=_SENTINEL_RULE_ID_PREFIX,
+            param="target_kind",
+            value=source_entity.kind,
+            valid=["class"],
+            reason="require_member_set must target a class",
+            rule_id_suffix=rule_id_suffix,
+        )
+        return [sentinel], [evidence], []
 
     if declaration.surface != "body":
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
-                source_entity,
-                declaration,
-                reason="require_member_set must be declared on a class body",
-                params=params_kwargs,
-            )
+        return _drop(
+            source_entity,
+            declaration,
+            param="declaration_surface",
+            value=declaration.surface,
+            valid=["body"],
+            reason="require_member_set must be declared on a class body",
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     member_kinds, member_kinds_valid = _normalize_member_kinds(
         params_kwargs.get("member_kinds")
     )
     if not member_kinds_valid or member_kinds is None:
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
-                source_entity,
-                declaration,
-                reason=(
-                    "member_kinds must be a non-empty tuple/list of: "
-                    "any, method, attribute, property, descriptor, constructor; "
-                    "'any' cannot be combined with other kinds"
-                ),
-                params=params_kwargs,
-            )
+        return _drop(
+            source_entity,
+            declaration,
+            param="member_kinds",
+            value=params_kwargs.get("member_kinds"),
+            valid=sorted(_VALID_MEMBER_KINDS),
+            reason=(
+                "member_kinds must be a non-empty tuple/list of: "
+                "any, method, attribute, property, descriptor, constructor; "
+                "'any' cannot be combined with other kinds"
+            ),
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     name_match = str(params_kwargs.get("name_match", "any")).lower()
     if name_match not in _VALID_NAME_MATCH:
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
-                source_entity,
-                declaration,
-                reason="name_match must be one of: any, regex, names",
-                params=params_kwargs,
-            )
+        return _drop(
+            source_entity,
+            declaration,
+            param="name_match",
+            value=params_kwargs.get("name_match"),
+            valid=sorted(_VALID_NAME_MATCH),
+            reason="name_match must be one of: any, regex, names",
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     names, names_valid = _normalize_names(params_kwargs.get("names"))
     if not names_valid:
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
-                source_entity,
-                declaration,
-                reason="names must be a list of non-empty strings",
-                params=params_kwargs,
-            )
+        return _drop(
+            source_entity,
+            declaration,
+            param="names",
+            value=params_kwargs.get("names"),
+            valid=None,
+            reason="names must be a list of non-empty strings",
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     pattern = params_kwargs.get("pattern")
     if pattern is not None:
         if not isinstance(pattern, str) or not pattern.strip():
-            compiler_evidence.append(
-                _invalid_declaration_evidence(
-                    source_entity,
-                    declaration,
-                    reason="pattern must be a non-empty string",
-                    params=params_kwargs,
-                )
+            return _drop(
+                source_entity,
+                declaration,
+                param="pattern",
+                value=pattern,
+                valid=None,
+                reason="pattern must be a non-empty string",
+                params_kwargs=params_kwargs,
+                rule_id_suffix=rule_id_suffix,
             )
-            return [], compiler_evidence, []
         pattern = pattern.strip()
 
     if name_match == "names":
         if not names:
-            compiler_evidence.append(
-                _invalid_declaration_evidence(
-                    source_entity,
-                    declaration,
-                    reason="name_match='names' requires a non-empty names list",
-                    params=params_kwargs,
-                )
+            return _drop(
+                source_entity,
+                declaration,
+                param="names",
+                value=names,
+                valid=None,
+                reason="name_match='names' requires a non-empty names list",
+                params_kwargs=params_kwargs,
+                rule_id_suffix=rule_id_suffix,
             )
-            return [], compiler_evidence, []
         if pattern is not None:
-            compiler_evidence.append(
-                _invalid_declaration_evidence(
-                    source_entity,
-                    declaration,
-                    reason="name_match='names' does not accept pattern",
-                    params=params_kwargs,
-                )
+            return _drop(
+                source_entity,
+                declaration,
+                param="pattern",
+                value=pattern,
+                valid=None,
+                reason="name_match='names' does not accept pattern",
+                params_kwargs=params_kwargs,
+                rule_id_suffix=rule_id_suffix,
             )
-            return [], compiler_evidence, []
     elif name_match == "regex":
         if names not in (None, []):
-            compiler_evidence.append(
-                _invalid_declaration_evidence(
-                    source_entity,
-                    declaration,
-                    reason="name_match='regex' does not accept names",
-                    params=params_kwargs,
-                )
+            return _drop(
+                source_entity,
+                declaration,
+                param="names",
+                value=names,
+                valid=None,
+                reason="name_match='regex' does not accept names",
+                params_kwargs=params_kwargs,
+                rule_id_suffix=rule_id_suffix,
             )
-            return [], compiler_evidence, []
         if pattern is None:
-            compiler_evidence.append(
-                _invalid_declaration_evidence(
-                    source_entity,
-                    declaration,
-                    reason="name_match='regex' requires a non-empty pattern",
-                    params=params_kwargs,
-                )
+            return _drop(
+                source_entity,
+                declaration,
+                param="pattern",
+                value=None,
+                valid=None,
+                reason="name_match='regex' requires a non-empty pattern",
+                params_kwargs=params_kwargs,
+                rule_id_suffix=rule_id_suffix,
             )
-            return [], compiler_evidence, []
         try:
             re.compile(pattern)
         except re.error as exc:
-            compiler_evidence.append(
-                _invalid_declaration_evidence(
-                    source_entity,
-                    declaration,
-                    reason=f"invalid regex pattern: {exc}",
-                    params=params_kwargs,
-                )
-            )
-            return [], compiler_evidence, []
-    elif names not in (None, []) or pattern is not None:
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
+            return _drop(
                 source_entity,
                 declaration,
-                reason="name_match='any' does not accept names or pattern",
-                params=params_kwargs,
+                param="pattern",
+                value=pattern,
+                valid=None,
+                reason=f"invalid regex pattern: {exc}",
+                params_kwargs=params_kwargs,
+                rule_id_suffix=rule_id_suffix,
             )
+    elif names not in (None, []) or pattern is not None:
+        return _drop(
+            source_entity,
+            declaration,
+            param="names_or_pattern",
+            value={"names": names, "pattern": pattern},
+            valid=None,
+            reason="name_match='any' does not accept names or pattern",
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     method_kind = str(params_kwargs.get("method_kind", "any")).lower()
     if method_kind not in _VALID_METHOD_KINDS:
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
-                source_entity,
-                declaration,
-                reason=(
-                    "method_kind must be one of: any, instance, "
-                    "classmethod, staticmethod"
-                ),
-                params=params_kwargs,
-            )
+        return _drop(
+            source_entity,
+            declaration,
+            param="method_kind",
+            value=params_kwargs.get("method_kind"),
+            valid=sorted(_VALID_METHOD_KINDS),
+            reason=(
+                "method_kind must be one of: any, instance, "
+                "classmethod, staticmethod"
+            ),
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     storage = str(params_kwargs.get("storage", "any")).lower()
     if storage not in _VALID_STORAGE:
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
-                source_entity,
-                declaration,
-                reason="storage must be one of: any, instance, class",
-                params=params_kwargs,
-            )
+        return _drop(
+            source_entity,
+            declaration,
+            param="storage",
+            value=params_kwargs.get("storage"),
+            valid=sorted(_VALID_STORAGE),
+            reason="storage must be one of: any, instance, class",
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     descriptor_kinds, descriptor_kinds_valid = _normalize_descriptor_kinds(
         params_kwargs.get("descriptor_kinds")
     )
     if not descriptor_kinds_valid:
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
-                source_entity,
-                declaration,
-                reason=(
-                    "descriptor_kinds must be a non-empty tuple/list with values from: "
-                    "cached_property, classproperty"
-                ),
-                params=params_kwargs,
-            )
+        return _drop(
+            source_entity,
+            declaration,
+            param="descriptor_kinds",
+            value=params_kwargs.get("descriptor_kinds"),
+            valid=sorted(_VALID_DESCRIPTOR_KINDS),
+            reason=(
+                "descriptor_kinds must be a non-empty tuple/list with values from: "
+                "cached_property, classproperty"
+            ),
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     constructor_kind = str(params_kwargs.get("constructor_kind", "auto"))
     if constructor_kind not in _VALID_CONSTRUCTOR_KIND:
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
-                source_entity,
-                declaration,
-                reason=(
-                    "constructor_kind must be one of: auto, __init__, __new__"
-                ),
-                params=params_kwargs,
-            )
+        return _drop(
+            source_entity,
+            declaration,
+            param="constructor_kind",
+            value=params_kwargs.get("constructor_kind"),
+            valid=sorted(_VALID_CONSTRUCTOR_KIND),
+            reason=(
+                "constructor_kind must be one of: auto, __init__, __new__"
+            ),
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     min_count, min_count_valid = _normalize_nonnegative_int(
         params_kwargs.get("min_count", 1)
     )
     if not min_count_valid or min_count is None:
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
-                source_entity,
-                declaration,
-                reason="min_count must be an integer >= 0",
-                params=params_kwargs,
-            )
+        return _drop(
+            source_entity,
+            declaration,
+            param="min_count",
+            value=params_kwargs.get("min_count"),
+            valid=None,
+            reason="min_count must be an integer >= 0",
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     max_count_raw = params_kwargs.get("max_count")
     max_count: int | None
@@ -347,26 +411,28 @@ def compile_require_member_set(
     else:
         max_count, max_count_valid = _normalize_nonnegative_int(max_count_raw)
         if not max_count_valid or max_count is None:
-            compiler_evidence.append(
-                _invalid_declaration_evidence(
-                    source_entity,
-                    declaration,
-                    reason="max_count must be None or an integer >= 0",
-                    params=params_kwargs,
-                )
-            )
-            return [], compiler_evidence, []
-
-    if max_count is not None and max_count < min_count:
-        compiler_evidence.append(
-            _invalid_declaration_evidence(
+            return _drop(
                 source_entity,
                 declaration,
-                reason="max_count must be >= min_count",
-                params=params_kwargs,
+                param="max_count",
+                value=max_count_raw,
+                valid=None,
+                reason="max_count must be None or an integer >= 0",
+                params_kwargs=params_kwargs,
+                rule_id_suffix=rule_id_suffix,
             )
+
+    if max_count is not None and max_count < min_count:
+        return _drop(
+            source_entity,
+            declaration,
+            param="max_count",
+            value=max_count,
+            valid=None,
+            reason="max_count must be >= min_count",
+            params_kwargs=params_kwargs,
+            rule_id_suffix=rule_id_suffix,
         )
-        return [], compiler_evidence, []
 
     declared_only = bool(params_kwargs.get("declared_only", False))
     allow_property = bool(params_kwargs.get("allow_property", True))

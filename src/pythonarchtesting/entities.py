@@ -111,6 +111,79 @@ def signature_key_from_info(signature: SignatureInfo | None) -> str:
     )
 
 
+_SIGNATURE_KEY_PREFIXES = ("p", "a", "v", "k", "w", "d", "kd")
+
+
+def parse_signature_key(key: str) -> dict[str, int] | None:
+    """Parse a `signature_key_from_info` string into its component counts."""
+    if key == "-":
+        return None
+    parsed: dict[str, int] = {}
+    for token in key.split("-"):
+        if token.startswith("kd"):
+            prefix, value = "kd", token[2:]
+        elif token and token[0] in {"p", "a", "v", "k", "w", "d"}:
+            prefix, value = token[0], token[1:]
+        else:
+            return None
+        try:
+            parsed[prefix] = int(value)
+        except ValueError:
+            return None
+    if not all(prefix in parsed for prefix in _SIGNATURE_KEY_PREFIXES):
+        return None
+    return parsed
+
+
+def is_extras_only_divergence(source_key: str, target_key: str) -> bool:
+    """
+    True iff the only divergence between the two signatures is that the target
+    has additional optional parameters (vararg / kwarg presence permitted).
+
+    Required positional and required kw-only counts must match. Total positional
+    and kw-only counts in the target must be >= source. ``vararg``/``kwarg``
+    presence flags must be >= source (target may add but not drop them).
+    """
+    source = parse_signature_key(source_key)
+    target = parse_signature_key(target_key)
+    if source is None or target is None:
+        return False
+    src_required_pos = (source["p"] + source["a"]) - source["d"]
+    tgt_required_pos = (target["p"] + target["a"]) - target["d"]
+    if src_required_pos != tgt_required_pos:
+        return False
+    src_required_kw = source["k"] - source["kd"]
+    tgt_required_kw = target["k"] - target["kd"]
+    if src_required_kw != tgt_required_kw:
+        return False
+    if (source["p"] + source["a"]) > (target["p"] + target["a"]):
+        return False
+    if source["k"] > target["k"]:
+        return False
+    if source["v"] > target["v"]:
+        return False
+    if source["w"] > target["w"]:
+        return False
+    return True
+
+
+def is_param_rename_only_divergence(source_key: str, target_key: str) -> bool:
+    """
+    True iff source and target signatures share identical structural counts
+    (positional/keyword arity, defaults, vararg/kwarg presence). ``signature_key``
+    encodes counts only, so a parameter rename leaves every component equal.
+    Acts as an admission gate for re-gating LOW_CONFIDENCE matches; the
+    evaluator still issues the real verdict against the actual parameter names.
+    """
+    source = parse_signature_key(source_key)
+    target = parse_signature_key(target_key)
+    if source is None or target is None:
+        return False
+    return all(
+        source[component] == target[component] for component in _SIGNATURE_KEY_PREFIXES
+    )
+
+
 def build_canonical_id(
     role: Role,
     root_label: str,

@@ -233,6 +233,7 @@ def factory_candidates_for_class(
         )
         if _is_factory_candidate(method, detection_mode=detection_mode)
         and method.name not in _FACTORY_CONSTRUCTOR_NAMES
+        and not method.extras.get("assignment_wrapped_by")
     }
     if detection_mode == "extended":
         for owner_class in _candidate_owner_classes(

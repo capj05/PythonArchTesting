@@ -10,11 +10,81 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 
 from pythonarchtesting.config import Config
-from pythonarchtesting.entities import Entity, EntityIndex
+from pythonarchtesting.entities import (
+    Entity,
+    EntityIndex,
+    is_extras_only_divergence,
+    is_param_rename_only_divergence,
+)
 from pythonarchtesting.execution.evaluators.member_name_resolution import (
     matched_target_parent_class,
 )
 from pythonarchtesting.matching import MatchResult, MatchStatus
+
+
+def _first_admissible(
+    source_entity: Entity,
+    match: MatchResult,
+    ctx: Any,
+    admits: Any,
+) -> Entity | None:
+    if match.target_id is not None:
+        candidate = ctx.target_by_id.get(match.target_id)
+        if candidate is not None and admits(candidate):
+            return candidate
+    pool = ctx.target_index.by_name.get(
+        (source_entity.kind, source_entity.name), []
+    )
+    for candidate in pool:
+        if admits(candidate):
+            return candidate
+    return None
+
+
+def _promote_low_confidence_target(
+    rule: Any,
+    source_entity: Entity,
+    match: MatchResult,
+    ctx: Any,
+) -> Entity | None:
+    if match.status != MatchStatus.LOW_CONFIDENCE:
+        return None
+
+    if rule.rule_type == "api_signature":
+        admit_extras = rule.params.get("allow_extra_params", True) is True
+        admit_rename = rule.params.get("allow_param_rename", False) is True
+        if not (admit_extras or admit_rename):
+            return None
+
+        def admits(candidate: Entity) -> bool:
+            if candidate.name != source_entity.name:
+                return False
+            if admit_extras and is_extras_only_divergence(
+                source_entity.signature_key, candidate.signature_key
+            ):
+                return True
+            if admit_rename and is_param_rename_only_divergence(
+                source_entity.signature_key, candidate.signature_key
+            ):
+                return True
+            return False
+
+        return _first_admissible(source_entity, match, ctx, admits)
+
+    if rule.rule_type == "protocol_conformance":
+        sig_mode = str(rule.params.get("signature_mode", "compatible")).lower()
+        if sig_mode not in {"compatible", "any"}:
+            return None
+
+        def admits(candidate: Entity) -> bool:
+            return (
+                candidate.kind == source_entity.kind
+                and candidate.name == source_entity.name
+            )
+
+        return _first_admissible(source_entity, match, ctx, admits)
+
+    return None
 
 
 def evaluate_rule(
@@ -90,6 +160,18 @@ def evaluate_rule(
             if evaluator is not None and fallback_target is not None:
                 return evaluator.evaluate(
                     rule, source_entity, fallback_target, match, ctx
+                )
+
+        promoted_target = _promote_low_confidence_target(
+            rule, source_entity, match, ctx
+        )
+        if promoted_target is not None:
+            from pythonarchtesting.execution.evaluators import get_rule_evaluator
+
+            evaluator = get_rule_evaluator(rule.rule_type)
+            if evaluator is not None:
+                return evaluator.evaluate(
+                    rule, source_entity, promoted_target, match, ctx
                 )
 
         if bool(rule.params.get("fail_on_unmatched", False)):

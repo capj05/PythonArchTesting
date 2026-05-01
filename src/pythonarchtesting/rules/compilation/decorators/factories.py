@@ -6,7 +6,12 @@ from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
+from ..common import (
+    build_invalid_param_sentinel_rule,
+    canonicalize_payload,
+    evidence_id,
+    with_rule_id_suffix,
+)
 
 _VALID_SATISFY_WITH = frozenset(
     {"constructor", "classmethod", "staticmethod", "static_attribute"}
@@ -34,6 +39,31 @@ def _bool_param(
     if isinstance(value, bool):
         return value, True
     return default, False
+
+
+def _invalid_param_sentinel_rule(
+    source_entity: Entity,
+    *,
+    param: str,
+    value: Any = None,
+    valid: list[str] | None = None,
+    reason: str | None = None,
+    rule_id_suffix: str,
+) -> Any:
+    """Build a sentinel Rule that surfaces a dropped required_factory rule.
+
+    Thin delegator over :func:`build_invalid_param_sentinel_rule`.
+    """
+    return build_invalid_param_sentinel_rule(
+        source_entity,
+        decorator_name="required_factory",
+        rule_id_prefix="API004/required_factory/invalid_param",
+        param=param,
+        value=value,
+        valid=valid,
+        reason=reason,
+        rule_id_suffix=rule_id_suffix,
+    )
 
 
 def compile_required_factory(
@@ -118,12 +148,26 @@ def compile_required_factory(
                 location=location,
             )
         )
-        return [], compiler_evidence, []
+        sentinel = _invalid_param_sentinel_rule(
+            source_entity,
+            param="signature_mode",
+            value=signature_mode,
+            valid=sorted(_VALID_SIGNATURE_MODES),
+            rule_id_suffix=rule_id_suffix,
+        )
+        return [sentinel], compiler_evidence, []
 
-    satisfy_with_raw = params_kwargs.get(
-        "satisfy_with",
-        ["constructor", "classmethod", "staticmethod"],
+    caller_constrained_name = (
+        params_kwargs.get("aliases") is not None
+        or params_kwargs.get("pattern") is not None
+        or str(params_kwargs.get("name_match", "any")).lower() != "any"
     )
+    default_satisfy_with: list[str] = (
+        ["classmethod", "staticmethod"]
+        if caller_constrained_name
+        else ["constructor", "classmethod", "staticmethod"]
+    )
+    satisfy_with_raw = params_kwargs.get("satisfy_with", default_satisfy_with)
     satisfy_with = [str(value) for value in satisfy_with_raw]
     invalid_satisfy = [
         value for value in satisfy_with if value not in _VALID_SATISFY_WITH
@@ -149,7 +193,14 @@ def compile_required_factory(
                 location=location,
             )
         )
-        return [], compiler_evidence, []
+        sentinel = _invalid_param_sentinel_rule(
+            source_entity,
+            param="satisfy_with",
+            value=satisfy_with,
+            valid=sorted(_VALID_SATISFY_WITH),
+            rule_id_suffix=rule_id_suffix,
+        )
+        return [sentinel], compiler_evidence, []
 
     allow_inherited = bool(params_kwargs.get("allow_inherited", True))
     allow_missing, allow_missing_valid = _bool_param(
@@ -175,7 +226,14 @@ def compile_required_factory(
                 location=location,
             )
         )
-        return [], compiler_evidence, []
+        sentinel = _invalid_param_sentinel_rule(
+            source_entity,
+            param="allow_missing",
+            value=params_kwargs.get("allow_missing"),
+            reason="allow_missing must be a boolean",
+            rule_id_suffix=rule_id_suffix,
+        )
+        return [sentinel], compiler_evidence, []
     name_match = str(params_kwargs.get("name_match", "any")).lower()
     if name_match not in _VALID_NAME_MATCH:
         name_match = "any"
@@ -206,9 +264,23 @@ def compile_required_factory(
                 location=location,
             )
         )
-        return [], compiler_evidence, []
+        sentinel = _invalid_param_sentinel_rule(
+            source_entity,
+            param="return_annotation_mode",
+            value=return_annotation_mode,
+            valid=sorted(_VALID_RETURN_ANNOTATION_MODE),
+            rule_id_suffix=rule_id_suffix,
+        )
+        return [sentinel], compiler_evidence, []
 
-    detection_mode = str(params_kwargs.get("detection_mode", "strict")).lower()
+    default_detection_mode = (
+        "extended"
+        if source_entity.extras.get("assignment_wrapped_by")
+        else "strict"
+    )
+    detection_mode = str(
+        params_kwargs.get("detection_mode", default_detection_mode)
+    ).lower()
     if detection_mode not in _VALID_DETECTION_MODE:
         detection_mode_payload: dict[str, Any] = {
             "decorator": "required_factory",
@@ -230,7 +302,14 @@ def compile_required_factory(
                 location=location,
             )
         )
-        return [], compiler_evidence, []
+        sentinel = _invalid_param_sentinel_rule(
+            source_entity,
+            param="detection_mode",
+            value=detection_mode,
+            valid=sorted(_VALID_DETECTION_MODE),
+            rule_id_suffix=rule_id_suffix,
+        )
+        return [sentinel], compiler_evidence, []
 
     if name_match == "alias" and not aliases:
         payload = {
@@ -250,7 +329,14 @@ def compile_required_factory(
                 location=location,
             )
         )
-        return [], compiler_evidence, []
+        sentinel = _invalid_param_sentinel_rule(
+            source_entity,
+            param="aliases",
+            value=aliases,
+            reason="name_match='alias' requires non-empty aliases list",
+            rule_id_suffix=rule_id_suffix,
+        )
+        return [sentinel], compiler_evidence, []
 
     if name_match == "regex" and not pattern:
         payload = {
@@ -270,7 +356,14 @@ def compile_required_factory(
                 location=location,
             )
         )
-        return [], compiler_evidence, []
+        sentinel = _invalid_param_sentinel_rule(
+            source_entity,
+            param="pattern",
+            value=pattern,
+            reason="name_match='regex' requires a pattern",
+            rule_id_suffix=rule_id_suffix,
+        )
+        return [sentinel], compiler_evidence, []
 
     if "static_attribute" in satisfy_with and name_match == "any":
         payload = {
@@ -295,7 +388,18 @@ def compile_required_factory(
                 location=location,
             )
         )
-        return [], compiler_evidence, []
+        sentinel = _invalid_param_sentinel_rule(
+            source_entity,
+            param="name_match",
+            value="any",
+            valid=["exact", "alias", "regex"],
+            reason=(
+                "static_attribute factory satisfaction requires constrained "
+                "name matching: exact, alias, or regex"
+            ),
+            rule_id_suffix=rule_id_suffix,
+        )
+        return [sentinel], compiler_evidence, []
 
     base_severity_raw = str(
         params_kwargs.get("severity", "error")

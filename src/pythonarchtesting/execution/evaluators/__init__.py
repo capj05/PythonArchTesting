@@ -7,6 +7,7 @@ for different rule types, updated to work with the new core models.
 
 from .api_signature import ApiSignatureEvaluator
 from .attribute_contract import AttributeContractEvaluator
+from .compiler_invalid_param import CompilerInvalidParamEvaluator
 from .enum_type import EnumTypeEvaluator
 from .import_policy import ImportPolicyEvaluator
 from .member_absence import MemberAbsenceEvaluator
@@ -21,6 +22,7 @@ from .variable_flow import VariableFlowEvaluator
 __all__ = [
     "AttributeContractEvaluator",
     "ApiSignatureEvaluator",
+    "CompilerInvalidParamEvaluator",
     "EnumTypeEvaluator",
     "ImportPolicyEvaluator",
     "MemberAbsenceEvaluator",

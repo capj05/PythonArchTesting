@@ -39,6 +39,9 @@ def _invalid_required_method_declaration(
     )
 
 
+_VALID_RETURN_ANNOTATION = {"off", "ignore", "warning", "error"}
+
+
 def compile_required_entity_signature(
     source_entity: Entity,
     declaration: DeclarationEntry,
@@ -57,6 +60,7 @@ def compile_required_entity_signature(
 
     _ = cfg
     params_kwargs = dict(declaration.params)
+    compiler_evidence: List[Evidence] = []
 
     mode = str(params_kwargs.get("mode", "compatible")).lower()
     if mode not in {"compatible", "exact", "any"}:
@@ -65,9 +69,39 @@ def compile_required_entity_signature(
     allow_extra_params = bool(params_kwargs.get("allow_extra_params", True))
     allow_param_rename = bool(params_kwargs.get("allow_param_rename", False))
 
-    return_annotation = str(params_kwargs.get("return_annotation", "warning")).lower()
-    if return_annotation not in {"off", "warning", "error"}:
-        return_annotation = "warning"
+    return_annotation_raw = str(
+        params_kwargs.get("return_annotation", "warning")
+    ).lower()
+    if return_annotation_raw not in _VALID_RETURN_ANNOTATION:
+        location = {
+            "filepath": source_entity.filepath_rel,
+            "lineno": declaration.lineno or source_entity.lineno,
+            "col": declaration.col,
+        }
+        return_annotation_payload: dict[str, Any] = {
+            "decorator": "required_entity_signature",
+            "issue": "compiler_invalid_param",
+            "param": "return_annotation",
+            "value": return_annotation_raw,
+            "valid": sorted(_VALID_RETURN_ANNOTATION),
+        }
+        compiler_evidence.append(
+            Evidence(
+                evidence_id=evidence_id(
+                    "compiler_invalid_param", return_annotation_payload
+                ),
+                type="compiler_invalid_param",
+                source="compiler",
+                role="source",
+                entity_id=source_entity.canonical_id,
+                payload=canonicalize_payload(return_annotation_payload),
+                location=location,
+            )
+        )
+        return [], compiler_evidence, []
+
+    # "ignore" is an alias for "off" — both suppress the return-only sibling rule.
+    return_annotation = "off" if return_annotation_raw == "ignore" else return_annotation_raw
 
     base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
     if base_severity_raw in {"error", "warning", "info"}:
@@ -144,7 +178,7 @@ def compile_required_entity_signature(
             )
         )
 
-    return rules, [], []
+    return rules, compiler_evidence, []
 
 
 def compile_required_method(

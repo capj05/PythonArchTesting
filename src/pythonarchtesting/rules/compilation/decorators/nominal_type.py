@@ -8,7 +8,34 @@ from pythonarchtesting.entities import DeclarationEntry, Entity
 from pythonarchtesting.protocols.entity_lookup import ProtocolEntityLookup
 from pythonarchtesting.protocols.reference_resolution import normalize_reference
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
+from ..common import (
+    build_invalid_param_sentinel_rule,
+    canonicalize_payload,
+    evidence_id,
+    with_rule_id_suffix,
+)
+
+
+def _sentinel(
+    source_entity: Entity,
+    *,
+    declaration_name: str,
+    param: str,
+    value: Any,
+    valid: list[Any] | None,
+    reason: str,
+    rule_id_suffix: str,
+) -> Any:
+    return build_invalid_param_sentinel_rule(
+        source_entity,
+        decorator_name=declaration_name,
+        rule_id_prefix=f"NOM001/{declaration_name}/invalid_declaration",
+        param=param,
+        value=value,
+        valid=valid,
+        reason=reason,
+        rule_id_suffix=rule_id_suffix,
+    )
 
 
 def _evidence(
@@ -156,8 +183,17 @@ def _compile_nominal_rule(
             "expected_kind": "class",
             "found_kind": source_entity.kind,
         }
+        sentinel = _sentinel(
+            source_entity,
+            declaration_name=declaration_name,
+            param="target_kind",
+            value=source_entity.kind,
+            valid=["class"],
+            reason=f"{declaration_name} must target a class",
+            rule_id_suffix=rule_id_suffix,
+        )
         return (
-            [],
+            [sentinel],
             [
                 _evidence(
                     source_entity,
@@ -178,7 +214,24 @@ def _compile_nominal_rule(
     )
     compiler_evidence.extend(evidence_items)
     if base_entity is None or normalized_base is None:
-        return [], compiler_evidence, []
+        base_ref = str(declaration.params.get("base", "")).strip() or None
+        reason = "ambiguous_or_missing"
+        if compiler_evidence:
+            last_payload = compiler_evidence[-1].payload
+            if isinstance(last_payload, dict):
+                reason_value = last_payload.get("reason")
+                if isinstance(reason_value, str) and reason_value:
+                    reason = reason_value
+        sentinel = _sentinel(
+            source_entity,
+            declaration_name=declaration_name,
+            param="base",
+            value=base_ref,
+            valid=None,
+            reason=reason,
+            rule_id_suffix=rule_id_suffix,
+        )
+        return [sentinel], compiler_evidence, []
 
     rule = Rule(
         rule_id=with_rule_id_suffix(rule_id, rule_id_suffix),
