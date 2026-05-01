@@ -10,10 +10,7 @@ from pythonarchtesting.protocols.attribute_introspection import (
     collect_attributes,
 )
 
-from .construction_resolution import (
-    ConstructorCandidate,
-    constructor_candidates_for_class,
-)
+from .construction_resolution import constructor_candidates_for_class
 from .member_name_resolution import (
     member_origin,
     target_methods_for_class,

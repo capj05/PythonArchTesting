@@ -99,7 +99,10 @@ def _compile_python_modifier_rule(
             "{target.module_path}:{target.qualname}: {details.reason}"
         ),
         fix_hints=(
-            f"Align the target {fix_hint_subject} with the required Python modifier classification.",
+            (
+                f"Align the target {fix_hint_subject} with the required "
+                "Python modifier classification."
+            ),
             "Use recognized Python decorators for abstract/final contracts.",
         ),
         enabled=True,

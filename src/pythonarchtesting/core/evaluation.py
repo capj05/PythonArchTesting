@@ -29,15 +29,15 @@ def _first_admissible(
     admits: Any,
 ) -> Entity | None:
     if match.target_id is not None:
-        candidate = ctx.target_by_id.get(match.target_id)
+        candidate: Entity | None = ctx.target_by_id.get(match.target_id)
         if candidate is not None and admits(candidate):
             return candidate
-    pool = ctx.target_index.by_name.get(
+    pool: list[Entity] = ctx.target_index.by_name.get(
         (source_entity.kind, source_entity.name), []
     )
-    for candidate in pool:
-        if admits(candidate):
-            return candidate
+    for entry in pool:
+        if admits(entry):
+            return entry
     return None
 
 

@@ -485,12 +485,12 @@ def _evaluate_required_factory_rule(
         candidate_details.append(detail)
         candidate_details_by_key[("entity", candidate.canonical_id)] = detail
 
-    for candidate in static_attribute_candidates:
-        qualname = _static_attribute_candidate_qualname(candidate)
-        matched = candidate in matched_static_attribute_candidates
-        accepted = candidate in filtered_static_attribute_candidates
+    for static_candidate in static_attribute_candidates:
+        qualname = _static_attribute_candidate_qualname(static_candidate)
+        matched = static_candidate in matched_static_attribute_candidates
+        accepted = static_candidate in filtered_static_attribute_candidates
         failure_reason: str | None = None
-        if matched and candidate.inherited and not allow_inherited:
+        if matched and static_candidate.inherited and not allow_inherited:
             failure_reason = "static_attribute_inherited_not_allowed"
             errors = [
                 "static attribute is inherited but not declared directly on target "
@@ -503,16 +503,16 @@ def _evaluate_required_factory_rule(
         detail = {
             "entity_id": None,
             "qualname": qualname,
-            "name": candidate.name,
+            "name": static_candidate.name,
             "factory_kind": "static_attribute",
             "method_kind": None,
-            "inherited": candidate.inherited,
+            "inherited": static_candidate.inherited,
             "accepted": accepted,
             "failure_reason": failure_reason,
             "errors": errors,
-            "annotation": candidate.annotation,
-            "value_expr": candidate.value_expr,
-            "lineno": candidate.lineno,
+            "annotation": static_candidate.annotation,
+            "value_expr": static_candidate.value_expr,
+            "lineno": static_candidate.lineno,
         }
         candidate_details.append(detail)
         candidate_details_by_key[("static_attribute", qualname)] = detail
@@ -572,7 +572,7 @@ def _evaluate_required_factory_rule(
             check_return=False,
         )
         errors = list(candidate_result["errors"])
-        failure_reason: str | None = None
+        failure_reason = None
         if not errors:
             signature_compatible_candidates += 1
             if check_return and return_annotation_mode != "ignore":
@@ -601,14 +601,14 @@ def _evaluate_required_factory_rule(
                 }
             )
 
-    for candidate in filtered_static_attribute_candidates:
+    for static_candidate in filtered_static_attribute_candidates:
         errors = _static_attribute_param_errors(source, mode=mode)
-        failure_reason: str | None = None
+        failure_reason = None
         if not errors:
             signature_compatible_candidates += 1
             if check_return and return_annotation_mode != "ignore":
                 failure_reason, return_errors = _static_attribute_return_mismatch(
-                    candidate,
+                    static_candidate,
                     target_class=target_class,
                     ctx=ctx,
                     return_annotation_mode=return_annotation_mode,
@@ -618,7 +618,7 @@ def _evaluate_required_factory_rule(
                     return_failure_reasons.append(failure_reason)
         else:
             failure_reason = "static_attribute_parameterized_factory_mismatch"
-        qualname = _static_attribute_candidate_qualname(candidate)
+        qualname = _static_attribute_candidate_qualname(static_candidate)
         detail = candidate_details_by_key[("static_attribute", qualname)]
         detail["accepted"] = not errors
         detail["failure_reason"] = failure_reason
@@ -627,7 +627,7 @@ def _evaluate_required_factory_rule(
             compatible_candidates.append(
                 {
                     "factory_kind": "static_attribute",
-                    "candidate": candidate,
+                    "candidate": static_candidate,
                 }
             )
 

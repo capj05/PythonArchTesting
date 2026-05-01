@@ -244,7 +244,10 @@ def _negative_modifier_result_details(
     reason = (
         f"target {target_subject} is decorated with a recognized {decorator_kind_word} decorator"
         if observed
-        else f"target {target_subject} is not decorated with a recognized {decorator_kind_word} decorator"
+        else (
+            f"target {target_subject} is not decorated with a recognized "
+            f"{decorator_kind_word} decorator"
+        )
     )
     failure_reason = (
         f"forbidden_{observed_label}_present"
@@ -403,7 +406,7 @@ class PythonModifierEvaluator:
             )
 
         if target.kind != "class":
-            details: dict[str, Any] = {
+            details = {
                 "reason": (
                     f"matched target kind '{target.kind}' "
                     "does not support class modifier checks"
@@ -447,7 +450,7 @@ class PythonModifierEvaluator:
             is_final, recognized_final_decorator, normalized_decorators = (
                 _is_final_class(target, lookup)
             )
-            final_details: dict[str, Any] = {
+            final_details = {
                 "reason": (
                     "target class is decorated with a recognized final decorator"
                     if is_final

@@ -162,7 +162,7 @@ def _declared_assignment_factory_candidates(
             continue
         assignment_name = stmt.targets[0].id
         method_kind = _assignment_method_kind(stmt.value)
-        if method_kind is None:
+        if method_kind is None or not isinstance(stmt.value, ast.Call):
             continue
         wrapped = stmt.value.args[0]
         if not isinstance(wrapped, ast.Name):

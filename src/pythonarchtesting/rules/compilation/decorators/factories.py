@@ -366,7 +366,7 @@ def compile_required_factory(
         return [sentinel], compiler_evidence, []
 
     if "static_attribute" in satisfy_with and name_match == "any":
-        payload = {
+        name_match_payload: dict[str, Any] = {
             "decorator": "required_factory",
             "issue": "compiler_invalid_param",
             "param": "name_match",
@@ -379,12 +379,12 @@ def compile_required_factory(
         }
         compiler_evidence.append(
             Evidence(
-                evidence_id=evidence_id("compiler_invalid_param", payload),
+                evidence_id=evidence_id("compiler_invalid_param", name_match_payload),
                 type="compiler_invalid_param",
                 source="compiler",
                 role="source",
                 entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(payload),
+                payload=canonicalize_payload(name_match_payload),
                 location=location,
             )
         )

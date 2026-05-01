@@ -106,8 +106,8 @@ def test_public_docs_use_current_cli_surface() -> None:
     assert "--format json" in text
     assert "--format markdown" in text
     assert "python -m pythonarchtesting.cli" in text or "python-arch-test" in text
-    assert "path/to/reference" in text
-    assert "path/to/assignments" in text
+    assert "example/checkout_assignment/reference" in text
+    assert "example/checkout_assignment/assignments" in text
     assert "python -m pythonarchtesting --help" not in text
 
 

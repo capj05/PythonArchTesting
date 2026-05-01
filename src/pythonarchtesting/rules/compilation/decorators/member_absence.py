@@ -515,7 +515,7 @@ def compile_does_not_have(
             source_entity,
             param="include_descriptors",
             value=True,
-            valid=[False],
+            valid=["False"],
             reason="include_descriptors is not supported when member_kind='method'",
             compiler_evidence=compiler_evidence,
             rule_id_suffix=rule_id_suffix,
@@ -534,7 +534,7 @@ def compile_does_not_have(
             source_entity,
             param="include_dynamic_attributes",
             value=True,
-            valid=[False],
+            valid=["False"],
             reason=(
                 "include_dynamic_attributes is not supported when member_kind='method'"
             ),
