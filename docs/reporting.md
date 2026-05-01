@@ -111,8 +111,9 @@ Markdown output always writes a bundle and requires `--output` to point to a
 directory:
 
 ```bash
-python-arch-test --source path/to/reference --target path/to/target \
-  --format markdown --output reports/out
+python-arch-test --source example/checkout_assignment/reference \
+  --target example/checkout_assignment/assignments/target3 \
+  --format markdown --output example/checkout_assignment/reports/report_md
 ```
 
 Bundle structure:

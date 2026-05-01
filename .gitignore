@@ -5,7 +5,8 @@ tools/
 out/
 .venv*
 .tmp*
-example/
+example/*
+!example/checkout_assignment/
 *.egg-info/
 docs/dev_notes/
 docs/diagrams/

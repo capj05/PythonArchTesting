@@ -105,8 +105,8 @@ Common fields:
 
 ```ini
 [projects]
-source_path = path/to/reference
-targets_dir = path/to/assignments
+source_path = example/checkout_assignment/reference
+targets_dir = example/checkout_assignment/assignments
 project_pattern = target*
 
 [discovery]

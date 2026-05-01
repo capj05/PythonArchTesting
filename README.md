@@ -47,25 +47,54 @@ CLI entrypoints:
 
 ## Quick Example
 
-Reference declarations:
+The repository ships a canonical worked example at
+`example/checkout_assignment/`. The snippets and CLI commands below are drawn
+from it — every path is a real file you can open in the tree.
 
+Module-level import policy (forbids HTTP libraries inside the storage
+package):
+
+<!-- File: example/checkout_assignment/reference/storage/__init__.py -->
 ```python
 from typing import Annotated
-from pythonarchtesting.rules import forbid_imports, required_entity_signature
+
+from pythonarchtesting.rules import forbid_imports
+
+from .repository import InMemoryOrderRepository
 
 __archtest__: Annotated[
     None,
-    forbid_imports("statistics", scope="package", package="data_processor"),
+    forbid_imports("requests", scope="package", package="storage"),
 ]
 
+__all__ = ["InMemoryOrderRepository"]
+```
 
-def normalize(
-    value: str,
-) -> Annotated[
-    str,
-    required_entity_signature(mode="compatible", return_annotation="warning"),
-]:
-    return value.strip().lower()
+Class-level cluster declaring required attributes and a compatible
+constructor signature:
+
+<!-- File: example/checkout_assignment/reference/models.py -->
+```python
+from typing import Annotated
+
+from pythonarchtesting.rules import required_attribute, required_constructor
+
+
+class Product:
+    """Catalog product. Constructor shape and instance attributes are part of the API."""
+
+    __archtest__: Annotated[
+        None,
+        required_attribute("sku", annotation="str", storage="instance"),
+        required_attribute("name", annotation="str", storage="instance"),
+        required_attribute("price", annotation="float", storage="instance"),
+        required_constructor(signature_mode="compatible"),
+    ]
+
+    def __init__(self, sku: str, name: str, price: float) -> None:
+        self.sku: str = sku
+        self.name: str = name
+        self.price: float = price
 ```
 
 Use `scope="module"` for file-wide checks and `scope="package"` for package
@@ -76,20 +105,23 @@ default; use `mode="direct"` for the direct AST import check.
 Validate the reference declarations before comparing targets:
 
 ```bash
-python-arch-test --validate-declarations --source path/to/reference --format json
+python-arch-test --validate-declarations --source example/checkout_assignment/reference --format json
 ```
 
 Analyze a batch of targets and print a JSON report:
 
 ```bash
-python-arch-test --source path/to/reference --targets-dir path/to/assignments --format json
+python-arch-test --source example/checkout_assignment/reference --targets-dir example/checkout_assignment/assignments --format json
 ```
 
 Generate a Markdown bundle for the same run:
 
 ```bash
-python-arch-test --source path/to/reference --targets-dir path/to/assignments --format markdown --output reports/project_markdown
+python-arch-test --source example/checkout_assignment/reference --targets-dir example/checkout_assignment/assignments --format markdown --output example/checkout_assignment/reports/report_md
 ```
+
+Pre-rendered reports for this example live at
+`example/checkout_assignment/reports/`.
 
 ## How To Interpret Results
 

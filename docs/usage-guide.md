@@ -11,39 +11,53 @@ For most users, install the package and use `python-arch-test`. The
 `python -m pythonarchtesting.cli` entrypoint is mainly useful when working from a source
 checkout during development.
 
+Examples in this guide come from `example/checkout_assignment/`, the
+canonical worked example shipped with the repo. Every path and code fence
+below corresponds to a real file you can open in the tree.
+
 ## 1. Write Reference Declarations
 
-Example reference code:
+Module-level import policy plus a class-body cluster declaring required
+attributes and a compatible constructor:
 
+<!-- File: example/checkout_assignment/reference/storage/__init__.py -->
 ```python
 from typing import Annotated
-from pythonarchtesting.rules import forbid_imports, required_entity_signature, required_method
+
+from pythonarchtesting.rules import forbid_imports
+
+from .repository import InMemoryOrderRepository
 
 __archtest__: Annotated[
     None,
-    forbid_imports(
-        "statistics",
-        scope="package",
-        package="data_processor",
-        mode="direct",
-    ),
+    forbid_imports("requests", scope="package", package="storage"),
 ]
 
+__all__ = ["InMemoryOrderRepository"]
+```
 
-def normalize_operands(
-    a: float,
-    b: float = 0.0,
-) -> Annotated[
-    tuple[float, float],
-    required_entity_signature(mode="compatible"),
-]:
-    return (float(a), float(b))
+<!-- File: example/checkout_assignment/reference/models.py -->
+```python
+from typing import Annotated
+
+from pythonarchtesting.rules import required_attribute, required_constructor
 
 
-class Calculator:
-    def add(self, a: float, b: float) -> float:
-        __archtest__: Annotated[None, required_method(signature_mode="compatible")]
-        return a + b
+class Product:
+    """Catalog product. Constructor shape and instance attributes are part of the API."""
+
+    __archtest__: Annotated[
+        None,
+        required_attribute("sku", annotation="str", storage="instance"),
+        required_attribute("name", annotation="str", storage="instance"),
+        required_attribute("price", annotation="float", storage="instance"),
+        required_constructor(signature_mode="compatible"),
+    ]
+
+    def __init__(self, sku: str, name: str, price: float) -> None:
+        self.sku: str = sku
+        self.name: str = name
+        self.price: float = price
 ```
 
 `forbid_imports(...)` uses `scope="module"` for file-wide checks and
@@ -52,26 +66,65 @@ spelling is still accepted for compatibility, but `module` is the canonical
 public name. Bare `forbid_imports(...)` defaults to reachable mode; use
 `mode="direct"` when you want the direct AST import check instead.
 
-Other supported declaration shapes:
+Other supported declaration shapes — an in-method `required_factory` and a
+class-level `implements_protocol`:
 
+<!-- File: example/checkout_assignment/reference/models.py -->
 ```python
 from typing import Annotated
-from pythonarchtesting.rules import enforce_flow, flow, implements_protocol
+
+from pythonarchtesting.rules import required_factory
 
 
-class RepositoryAdapter:
-    __archtest__: Annotated[None, implements_protocol("reference.Repository")]
+class Cart:
+    """Mutable cart of products. Provides an explicit ``empty()`` factory."""
+
+    @classmethod
+    def empty(cls) -> "Cart":
+        __archtest__: Annotated[  # noqa: F842
+            None,
+            required_factory(
+                satisfy_with=("classmethod",),
+                name_match="exact",
+                aliases=("empty",),
+            ),
+        ]
+        return cls()
+```
+
+<!-- File: example/checkout_assignment/reference/storage/repository.py -->
+```python
+from __future__ import annotations
+
+from typing import Annotated
+
+from pythonarchtesting.rules import implements_protocol
+
+from ..contracts import OrderRepository
+from ..models import Order
 
 
-def build(repo: Annotated[object, implements_protocol("reference.Repository")]) -> None:
-    value = repo
-    __archtest__: Annotated[None, flow("raw", variable="value")]
-    value = repo
-    __archtest__: Annotated[None, flow("validated", variable="value")]
+class InMemoryOrderRepository:
+    """Repository implementation that satisfies ``OrderRepository``."""
+
     __archtest__: Annotated[
         None,
-        enforce_flow(["raw", "validated"], variable="value"),
+        implements_protocol(
+            OrderRepository,
+            signature_mode="compatible",
+            return_annotation="error",
+        ),
     ]
+
+    def __init__(self) -> None:
+        self._items: dict[str, Order] = {}
+
+    def save(self, order: Order) -> Order:
+        self._items[order.id] = order
+        return order
+
+    def get(self, order_id: str) -> Order:
+        return self._items[order_id]
 ```
 
 ## 2. Validate Declarations First
@@ -79,7 +132,7 @@ def build(repo: Annotated[object, implements_protocol("reference.Repository")]) 
 Use declaration validation to catch invalid metadata before comparing targets:
 
 ```bash
-python-arch-test --validate-declarations --source path/to/reference --format json
+python-arch-test --validate-declarations --source example/checkout_assignment/reference --format json
 ```
 
 What this does:
@@ -109,7 +162,7 @@ Every run uses the same execution path. A single `--target` produces the same
 JSON schema as a batch run — `targets` array with one entry and a `summary`.
 
 ```bash
-python-arch-test --source path/to/reference --target path/to/assignments/target1 --format json
+python-arch-test --source example/checkout_assignment/reference --target example/checkout_assignment/assignments/target1 --format json
 ```
 
 ## 4. Run Multiple Targets
@@ -117,13 +170,13 @@ python-arch-test --source path/to/reference --target path/to/assignments/target1
 Batch analysis from a directory:
 
 ```bash
-python-arch-test --source path/to/reference --targets-dir path/to/assignments --format json
+python-arch-test --source example/checkout_assignment/reference --targets-dir example/checkout_assignment/assignments --format json
 ```
 
 Explicit target list:
 
 ```bash
-python-arch-test --source path/to/reference --target path/to/target_a --target path/to/target_b --format json
+python-arch-test --source example/checkout_assignment/reference --target example/checkout_assignment/assignments/target1 --target example/checkout_assignment/assignments/target3 --format json
 ```
 
 Target discovery controls:
@@ -138,7 +191,7 @@ Markdown output always requires `--output` pointing to a directory, whether you
 are running one target or many:
 
 ```bash
-python-arch-test --source path/to/reference --targets-dir path/to/assignments --format markdown --output reports/project_markdown
+python-arch-test --source example/checkout_assignment/reference --targets-dir example/checkout_assignment/assignments --format markdown --output example/checkout_assignment/reports/report_md
 ```
 
 The bundle contains:
@@ -160,7 +213,7 @@ limited to template-style logical view functions detected from calls such as:
 For most projects, keep the default:
 
 ```bash
-python-arch-test --validate-declarations --source path/to/reference --validation-scope all --format json
+python-arch-test --validate-declarations --source example/checkout_assignment/reference --validation-scope all --format json
 ```
 
 ## 7. Read Results In This Order
