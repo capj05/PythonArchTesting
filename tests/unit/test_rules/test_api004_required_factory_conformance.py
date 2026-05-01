@@ -1705,3 +1705,116 @@ class Session:
     assert [result.status for result in results] == ["OK"]
     assert results[0].details["candidate_factories"][0]["factory_kind"] == "static_attribute"
     assert results[0].details["selected_candidate"]["factory_kind"] == "static_attribute"
+
+
+def test_api004_invalid_detection_mode_sentinel_rule_evaluates_failed() -> None:
+    """Fix 3: a sentinel `compiler_invalid_param` rule must produce a FAILED
+    result through the evaluator pipeline so dropped rules are visible in
+    `status_counts` rather than silently disappearing."""
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(detection_mode="bogus"),
+        ]
+        return cls()
+"""
+    target = """
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        return cls()
+"""
+    source_entities = _extract_entities(source, role="source")
+    target_entities = _extract_entities(target, role="target")
+
+    source_method = _find(source_entities, kind="method", name="create")
+    target_method = _find(target_entities, kind="method", name="create")
+
+    rules, _, _ = compile_rules(source_entities, Mock())
+    sentinel_rules = [r for r in rules if r.rule_type == "compiler_invalid_param"]
+    assert len(sentinel_rules) == 1
+
+    matches: dict[str, MatchResult] = {
+        source_method.canonical_id: MatchResult(
+            source_id=source_method.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_method.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        ),
+    }
+
+    results, errors = evaluate_rules_for_target(
+        rules=sentinel_rules,
+        source_index=build_entity_index(source_entities),
+        target_index=build_entity_index(target_entities),
+        matches=matches,
+        config=Mock(),
+        source_by_id={e.canonical_id: e for e in source_entities},
+        target_by_id={e.canonical_id: e for e in target_entities},
+    )
+
+    assert errors == []
+    assert [r.status for r in results] == ["FAILED"]
+
+
+def test_api004_invalid_return_annotation_mode_sentinel_rule_evaluates_failed() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(return_annotation_mode="approximate"),
+        ]
+        return cls()
+"""
+    target = """
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        return cls()
+"""
+    source_entities = _extract_entities(source, role="source")
+    target_entities = _extract_entities(target, role="target")
+
+    source_method = _find(source_entities, kind="method", name="create")
+    target_method = _find(target_entities, kind="method", name="create")
+
+    rules, _, _ = compile_rules(source_entities, Mock())
+    sentinel_rules = [r for r in rules if r.rule_type == "compiler_invalid_param"]
+    assert len(sentinel_rules) == 1
+
+    matches: dict[str, MatchResult] = {
+        source_method.canonical_id: MatchResult(
+            source_id=source_method.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_method.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        ),
+    }
+
+    results, errors = evaluate_rules_for_target(
+        rules=sentinel_rules,
+        source_index=build_entity_index(source_entities),
+        target_index=build_entity_index(target_entities),
+        matches=matches,
+        config=Mock(),
+        source_by_id={e.canonical_id: e for e in source_entities},
+        target_by_id={e.canonical_id: e for e in target_entities},
+    )
+
+    assert errors == []
+    assert [r.status for r in results] == ["FAILED"]

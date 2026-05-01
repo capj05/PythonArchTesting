@@ -287,6 +287,67 @@ class User:
     assert "attribute annotation mismatch" in results[0].message
 
 
+def test_api003_bare_name_annotation_passes_when_target_matches() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("VERSION", annotation=str, storage="class"),
+    ]
+"""
+    target = """
+class User:
+    VERSION: str = "1"
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api003_bare_name_annotation_fails_on_mismatch() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_attribute
+
+class User:
+    __archtest__: Annotated[
+        None,
+        required_attribute("VERSION", annotation=str, storage="class"),
+    ]
+"""
+    target = """
+class User:
+    VERSION: int = 1
+"""
+
+    results, errors, _ = evaluate_single_rule(
+        source_text=source,
+        target_text=target,
+        source_kind="class",
+        source_name="User",
+        target_kind="class",
+        target_name="User",
+        rule_id="API003/required_attribute/v1",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert "attribute annotation mismatch" in results[0].message
+
+
 def test_api003_evaluation_fails_for_property_only_target() -> None:
     source = """
 from typing import Annotated

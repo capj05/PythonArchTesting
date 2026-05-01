@@ -498,3 +498,299 @@ def handle(pet: Dog) -> None:
     assert errors == []
     assert [result.status for result in results] == ["FAILED", "OK"]
     assert "parameter annotation mismatch" in results[0].message
+
+
+def test_api001_return_annotation_ignore_is_alias_for_off() -> None:
+    """`return_annotation="ignore"` must suppress the return-only sibling rule."""
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_entity_signature
+
+def normalize(a: int) -> int:
+    __archtest__: Annotated[
+        None,
+        required_entity_signature(mode="compatible", return_annotation="ignore"),
+    ]
+    return a
+"""
+    source_entity = _extract_function_entity(source, role="source", name="normalize")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert evidence == []
+    assert compiler_results == []
+    assert [rule.rule_id for rule in rules] == [
+        "API001/required_entity_signature/v1",
+    ]
+
+
+def test_api001_return_annotation_ignore_does_not_fail_on_return_drift() -> None:
+    """End-to-end: ignore must mean no return-only FAIL even if target return drifts."""
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_entity_signature
+
+def normalize(a: int) -> int:
+    __archtest__: Annotated[
+        None,
+        required_entity_signature(mode="compatible", return_annotation="ignore"),
+    ]
+    return a
+"""
+    target = """
+def normalize(a: int) -> str:
+    return str(a)
+"""
+    source_entity = _extract_function_entity(source, role="source", name="normalize")
+    target_entity = _extract_function_entity(target, role="target", name="normalize")
+
+    rules, _, _ = compile_rules([source_entity], Mock())
+    matches = {
+        source_entity.canonical_id: MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_entity.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        )
+    }
+    results, errors = evaluate_rules_for_target(
+        rules=rules,
+        source_index=build_entity_index([source_entity]),
+        target_index=build_entity_index([target_entity]),
+        matches=matches,
+        config=Mock(),
+    )
+
+    assert errors == []
+    assert all(result.status == "OK" for result in results)
+
+
+def test_api001_return_annotation_invalid_value_emits_diagnostic() -> None:
+    """Unrecognised return_annotation must emit compiler_invalid_param and drop the rule."""
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_entity_signature
+
+def normalize(a: int) -> int:
+    __archtest__: Annotated[
+        None,
+        required_entity_signature(return_annotation="bogus"),
+    ]
+    return a
+"""
+    source_entity = _extract_function_entity(source, role="source", name="normalize")
+    rules, evidence, _ = compile_rules([source_entity], Mock())
+
+    assert rules == []
+    assert len(evidence) == 1
+    assert evidence[0].type == "compiler_invalid_param"
+    assert evidence[0].payload["param"] == "return_annotation"
+    assert evidence[0].payload["value"] == "bogus"
+
+
+def test_api001_low_confidence_extras_only_promotes_to_evaluator() -> None:
+    """`allow_extra_params=True` must promote LOW_CONFIDENCE matches whose only
+    divergence is the target adding optional kw-only parameters — the
+    evaluator's verdict should win."""
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_entity_signature
+
+def normalize(a: int, b: int = 0) -> int:
+    __archtest__: Annotated[
+        None,
+        required_entity_signature(
+            mode="compatible",
+            allow_extra_params=True,
+            return_annotation="off",
+        ),
+    ]
+    return a + b
+"""
+    target = """
+def normalize(a: int, b: int = 0, *, x: int = 1, y: int = 2) -> int:
+    return a + b + x + y
+"""
+    source_entity = _extract_function_entity(source, role="source", name="normalize")
+    target_entity = _extract_function_entity(target, role="target", name="normalize")
+
+    rules, _, _ = compile_rules([source_entity], Mock())
+    matches = {
+        source_entity.canonical_id: MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.LOW_CONFIDENCE,
+            target_id=target_entity.canonical_id,
+            confidence=0.55,
+            reasons=[],
+            candidates=[],
+        )
+    }
+
+    results, errors = evaluate_rules_for_target(
+        rules=rules,
+        source_index=build_entity_index([source_entity]),
+        target_index=build_entity_index([target_entity]),
+        matches=matches,
+        config=Mock(),
+    )
+
+    assert errors == []
+    assert len(results) == 1
+    assert results[0].status == "OK"
+
+
+def test_api001_low_confidence_required_param_addition_fails_via_evaluator() -> None:
+    """A LOW_CONFIDENCE match where the target adds a *required* parameter must
+    not be promoted — the divergence is not extras-only, so the rule remains
+    SKIPPED with a match-status reason (it is not silently treated as OK)."""
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_entity_signature
+
+def normalize(a: int) -> int:
+    __archtest__: Annotated[
+        None,
+        required_entity_signature(
+            mode="compatible",
+            allow_extra_params=True,
+            return_annotation="off",
+        ),
+    ]
+    return a
+"""
+    target = """
+def normalize(a: int, b: int) -> int:
+    return a + b
+"""
+    source_entity = _extract_function_entity(source, role="source", name="normalize")
+    target_entity = _extract_function_entity(target, role="target", name="normalize")
+
+    rules, _, _ = compile_rules([source_entity], Mock())
+    matches = {
+        source_entity.canonical_id: MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.LOW_CONFIDENCE,
+            target_id=target_entity.canonical_id,
+            confidence=0.55,
+            reasons=[],
+            candidates=[],
+        )
+    }
+
+    results, errors = evaluate_rules_for_target(
+        rules=rules,
+        source_index=build_entity_index([source_entity]),
+        target_index=build_entity_index([target_entity]),
+        matches=matches,
+        config=Mock(),
+    )
+
+    assert errors == []
+    assert len(results) == 1
+    # Required-param addition is NOT extras-only — the gate refuses to promote,
+    # so the rule short-circuits per the rule's `fail_on_unmatched=True` default.
+    assert results[0].status == "FAILED"
+    assert results[0].details.get("reason") == "required_target_missing"
+
+
+def test_api001_low_confidence_param_rename_promotes_to_evaluator() -> None:
+    """`allow_param_rename=True` must promote LOW_CONFIDENCE matches whose only
+    divergence is parameter renaming — the evaluator's verdict should win."""
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_entity_signature
+
+def normalize(a: int, b: int = 0) -> int:
+    __archtest__: Annotated[
+        None,
+        required_entity_signature(
+            mode="compatible",
+            allow_param_rename=True,
+            return_annotation="off",
+        ),
+    ]
+    return a + b
+"""
+    target = """
+def normalize(x: int, y: int = 0) -> int:
+    return x + y
+"""
+    source_entity = _extract_function_entity(source, role="source", name="normalize")
+    target_entity = _extract_function_entity(target, role="target", name="normalize")
+
+    rules, _, _ = compile_rules([source_entity], Mock())
+    matches = {
+        source_entity.canonical_id: MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.LOW_CONFIDENCE,
+            target_id=target_entity.canonical_id,
+            confidence=0.55,
+            reasons=[],
+            candidates=[],
+        )
+    }
+
+    results, errors = evaluate_rules_for_target(
+        rules=rules,
+        source_index=build_entity_index([source_entity]),
+        target_index=build_entity_index([target_entity]),
+        matches=matches,
+        config=Mock(),
+    )
+
+    assert errors == []
+    assert len(results) == 1
+    assert results[0].status == "OK"
+
+
+def test_api001_low_confidence_param_rename_rejected_when_flag_off() -> None:
+    """Without `allow_param_rename`, the same rename-only LOW_CONFIDENCE match
+    must NOT be promoted: it falls through to the standard match-status
+    short-circuit (FAILED via `fail_on_unmatched=True`)."""
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_entity_signature
+
+def normalize(a: int, b: int = 0) -> int:
+    __archtest__: Annotated[
+        None,
+        required_entity_signature(
+            mode="compatible",
+            allow_extra_params=False,
+            return_annotation="off",
+        ),
+    ]
+    return a + b
+"""
+    target = """
+def normalize(x: int, y: int = 0) -> int:
+    return x + y
+"""
+    source_entity = _extract_function_entity(source, role="source", name="normalize")
+    target_entity = _extract_function_entity(target, role="target", name="normalize")
+
+    rules, _, _ = compile_rules([source_entity], Mock())
+    matches = {
+        source_entity.canonical_id: MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.LOW_CONFIDENCE,
+            target_id=target_entity.canonical_id,
+            confidence=0.55,
+            reasons=[],
+            candidates=[],
+        )
+    }
+
+    results, errors = evaluate_rules_for_target(
+        rules=rules,
+        source_index=build_entity_index([source_entity]),
+        target_index=build_entity_index([target_entity]),
+        matches=matches,
+        config=Mock(),
+    )
+
+    assert errors == []
+    assert len(results) == 1
+    assert results[0].status == "FAILED"
+    assert results[0].details.get("reason") == "required_target_missing"

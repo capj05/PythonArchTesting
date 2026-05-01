@@ -234,6 +234,37 @@ def ignore_me() -> int:
     assert [edge.imported_module for edge in edges] == ["requests"]
 
 
+def test_collect_normalized_import_edges_for_modules_double_star_matches_top_level() -> None:
+    kept = _extract_target_entity(
+        """
+def keep() -> int:
+    import requests
+    return 1
+""",
+        file_path="assignment/kept.py",
+        kind="function",
+        name="keep",
+    )
+    ignored = _extract_target_entity(
+        """
+def ignore_me() -> int:
+    import socket
+    return 1
+""",
+        file_path="ignored_module.py",
+        kind="function",
+        name="ignore_me",
+    )
+
+    edges = collect_normalized_import_edges_for_modules(
+        entities=[kept, ignored],
+        scope_modules={kept.module_path, ignored.module_path},
+        ignore_globs=["**/ignored_module.py"],
+    )
+
+    assert [edge.imported_module for edge in edges] == ["requests"]
+
+
 def test_collect_canonical_module_entities_prefers_module_entity_per_module() -> None:
     entities = _extract_target_entities(
         """

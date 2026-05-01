@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from unittest.mock import Mock
 
-from pythonarchtesting.entities import build_canonical_id
+from pythonarchtesting.core.evaluation import evaluate_rules_for_target
+from pythonarchtesting.entities import build_canonical_id, build_entity_index
+from pythonarchtesting.matching import MatchResult, MatchStatus
 from pythonarchtesting.rules.compilation import compile_rules
 from tests.unit.test_rules.protocol_rule_test_helpers import extract_entities
 
@@ -52,7 +54,10 @@ def build() -> None:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["decorator"] == "does_not_have"
+    assert rules[0].params["param"] == "target_kind"
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
     assert evidence[0].payload["issue"] == "compiler_invalid_target"
@@ -73,7 +78,9 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["param"] == "member_kind"
     assert compiler_results == []
     assert [item.type for item in evidence] == [
         "compiler_invalid_member_absence_declaration"
@@ -96,7 +103,9 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["param"] == "storage"
     assert compiler_results == []
     assert [item.type for item in evidence] == [
         "compiler_invalid_member_absence_declaration"
@@ -119,7 +128,9 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["param"] == "storage"
     assert compiler_results == []
     assert [item.type for item in evidence] == [
         "compiler_invalid_member_absence_declaration"
@@ -142,7 +153,9 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["param"] == "storage"
     assert compiler_results == []
     assert [item.type for item in evidence] == [
         "compiler_invalid_member_absence_declaration"
@@ -233,7 +246,9 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["param"] == "aliases"
     assert compiler_results == []
     assert [item.type for item in evidence] == [
         "compiler_invalid_member_absence_declaration"
@@ -256,7 +271,9 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["param"] == "pattern"
     assert compiler_results == []
     assert [item.type for item in evidence] == [
         "compiler_invalid_member_absence_declaration"
@@ -283,7 +300,9 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["param"] == "signature_mode"
     assert compiler_results == []
     assert evidence[0].payload["issue"] == "invalid_signature_mode_for_member_kind"
 
@@ -341,7 +360,9 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["param"] == "signature_mode"
     assert compiler_results == []
     assert evidence[0].payload["issue"] == "signature_mode_requires_method_body"
 
@@ -361,6 +382,65 @@ def build() -> None:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["param"] == "target_kind"
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
+
+
+def test_neg001_invalid_member_kind_sentinel_rule_evaluates_failed() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+class User:
+    __archtest__: Annotated[
+        None,
+        does_not_have("password", member_kind="bogus"),
+    ]
+"""
+    target = """
+class User:
+    pass
+"""
+    source_entities = extract_entities(source, role="source")
+    target_entities = extract_entities(target, role="target")
+
+    source_class = next(
+        e for e in source_entities if e.kind == "class" and e.name == "User"
+    )
+    target_class = next(
+        e for e in target_entities if e.kind == "class" and e.name == "User"
+    )
+
+    rules, _, _ = compile_rules(source_entities, Mock())
+    sentinel_rules = [r for r in rules if r.rule_type == "compiler_invalid_param"]
+    assert len(sentinel_rules) == 1
+    assert sentinel_rules[0].rule_id.startswith(
+        "NEG001/does_not_have/invalid_declaration/"
+    )
+
+    matches: dict[str, MatchResult] = {
+        source_class.canonical_id: MatchResult(
+            source_id=source_class.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_class.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        ),
+    }
+
+    results, errors = evaluate_rules_for_target(
+        rules=sentinel_rules,
+        source_index=build_entity_index(source_entities),
+        target_index=build_entity_index(target_entities),
+        matches=matches,
+        config=Mock(),
+        source_by_id={e.canonical_id: e for e in source_entities},
+        target_by_id={e.canonical_id: e for e in target_entities},
+    )
+
+    assert errors == []
+    assert [r.status for r in results] == ["FAILED"]

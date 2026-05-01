@@ -4,8 +4,10 @@ import textwrap
 from pathlib import Path
 from unittest.mock import Mock
 
-from pythonarchtesting.entities import Entity
+from pythonarchtesting.core.evaluation import evaluate_rules_for_target
+from pythonarchtesting.entities import Entity, build_entity_index
 from pythonarchtesting.entities_extraction import extract_entities_from_source
+from pythonarchtesting.matching import MatchResult, MatchStatus
 from pythonarchtesting.rules.compilation import compile_rules
 
 
@@ -76,7 +78,10 @@ def build() -> None:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["decorator"] == "exact_type"
+    assert rules[0].params["param"] == "target_kind"
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
 
@@ -94,7 +99,10 @@ class CsvRepository:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["decorator"] == "exact_type"
+    assert rules[0].params["param"] == "base"
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_base_reference"]
     assert evidence[0].payload["reason"] == "missing_base"
@@ -113,7 +121,10 @@ class CsvRepository:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["decorator"] == "exact_type"
+    assert rules[0].params["param"] == "base"
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_base_reference"]
 
@@ -150,7 +161,64 @@ class CsvRepository:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert len(rules) == 1
+    assert rules[0].rule_type == "compiler_invalid_param"
+    assert rules[0].params["decorator"] == "exact_type"
+    assert rules[0].params["param"] == "base"
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_base_reference"]
     assert evidence[0].payload["reason"] == "ambiguous_simple_name"
+
+
+def test_nom001_exact_type_invalid_target_sentinel_rule_evaluates_failed() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import exact_type
+
+def build() -> None:
+    __archtest__: Annotated[None, exact_type("source_module.BaseRepository")]
+"""
+    target = """
+def build() -> None:
+    return None
+"""
+    source_entities = _extract_entities(source, path="source_module.py")
+    target_entities = _extract_entities(target, path="target_module.py")
+
+    source_func = next(
+        e for e in source_entities if e.kind == "function" and e.name == "build"
+    )
+    target_func = next(
+        e for e in target_entities if e.kind == "function" and e.name == "build"
+    )
+
+    rules, _, _ = compile_rules(source_entities, Mock())
+    sentinel_rules = [r for r in rules if r.rule_type == "compiler_invalid_param"]
+    assert len(sentinel_rules) == 1
+    assert sentinel_rules[0].rule_id.startswith(
+        "NOM001/exact_type/invalid_declaration/"
+    )
+
+    matches: dict[str, MatchResult] = {
+        source_func.canonical_id: MatchResult(
+            source_id=source_func.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_func.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        ),
+    }
+
+    results, errors = evaluate_rules_for_target(
+        rules=sentinel_rules,
+        source_index=build_entity_index(source_entities),
+        target_index=build_entity_index(target_entities),
+        matches=matches,
+        config=Mock(),
+        source_by_id={e.canonical_id: e for e in source_entities},
+        target_by_id={e.canonical_id: e for e in target_entities},
+    )
+
+    assert errors == []
+    assert [r.status for r in results] == ["FAILED"]

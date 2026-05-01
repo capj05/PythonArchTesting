@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import Mock
 
 from pythonarchtesting.rules import require_method_set
@@ -8,6 +9,19 @@ from tests.unit.test_rules.protocol_rule_test_helpers import (
     extract_entities,
     extract_entity,
 )
+
+
+def _assert_sentinel(rules: list[Any], *, param: str) -> None:
+    """Assert the compiler emitted exactly one API005 invalid-param sentinel."""
+    assert len(rules) == 1
+    sentinel = rules[0]
+    assert sentinel.rule_type == "compiler_invalid_param"
+    assert sentinel.name == "require_method_set"
+    assert sentinel.rule_id.startswith(
+        f"API005/require_method_set/invalid_declaration/{param}"
+    )
+    assert sentinel.params["decorator"] == "require_method_set"
+    assert sentinel.params["param"] == param
 
 
 def test_api005_import_surface_exposes_require_method_set() -> None:
@@ -69,7 +83,7 @@ def helper() -> None:
     )
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    _assert_sentinel(rules, param="target_kind")
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
 
@@ -85,7 +99,7 @@ class Contract:
     source_entity = extract_entity(source, role="source", kind="class", name="Contract")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    _assert_sentinel(rules, param="name_match")
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
 
@@ -101,7 +115,7 @@ class Contract:
     source_entity = extract_entity(source, role="source", kind="class", name="Contract")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    _assert_sentinel(rules, param="pattern")
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
 
@@ -117,7 +131,7 @@ class Contract:
     source_entity = extract_entity(source, role="source", kind="class", name="Contract")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    _assert_sentinel(rules, param="names")
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
 
@@ -133,7 +147,7 @@ class Contract:
     source_entity = extract_entity(source, role="source", kind="class", name="Contract")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    _assert_sentinel(rules, param="min_count")
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
 
@@ -149,7 +163,7 @@ class Contract:
     source_entity = extract_entity(source, role="source", kind="class", name="Contract")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    _assert_sentinel(rules, param="max_count")
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
 
@@ -165,7 +179,7 @@ class Contract:
     source_entity = extract_entity(source, role="source", kind="class", name="Contract")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    _assert_sentinel(rules, param="max_count")
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
 

@@ -1,6 +1,17 @@
 from __future__ import annotations
 
-from tests.unit.test_rules.protocol_rule_test_helpers import evaluate_single_rule
+from unittest.mock import Mock
+
+from pythonarchtesting.core.evaluation import evaluate_rules_for_target
+from pythonarchtesting.entities import build_entity_index
+from pythonarchtesting.matching import MatchResult, MatchStatus
+from pythonarchtesting.rules.compilation import compile_rules
+from tests.unit.test_rules.protocol_rule_test_helpers import (
+    evaluate_single_rule,
+    extract_entities,
+    extract_entity,
+    select_rule,
+)
 
 
 def test_pro002_evaluation_fails_for_protocol_mismatch() -> None:
@@ -613,3 +624,125 @@ def build() -> SqlService:
 
     assert errors == []
     assert [result.status for result in results] == ["OK"]
+
+
+def test_pro002_low_confidence_compatible_mode_promotes_to_evaluator() -> None:
+    """`signature_mode="compatible"` (default) must promote LOW_CONFIDENCE
+    matches whose source/target functions share kind+name — the evaluator's
+    verdict against the actual annotations should win."""
+    source = """
+from typing import Annotated
+from typing import Protocol
+from pythonarchtesting.rules import implements_protocol
+
+class Repository(Protocol):
+    def get(self, item_id: str) -> str:
+        ...
+
+def process(repo: Annotated[object, implements_protocol(Repository)]) -> None:
+    return None
+"""
+    target = """
+class SqlRepository:
+    def get(self, item_id: str) -> str:
+        return item_id
+
+def process(repo: SqlRepository) -> None:
+    return None
+"""
+    source_entities = extract_entities(source, role="source")
+    target_entities = extract_entities(target, role="target")
+    source_func = extract_entity(
+        source, role="source", kind="function", name="process"
+    )
+    target_func = extract_entity(
+        target, role="target", kind="function", name="process"
+    )
+
+    rules, _, _ = compile_rules(source_entities, Mock())
+    selected = select_rule(rules, rule_id="PRO002/implements_protocol_signature/v1")
+
+    matches = {
+        source_func.canonical_id: MatchResult(
+            source_id=source_func.canonical_id,
+            status=MatchStatus.LOW_CONFIDENCE,
+            target_id=target_func.canonical_id,
+            confidence=0.55,
+            reasons=[],
+            candidates=[],
+        )
+    }
+
+    results, errors = evaluate_rules_for_target(
+        rules=[selected],
+        source_index=build_entity_index(source_entities),
+        target_index=build_entity_index(target_entities),
+        matches=matches,
+        config=Mock(),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_pro002_low_confidence_exact_mode_not_promoted() -> None:
+    """`signature_mode="exact"` must NOT trigger LOW_CONFIDENCE promotion: the
+    rule short-circuits via `fail_on_unmatched=True`, producing FAILED with
+    `required_target_missing` (rather than silently being treated as OK)."""
+    source = """
+from typing import Annotated
+from typing import Protocol
+from pythonarchtesting.rules import implements_protocol
+
+class Repository(Protocol):
+    def get(self, item_id: str) -> str:
+        ...
+
+def process(
+    repo: Annotated[object, implements_protocol(Repository, signature_mode="exact")],
+) -> None:
+    return None
+"""
+    target = """
+class SqlRepository:
+    def get(self, item_id: str) -> str:
+        return item_id
+
+def process(repo: SqlRepository) -> None:
+    return None
+"""
+    source_entities = extract_entities(source, role="source")
+    target_entities = extract_entities(target, role="target")
+    source_func = extract_entity(
+        source, role="source", kind="function", name="process"
+    )
+    target_func = extract_entity(
+        target, role="target", kind="function", name="process"
+    )
+
+    rules, _, _ = compile_rules(source_entities, Mock())
+    selected = select_rule(rules, rule_id="PRO002/implements_protocol_signature/v1")
+    assert selected.params["signature_mode"] == "exact"
+
+    matches = {
+        source_func.canonical_id: MatchResult(
+            source_id=source_func.canonical_id,
+            status=MatchStatus.LOW_CONFIDENCE,
+            target_id=target_func.canonical_id,
+            confidence=0.55,
+            reasons=[],
+            candidates=[],
+        )
+    }
+
+    results, errors = evaluate_rules_for_target(
+        rules=[selected],
+        source_index=build_entity_index(source_entities),
+        target_index=build_entity_index(target_entities),
+        matches=matches,
+        config=Mock(),
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details.get("reason") == "required_target_missing"

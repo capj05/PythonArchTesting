@@ -103,9 +103,10 @@ class MyFactory:
     source_entity = extract_entity(source, role="source", kind="method", name="create")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_param"]
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
+    assert rules[0].params["param"] == "satisfy_with"
 
 
 def test_api004_name_match_alias_without_aliases_emits_compiler_invalid_param() -> None:
@@ -122,9 +123,10 @@ class MyFactory:
     source_entity = extract_entity(source, role="source", kind="method", name="create")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_param"]
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
+    assert rules[0].params["param"] == "aliases"
 
 
 def test_api004_multiple_factory_rules_on_same_entity_get_suffixed_rule_ids() -> None:
@@ -205,10 +207,11 @@ class MyFactory:
     source_entity = extract_entity(source, role="source", kind="method", name="create")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_param"]
     assert evidence[0].payload["param"] == "allow_missing"
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
+    assert rules[0].params["param"] == "allow_missing"
 
 
 def test_api004_invalid_signature_mode_emits_compiler_invalid_param() -> None:
@@ -228,10 +231,11 @@ class MyFactory:
     source_entity = extract_entity(source, role="source", kind="method", name="create")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_param"]
     assert evidence[0].payload["param"] == "signature_mode"
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
+    assert rules[0].params["param"] == "signature_mode"
 
 
 def test_api004_params_survive_compilation() -> None:
@@ -333,10 +337,11 @@ class MyFactory:
     source_entity = extract_entity(source, role="source", kind="method", name="create")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_param"]
     assert evidence[0].payload["param"] == "return_annotation_mode"
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
+    assert rules[0].params["param"] == "return_annotation_mode"
 
 
 def test_api004_detection_mode_compiles_to_v2_rule() -> None:
@@ -379,10 +384,11 @@ class MyFactory:
     source_entity = extract_entity(source, role="source", kind="method", name="create")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_param"]
     assert evidence[0].payload["param"] == "detection_mode"
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
+    assert rules[0].params["param"] == "detection_mode"
 
 
 def test_api004_static_attribute_satisfy_with_compiles_to_v3() -> None:
@@ -447,10 +453,11 @@ class MyFactory:
     source_entity = extract_entity(source, role="source", kind="method", name="create")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_param"]
     assert evidence[0].payload["param"] == "name_match"
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
+    assert rules[0].params["param"] == "name_match"
 
 
 def test_api004_static_attribute_valid_satisfy_with_list() -> None:
@@ -470,10 +477,11 @@ class MyFactory:
     source_entity = extract_entity(source, role="source", kind="method", name="create")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_param"]
     assert "static_attribute" in evidence[0].payload["valid"]
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
+    assert rules[0].params["param"] == "satisfy_with"
 
 
 def test_api004_static_attribute_with_return_check_still_v3() -> None:
@@ -501,3 +509,200 @@ class MyFactory:
     assert compiler_results == []
     assert evidence == []
     assert [rule.rule_id for rule in rules] == ["API004/required_factory/v3"]
+
+
+def test_api004_assignment_wrapped_classmethod_compiles() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    def _make_impl(cls, name: str):
+        __archtest__: Annotated[None, required_factory(aliases=("make",), name_match="alias")]
+        return cls()
+
+    make = classmethod(_make_impl)
+"""
+    source_entity = extract_entity(
+        source, role="source", kind="method", name="_make_impl"
+    )
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert [rule.rule_type for rule in rules] == ["api_signature"]
+
+
+def test_api004_assignment_wrapped_staticmethod_compiles() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    def _make_static_impl(name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                aliases=("make",),
+                name_match="alias",
+                satisfy_with=("staticmethod",),
+            ),
+        ]
+        return MyFactory()
+
+    make = staticmethod(_make_static_impl)
+"""
+    source_entity = extract_entity(
+        source, role="source", kind="method", name="_make_static_impl"
+    )
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert [rule.rule_type for rule in rules] == ["api_signature"]
+
+
+def test_api004_default_satisfy_with_drops_constructor_when_aliases_present() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def make(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(aliases=("make",), name_match="alias"),
+        ]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="make")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert len(rules) == 1
+    assert rules[0].params["satisfy_with"] == ["classmethod", "staticmethod"]
+
+
+def test_api004_default_satisfy_with_drops_constructor_when_pattern_present() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(name_match="regex", pattern="^make.*"),
+        ]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert len(rules) == 1
+    assert rules[0].params["satisfy_with"] == ["classmethod", "staticmethod"]
+
+
+def test_api004_default_satisfy_with_drops_constructor_when_name_match_exact() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[None, required_factory(name_match="exact")]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert len(rules) == 1
+    assert rules[0].params["satisfy_with"] == ["classmethod", "staticmethod"]
+
+
+def test_api004_default_satisfy_with_unchanged_for_bare_call() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[None, required_factory()]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert evidence == []
+    assert len(rules) == 1
+    assert rules[0].params["satisfy_with"] == [
+        "constructor",
+        "classmethod",
+        "staticmethod",
+    ]
+
+
+def test_api004_invalid_detection_mode_emits_sentinel_with_fail_on_unmatched() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(detection_mode="bogus"),
+        ]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert [item.type for item in evidence] == ["compiler_invalid_param"]
+    assert len(rules) == 1
+    sentinel = rules[0]
+    assert sentinel.rule_type == "compiler_invalid_param"
+    assert sentinel.name == "required_factory"
+    assert sentinel.params["param"] == "detection_mode"
+    assert sentinel.params["value"] == "bogus"
+    assert sentinel.params["fail_on_unmatched"] is True
+    assert "extended" in sentinel.params["valid"]
+    assert "strict" in sentinel.params["valid"]
+
+
+def test_api004_invalid_return_annotation_mode_emits_sentinel() -> None:
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class MyFactory:
+    @classmethod
+    def create(cls, name: str):
+        __archtest__: Annotated[
+            None,
+            required_factory(return_annotation_mode="approximate"),
+        ]
+        return cls()
+"""
+    source_entity = extract_entity(source, role="source", kind="method", name="create")
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert [item.type for item in evidence] == ["compiler_invalid_param"]
+    assert len(rules) == 1
+    sentinel = rules[0]
+    assert sentinel.rule_type == "compiler_invalid_param"
+    assert sentinel.params["param"] == "return_annotation_mode"
+    assert sentinel.params["fail_on_unmatched"] is True
