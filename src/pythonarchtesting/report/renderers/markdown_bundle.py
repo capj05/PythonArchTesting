@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from pythonarchtesting.report.paths import (
     markdown_bundle_index,
@@ -45,6 +45,10 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _format_count_dict(counts: Mapping[str, int]) -> str:
+    return " · ".join(f"{escape_markdown(str(k))}: {v}" for k, v in counts.items())
+
+
 def _target_summary_rows(targets: List[TargetReport]) -> tuple[tuple[str, ...], ...]:
     rows: List[tuple[str, ...]] = []
     for target in targets:
@@ -60,20 +64,28 @@ def _target_summary_rows(targets: List[TargetReport]) -> tuple[tuple[str, ...], 
     return tuple(rows)
 
 
+_VALID_DETAIL_LEVELS = ("summary", "verbose", "debug")
+
+
+def _normalize_detail(level: Optional[str]) -> str:
+    if level is None:
+        return "verbose"
+    normalized = str(level).strip().lower()
+    if normalized not in _VALID_DETAIL_LEVELS:
+        return "verbose"
+    return normalized
+
+
 def _render_target_page(
     document: ReportDocument,
     target: TargetReport,
     *,
     matching_debug_context: Optional[Dict[str, Any]] = None,
     include_back_link: bool = True,
+    detail: str = "verbose",
 ) -> str:
     results = target.results
-    debug_target = _target_debug_report(target)
-    matching_blocks = build_matching_debug_blocks_for_target(
-        debug_target,
-        get_target_debug_context(matching_debug_context, debug_target),
-        top_k=DEFAULT_MATCHING_DEBUG_TOP_K,
-    )
+    detail = _normalize_detail(detail)
     lines: List[str] = [
         f"# Target Report: {escape_markdown(target.target_id)}",
         "",
@@ -94,20 +106,34 @@ def _render_target_page(
         f"- Severity Counts: {escape_markdown(str(target.summary.severity_counts))}",
         f"- Category Counts: {escape_markdown(str(target.summary.category_counts))}",
         "",
-        "## Matching",
-        "",
-        f"- Total: {target.matching.summary.total}",
-        f"- Matched: {target.matching.summary.matched}",
-        f"- Low confidence: {target.matching.summary.low_confidence}",
-        f"- Ambiguous: {target.matching.summary.ambiguous}",
-        f"- Unmatched: {target.matching.summary.unmatched}",
-        "",
-        render_matching_debug_markdown(
-            matching_blocks,
+    ])
+    if detail in ("verbose", "debug"):
+        lines.extend([
+            "## Matching",
+            "",
+            f"- Total: {target.matching.summary.total}",
+            f"- Matched: {target.matching.summary.matched}",
+            f"- Low confidence: {target.matching.summary.low_confidence}",
+            f"- Ambiguous: {target.matching.summary.ambiguous}",
+            f"- Unmatched: {target.matching.summary.unmatched}",
+            "",
+        ])
+    if detail == "debug":
+        debug_target = _target_debug_report(target)
+        matching_blocks = build_matching_debug_blocks_for_target(
+            debug_target,
+            get_target_debug_context(matching_debug_context, debug_target),
             top_k=DEFAULT_MATCHING_DEBUG_TOP_K,
-            heading_level=2,
-        ).rstrip(),
-        "",
+        )
+        lines.extend([
+            render_matching_debug_markdown(
+                matching_blocks,
+                top_k=DEFAULT_MATCHING_DEBUG_TOP_K,
+                heading_level=2,
+            ).rstrip(),
+            "",
+        ])
+    lines.extend([
         "## Results",
         "",
     ])
@@ -152,6 +178,7 @@ def render_markdown_single_target(
     output_path: Path,
     *,
     matching_debug_context: Optional[Dict[str, Any]] = None,
+    detail: str = "verbose",
 ) -> str:
     """Render a single-target Markdown report to one file. Returns the path."""
     targets = list(document.targets)
@@ -165,6 +192,7 @@ def render_markdown_single_target(
         target,
         matching_debug_context=matching_debug_context,
         include_back_link=False,
+        detail=detail,
     )
     _ensure_parent(output_path)
     output_path.write_text(rendered, encoding="utf-8")
@@ -176,12 +204,14 @@ def render_markdown_bundle(
     output_root: Path,
     *,
     matching_debug_context: Optional[Dict[str, Any]] = None,
+    detail: str = "verbose",
 ) -> str:
     """Write a deterministic Markdown bundle for a run report and return the index path."""
     root = resolve_bundle_root(output_root)
     root.mkdir(parents=True, exist_ok=True)
 
     targets = list(document.targets)
+    detail = _normalize_detail(detail)
 
     for target in targets:
         page_path = markdown_target_page(root, target.target_id or "target")
@@ -191,6 +221,7 @@ def render_markdown_bundle(
                 document,
                 target,
                 matching_debug_context=matching_debug_context,
+                detail=detail,
             ),
             encoding="utf-8",
         )
@@ -209,9 +240,70 @@ def render_markdown_bundle(
         f"- Targets passed: {document.summary.targets_passed or 0}",
         f"- Targets failed: {document.summary.targets_failed or 0}",
         "",
+    ]
+
+    if detail in ("verbose", "debug"):
+        results_summary = document.summary.results
+        if results_summary.results_total > 0:
+            index_lines.extend([
+                "## Result Totals",
+                "",
+                f"- Total Results: {results_summary.results_total}",
+            ])
+            if results_summary.status_counts:
+                index_lines.append(
+                    f"- Status Counts: {_format_count_dict(results_summary.status_counts)}"
+                )
+            if results_summary.severity_counts:
+                index_lines.append(
+                    f"- Severity Counts: {_format_count_dict(results_summary.severity_counts)}"
+                )
+            if results_summary.category_counts:
+                index_lines.append(
+                    f"- Category Counts: {_format_count_dict(results_summary.category_counts)}"
+                )
+            index_lines.append("")
+        if results_summary.top_rules:
+            index_lines.extend([
+                "## Top Rules by Violation Count",
+                "",
+                render_markdown_table(
+                    Table(
+                        headers=("Rule", "Violations"),
+                        rows=tuple(
+                            (
+                                escape_markdown(str(entry.get("name") or "")),
+                                str(entry.get("count") or 0),
+                            )
+                            for entry in results_summary.top_rules
+                        ),
+                    )
+                ),
+                "",
+            ])
+        if results_summary.top_source_files:
+            index_lines.extend([
+                "## Top Source Files",
+                "",
+                render_markdown_table(
+                    Table(
+                        headers=("File", "Results"),
+                        rows=tuple(
+                            (
+                                escape_markdown(str(entry.get("name") or "")),
+                                str(entry.get("count") or 0),
+                            )
+                            for entry in results_summary.top_source_files
+                        ),
+                    )
+                ),
+                "",
+            ])
+
+    index_lines.extend([
         "## Targets",
         "",
-    ]
+    ])
     index_lines.append(
         render_markdown_table(
             Table(

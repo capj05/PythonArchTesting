@@ -95,6 +95,7 @@ class ReportConfig:
     max_evidence_items_text: int = 3
     run_exit_policy: str = "any_fail"
     fail_threshold: int = 1
+    markdown_detail: str = "verbose"
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,9 +14,11 @@ class MarkdownReportGenerator(BaseReportGenerator):
         self,
         report_data: Any,
         matching_debug_context: dict | None = None,
+        detail: str = "verbose",
     ) -> None:
         super().__init__(report_data)
         self._matching_debug_context = matching_debug_context
+        self._detail = detail
 
     def _generate_report(self, output_file: str | None = None) -> str:
         document = self._ensure_document()
@@ -26,4 +28,5 @@ class MarkdownReportGenerator(BaseReportGenerator):
             document,
             Path(output_file),
             matching_debug_context=self._matching_debug_context,
+            detail=self._detail,
         )

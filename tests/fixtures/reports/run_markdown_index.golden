@@ -11,6 +11,26 @@
 - Targets passed: 1
 - Targets failed: 1
 
+## Result Totals
+
+- Total Results: 2
+- Status Counts: FAILED: 1 · OK: 1
+- Severity Counts: error: 1 · info: 1
+- Category Counts: arch: 2
+
+## Top Rules by Violation Count
+
+| Rule | Violations |
+|---|---|
+| arch/fail | 1 |
+| arch/ok | 1 |
+
+## Top Source Files
+
+| File | Results |
+|---|---|
+| <unknown> | 2 |
+
 ## Targets
 
 | Target | Path | Exit | Results | Failed |

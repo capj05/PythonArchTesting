@@ -122,3 +122,21 @@ Bundle structure:
 - `targets/<target_id>.md`: one page per target
 
 This is the easiest format for sharing batch results with humans.
+
+### Detail Level
+
+The `[report].markdown_detail` config setting controls how much each target
+page contains. Allowed values:
+
+- `summary`: metadata, summary counts, results table
+- `verbose` (default): adds the matching summary section (totals, matched,
+  low confidence, ambiguous, unmatched)
+- `debug`: adds the per-source matching candidates breakdown — this content
+  is also available in the JSON report under `targets[*].matching.matches[*]`,
+  so prefer `verbose` for shared markdown and use the JSON when investigating
+  matching itself.
+
+At `verbose` and `debug` the run-level `report.md` also includes status,
+severity, and category counts plus the top-N rules and source files by
+violation count, derived from the same aggregates that appear in the JSON
+`summary.results` block.

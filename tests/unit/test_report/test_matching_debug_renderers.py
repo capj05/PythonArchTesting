@@ -327,6 +327,7 @@ def test_markdown_bundle_matching_debug_isolated_per_target(tmp_path: Path):
         report_dict_to_ir(report, kind="run"),
         md_root,
         matching_debug_context=ctx,
+        detail="debug",
     )
 
     a_md = (md_root / "targets" / "a.md").read_text(encoding="utf-8")

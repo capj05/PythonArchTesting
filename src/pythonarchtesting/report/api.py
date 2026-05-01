@@ -80,6 +80,11 @@ def generate_run_report(
         if output_path is not None:
             Path(output_path).write_text(rendered, encoding="utf-8")
         return rendered
+    detail = "verbose"
+    if config is not None:
+        report_cfg = getattr(config, "report", None)
+        if report_cfg is not None:
+            detail = getattr(report_cfg, "markdown_detail", "verbose") or "verbose"
     try:
         if output_format == ReportingConstants.MARKDOWN_FORMAT:
             from .renderers.matching_debug import build_run_matching_debug_context
@@ -100,11 +105,13 @@ def generate_run_report(
                     document,
                     output_path_obj,
                     matching_debug_context=matching_debug_context,
+                    detail=detail,
                 )
             return render_markdown_bundle(
                 document,
                 output_path_obj,
                 matching_debug_context=matching_debug_context,
+                detail=detail,
             )
         raise ValueError(output_format)
     except ValueError as e:
