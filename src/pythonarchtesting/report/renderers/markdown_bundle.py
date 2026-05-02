@@ -52,9 +52,10 @@ def _format_count_dict(counts: Mapping[str, int]) -> str:
 def _target_summary_rows(targets: List[TargetReport]) -> tuple[tuple[str, ...], ...]:
     rows: List[tuple[str, ...]] = []
     for target in targets:
+        tid = target.target_id or "target"
         rows.append(
             (
-                target.target_id,
+                f"[{escape_markdown(tid)}](targets/{tid}.md)",
                 target.target_path,
                 str(target.exit_code),
                 str(target.summary.results_total),
@@ -312,10 +313,6 @@ def render_markdown_bundle(
             )
         )
     )
-    index_lines.append("")
-    for target in targets:
-        tid = target.target_id or "target"
-        index_lines.append(f"- [{escape_markdown(tid)}](targets/{tid}.md)")
     index_lines.append("")
 
     index_path = markdown_bundle_index(root)
