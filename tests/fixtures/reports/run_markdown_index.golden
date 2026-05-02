@@ -35,8 +35,5 @@
 
 | Target | Path | Exit | Results | Failed |
 |---|---|---|---|---|
-| a | /targets/a | 0 | 1 | 0 |
-| b | /targets/b | 1 | 1 | 1 |
-
-- [a](targets/a.md)
-- [b](targets/b.md)
+| [a](targets/a.md) | /targets/a | 0 | 1 | 0 |
+| [b](targets/b.md) | /targets/b | 1 | 1 | 1 |
