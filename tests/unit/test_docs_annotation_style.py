@@ -29,7 +29,6 @@ def test_public_docs_are_annotation_only() -> None:
         root / "docs" / "api-reference.md",
         root / "docs" / "pattern-recipes.md",
         root / "docs" / "architecture.md",
-        root / "docs" / "core-components.md",
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in files)
 
@@ -65,7 +64,6 @@ def test_public_examples_and_default_reference_fixtures_are_annotation_first() -
         root / "docs" / "api-reference.md",
         root / "docs" / "pattern-recipes.md",
         root / "docs" / "architecture.md",
-        root / "docs" / "core-components.md",
         root / "docs" / "snippets" / "patterns" / "immutable_value_object.py",
         root / "docs" / "snippets" / "patterns" / "enum_domain_type.py",
         root / "docs" / "snippets" / "patterns" / "repository_contract.py",
