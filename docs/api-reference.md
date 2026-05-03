@@ -96,6 +96,8 @@ documented in [pattern-recipes.md](pattern-recipes.md).
 
 ### `required_entity_signature(...)`
 
+See also: [markers/required_entity_signature.md](markers/required_entity_signature.md) — focused per-marker page(s).
+
 Common options:
 
 - `mode`
@@ -122,6 +124,8 @@ def normalize(
 ```
 
 ### `required_method(...)`
+
+See also: [markers/required_method.md](markers/required_method.md) — focused per-marker page(s).
 
 Common options:
 
@@ -268,6 +272,8 @@ class Repository:
 
 ### `require_method_set(...)`
 
+See also: [markers/require_method_set.md](markers/require_method_set.md) — focused per-marker page(s).
+
 Common options:
 
 - `name_match`
@@ -350,6 +356,8 @@ class HandlerContract:
 
 ### `require_member_set(...)`
 
+See also: [markers/require_member_set.md](markers/require_member_set.md) — focused per-marker page(s).
+
 Common options:
 
 - `member_kinds` (default `("any",)`) — any subset of `{"any", "method", "attribute", "property", "descriptor", "constructor"}`. `"any"` cannot be combined with other kinds.
@@ -426,6 +434,8 @@ class DataContract:
 ```
 
 ### `required_attribute(...)`
+
+See also: [markers/required_attribute.md](markers/required_attribute.md) — focused per-marker page(s).
 
 Common options:
 
@@ -635,6 +645,8 @@ class User:
 
 ### `required_constructor(...)`
 
+See also: [markers/required_constructor.md](markers/required_constructor.md) — focused per-marker page(s).
+
 Common options:
 
 - `signature_mode` — `"compatible"` (default), `"exact"`, or `"any"`; compared via the same callable matching model used by `required_method(...)`.
@@ -743,6 +755,8 @@ class User:
 ```
 
 ### `required_factory(...)`
+
+See also: [markers/required_factory.md](markers/required_factory.md) — focused per-marker page(s).
 
 Common options:
 
@@ -989,6 +1003,8 @@ class SessionTarget:
 
 ### `does_not_have(...)`
 
+See also: [markers/does_not_have.md](markers/does_not_have.md) — focused per-marker page(s).
+
 `does_not_have(...)` stays in the existing `NEG001` rule family and now has a
 backward-compatible v1/v2 surface.
 
@@ -1119,6 +1135,8 @@ class Credentials:
 
 ### `forbid_imports(...)`
 
+See also: [markers/forbid_imports.md](markers/forbid_imports.md) — focused per-marker page(s).
+
 Common options:
 
 - `scope`
@@ -1158,6 +1176,8 @@ __archtest__: Annotated[
 
 ### `implements_protocol(...)`
 
+See also: [markers/implements_protocol.md](markers/implements_protocol.md) — focused per-marker page(s).
+
 Common options:
 
 - `protocol`
@@ -1191,6 +1211,8 @@ def build(
 
 ### `subclass_of(...)`
 
+See also: [markers/subclass_of.md](markers/subclass_of.md) — focused per-marker page(s).
+
 Require the matched target class to inherit from the matched target counterpart
 of a source base class.
 
@@ -1221,6 +1243,8 @@ class CsvRepository(BaseRepository):
 
 ### `exact_type(...)`
 
+See also: [markers/exact_type.md](markers/exact_type.md) — focused per-marker page(s).
+
 Require the matched target class to be exactly the matched target counterpart
 of a source base class.
 
@@ -1250,6 +1274,8 @@ class CsvRepository(BaseRepository):
 
 ### `not_subclass_of(...)`
 
+See also: [markers/not_subclass_of.md](markers/not_subclass_of.md) — focused per-marker page(s).
+
 Require the matched target class to neither inherit from nor equal the matched
 target counterpart of a source base class.
 
@@ -1278,6 +1304,8 @@ class CsvRepository:
 ```
 
 ### `inherits_directly_from(...)`
+
+See also: [markers/inherits_directly_from.md](markers/inherits_directly_from.md) — focused per-marker page(s).
 
 Require the matched target class to list the matched target counterpart of a
 source base class among its immediate bases.
@@ -1310,6 +1338,8 @@ class CsvRepository(BaseRepository):
 ```
 
 ### `is_enum(...)`
+
+See also: [markers/is_enum.md](markers/is_enum.md) — focused per-marker page(s).
 
 Require the matched target class to classify as enum-like based on stdlib enum
 inheritance.
@@ -1358,6 +1388,8 @@ Non-goals in v1:
 
 ### `is_abstract_class(...)`
 
+See also: [markers/is_abstract_class.md](markers/is_abstract_class.md) — focused per-marker page(s).
+
 Require the matched target class to classify as abstract under a conservative
 local static analysis.
 
@@ -1394,6 +1426,8 @@ class RepositoryContract:
 
 ### `is_concrete_class(...)`
 
+See also: [markers/is_concrete_class.md](markers/is_concrete_class.md) — focused per-marker page(s).
+
 Require the matched target class to classify as concrete under the same local
 static model used by `is_abstract_class(...)`.
 
@@ -1418,6 +1452,8 @@ class RepositoryImplementationContract:
 ```
 
 ### `is_final_class(...)`
+
+See also: [markers/is_final_class.md](markers/is_final_class.md) — focused per-marker page(s).
 
 Require the matched target class to be decorated with a recognized final-class
 decorator.
@@ -1446,6 +1482,8 @@ class ValueObjectContract:
 ```
 
 ### `is_abstract_method(...)` and `is_final_method(...)`
+
+See also: [markers/is_abstract_method.md](markers/is_abstract_method.md), [markers/is_final_method.md](markers/is_final_method.md) — focused per-marker page(s).
 
 Require the matched target method to be decorated with a recognized abstract or
 final decorator.
@@ -1539,6 +1577,8 @@ class Factory:
 
 ### Negative modifiers
 
+See also: [markers/is_non_final_class.md](markers/is_non_final_class.md), [markers/is_non_abstract_method.md](markers/is_non_abstract_method.md), [markers/is_non_final_method.md](markers/is_non_final_method.md) — focused per-marker page(s).
+
 `is_non_final_class(...)`, `is_non_abstract_method(...)`, and
 `is_non_final_method(...)` are the inverse of their positive counterparts. They
 fail when the matched target carries the recognized decorator and pass
@@ -1622,6 +1662,8 @@ class Renderer:
 
 ### `flow(...)`
 
+See also: [markers/flow.md](markers/flow.md) — focused per-marker page(s).
+
 Common options:
 
 - `stage`
@@ -1642,6 +1684,8 @@ def process(value: str) -> str:
 ```
 
 ### `enforce_flow(...)`
+
+See also: [markers/enforce_flow.md](markers/enforce_flow.md) — focused per-marker page(s).
 
 Common options:
 

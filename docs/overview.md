@@ -15,17 +15,39 @@ it does not execute application behavior to decide whether a rule passed.
 
 ## Supported Checks
 
-The current public marker surface from `pythonarchtesting.rules` is:
+All markers are imported from `pythonarchtesting.rules`. They group into five
+categories. See [api-reference.md](api-reference.md) for every option and
+[pattern-recipes.md](pattern-recipes.md) for ready-to-use combinations.
 
-- `required_entity_signature`: require a compatible function or method
-  signature
-- `required_method`: require a method to exist with a compatible signature
-- `forbid_imports`: declare a forbidden import policy
-- `implements_protocol`: require structural conformance to a protocol
-- `flow`: mark a statement as a stage in variable flow
-- `enforce_flow`: require stages to appear in order for a tracked variable
+**Signature and shape** — describe the callable interface and the data layout
+of a class:
 
-At report level, these map to four evaluation families:
+- `required_entity_signature`, `required_method`, `require_method_set`,
+  `require_member_set`, `required_constructor`, `required_factory`,
+  `required_attribute`, `does_not_have`
+
+**Imports** — module-scoped or package-scoped import policy, in either direct
+AST mode or graph (reachable-import) mode:
+
+- `forbid_imports`
+
+**Type identity and inheritance** — structural conformance, inheritance, and
+identity checks:
+
+- `implements_protocol`, `subclass_of`, `exact_type`, `not_subclass_of`,
+  `inherits_directly_from`, `is_enum`
+
+**Abstractness and finality** — class-level and method-level modifiers:
+
+- `is_abstract_class`, `is_concrete_class`, `is_final_class`,
+  `is_non_final_class`, `is_abstract_method`, `is_non_abstract_method`,
+  `is_final_method`, `is_non_final_method`
+
+**Variable flow** — ordered stages of a tracked variable:
+
+- `flow`, `enforce_flow`
+
+At report level, markers map to four evaluator families:
 
 - `api_signature`
 - `import_policy`

@@ -13,8 +13,10 @@ This is the current high-level pipeline for PythonArchTesting.
 5. Compiled rules are evaluated in `pythonarchtesting.execution.evaluators`.
 6. Reports are built and rendered in `pythonarchtesting.report`.
 
-For run execution, `pythonarchtesting.runner` prepares the shared source state once
-and evaluates each target separately.
+For run execution, the `pythonarchtesting.runner` package prepares shared
+source state once (`runner.source_prep`) and evaluates each target separately
+(`runner.target_eval`); `runner.orchestrator` coordinates both single-target
+and multi-target runs.
 
 ## Key Modules
 
@@ -38,12 +40,24 @@ normalizes them into shared declaration entries.
 
 - `pythonarchtesting.rules.compilation.orchestrator`
 - `pythonarchtesting.rules.compilation.decorators.api_signature`
-- `pythonarchtesting.rules.compilation.decorators.import_policy`
-- `pythonarchtesting.rules.compilation.decorators.protocols`
+- `pythonarchtesting.rules.compilation.decorators.attributes`
+- `pythonarchtesting.rules.compilation.decorators.constructors`
+- `pythonarchtesting.rules.compilation.decorators.enum_type`
+- `pythonarchtesting.rules.compilation.decorators.factories`
 - `pythonarchtesting.rules.compilation.decorators.flow`
+- `pythonarchtesting.rules.compilation.decorators.import_policy`
+- `pythonarchtesting.rules.compilation.decorators.member_absence`
+- `pythonarchtesting.rules.compilation.decorators.member_set`
+- `pythonarchtesting.rules.compilation.decorators.method_set`
+- `pythonarchtesting.rules.compilation.decorators.nominal_type`
+- `pythonarchtesting.rules.compilation.decorators.protocols`
+- `pythonarchtesting.rules.compilation.decorators.python_modifiers`
 
-Compilation turns normalized declarations into rule objects, compiler evidence,
-and compiler-side results.
+`pythonarchtesting.rules.compilation` is the canonical compiler namespace.
+Each decorator module turns its normalized declaration entries into rule
+objects, compiler evidence, and compiler-side results. Marker factories on the
+public `pythonarchtesting.rules` surface dispatch into these modules through
+the orchestrator.
 
 ### Matching
 
