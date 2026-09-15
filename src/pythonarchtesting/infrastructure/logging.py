@@ -10,7 +10,8 @@ DATEFMT = "%Y-%m-%d %H:%M:%S"
 FORMATTER_NAME = "default"
 DEFAULT_OUTPUT_FILE = "log.txt"
 LOGGER_NAME = "shared_logger"
-DEFAULT_LOGGER_LEVEL = "DEBUG"
+DEFAULT_LOGGER_LEVEL = "WARNING"
+DEFAULT_FILE_LOGGING = False
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -38,19 +39,22 @@ def configure_logging(config: Any, force: bool = False) -> None:
 
     level = get_str(config, "logging", "level", DEFAULT_LOGGER_LEVEL)
     root_logger.setLevel(level)
-
-    file_enabled = get_bool(config, "logging", "file", True)
-    if file_enabled is False:
-        if not root_logger.handlers:
-            root_logger.addHandler(logging.NullHandler())
-        return
-
-    output_file = get_str(config, "logging", "filename", DEFAULT_OUTPUT_FILE)
-    file_handler = logging.FileHandler(output_file, mode="w", encoding="utf-8")
-    file_handler.setLevel(level)
     formatter = logging.Formatter(fmt=FORMAT, datefmt=DATEFMT)
-    file_handler.setFormatter(formatter)
-    root_logger.addHandler(file_handler)
+
+    # Always report on stderr, so warnings stay visible without a log file and
+    # never mix into the report written to stdout.
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(level)
+    stream_handler.setFormatter(formatter)
+    root_logger.addHandler(stream_handler)
+
+    file_enabled = get_bool(config, "logging", "file", DEFAULT_FILE_LOGGING)
+    if file_enabled:
+        output_file = get_str(config, "logging", "filename", DEFAULT_OUTPUT_FILE)
+        file_handler = logging.FileHandler(output_file, mode="w", encoding="utf-8")
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
 
     # Keep the shared logger available for compatibility while inheriting root
     # setup.

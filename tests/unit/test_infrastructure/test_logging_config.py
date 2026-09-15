@@ -40,6 +40,21 @@ def test_logging_file_disabled_does_not_create_log_file(monkeypatch, tmp_path):
     assert not (tmp_path / "disabled.log").exists()
 
 
+def test_logging_file_disabled_still_reports_warnings_on_stderr(
+    monkeypatch, tmp_path, capsys
+):
+    cfg = create_config_from_dict(
+        {"logging": {"level": "WARNING", "file": "false", "filename": "disabled.log"}}
+    )
+    monkeypatch.chdir(tmp_path)
+
+    configure_logging(cfg, force=True)
+    get_logger("pythonarchtesting.config").warning("config warning line")
+    _flush_handlers()
+
+    assert "config warning line" in capsys.readouterr().err
+
+
 def test_force_reconfiguration_switches_log_file(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 

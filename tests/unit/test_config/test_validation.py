@@ -65,6 +65,14 @@ def test_packaged_defaults_conf_matches_schema_keys() -> None:
     assert defaults_keys == schema_keys
 
 
+def test_packaged_defaults_do_not_write_a_log_file() -> None:
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read(Path("src/pythonarchtesting/defaults.conf"), encoding="utf-8")
+
+    assert parser["logging"]["level"] == "WARNING"
+    assert parser["logging"]["file"] == "false"
+
+
 @pytest.mark.parametrize(
     "removed_section", ["arch_rules", "runtime", "structural_check", "type_check"]
 )
