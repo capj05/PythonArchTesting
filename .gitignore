@@ -7,6 +7,8 @@ out/
 .tmp*
 example/*
 !example/checkout_assignment/
+!example/project_1/
+example/project_1/reports/
 *.egg-info/
 docs/dev_notes/
 docs/diagrams/
