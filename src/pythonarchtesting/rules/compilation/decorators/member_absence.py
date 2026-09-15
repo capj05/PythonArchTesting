@@ -544,7 +544,7 @@ def compile_does_not_have(
 
     selector_source_entity_id = source_entity.canonical_id
     signature_anchor_entity_id: str | None = None
-    scope = cast(Literal["class", "method"], source_entity.kind)
+    scope: Literal["class", "method"] = source_entity.kind
 
     if source_entity.kind == "method":
         if member_kind not in {"method", "any"}:
