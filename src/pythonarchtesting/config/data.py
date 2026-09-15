@@ -121,9 +121,7 @@ class ProjectsConfig:
     exclude_patterns: List[str] = field(
         default_factory=lambda: [".git", "__pycache__", "template"]
     )
-    required_modules: List[str] = field(
-        default_factory=lambda: ["calculator", "data_processor"]
-    )
+    required_modules: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

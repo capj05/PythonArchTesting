@@ -224,7 +224,7 @@ CONFIGURATION_SCHEMA: Dict[str, Dict[str, ValidationRule]] = {
         ),
         "target_path": ValidationRule(
             value_type=ValueType.PATH,
-            default_value="./target",
+            default_value="",
             error_message="Target path must be a valid directory path",
         ),
         "project_pattern": ValidationRule(
@@ -240,7 +240,7 @@ CONFIGURATION_SCHEMA: Dict[str, Dict[str, ValidationRule]] = {
         ),
         "required_modules": ValidationRule(
             value_type=ValueType.LIST,
-            default_value=["calculator", "data_processor"],
+            default_value=[],
             error_message="Required modules must be a list of strings",
         ),
     },

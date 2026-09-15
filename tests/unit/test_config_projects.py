@@ -2,8 +2,21 @@ from pathlib import Path
 
 import pytest
 
+from pythonarchtesting.config import load_config
 from pythonarchtesting.config.projects import resolve_projects_config
 from pythonarchtesting.exceptions import ConfigurationError
+
+
+def test_packaged_defaults_do_not_configure_a_phantom_target(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = load_config(config_path=None, cli_args={}, discover_from_cwd=False)
+
+    with pytest.raises(ConfigurationError) as excinfo:
+        resolve_projects_config(config)
+
+    assert excinfo.value.error_code == "CONFIG_TARGETS_EMPTY"
 
 
 class StubConfig:
