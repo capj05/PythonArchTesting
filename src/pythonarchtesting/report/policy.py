@@ -18,6 +18,8 @@ def compute_exit_code(results: List[Dict[str, Any]], config: Any) -> int:
             return 1
         if status == "SKIPPED":
             continue
+        if status == "OK":
+            continue
         if warnings_as_fail and (severity == "warning" or status == "WARNING"):
             return 1
     return 0

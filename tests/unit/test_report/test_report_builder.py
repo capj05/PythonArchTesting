@@ -24,6 +24,11 @@ def test_compute_exit_code_warnings_as_fail():
     assert compute_exit_code(results, _DummyConfig(True)) == 1
 
 
+def test_passing_warning_severity_rule_does_not_fail_target():
+    results = [{"status": "OK", "severity": "warning"}]
+    assert compute_exit_code(results, _DummyConfig(True)) == 0
+
+
 class _ExitState:
     def __init__(self, exit_code: int) -> None:
         self.exit_code = exit_code
