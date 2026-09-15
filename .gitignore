@@ -9,6 +9,7 @@ example/*
 !example/checkout_assignment/
 !example/project_1/
 example/project_1/reports/
+example/checkout_assignment/reports/report.json
 *.egg-info/
 docs/dev_notes/
 docs/diagrams/

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 from datetime import datetime, timezone
@@ -156,6 +157,42 @@ def test_markdown_bundle_index_golden(tmp_path):
     assert _normalize_text(index) == _normalize_text(
         _golden("run_markdown_index.golden")
     )
+
+
+def test_report_paths_under_cwd_are_rendered_relative(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    cfg = _cfg()
+    run_state = dataclasses.replace(_run_state(cfg), source_path=tmp_path / "reference")
+    targets = [
+        _target(
+            "t1",
+            tmp_path / "assignments" / "t1",
+            ValidationStatus.OK,
+            "arch/ok",
+        )
+    ]
+
+    report = json.loads(
+        generate_run_report(run_state, targets, output_format="json", config=cfg)
+    )
+
+    assert report["run"]["source_path"] == "reference"
+    assert report["targets"][0]["source_root"] == "reference"
+    assert report["targets"][0]["target_path"] == "assignments/t1"
+
+
+def test_report_paths_outside_cwd_stay_absolute(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path / "..")
+    cfg = _cfg()
+    run_state = dataclasses.replace(_run_state(cfg), source_path=Path("/source"))
+    targets = [_target("b", Path("/targets/b"), ValidationStatus.OK, "arch/ok")]
+
+    report = json.loads(
+        generate_run_report(run_state, targets, output_format="json", config=cfg)
+    )
+
+    assert report["run"]["source_path"] == "/source"
+    assert report["targets"][0]["target_path"] == "/targets/b"
 
 
 def test_markdown_target_page_formats_counts_like_the_index(tmp_path):

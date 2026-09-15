@@ -5,6 +5,7 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 from hashlib import sha1
+from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from pythonarchtesting.config import load_config
@@ -200,6 +201,21 @@ def _severity_from_status(status: str) -> str:
     if status in {"WARNING", "SKIPPED"}:
         return "warning"
     return "info"
+
+
+def _display_path(value: Any) -> str:
+    """Render a path relative to the working directory when it lives inside it.
+
+    Keeps reports reproducible across machines: a run made from the project root
+    reports ``example/reference`` rather than a checkout-specific absolute path.
+    Paths outside the working directory stay absolute, because shortening them
+    would be misleading.
+    """
+    path = Path(value)
+    try:
+        return path.relative_to(Path.cwd()).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def _derive_project_id(project_id: Optional[str], target_path: Optional[str]) -> str:
@@ -919,7 +935,7 @@ def _build_run_report_document(
     run = RunMeta(
         generated_at=generated_at,
         target_path=None,
-        source_path=str(run_state.source_path),
+        source_path=_display_path(run_state.source_path),
         reference_modules=tuple(sorted(str(v) for v in run_state.reference_modules)),
         config_snapshot=config_snapshot,
         config_fingerprint=_config_fingerprint(config_snapshot),
@@ -956,7 +972,7 @@ def _build_run_report_document(
                 target_id=canonical_target_id,
                 display_name=display_name,
                 source_root=run.source_path,
-                target_path=target_path,
+                target_path=_display_path(target_path),
                 tags=tuple(),
                 mode=run.mode,
                 matching=_matching_section(

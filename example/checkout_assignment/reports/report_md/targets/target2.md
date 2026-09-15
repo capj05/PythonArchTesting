@@ -5,15 +5,15 @@
 ## Metadata
 
 - Target ID: target2
-- Path: /mnt/c/Users/jiric/Documents/School/DP/PythonArchTesting/example/checkout_assignment/assignments/target2
+- Path: example/checkout_assignment/assignments/target2
 - Exit Code: 1
 
 ## Summary
 
 - Total Results: 15
-- Status Counts: {'FAILED': 3, 'OK': 12}
-- Severity Counts: {'error': 15}
-- Category Counts: {'api_signature': 6, 'attribute_contract': 7, 'import_policy': 1, 'protocol_conformance': 1}
+- Status Counts: FAILED: 3 · OK: 12
+- Severity Counts: error: 15
+- Category Counts: api_signature: 6 · attribute_contract: 7 · import_policy: 1 · protocol_conformance: 1
 
 ## Matching
 

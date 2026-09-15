@@ -184,8 +184,9 @@ python-arch-test \
     --output example/checkout_assignment/reports/report_md
 ```
 
-Pre-rendered reports for this example live at
-`example/checkout_assignment/reports/`.
+A pre-rendered Markdown bundle for this example lives at
+`example/checkout_assignment/reports/report_md/`. JSON output is not checked in;
+run the JSON command above to produce it.
 
 ## How To Read A Report
 
