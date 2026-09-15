@@ -158,6 +158,23 @@ def test_markdown_bundle_index_golden(tmp_path):
     )
 
 
+def test_markdown_target_page_formats_counts_like_the_index(tmp_path):
+    cfg, run_state, targets = _golden_targets()
+    out = generate_run_report(
+        run_state,
+        targets,
+        output_format="markdown",
+        config=cfg,
+        output_path=tmp_path / "md_counts",
+    )
+
+    page = (Path(out).parent / "targets" / "b.md").read_text(encoding="utf-8")
+
+    assert "- Status Counts: FAILED: 1" in page
+    assert "- Severity Counts: error: 1" in page
+    assert "- Category Counts: arch: 1" in page
+
+
 def test_run_report_rejects_removed_html_format(tmp_path):
     cfg, run_state, targets = _golden_targets()
     with pytest.raises(

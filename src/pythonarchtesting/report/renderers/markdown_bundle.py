@@ -103,9 +103,9 @@ def _render_target_page(
         "## Summary",
         "",
         f"- Total Results: {target.summary.results_total}",
-        f"- Status Counts: {escape_markdown(str(target.summary.status_counts))}",
-        f"- Severity Counts: {escape_markdown(str(target.summary.severity_counts))}",
-        f"- Category Counts: {escape_markdown(str(target.summary.category_counts))}",
+        f"- Status Counts: {_format_count_dict(target.summary.status_counts)}",
+        f"- Severity Counts: {_format_count_dict(target.summary.severity_counts)}",
+        f"- Category Counts: {_format_count_dict(target.summary.category_counts)}",
         "",
     ])
     if detail in ("verbose", "debug"):
