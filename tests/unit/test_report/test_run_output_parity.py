@@ -212,6 +212,22 @@ def test_markdown_target_page_formats_counts_like_the_index(tmp_path):
     assert "- Category Counts: arch: 1" in page
 
 
+def test_markdown_single_target_golden(tmp_path):
+    cfg, run_state, targets = _golden_targets()
+    out = generate_run_report(
+        run_state,
+        [targets[0]],
+        output_format="markdown",
+        config=cfg,
+        output_path=tmp_path / "single.md",
+    )
+
+    rendered = Path(out).read_text(encoding="utf-8")
+    assert _normalize_text(rendered) == _normalize_text(
+        _golden("single_markdown.golden")
+    )
+
+
 def test_run_report_rejects_removed_html_format(tmp_path):
     cfg, run_state, targets = _golden_targets()
     with pytest.raises(
