@@ -247,7 +247,11 @@ def factory_candidates_for_class(
         *constructor_entities,
         *sorted(
             method_candidates.values(),
-            key=lambda candidate: (candidate.name, candidate.qualname, candidate.lineno),
+            key=lambda candidate: (
+                candidate.name,
+                candidate.qualname,
+                candidate.lineno,
+            ),
         ),
     ]
 
@@ -380,7 +384,9 @@ def filter_static_attribute_factory_candidates(
             result.append(candidate)
         elif name_match == "alias" and aliases and candidate.name in aliases:
             result.append(candidate)
-        elif name_match == "regex" and pattern and re.fullmatch(pattern, candidate.name):
+        elif (
+            name_match == "regex" and pattern and re.fullmatch(pattern, candidate.name)
+        ):
             result.append(candidate)
     return result
 

@@ -140,10 +140,16 @@ class Contract:
     assert pos_errors == [] and neg_errors == []
     assert [r.status for r in pos_results] == ["OK"]
     assert [r.status for r in neg_results] == ["FAILED"]
-    assert pos_results[0].details["recognized_abstract_decorator"] == "abc.abstractmethod"
-    assert neg_results[0].details["recognized_abstract_decorator"] == "abc.abstractmethod"
+    assert (
+        pos_results[0].details["recognized_abstract_decorator"] == "abc.abstractmethod"
+    )
+    assert (
+        neg_results[0].details["recognized_abstract_decorator"] == "abc.abstractmethod"
+    )
     assert neg_results[0].details["modifier_polarity"] == "negative"
-    assert neg_results[0].details["failure_reason"] == "forbidden_abstract_method_present"
+    assert (
+        neg_results[0].details["failure_reason"] == "forbidden_abstract_method_present"
+    )
 
 
 def test_mod003_abstract_method_symmetry_for_concrete_target() -> None:
@@ -172,7 +178,9 @@ class Contract:
     assert pos_results[0].details["recognized_abstract_decorator"] is None
     assert neg_results[0].details["recognized_abstract_decorator"] is None
     assert neg_results[0].details["modifier_polarity"] == "negative"
-    assert neg_results[0].details["failure_reason"] == "forbidden_abstract_method_absent"
+    assert (
+        neg_results[0].details["failure_reason"] == "forbidden_abstract_method_absent"
+    )
 
 
 def test_mod003_final_method_symmetry_for_final_target() -> None:

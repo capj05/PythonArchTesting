@@ -274,9 +274,7 @@ def compile_required_factory(
         return [sentinel], compiler_evidence, []
 
     default_detection_mode = (
-        "extended"
-        if source_entity.extras.get("assignment_wrapped_by")
-        else "strict"
+        "extended" if source_entity.extras.get("assignment_wrapped_by") else "strict"
     )
     detection_mode = str(
         params_kwargs.get("detection_mode", default_detection_mode)

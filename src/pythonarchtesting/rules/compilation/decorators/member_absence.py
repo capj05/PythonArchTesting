@@ -261,9 +261,7 @@ def compile_does_not_have(
             param="storage",
             value=storage,
             valid=["any"],
-            reason=(
-                f"storage must be 'any' when member_kind is '{member_kind}'"
-            ),
+            reason=(f"storage must be 'any' when member_kind is '{member_kind}'"),
             compiler_evidence=compiler_evidence,
             rule_id_suffix=rule_id_suffix,
         )

@@ -382,9 +382,7 @@ def compile_require_member_set(
             param="constructor_kind",
             value=params_kwargs.get("constructor_kind"),
             valid=sorted(_VALID_CONSTRUCTOR_KIND),
-            reason=(
-                "constructor_kind must be one of: auto, __init__, __new__"
-            ),
+            reason=("constructor_kind must be one of: auto, __init__, __new__"),
             params_kwargs=params_kwargs,
             rule_id_suffix=rule_id_suffix,
         )

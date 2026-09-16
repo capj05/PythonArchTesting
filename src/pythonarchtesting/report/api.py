@@ -97,10 +97,7 @@ def generate_run_report(
             matching_debug_context = build_run_matching_debug_context(
                 run_state, target_states
             )
-            if (
-                output_path_obj.suffix == ".md"
-                and len(target_states) == 1
-            ):
+            if output_path_obj.suffix == ".md" and len(target_states) == 1:
                 return render_markdown_single_target(
                     document,
                     output_path_obj,

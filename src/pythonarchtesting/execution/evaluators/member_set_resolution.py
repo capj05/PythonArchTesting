@@ -106,7 +106,9 @@ def collect_attribute_members(
     include_descriptors = bool(descriptor_kinds)
     if include_descriptors:
         kinds_set: set[str] | None = {
-            kind for kind in descriptor_kinds or () if kind in _SUPPORTED_DESCRIPTOR_KINDS
+            kind
+            for kind in descriptor_kinds or ()
+            if kind in _SUPPORTED_DESCRIPTOR_KINDS
         }
         if not kinds_set:
             kinds_set = None
@@ -135,9 +137,11 @@ def collect_attribute_members(
             SelectedMember(
                 name=name,
                 member_kind=_attribute_member_kind(attribute),
-                qualname=attribute.declared_on_qualname + "." + name
-                if attribute.declared_on_qualname
-                else name,
+                qualname=(
+                    attribute.declared_on_qualname + "." + name
+                    if attribute.declared_on_qualname
+                    else name
+                ),
                 module_path=target_class.module_path,
                 lineno=attribute.lineno,
                 origin=attribute.origin,

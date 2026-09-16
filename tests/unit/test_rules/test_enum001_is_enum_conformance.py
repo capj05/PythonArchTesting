@@ -247,8 +247,9 @@ class DeploymentStatus(BaseStatus):
     assert results[0].details["target_bases"] == ["target_module.BaseStatus"]
 
 
-def test_enum001_evaluation_passes_for_mixed_inheritance_when_any_branch_is_enum_like(
-) -> None:
+def test_enum001_evaluation_passes_for_mixed_inheritance_when_any_branch_is_enum_like() -> (
+    None
+):
     source_modules = [
         (
             "source_module.py",

@@ -652,12 +652,8 @@ def process(repo: SqlRepository) -> None:
 """
     source_entities = extract_entities(source, role="source")
     target_entities = extract_entities(target, role="target")
-    source_func = extract_entity(
-        source, role="source", kind="function", name="process"
-    )
-    target_func = extract_entity(
-        target, role="target", kind="function", name="process"
-    )
+    source_func = extract_entity(source, role="source", kind="function", name="process")
+    target_func = extract_entity(target, role="target", kind="function", name="process")
 
     rules, _, _ = compile_rules(source_entities, Mock())
     selected = select_rule(rules, rule_id="PRO002/implements_protocol_signature/v1")
@@ -713,12 +709,8 @@ def process(repo: SqlRepository) -> None:
 """
     source_entities = extract_entities(source, role="source")
     target_entities = extract_entities(target, role="target")
-    source_func = extract_entity(
-        source, role="source", kind="function", name="process"
-    )
-    target_func = extract_entity(
-        target, role="target", kind="function", name="process"
-    )
+    source_func = extract_entity(source, role="source", kind="function", name="process")
+    target_func = extract_entity(target, role="target", kind="function", name="process")
 
     rules, _, _ = compile_rules(source_entities, Mock())
     selected = select_rule(rules, rule_id="PRO002/implements_protocol_signature/v1")

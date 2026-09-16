@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from tests.unit.test_rules.protocol_rule_test_helpers import extract_entity
-
 from pythonarchtesting.rules.compilation.common import (
     build_invalid_param_sentinel_rule,
     with_rule_id_suffix,
 )
-
+from tests.unit.test_rules.protocol_rule_test_helpers import extract_entity
 
 _SOURCE = """
 class TestContract:
@@ -32,8 +30,7 @@ def test_build_invalid_param_sentinel_rule_sets_decorator_name_and_rule_id() -> 
     assert sentinel.rule_type == "compiler_invalid_param"
     assert sentinel.name == "require_method_set"
     assert (
-        sentinel.rule_id
-        == "API005/require_method_set/invalid_declaration/name_match"
+        sentinel.rule_id == "API005/require_method_set/invalid_declaration/name_match"
     )
     assert sentinel.params["decorator"] == "require_method_set"
     assert sentinel.params["param"] == "name_match"
@@ -60,8 +57,7 @@ def test_build_invalid_param_sentinel_rule_appends_suffix() -> None:
     )
 
     assert (
-        sentinel.rule_id
-        == "API005/require_method_set/invalid_declaration/min_count/d2"
+        sentinel.rule_id == "API005/require_method_set/invalid_declaration/min_count/d2"
     )
     assert sentinel.params["valid"] == []
 

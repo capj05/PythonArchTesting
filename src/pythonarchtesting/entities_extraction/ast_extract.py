@@ -29,7 +29,6 @@ from .signature import (
     signature_info_from_ast,
 )
 
-
 _ASSIGNMENT_FACTORY_WRAPPERS = {
     "classmethod": "class",
     "staticmethod": "static",

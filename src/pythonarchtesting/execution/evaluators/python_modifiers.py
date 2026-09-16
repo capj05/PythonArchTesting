@@ -240,7 +240,9 @@ def _negative_modifier_result_details(
     target_payload_field: str,
     target_subject: str,
 ) -> dict[str, Any]:
-    decorator_kind_word = "abstract" if observed_label.startswith("abstract") else "final"
+    decorator_kind_word = (
+        "abstract" if observed_label.startswith("abstract") else "final"
+    )
     reason = (
         f"target {target_subject} is decorated with a recognized {decorator_kind_word} decorator"
         if observed

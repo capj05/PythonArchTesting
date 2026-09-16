@@ -21,7 +21,9 @@ def _extract_entities(source_text: str) -> list[Entity]:
     )
 
 
-def _compile_source(source_text: str) -> tuple[list[object], list[object], list[object]]:
+def _compile_source(
+    source_text: str,
+) -> tuple[list[object], list[object], list[object]]:
     return compile_rules(_extract_entities(source_text), Mock())
 
 

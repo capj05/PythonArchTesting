@@ -101,7 +101,9 @@ def compile_required_entity_signature(
         return [], compiler_evidence, []
 
     # "ignore" is an alias for "off" — both suppress the return-only sibling rule.
-    return_annotation = "off" if return_annotation_raw == "ignore" else return_annotation_raw
+    return_annotation = (
+        "off" if return_annotation_raw == "ignore" else return_annotation_raw
+    )
 
     base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
     if base_severity_raw in {"error", "warning", "info"}:

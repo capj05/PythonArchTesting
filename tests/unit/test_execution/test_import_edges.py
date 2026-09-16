@@ -234,7 +234,9 @@ def ignore_me() -> int:
     assert [edge.imported_module for edge in edges] == ["requests"]
 
 
-def test_collect_normalized_import_edges_for_modules_double_star_matches_top_level() -> None:
+def test_collect_normalized_import_edges_for_modules_double_star_matches_top_level() -> (
+    None
+):
     kept = _extract_target_entity(
         """
 def keep() -> int:

@@ -85,7 +85,9 @@ class Target:
     assert [candidate.name for candidate in candidates] == ["INSTANCE"]
 
 
-def test_static_attribute_factory_resolution_ignores_method_wrapper_assignments() -> None:
+def test_static_attribute_factory_resolution_ignores_method_wrapper_assignments() -> (
+    None
+):
     target = """
 class Target:
     def _build_impl(cls):

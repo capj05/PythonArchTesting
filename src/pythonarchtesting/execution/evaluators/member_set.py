@@ -109,7 +109,9 @@ class MemberSetEvaluator:
         names_list = [str(name) for name in names] if isinstance(names, list) else None
         pattern_raw = params.get("pattern")
         pattern = (
-            pattern_raw.strip() if isinstance(pattern_raw, str) and pattern_raw else None
+            pattern_raw.strip()
+            if isinstance(pattern_raw, str) and pattern_raw
+            else None
         )
         declared_only = bool(params.get("declared_only", False))
         method_kind = str(params.get("method_kind", "any")).lower()
@@ -121,7 +123,9 @@ class MemberSetEvaluator:
             if isinstance(descriptor_kinds_raw, list)
             else None
         )
-        include_dynamic_attributes = bool(params.get("include_dynamic_attributes", False))
+        include_dynamic_attributes = bool(
+            params.get("include_dynamic_attributes", False)
+        )
         interpret_dataclass_fields = bool(
             params.get("interpret_dataclass_fields", False)
         )
@@ -165,7 +169,9 @@ class MemberSetEvaluator:
                 "selected_members": [],
                 **common_details,
             }
-            return _build_rule_result(rule, source, target, match, "FAILED", details, ())
+            return _build_rule_result(
+                rule, source, target, match, "FAILED", details, ()
+            )
 
         all_members: list[SelectedMember] = []
 

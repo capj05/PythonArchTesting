@@ -33,9 +33,7 @@ def test_pattern_recipe_catalog_references_existing_snippets() -> None:
 
 
 def test_pattern_recipe_index_links_resolve_to_sections() -> None:
-    catalog = (_repo_root() / "docs" / "pattern-recipes.md").read_text(
-        encoding="utf-8"
-    )
+    catalog = (_repo_root() / "docs" / "pattern-recipes.md").read_text(encoding="utf-8")
     headings = re.findall(r"^## (.+)$", catalog, flags=re.MULTILINE)
     heading_slugs = {_slugify(heading) for heading in headings}
     index_links = re.findall(r"\(#([a-z0-9-]+)\)", catalog)

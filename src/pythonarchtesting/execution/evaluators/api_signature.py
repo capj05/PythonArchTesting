@@ -26,15 +26,10 @@ from .member_name_resolution import (
     matched_target_parent_class,
 )
 from .member_name_resolution import member_origin as resolved_member_origin
-from .member_name_resolution import (
-    target_methods_for_class,
-    target_parent_class,
-)
+from .member_name_resolution import target_methods_for_class, target_parent_class
 from .messages import _build_rule_result
 from .signature_comparison import compatible_compare as _compatible_compare
-from .signature_comparison import (
-    evaluate_method_compatibility,
-)
+from .signature_comparison import evaluate_method_compatibility
 from .signature_comparison import exact_compare as _exact_compare
 from .signature_comparison import method_kind as _method_kind
 from .signature_comparison import param_model as _param_model
@@ -424,9 +419,7 @@ def _evaluate_required_factory_rule(
         allow_inherited=allow_inherited,
         detection_mode=detection_mode,
     )
-    effective_source_name = (
-        source.extras.get("assignment_wrapped_by") or source.name
-    )
+    effective_source_name = source.extras.get("assignment_wrapped_by") or source.name
     filtered_candidates = filter_factory_candidates(
         candidates,
         satisfy_with=satisfy_with,
@@ -446,12 +439,14 @@ def _evaluate_required_factory_rule(
             ctx,
             allow_inherited=True,
         )
-        matched_static_attribute_candidates = filter_static_attribute_factory_candidates(
-            static_attribute_candidates,
-            name_match=name_match,
-            source_name=source.name,
-            aliases=aliases,
-            pattern=pattern,
+        matched_static_attribute_candidates = (
+            filter_static_attribute_factory_candidates(
+                static_attribute_candidates,
+                name_match=name_match,
+                source_name=source.name,
+                aliases=aliases,
+                pattern=pattern,
+            )
         )
         filtered_static_attribute_candidates = [
             candidate
@@ -706,9 +701,7 @@ def _evaluate_required_factory_rule(
         selected_static_attribute = selected_candidate["candidate"]
         selected_candidate_details = {
             "entity_id": None,
-            "qualname": _static_attribute_candidate_qualname(
-                selected_static_attribute
-            ),
+            "qualname": _static_attribute_candidate_qualname(selected_static_attribute),
             "name": selected_static_attribute.name,
             "factory_kind": "static_attribute",
             "owner_class": selected_static_attribute.owner_class.qualname,

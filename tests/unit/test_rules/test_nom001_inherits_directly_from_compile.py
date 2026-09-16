@@ -187,7 +187,9 @@ class CsvRepository:
     assert evidence[0].payload["reason"] == "ambiguous_simple_name"
 
 
-def test_nom001_inherits_directly_from_invalid_target_sentinel_rule_evaluates_failed() -> None:
+def test_nom001_inherits_directly_from_invalid_target_sentinel_rule_evaluates_failed() -> (
+    None
+):
     source = """
 from typing import Annotated
 from pythonarchtesting.rules import inherits_directly_from

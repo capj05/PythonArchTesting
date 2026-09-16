@@ -1442,7 +1442,8 @@ class Session:
     assert errors == []
     assert [result.status for result in results] == ["FAILED"]
     assert (
-        results[0].details["reason"] == "static_attribute_parameterized_factory_mismatch"
+        results[0].details["reason"]
+        == "static_attribute_parameterized_factory_mismatch"
     )
 
 
@@ -1556,7 +1557,10 @@ class Session:
 
     assert errors == []
     assert [result.status for result in results] == ["FAILED"]
-    assert results[0].details["reason"] == "factory_static_attribute_annotation_incompatible"
+    assert (
+        results[0].details["reason"]
+        == "factory_static_attribute_annotation_incompatible"
+    )
 
 
 def test_api004_static_attribute_absent_optional_skips() -> None:
@@ -1703,8 +1707,13 @@ class Session:
 
     assert errors == []
     assert [result.status for result in results] == ["OK"]
-    assert results[0].details["candidate_factories"][0]["factory_kind"] == "static_attribute"
-    assert results[0].details["selected_candidate"]["factory_kind"] == "static_attribute"
+    assert (
+        results[0].details["candidate_factories"][0]["factory_kind"]
+        == "static_attribute"
+    )
+    assert (
+        results[0].details["selected_candidate"]["factory_kind"] == "static_attribute"
+    )
 
 
 def test_api004_invalid_detection_mode_sentinel_rule_evaluates_failed() -> None:

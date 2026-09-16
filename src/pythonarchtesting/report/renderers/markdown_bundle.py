@@ -93,32 +93,36 @@ def _render_target_page(
     ]
     if include_back_link:
         lines.extend(["[Back to run index](../report.md)", ""])
-    lines.extend([
-        "## Metadata",
-        "",
-        f"- Target ID: {escape_markdown(target.target_id)}",
-        f"- Path: {escape_markdown(target.target_path)}",
-        f"- Exit Code: {target.exit_code}",
-        "",
-        "## Summary",
-        "",
-        f"- Total Results: {target.summary.results_total}",
-        f"- Status Counts: {_format_count_dict(target.summary.status_counts)}",
-        f"- Severity Counts: {_format_count_dict(target.summary.severity_counts)}",
-        f"- Category Counts: {_format_count_dict(target.summary.category_counts)}",
-        "",
-    ])
+    lines.extend(
+        [
+            "## Metadata",
+            "",
+            f"- Target ID: {escape_markdown(target.target_id)}",
+            f"- Path: {escape_markdown(target.target_path)}",
+            f"- Exit Code: {target.exit_code}",
+            "",
+            "## Summary",
+            "",
+            f"- Total Results: {target.summary.results_total}",
+            f"- Status Counts: {_format_count_dict(target.summary.status_counts)}",
+            f"- Severity Counts: {_format_count_dict(target.summary.severity_counts)}",
+            f"- Category Counts: {_format_count_dict(target.summary.category_counts)}",
+            "",
+        ]
+    )
     if detail in ("verbose", "debug"):
-        lines.extend([
-            "## Matching",
-            "",
-            f"- Total: {target.matching.summary.total}",
-            f"- Matched: {target.matching.summary.matched}",
-            f"- Low confidence: {target.matching.summary.low_confidence}",
-            f"- Ambiguous: {target.matching.summary.ambiguous}",
-            f"- Unmatched: {target.matching.summary.unmatched}",
-            "",
-        ])
+        lines.extend(
+            [
+                "## Matching",
+                "",
+                f"- Total: {target.matching.summary.total}",
+                f"- Matched: {target.matching.summary.matched}",
+                f"- Low confidence: {target.matching.summary.low_confidence}",
+                f"- Ambiguous: {target.matching.summary.ambiguous}",
+                f"- Unmatched: {target.matching.summary.unmatched}",
+                "",
+            ]
+        )
     if detail == "debug":
         debug_target = _target_debug_report(target)
         matching_blocks = build_matching_debug_blocks_for_target(
@@ -126,18 +130,22 @@ def _render_target_page(
             get_target_debug_context(matching_debug_context, debug_target),
             top_k=DEFAULT_MATCHING_DEBUG_TOP_K,
         )
-        lines.extend([
-            render_matching_debug_markdown(
-                matching_blocks,
-                top_k=DEFAULT_MATCHING_DEBUG_TOP_K,
-                heading_level=2,
-            ).rstrip(),
+        lines.extend(
+            [
+                render_matching_debug_markdown(
+                    matching_blocks,
+                    top_k=DEFAULT_MATCHING_DEBUG_TOP_K,
+                    heading_level=2,
+                ).rstrip(),
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## Results",
             "",
-        ])
-    lines.extend([
-        "## Results",
-        "",
-    ])
+        ]
+    )
 
     headers = (
         "Project",
@@ -184,9 +192,7 @@ def render_markdown_single_target(
     """Render a single-target Markdown report to one file. Returns the path."""
     targets = list(document.targets)
     if len(targets) != 1:
-        raise ValueError(
-            "render_markdown_single_target requires exactly one target."
-        )
+        raise ValueError("render_markdown_single_target requires exactly one target.")
     target = targets[0]
     rendered = _render_target_page(
         document,
@@ -246,11 +252,13 @@ def render_markdown_bundle(
     if detail in ("verbose", "debug"):
         results_summary = document.summary.results
         if results_summary.results_total > 0:
-            index_lines.extend([
-                "## Result Totals",
-                "",
-                f"- Total Results: {results_summary.results_total}",
-            ])
+            index_lines.extend(
+                [
+                    "## Result Totals",
+                    "",
+                    f"- Total Results: {results_summary.results_total}",
+                ]
+            )
             if results_summary.status_counts:
                 index_lines.append(
                     f"- Status Counts: {_format_count_dict(results_summary.status_counts)}"
@@ -265,46 +273,52 @@ def render_markdown_bundle(
                 )
             index_lines.append("")
         if results_summary.top_rules:
-            index_lines.extend([
-                "## Top Rules by Violation Count",
-                "",
-                render_markdown_table(
-                    Table(
-                        headers=("Rule", "Violations"),
-                        rows=tuple(
-                            (
-                                escape_markdown(str(entry.get("name") or "")),
-                                str(entry.get("count") or 0),
-                            )
-                            for entry in results_summary.top_rules
-                        ),
-                    )
-                ),
-                "",
-            ])
+            index_lines.extend(
+                [
+                    "## Top Rules by Violation Count",
+                    "",
+                    render_markdown_table(
+                        Table(
+                            headers=("Rule", "Violations"),
+                            rows=tuple(
+                                (
+                                    escape_markdown(str(entry.get("name") or "")),
+                                    str(entry.get("count") or 0),
+                                )
+                                for entry in results_summary.top_rules
+                            ),
+                        )
+                    ),
+                    "",
+                ]
+            )
         if results_summary.top_source_files:
-            index_lines.extend([
-                "## Top Source Files",
-                "",
-                render_markdown_table(
-                    Table(
-                        headers=("File", "Results"),
-                        rows=tuple(
-                            (
-                                escape_markdown(str(entry.get("name") or "")),
-                                str(entry.get("count") or 0),
-                            )
-                            for entry in results_summary.top_source_files
-                        ),
-                    )
-                ),
-                "",
-            ])
+            index_lines.extend(
+                [
+                    "## Top Source Files",
+                    "",
+                    render_markdown_table(
+                        Table(
+                            headers=("File", "Results"),
+                            rows=tuple(
+                                (
+                                    escape_markdown(str(entry.get("name") or "")),
+                                    str(entry.get("count") or 0),
+                                )
+                                for entry in results_summary.top_source_files
+                            ),
+                        )
+                    ),
+                    "",
+                ]
+            )
 
-    index_lines.extend([
-        "## Targets",
-        "",
-    ])
+    index_lines.extend(
+        [
+            "## Targets",
+            "",
+        ]
+    )
     index_lines.append(
         render_markdown_table(
             Table(
