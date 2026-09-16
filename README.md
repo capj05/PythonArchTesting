@@ -94,6 +94,8 @@ CLI entrypoints:
 ## Quick Example
 
 The repository ships a canonical worked example at `example/checkout_assignment/`.
+For a marker-by-marker tour, `example/rule_showcase/` holds one small project per
+rule family and covers every marker in isolation.
 The snippets and CLI commands below are drawn from it — every path is a real
 file you can open in the tree.
 
