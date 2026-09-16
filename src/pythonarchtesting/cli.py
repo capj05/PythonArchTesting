@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from pythonarchtesting.config import Config, load_config, resolve_projects_config
+from pythonarchtesting.exceptions import ConfigurationError
 from pythonarchtesting.infrastructure.logging import configure_logging
 from pythonarchtesting.report.lazy import (
     generate_run_report,
@@ -24,6 +25,20 @@ def run_projects(*args: Any, **kwargs: Any) -> Any:
     from pythonarchtesting.runner import run_projects as _run_projects
 
     return _run_projects(*args, **kwargs)
+
+
+USAGE_ERROR_EXIT_CODE = 2
+
+
+def _write_report(output_path: str, report: str) -> None:
+    """Write a report, creating the output directory when it is missing.
+
+    Mirrors the Markdown bundle, which already creates its own directory.
+    """
+    path = Path(output_path)
+    if path.parent != Path(""):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(report, encoding="utf-8")
 
 
 def _parse_csv(value: Optional[str]) -> List[str]:
@@ -113,8 +128,7 @@ def _run_declaration_validation(
     )
     report = build_declaration_validation_report(run_state, output_format or "json")
     if output_file:
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(report)
+        _write_report(output_file, report)
         print(f"Report written to {output_file}")
     else:
         print(report)
@@ -122,6 +136,23 @@ def _run_declaration_validation(
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    """Run the CLI, turning expected failures into a one-line message.
+
+    Argument errors keep going through ``parser.error``, which raises
+    ``SystemExit(2)``; this wrapper gives configuration and I/O failures the same
+    exit code instead of letting a traceback reach the user.
+    """
+    try:
+        return _run(argv)
+    except ConfigurationError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return USAGE_ERROR_EXIT_CODE
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return USAGE_ERROR_EXIT_CODE
+
+
+def _run(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -210,8 +241,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         run_state, target_states, args.format, config, args.output
     )
     if args.output and args.format == "json":
-        with open(args.output, "w", encoding="utf-8") as f:
-            f.write(report)
+        # generate_run_report already wrote the file when given an output path.
         print(f"Report written to {args.output}")
     elif args.output and args.format == "markdown":
         print(f"Report written to {report}")

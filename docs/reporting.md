@@ -18,6 +18,11 @@ Each target gets its own `exit_code`:
 - `0`: no `FAILED` or `ERROR` result triggered failure
 - `1`: at least one result failed
 
+The CLI process itself also exits `2` when the run could not start at all — an
+invalid flag combination, a configuration error, or an output path that cannot be
+written. Those failures print a single `error: ...` line on stderr and produce no
+report. Exit codes `0` and `1` always mean a run completed and was judged.
+
 `SKIPPED` does not fail a target by itself.
 
 Warnings fail a target only when `[report].warnings_as_fail = true`.

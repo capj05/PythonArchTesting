@@ -78,7 +78,9 @@ def generate_run_report(
     if output_format == ReportingConstants.JSON_FORMAT:
         rendered = render_json(document)
         if output_path is not None:
-            Path(output_path).write_text(rendered, encoding="utf-8")
+            destination = Path(output_path)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(rendered, encoding="utf-8")
         return rendered
     detail = "verbose"
     if config is not None:

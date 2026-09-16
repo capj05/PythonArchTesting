@@ -317,3 +317,68 @@ def test_validation_scope_logical_views_filters_non_template_functions(
     assert data_all["summary"]["targets_failed"] == 1
     assert exit_code_scoped == 0
     assert data_scoped["summary"]["targets_failed"] == 0
+
+
+def test_run_cli_creates_missing_json_output_directory(monkeypatch, tmp_path):
+    config_path = _write_smoke_config(tmp_path)
+    source, target_ok, _ = _smoke_paths()
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
+    output = tmp_path / "missing" / "nested" / "report.json"
+
+    exit_code = main(
+        [
+            "--config",
+            str(config_path),
+            "--source",
+            str(source),
+            "--target",
+            str(target_ok),
+            "--format",
+            "json",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert exit_code == 0
+    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == "2"
+
+
+def test_validate_declarations_creates_missing_output_directory(monkeypatch, tmp_path):
+    config_path = _write_smoke_config(tmp_path)
+    source, _, _ = _smoke_paths()
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
+    output = tmp_path / "missing" / "declarations.json"
+
+    main(
+        [
+            "--config",
+            str(config_path),
+            "--validate-declarations",
+            "--source",
+            str(source),
+            "--format",
+            "json",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert output.is_file()
+
+
+def test_run_cli_reports_configuration_error_without_traceback(
+    monkeypatch, tmp_path, capsys
+):
+    config_path = _write_smoke_config(tmp_path)
+    source, _, _ = _smoke_paths()
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(
+        ["--config", str(config_path), "--source", str(source), "--format", "json"]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "CONFIG_TARGETS_EMPTY" in captured.err
+    assert "Traceback" not in captured.err
