@@ -17,12 +17,6 @@ from pythonarchtesting.evidence.collection import (
     collect_static_evidence,
     parse_python_modules,
 )
-
-try:
-    from pythonarchtesting.state import ProjectState
-except ImportError:
-    ProjectState = None
-
 from tests.utils.assertions import assert_memory_usage_within_threshold
 from tests.utils.generators import generate_test_project
 
@@ -52,9 +46,6 @@ class TestMemoryUsage:
     @pytest.mark.performance
     def test_memory_usage_during_analysis(self, temp_project_dir: Path):
         """Test memory usage during project analysis."""
-        if not ProjectState:
-            pytest.skip("ProjectState not available")
-            return
 
         process = psutil.Process()
         initial_memory = process.memory_info().rss
@@ -63,7 +54,6 @@ class TestMemoryUsage:
         generate_test_project(temp_project_dir, num_modules=20)
 
         # Analyze project
-        project_state = ProjectState(str(temp_project_dir), [])
         evidence = _run_real_static_analysis(temp_project_dir)
         assert evidence["parsed_module_count"] > 0 or evidence["syntax_error_count"] > 0
 
@@ -76,7 +66,6 @@ class TestMemoryUsage:
         )
 
         # Clean up
-        del project_state
         gc.collect()
 
         final_memory = process.memory_info().rss
@@ -88,9 +77,6 @@ class TestMemoryUsage:
     @pytest.mark.performance
     def test_memory_leak_detection(self, temp_dir: Path):
         """Test for memory leaks during repeated operations."""
-        if not ProjectState:
-            pytest.skip("ProjectState not available")
-            return
 
         process = psutil.Process()
         initial_memory = process.memory_info().rss
@@ -102,7 +88,6 @@ class TestMemoryUsage:
             generate_test_project(project_path, num_modules=5)
 
             # Analyze project
-            project_state = ProjectState(str(project_path), [])
             evidence = _run_real_static_analysis(project_path)
             assert (
                 evidence["parsed_module_count"] > 0
@@ -110,7 +95,6 @@ class TestMemoryUsage:
             )
 
             # Clean up
-            del project_state
             gc.collect()
 
         final_memory = process.memory_info().rss
@@ -124,9 +108,6 @@ class TestMemoryUsage:
     @pytest.mark.performance
     def test_large_dataset_memory_usage(self, temp_project_dir: Path):
         """Test memory usage with large datasets."""
-        if not ProjectState:
-            pytest.skip("ProjectState not available")
-            return
 
         process = psutil.Process()
         initial_memory = process.memory_info().rss
@@ -135,7 +116,6 @@ class TestMemoryUsage:
         generate_test_project(temp_project_dir, num_modules=50)
 
         # Analyze large project
-        project_state = ProjectState(str(temp_project_dir), [])
         evidence = _run_real_static_analysis(temp_project_dir)
         assert evidence["parsed_module_count"] > 0 or evidence["syntax_error_count"] > 0
 
@@ -149,7 +129,6 @@ class TestMemoryUsage:
         )
 
         # Clean up
-        del project_state
         gc.collect()
 
         final_memory = process.memory_info().rss
@@ -161,14 +140,9 @@ class TestMemoryUsage:
     @pytest.mark.performance
     def test_validation_results_memory_usage(self, temp_project_dir: Path):
         """Test memory usage when storing many validation results."""
-        if not ProjectState:
-            pytest.skip("ProjectState not available")
-            return
 
         process = psutil.Process()
         initial_memory = process.memory_info().rss
-
-        project_state = ProjectState(str(temp_project_dir), [])
 
         # Simulate storing many validation results
         num_results = 1000
@@ -181,7 +155,6 @@ class TestMemoryUsage:
                 "line": i % 100 + 1,
                 "severity": i % 3,
             }
-            # project_state.validation_results.append(result)
 
         peak_memory = process.memory_info().rss
         memory_increase = peak_memory - initial_memory
@@ -192,7 +165,6 @@ class TestMemoryUsage:
         )
 
         # Clean up
-        del project_state
         gc.collect()
 
         final_memory = process.memory_info().rss
@@ -204,9 +176,6 @@ class TestMemoryUsage:
     @pytest.mark.performance
     def test_import_graph_memory_usage(self, temp_project_dir: Path):
         """Test memory usage when building import graphs."""
-        if not ProjectState:
-            pytest.skip("ProjectState not available")
-            return
 
         process = psutil.Process()
         initial_memory = process.memory_info().rss
@@ -235,7 +204,6 @@ class Class{i}:
             module_file.write_text(content)
 
         # Build import graph
-        project_state = ProjectState(str(temp_project_dir), [])
         evidence = _run_real_static_analysis(temp_project_dir)
         assert evidence["import_edges"]
 
@@ -248,7 +216,6 @@ class Class{i}:
         )
 
         # Clean up
-        del project_state
         gc.collect()
 
         final_memory = process.memory_info().rss
@@ -260,9 +227,6 @@ class Class{i}:
     @pytest.mark.performance
     def test_concurrent_memory_usage(self, temp_dir: Path):
         """Test memory usage during concurrent operations."""
-        if not ProjectState:
-            pytest.skip("ProjectState not available")
-            return
 
         import concurrent.futures
 
@@ -274,7 +238,6 @@ class Class{i}:
             project_path = base_dir / f"concurrent_project_{project_id}"
             generate_test_project(project_path, num_modules=5)
 
-            project_state = ProjectState(str(project_path), [])
             evidence = _run_real_static_analysis(project_path)
             assert (
                 evidence["parsed_module_count"] > 0
@@ -282,7 +245,6 @@ class Class{i}:
             )
 
             # Clean up
-            del project_state
             gc.collect()
 
         # Run concurrent analyses
@@ -310,14 +272,9 @@ class Class{i}:
     @pytest.mark.performance
     def test_cache_memory_usage(self, temp_project_dir: Path):
         """Test memory usage of caching mechanisms."""
-        if not ProjectState:
-            pytest.skip("ProjectState not available")
-            return
 
         process = psutil.Process()
         initial_memory = process.memory_info().rss
-
-        project_state = ProjectState(str(temp_project_dir), [])
 
         # Simulate caching many results
         cache_size = 500
@@ -330,7 +287,6 @@ class Class{i}:
                 "functions": [f"func_{j}" for j in range(i % 3)],
                 "timestamp": time.time(),
             }
-            # project_state.cache[cache_key] = cache_value
 
         peak_memory = process.memory_info().rss
         memory_increase = peak_memory - initial_memory
@@ -341,8 +297,6 @@ class Class{i}:
         )
 
         # Clear cache
-        # project_state.cache.clear()
-        del project_state
         gc.collect()
 
         final_memory = process.memory_info().rss
@@ -354,9 +308,6 @@ class Class{i}:
     @pytest.mark.performance
     def test_report_generation_memory_usage(self, temp_project_dir: Path):
         """Test memory usage during report generation."""
-        if not ProjectState:
-            pytest.skip("ProjectState not available")
-            return
 
         process = psutil.Process()
         initial_memory = process.memory_info().rss
@@ -364,10 +315,7 @@ class Class{i}:
         # Create project with many validation results
         generate_test_project(temp_project_dir, num_modules=20)
 
-        project_state = ProjectState(str(temp_project_dir), [])
-
         # Simulate having many validation results
-        # project_state.validation_results = [mock results for 20 modules]
 
         # Generate large report
         evidence = _run_real_static_analysis(temp_project_dir)
@@ -382,7 +330,6 @@ class Class{i}:
         )
 
         # Clean up
-        del project_state
         gc.collect()
 
         final_memory = process.memory_info().rss
