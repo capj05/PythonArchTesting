@@ -544,7 +544,12 @@ def compile_does_not_have(
 
     selector_source_entity_id = source_entity.canonical_id
     signature_anchor_entity_id: str | None = None
-    scope: Literal["class", "method"] = source_entity.kind
+    # Spelled out rather than narrowed from source_entity.kind: only newer mypy
+    # infers the narrowing from the guard above, and a cast that satisfies older
+    # mypy is reported as redundant by newer versions.
+    scope: Literal["class", "method"] = (
+        "method" if source_entity.kind == "method" else "class"
+    )
 
     if source_entity.kind == "method":
         if member_kind not in {"method", "any"}:
