@@ -6,13 +6,46 @@ on actual project structures found in the wild.
 """
 
 from pathlib import Path
+from typing import List, Set, Tuple
 
-import pytest
+from pythonarchtesting.config.data import create_config_from_dict
+from pythonarchtesting.entities_extraction import (
+    extract_entities_from_ast_with_nonmatchable,
+)
+from pythonarchtesting.evidence.collection import parse_python_modules
 
-try:
-    from pythonarchtesting.state import ProjectState
-except ImportError:
-    ProjectState = None
+
+def _discover(project_root: Path) -> Tuple[Set[str], Set[str], List[object]]:
+    """Run discovery and entity extraction over a project tree.
+
+    Returns the discovered module paths, the extracted entity qualnames, and any
+    syntax errors, so a test can assert on what the toolkit actually found.
+    """
+    config = create_config_from_dict({})
+    parsed_modules, parse_errors = parse_python_modules(
+        root_path=project_root,
+        config=config,
+        target_module_name=None,
+    )
+
+    modules: Set[str] = set()
+    qualnames: Set[str] = set()
+    for parsed in parsed_modules:
+        matchable, _ = extract_entities_from_ast_with_nonmatchable(
+            parsed.tree,
+            parsed.file_text,
+            parsed.file_path,
+            project_root,
+            None,
+            role="target",
+            include_nested_functions=False,
+            root_label="sample",
+        )
+        for entity in matchable:
+            modules.add(entity.module_path)
+            qualnames.add(entity.qualname)
+
+    return modules, qualnames, list(parse_errors)
 
 
 class TestRealProjects:
@@ -116,12 +149,11 @@ def create_user():
 """)
 
         # Test analysis
-        if ProjectState:
-            project_state = ProjectState(str(flask_project), [])
-            project_state.initialize(str(flask_project))
-            assert True, "Project analysis completed successfully"
-        else:
-            pytest.skip("ProjectState not available")
+        modules, qualnames, errors = _discover(flask_project)
+
+        assert errors == []
+        assert {"app", "models.models", "routes.routes"} <= modules
+        assert {"create_app", "User", "get_users", "create_user"} <= qualnames
 
     def test_django_project_structure(self, temp_project_dir: Path):
         """Test analysis of Django-style project structure."""
@@ -254,19 +286,16 @@ urlpatterns = [
 ''')
 
         # Test analysis
-        if ProjectState:
-            project_state = ProjectState(str(django_project), [])
-            project_state.initialize(str(django_project))
+        modules, qualnames, errors = _discover(django_project)
 
-            # Should have validation results (even if empty)
-            assert isinstance(
-                project_state.validation_results, list
-            ), "Should have validation results list"
-
-            # Test passes if project can be analyzed without errors
-            assert True, "Project analysis completed successfully"
-        else:
-            pytest.skip("ProjectState not available")
+        assert errors == []
+        assert {
+            "manage",
+            "myproject.settings",
+            "myproject.myapp.models",
+            "myproject.myapp.views",
+        } <= modules
+        assert {"TestModel", "test_view"} <= qualnames
 
     def test_fastapi_project_structure(self, temp_project_dir: Path):
         """Test analysis of FastAPI-style project structure."""
@@ -326,14 +355,11 @@ pydantic>=1.8.0
 """)
 
         # Test analysis
-        if ProjectState:
-            project_state = ProjectState(str(fastapi_project), [])
-            project_state.initialize(str(fastapi_project))
+        modules, qualnames, errors = _discover(fastapi_project)
 
-            # Test passes if project can be analyzed without errors
-            assert True, "Project analysis completed successfully"
-        else:
-            pytest.skip("ProjectState not available")
+        assert errors == []
+        assert "main" in modules
+        assert {"Item", "read_items", "read_item", "create_item"} <= qualnames
 
     def test_package_project_structure(self, temp_project_dir: Path):
         """Test analysis of Python package project structure."""
@@ -415,14 +441,12 @@ dev = [
 """)
 
         # Test analysis
-        if ProjectState:
-            project_state = ProjectState(str(package_project), [])
-            project_state.initialize(str(package_project))
+        modules, qualnames, errors = _discover(package_project)
 
-            # Test passes if project can be analyzed without errors
-            assert True, "Project analysis completed successfully"
-        else:
-            pytest.skip("ProjectState not available")
+        assert errors == []
+        assert {"src.mypackage.core", "src.mypackage.utils"} <= modules
+        assert {"CoreError", "UtilsError", "ExceptionsError"} <= qualnames
+        assert {"core_function", "utils_function", "exceptions_function"} <= qualnames
 
     def test_monorepo_structure(self, temp_project_dir: Path):
         """Test analysis of monorepo structure."""
@@ -461,8 +485,8 @@ setup(
                 backend_dir = package_dir / "backend"
                 backend_dir.mkdir(exist_ok=True)
                 (backend_dir / "__init__.py").write_text("")
-                (package_dir / "backend" / "api.py").write_text('''"""
-Backend API.
+                (package_dir / "backend" / "api.py").write_text('''"""Backend API."""
+
 
 def get_data():
     """Get data from backend."""
@@ -507,11 +531,8 @@ pytest = "^6.0"
 """)
 
         # Test analysis
-        if ProjectState:
-            project_state = ProjectState(str(monorepo), [])
-            project_state.initialize(str(monorepo))
+        modules, qualnames, errors = _discover(monorepo)
 
-            # Test passes if project can be analyzed without errors
-            assert True, "Project analysis completed successfully"
-        else:
-            pytest.skip("ProjectState not available")
+        assert errors == []
+        assert {"backend.backend.api", "shared.shared.utils"} <= modules
+        assert {"get_data", "shared_function"} <= qualnames
