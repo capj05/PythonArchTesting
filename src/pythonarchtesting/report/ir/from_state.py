@@ -467,7 +467,7 @@ def _config_fingerprint(config_snapshot: Optional[Dict[str, Any]]) -> Optional[s
     payload = json.dumps(
         config_snapshot, sort_keys=True, default=str, separators=(",", ":")
     )
-    return sha1(payload.encode("utf-8")).hexdigest()[:16]
+    return sha1(payload.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def _validate_report_document(
@@ -494,7 +494,7 @@ def _result_id(project_id: str, item: Dict[str, Any]) -> str:
             str(item.get("status") or ""),
         ]
     )
-    return sha1(key.encode("utf-8")).hexdigest()[:16]
+    return sha1(key.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def _stable_payload_key(payload: Any) -> str:

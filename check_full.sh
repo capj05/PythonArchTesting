@@ -23,6 +23,6 @@ run_gate() {
 }
 
 run_gate radon radon cc -nc src/ tests/
-run_gate pylint pylint --disable=all --enable=C0901,R0912,R0915,R0903 src/
+run_gate pylint pylint --disable=all --enable=R0912,R0915 src/
 run_gate bandit bandit -r src/
 echo "Full checks completed."

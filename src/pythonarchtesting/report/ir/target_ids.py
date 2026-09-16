@@ -19,7 +19,9 @@ def slugify_target_id(value: str) -> str:
 
 def path_hash8(path_value: str) -> str:
     """Return stable 8-char hash for path-based collision suffixes."""
-    return hashlib.sha1(path_value.encode("utf-8")).hexdigest()[:8]
+    return hashlib.sha1(path_value.encode("utf-8"), usedforsecurity=False).hexdigest()[
+        :8
+    ]
 
 
 def normalize_target_ids(

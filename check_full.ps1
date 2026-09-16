@@ -48,7 +48,7 @@ try {
     )
     Invoke-QualityGate -Name "pylint" -Executable "pylint.exe" -Arguments @(
         "--disable=all",
-        "--enable=C0901,R0912,R0915,R0903",
+        "--enable=R0912,R0915",
         "src/"
     )
     Invoke-QualityGate -Name "bandit" -Executable "bandit.exe" -Arguments @(

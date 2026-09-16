@@ -345,7 +345,8 @@ class _EntityExtractor(ast.NodeVisitor):
             kind = _assignment_method_kind(stmt.value)
             if kind is None:
                 continue
-            assert isinstance(stmt.value, ast.Call)
+            if not isinstance(stmt.value, ast.Call) or not stmt.value.args:
+                continue
             wrapped = stmt.value.args[0]
             if not isinstance(wrapped, ast.Name):
                 continue

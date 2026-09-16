@@ -400,8 +400,8 @@ def _compare_resolved_refs(
     variance: _Variance,
 ) -> bool:
     if expected.kind == "entity":
-        assert expected.entity is not None
-        assert found.entity is not None
+        if expected.entity is None or found.entity is None:
+            return False
         if variance == "covariant":
             return _is_same_or_subtype(
                 found.entity,
@@ -425,8 +425,8 @@ def _compare_resolved_refs(
             )
         return expected.entity.name == found.entity.name
     if expected.kind == "type":
-        assert expected.inner is not None
-        assert found.inner is not None
+        if expected.inner is None or found.inner is None:
+            return False
         return _compare_resolved_refs(
             expected.inner,
             found.inner,

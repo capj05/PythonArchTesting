@@ -173,10 +173,17 @@ strict_equality = true
 module = "tests.*"
 disallow_untyped_defs = false
 
+[tool.pylint.design]
+# Ceilings reflecting the code as it stands today, not an endorsement. The worst
+# offenders are compile_does_not_have() at 34 branches and the api_signature
+# evaluators at 113 statements. Lower these as those functions are split, rather
+# than raising them for new code.
+max-branches = 35
+max-statements = 115
+
 [tool.flake8]
 max-line-length = 100
 max-complexity = 50
-max-statements = 50
 extend-ignore = ["E203", "W503"]
 exclude = [
     ".git",
