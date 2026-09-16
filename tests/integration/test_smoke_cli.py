@@ -382,3 +382,72 @@ def test_run_cli_reports_configuration_error_without_traceback(
     assert exit_code == 2
     assert "CONFIG_TARGETS_EMPTY" in captured.err
     assert "Traceback" not in captured.err
+
+
+def test_run_cli_rejects_missing_source_path(monkeypatch, tmp_path, capsys):
+    config_path = _write_smoke_config(tmp_path)
+    _, target_ok, _ = _smoke_paths()
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
+
+    exit_code = main(
+        [
+            "--config",
+            str(config_path),
+            "--source",
+            str(tmp_path / "does_not_exist"),
+            "--target",
+            str(target_ok),
+            "--format",
+            "json",
+        ]
+    )
+
+    assert exit_code == 2
+    assert "does_not_exist" in capsys.readouterr().err
+
+
+def test_validate_declarations_rejects_missing_source_path(
+    monkeypatch, tmp_path, capsys
+):
+    config_path = _write_smoke_config(tmp_path)
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
+
+    exit_code = main(
+        [
+            "--config",
+            str(config_path),
+            "--validate-declarations",
+            "--source",
+            str(tmp_path / "does_not_exist"),
+            "--format",
+            "json",
+        ]
+    )
+
+    assert exit_code == 2
+    assert "does_not_exist" in capsys.readouterr().err
+
+
+def test_validate_declarations_rejects_source_without_python_files(
+    monkeypatch, tmp_path, capsys
+):
+    config_path = _write_smoke_config(tmp_path)
+    empty_source = tmp_path / "empty_source"
+    empty_source.mkdir()
+    (empty_source / "notes.txt").write_text("no python here", encoding="utf-8")
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
+
+    exit_code = main(
+        [
+            "--config",
+            str(config_path),
+            "--validate-declarations",
+            "--source",
+            str(empty_source),
+            "--format",
+            "json",
+        ]
+    )
+
+    assert exit_code == 2
+    assert "empty_source" in capsys.readouterr().err

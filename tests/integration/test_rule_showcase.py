@@ -54,8 +54,8 @@ def test_showcase_contains_exactly_the_expected_cases() -> None:
 def test_showcase_declarations_validate(case_name: str, monkeypatch, capsys) -> None:
     monkeypatch.chdir(_repo_root())
     reference = _showcase_root() / case_name / "reference"
-    # Guard against a vacuous pass: the CLI exits 0 for a source path that does
-    # not exist, so a missing showcase would otherwise look healthy.
+    # Fail on the missing directory itself rather than on the CLI's exit code,
+    # so a deleted showcase reads as such.
     assert reference.is_dir()
 
     exit_code = main(

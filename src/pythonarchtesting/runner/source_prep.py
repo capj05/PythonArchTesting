@@ -16,6 +16,7 @@ from pythonarchtesting.entities_extraction import (
     extract_entities_from_ast_with_nonmatchable,
     root_path_from_module_path,
 )
+from pythonarchtesting.exceptions import ConfigurationError, ErrorContext
 from pythonarchtesting.rules.compilation.orchestrator import compile_rules
 from pythonarchtesting.run_state import RunState
 from pythonarchtesting.state import ValidationResult, ValidationStatus
@@ -66,6 +67,38 @@ def _resolve_reference_modules(
     return []
 
 
+def _require_existing_source(source_path: Path) -> None:
+    """Fail loudly when the reference project path is not there at all.
+
+    Without this, a mistyped ``--source`` produces an empty run that reports no
+    violations and exits 0 — a typo would look like a clean pass.
+    """
+    if not source_path.exists():
+        raise ConfigurationError(
+            f"Source path does not exist: {source_path}",
+            context=ErrorContext(file=str(source_path)),
+            error_code="CONFIG_SOURCE_NOT_FOUND",
+            suggestion="Point --source at the reference project directory.",
+        )
+
+
+def _require_discoverable_source(source_path: Path, config: Config) -> None:
+    """Fail when discovery finds nothing to read.
+
+    Only meaningful for the discovery branch; when ``reference_modules`` names the
+    modules explicitly, unresolvable ones are already reported per module.
+    """
+    if not any(discover_python_files(source_path, config)):
+        raise ConfigurationError(
+            f"No Python files found in source path: {source_path}",
+            context=ErrorContext(file=str(source_path)),
+            error_code="CONFIG_SOURCE_EMPTY",
+            suggestion=(
+                "Check --source and the [discovery] included_file_patterns setting."
+            ),
+        )
+
+
 def prepare_source(
     *,
     config: Config,
@@ -74,6 +107,7 @@ def prepare_source(
     validation_scope: str = VALIDATION_SCOPE_ALL,
     _source_root_label: str = "source",
 ) -> RunState:
+    _require_existing_source(source_path)
     include_nested = get_bool(config, "matching", "include_nested_functions", False)
     source_entities: List[Entity] = []
     source_errors: List[ValidationResult] = []
@@ -129,6 +163,7 @@ def prepare_source(
                 )
                 source_entities.extend(matchable)
     else:
+        _require_discoverable_source(source_path, config)
         for file_path in discover_python_files(source_path, config):
             try:
                 file_text = Path(file_path).read_text(
