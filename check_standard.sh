@@ -25,5 +25,5 @@ run_gate flake8 flake8 src/ tests/
 run_gate black black --check src/ tests/
 run_gate isort isort --check-only src/ tests/
 run_gate mypy python -m mypy src/pythonarchtesting --ignore-missing-imports
-run_gate vulture vulture --min-confidence 70 src tests
+run_gate vulture vulture --min-confidence 70 src tests vulture_whitelist.py
 echo "Standard checks completed."

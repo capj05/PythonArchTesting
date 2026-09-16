@@ -65,7 +65,8 @@ try {
         "--min-confidence",
         "70",
         "src",
-        "tests"
+        "tests",
+        "vulture_whitelist.py"
     )
 
     Write-Host "Standard checks completed."
