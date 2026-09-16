@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Literal
 
-from pythonarchtesting.core.compilation.common import canonicalize_payload, evidence_id
 from pythonarchtesting.core.models import (
     EvalContext,
     Evidence,
@@ -29,6 +28,10 @@ from pythonarchtesting.execution.import_policy_paths import (
     collect_reachable_import_violations,
 )
 from pythonarchtesting.matching import MatchResult
+from pythonarchtesting.rules.compilation.common import (
+    canonicalize_payload,
+    evidence_id,
+)
 
 
 def _matches_prefix(name: str, prefixes: List[str]) -> str | None:

@@ -23,6 +23,11 @@ import pytest
         "pythonarchtesting.runner_multi",
         "pythonarchtesting.runner.runner",
         "pythonarchtesting.report.renderers.markdown_multi",
+        "pythonarchtesting.core.compilation",
+        "pythonarchtesting.core.compilation.arch",
+        "pythonarchtesting.core.compilation.common",
+        "pythonarchtesting.core.compilation.orchestrator",
+        "pythonarchtesting.core.compilation.decorators",
     ],
 )
 def test_removed_modules_are_not_importable(module_name: str):
