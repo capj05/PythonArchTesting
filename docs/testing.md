@@ -13,7 +13,6 @@ tests/
 ├── unit/
 ├── integration/
 ├── performance/
-├── property/
 ├── import_safety/
 ├── fixtures/
 ├── files/
