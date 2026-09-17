@@ -79,3 +79,37 @@ def test_every_public_marker_has_an_example() -> None:
     )
 
     assert missing == []
+
+
+@pytest.mark.parametrize("case_name", SHOWCASE_CASES)
+def test_showcase_targets_match_the_verdict_their_name_promises(
+    case_name: str, monkeypatch, capsys
+) -> None:
+    """``target_pass_*`` must exit 0 and ``target_fail_*`` must exit 1.
+
+    The showcase is the worked example each marker is documented by, so a rule
+    that stops detecting its own failing case has to fail here rather than in a
+    reader's project.
+    """
+    monkeypatch.chdir(_repo_root())
+    reference = _showcase_root() / case_name / "reference"
+    targets = sorted(
+        path
+        for path in (_showcase_root() / case_name / "assignments").iterdir()
+        if path.is_dir()
+    )
+    assert targets
+
+    observed = {}
+    for target in targets:
+        assert target.name.startswith(("target_pass_", "target_fail_")), target.name
+        observed[target.name] = main(
+            ["--source", str(reference), "--target", str(target), "--format", "json"]
+        )
+        capsys.readouterr()
+
+    expected = {
+        name: (0 if name.startswith("target_pass_") else 1) for name in observed
+    }
+
+    assert observed == expected
