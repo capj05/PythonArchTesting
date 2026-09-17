@@ -246,3 +246,35 @@ def test_projects_config_normalizes_source_and_targets(
 
     assert projects.source_path == source.resolve()
     assert projects.targets[0].path == target.resolve()
+
+
+def test_explicit_target_that_does_not_exist_raises(tmp_path: Path) -> None:
+    cfg = StubConfig()
+
+    with pytest.raises(ConfigurationError) as excinfo:
+        resolve_projects_config(
+            cfg,
+            targets=[str(tmp_path / "no_such_target")],
+            project_pattern="*",
+            exclude_patterns=[],
+            env_target_path=None,
+        )
+
+    assert excinfo.value.error_code == "CONFIG_TARGET_NOT_FOUND"
+
+
+def test_explicit_target_that_is_a_file_raises(tmp_path: Path) -> None:
+    target_file = tmp_path / "module.py"
+    target_file.write_text("print('m')", encoding="utf-8")
+
+    cfg = StubConfig()
+    with pytest.raises(ConfigurationError) as excinfo:
+        resolve_projects_config(
+            cfg,
+            targets=[str(target_file)],
+            project_pattern="*",
+            exclude_patterns=[],
+            env_target_path=None,
+        )
+
+    assert excinfo.value.error_code == "CONFIG_TARGET_INVALID"

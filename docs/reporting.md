@@ -19,8 +19,8 @@ Each target gets its own `exit_code`:
 - `1`: at least one result failed
 
 The CLI process itself also exits `2` when the run could not start at all — an
-invalid flag combination, a configuration error, or an output path that cannot be
-written. Those failures print a single `error: ...` line on stderr and produce no
+invalid flag combination, a configuration error, a `--source` or `--target` path
+that does not exist, or an output path that cannot be written. Those failures print a single `error: ...` line on stderr and produce no
 report. Exit codes `0` and `1` always mean a run completed and was judged.
 
 `SKIPPED` does not fail a target by itself.

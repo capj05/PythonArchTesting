@@ -110,6 +110,31 @@ def _discover_targets_from_dir(
     return sorted(candidates, key=lambda p: str(p.resolve()))
 
 
+def _require_usable_targets(target_paths: Iterable[Path]) -> None:
+    """Reject target paths that cannot be analyzed.
+
+    Without this, a mistyped ``--target`` produces a report in which every rule
+    fails against a path that is not there, so a typo reads as a broken project.
+    Paths discovered from ``targets_dir`` are already filtered; this guards the
+    explicitly named ones.
+    """
+    for path in target_paths:
+        if not path.exists():
+            raise ConfigurationError(
+                f"Target path does not exist: {path}",
+                context=ErrorContext(file=str(path)),
+                error_code="CONFIG_TARGET_NOT_FOUND",
+                suggestion="Point the target at an existing project directory.",
+            )
+        if not path.is_dir():
+            raise ConfigurationError(
+                f"Target path is not a directory: {path}",
+                context=ErrorContext(file=str(path)),
+                error_code="CONFIG_TARGET_INVALID",
+                suggestion="Point the target at a project directory, not a file.",
+            )
+
+
 def resolve_projects_config(
     config: Optional[Config] = None,
     *,
@@ -188,6 +213,8 @@ def resolve_projects_config(
                 "[projects].target_path, or PYTHON_ARCH_TARGET_PATH."
             ),
         )
+
+    _require_usable_targets(target_paths)
 
     return ProjectsConfig(
         source_path=source_path_norm,

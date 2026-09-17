@@ -451,3 +451,28 @@ def test_validate_declarations_rejects_source_without_python_files(
 
     assert exit_code == 2
     assert "empty_source" in capsys.readouterr().err
+
+
+def test_run_cli_rejects_missing_target_path(monkeypatch, tmp_path, capsys):
+    """A mistyped --target must fail, not report the source rules as violated."""
+    config_path = _write_smoke_config(tmp_path)
+    source, _, _ = _smoke_paths()
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
+
+    exit_code = main(
+        [
+            "--config",
+            str(config_path),
+            "--source",
+            str(source),
+            "--target",
+            str(tmp_path / "no_such_target"),
+            "--format",
+            "json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "no_such_target" in captured.err
+    assert captured.out == ""
