@@ -9,14 +9,12 @@ def test_report_api_module_does_not_import_compatibility_layers():
     tree = ast.parse(path.read_text(encoding="utf-8"))
 
     compatibility_modules = {
-        "pythonarchtesting.report.core",
         "pythonarchtesting.report.dispatcher",
         "pythonarchtesting.report.base_generator",
         "pythonarchtesting.report.json_generator",
         "pythonarchtesting.report.markdown_generator",
     }
     compatibility_relative = {
-        "core",
         "dispatcher",
         "base_generator",
         "json_generator",

@@ -28,6 +28,12 @@ import pytest
         "pythonarchtesting.core.compilation.common",
         "pythonarchtesting.core.compilation.orchestrator",
         "pythonarchtesting.core.compilation.decorators",
+        "pythonarchtesting.util.error_utils",
+        "pythonarchtesting.util.function_utils",
+        "pythonarchtesting.constants.dict_keys",
+        "pythonarchtesting.rules.models.rule_models",
+        "pythonarchtesting.rules.models",
+        "pythonarchtesting.report.core",
     ],
 )
 def test_removed_modules_are_not_importable(module_name: str):
