@@ -38,7 +38,7 @@ final / non-final). Markers carry no payload other than the standard
 mod001_modifiers/
     reference/        rules + class declarations (with __archtest__)
     assignments/      one passing target + eight failing targets
-    reports/          CLI output (populated by the bulk validation run)
+    reports/          CLI output, generated on demand and not checked in
 ```
 
 ## Notes

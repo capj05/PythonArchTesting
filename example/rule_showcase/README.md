@@ -37,11 +37,16 @@ defects across all 13 families lives in [`SUMMARY.md`](SUMMARY.md).
         target_pass_basic/         # passing baseline
         target_pass_<variant>/     # alternate passing scenarios (parameter flips)
         target_fail_<reason>/      # failing scenarios isolating one concern
-    reports/
-        <target>.report.json       # captured JSON v2 output
-        <target>.report.md         # captured Markdown output
+    reports/                       # NOT checked in - generated on demand
+        <target>.report.json       # JSON v2 output of the commands below
+        <target>.report.md         # Markdown output of the commands below
     findings.md                    # expected vs. observed table + notes
 ```
+
+The `reports/` directories are ignored by git (`.gitignore`:
+`example/rule_showcase/*/reports/`), so a fresh checkout has none. Re-create the
+ones you need with the commands below; `findings.md` records what those runs
+produced.
 
 ## Re-running validation
 

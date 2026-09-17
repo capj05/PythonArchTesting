@@ -71,4 +71,4 @@ python -m pythonarchtesting.cli \
     --output ./reports
 ```
 
-(`reports/` is intentionally empty in the checked-in tree.)
+(`reports/` is generated on demand and not checked in.)
