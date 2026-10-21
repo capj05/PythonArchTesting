@@ -216,7 +216,56 @@ For most projects, keep the default:
 python-arch-test --validate-declarations --source example/checkout_assignment/reference --validation-scope all --format json
 ```
 
-## 7. Read Results In This Order
+## 7. Add Runtime Checks With `--dynamic`
+
+Some structure only shows when the code runs: a controller that receives
+its service as a parameter can still reach past it into the repository, and an
+attribute can be assigned from outside its class through a helper. When the
+reference declares runtime markers —
+[`forbid_runtime_calls`](markers/forbid_runtime_calls.md),
+[`require_runtime_calls`](markers/require_runtime_calls.md),
+[`enforce_reference_calls`](markers/enforce_reference_calls.md),
+[`forbid_foreign_writes`](markers/forbid_foreign_writes.md),
+[`forbid_runtime_instantiation`](markers/forbid_runtime_instantiation.md),
+the runtime class rules ([`require_runtime_members`](markers/require_runtime_members.md)
+and its siblings), the design-pattern rules
+([`is_runtime_singleton`](markers/is_runtime_singleton.md),
+[`enforce_runtime_observer`](markers/enforce_runtime_observer.md),
+[`require_runtime_delegation`](markers/require_runtime_delegation.md)),
+[`forbid_runtime_imports`](markers/forbid_runtime_imports.md), or
+[`enforce_flow`](markers/enforce_flow.md#runtime-check-with-cases) with
+`cases` — add `--dynamic` to run them against each target:
+
+```bash
+python-arch-test --source example/rule_showcase/dyn001_layers/reference --targets-dir example/rule_showcase/dyn001_layers/assignments --format json --dynamic
+```
+
+The `cases` only give arguments that make the code run. What the code computes
+is never compared: a target with different results but the same layering
+passes (`target_pass_other_pricing` in the example).
+
+Without the flag those rules are reported as `SKIPPED` and do not change the exit
+code, so the same reference works for static-only runs; the CLI warns on
+stderr how many runtime results were skipped. With it, the target is
+imported and executed in separate interpreters, confined by `--sandbox`:
+
+- `--sandbox limits` (default) caps memory, CPU time, and written file size,
+  hides your environment variables, and kills the processes the target leaves
+  in its process group; on Linux it also caps the number of processes and
+  ends processes that detached with `setsid` when the probe finishes (only a
+  probe killed on timeout can leave one running);
+- `--sandbox bwrap` additionally cuts the network and shows the target only a
+  read-only view of the system and the project — use it for code you did not
+  write;
+- `--sandbox none` keeps only the process boundary and the timeout.
+
+```bash
+python-arch-test --source example/rule_showcase/dyn001_layers/reference --targets-dir example/rule_showcase/dyn001_layers/assignments --format json --dynamic --sandbox bwrap
+```
+
+Details: [dynamic-checks.md](dynamic-checks.md).
+
+## 8. Read Results In This Order
 
 For run-report JSON, start with:
 

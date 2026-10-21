@@ -62,8 +62,14 @@ __all__ = ["InMemoryOrderRepository"]
 ## What it does not check
 
 - Imports inside `try/except ImportError:` blocks beyond the static AST.
-- Lazy / deferred imports done through `importlib` or string lookups.
+- Lazy / deferred imports done through `importlib` or string lookups — use
+  [forbid_runtime_imports](forbid_runtime_imports.md) with `--dynamic` for those.
 - Imports in files filtered out by `ignore_globs`.
+- Under `mode="reachable"`, imports inside a function or method body: the
+  graph follows only the imports a module performs when it is imported.
+  `mode="direct"` sees them, since it reads every import statement of the
+  module; [forbid_runtime_calls](forbid_runtime_calls.md) with `--dynamic`
+  catches the module once the function uses it.
 
 ## See also
 

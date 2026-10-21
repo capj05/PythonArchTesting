@@ -10,8 +10,12 @@ metadata, and the CLI turns those declarations into rule results and reports.
 2. Run the CLI against one target or many targets.
 3. Read the report summary, then inspect the failing results.
 
-The tool is static and declaration-driven. It reads source code and annotations;
-it does not execute application behavior to decide whether a rule passed.
+The tool is declaration-driven and static by default. It reads source code and
+annotations; it does not execute application behavior to decide whether a rule
+passed. The one exception is opt-in: with `--dynamic`, the runtime rules run
+the target in a separate interpreter to observe structure the source does not
+show — calls between layers, attribute writes, imports by name, stage order.
+They still never compare results ([dynamic-checks.md](dynamic-checks.md)).
 
 ## Supported Checks
 
@@ -47,12 +51,32 @@ identity checks:
 
 - `flow`, `enforce_flow`
 
+**Runtime structure** — opt-in with `--dynamic`; executes the target, never
+compares its results:
+
+- `forbid_runtime_calls`, `require_runtime_calls` (layering by the calls that
+  actually happen), `enforce_reference_calls` (the reference's call graph),
+  `forbid_foreign_writes` (encapsulation), `forbid_runtime_instantiation`
+  (dependency injection), the runtime counterparts of the class rules
+  (`require_runtime_members`, `forbid_runtime_members`,
+  `is_runtime_concrete_class`, `is_runtime_abstract_class`,
+  `implements_runtime_protocol`), design patterns (`is_runtime_singleton`,
+  `enforce_runtime_observer`, `require_runtime_delegation`),
+  `forbid_runtime_imports`, and `enforce_flow` with `cases` (stage order learned
+  from running the reference)
+
 At report level, markers map to four evaluator families:
 
 - `api_signature`
 - `import_policy`
 - `protocol_conformance`
 - `variable_flow`
+
+With `--dynamic`, runtime results form ten more families,
+`runtime_calls`, `runtime_reference_calls`, `runtime_writes`,
+`runtime_instances`, `runtime_members`, `runtime_class_kind`,
+`runtime_protocol`, `runtime_pattern`, `runtime_imports`, and
+`runtime_flow`.
 
 ## Declaration Placement
 

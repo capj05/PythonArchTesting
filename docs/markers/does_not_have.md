@@ -69,3 +69,4 @@ class Repository:
 
 - [../api-reference.md](../api-reference.md) — full option surface and alias/regex/method-body examples
 - [forbid_imports](forbid_imports.md) — for import absence
+- [forbid_runtime_members](forbid_runtime_members.md) — the same absence checked on a built instance, dynamic attributes included

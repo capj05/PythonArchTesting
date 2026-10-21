@@ -5,7 +5,7 @@ isolation, exercise its parameter surface, and validate observed
 behaviour against expected outcomes via captured CLI reports.
 
 The synthesis of capabilities, limitations, gotchas, and observed
-defects across all 13 families lives in [`SUMMARY.md`](SUMMARY.md).
+defects across all 22 showcases lives in [`SUMMARY.md`](SUMMARY.md).
 
 ## Index
 
@@ -24,6 +24,15 @@ defects across all 13 families lives in [`SUMMARY.md`](SUMMARY.md).
 | [`mod001_modifiers/`](mod001_modifiers/)                        | `is_abstract_class`, `is_concrete_class`, `is_final_class`, `is_non_final_class`, `is_abstract_method`, `is_non_abstract_method`, `is_final_method`, `is_non_final_method` |
 | [`enum001_enum/`](enum001_enum/)                                | `is_enum`                                                                                              |
 | [`flw001_flow/`](flw001_flow/)                                  | `flow`, `enforce_flow`                                                                                 |
+| [`flw002_runtime_flow/`](flw002_runtime_flow/)                  | `enforce_flow` with `cases` — runtime stage order, no markers in targets (runs only with `--dynamic`)  |
+| [`dyn001_layers/`](dyn001_layers/)                              | `forbid_runtime_calls`, `require_runtime_calls` (runs only with `--dynamic`)                           |
+| [`dyn001_reference_calls/`](dyn001_reference_calls/)            | `enforce_reference_calls` — call graph learned from the reference (runs only with `--dynamic`)        |
+| [`dyn002_runtime_imports/`](dyn002_runtime_imports/)            | `forbid_runtime_imports`, `forbid_runtime_calls` for a lazy import (runs only with `--dynamic`)        |
+| [`dyn003_encapsulation/`](dyn003_encapsulation/)                | `forbid_foreign_writes` (runs only with `--dynamic`)                                                   |
+| [`dyn004_injection/`](dyn004_injection/)                        | `forbid_runtime_instantiation` (runs only with `--dynamic`)                                            |
+| [`dyn005_runtime_members/`](dyn005_runtime_members/)            | `require_runtime_members`, `forbid_runtime_members` (runs only with `--dynamic`)                       |
+| [`dyn006_runtime_classes/`](dyn006_runtime_classes/)            | `is_runtime_concrete_class`, `is_runtime_abstract_class`, `implements_runtime_protocol` (runs only with `--dynamic`) |
+| [`dyn008_patterns/`](dyn008_patterns/)                          | `is_runtime_singleton`, `enforce_runtime_observer`, `require_runtime_delegation` (runs only with `--dynamic`) |
 
 ## Layout (per family)
 
@@ -76,6 +85,9 @@ for t in example/rule_showcase/$FAM/assignments/*/; do
         --output example/rule_showcase/$FAM/reports/$name.report.md
 done
 ```
+
+For the `dyn*` families and `flw002_runtime_flow`, add `--dynamic` to both commands; without it every
+runtime rule is `SKIPPED` and all targets pass.
 
 Reading the captured JSON v2 reports — the `summary.results.status_counts`
 block tells you OK / FAILED / SKIPPED / WARNING tallies; the `results[]`

@@ -6,8 +6,15 @@ reads passive `Annotated[...]` metadata from the reference project, matches
 source entities to target entities, and reports where each target satisfies or
 violates the declared rules.
 
-The CLI is purely static: it parses source files and annotation metadata and
-does not execute application code to decide whether a rule passed.
+By default the CLI is purely static: it parses source files and annotation
+metadata and does not execute application code to decide whether a rule passed.
+The opt-in `--dynamic` flag adds runtime checks of structure that the
+source alone does not reveal — which layers code actually calls, who assigns
+an object's attributes, which modules get imported by name — by running the
+target in a separate interpreter, confined by `--sandbox` (`limits` by
+default; `bwrap` adds no network and a read-only file system — use it for
+code you did not write). Like the static rules they check how the program is
+built, never what it computes ([docs/dynamic-checks.md](docs/dynamic-checks.md)).
 
 ## What It Can Check
 
@@ -50,8 +57,43 @@ All markers are imported from `pythonarchtesting.rules`. See
 - `flow` — mark a statement as a stage in an ordered variable flow
 - `enforce_flow` — require those stages to appear in declared order
 
+**Runtime structure** (opt-in, runs only with `--dynamic`; `cases` only
+give call arguments, results are never compared)
+
+- `forbid_runtime_calls` — code of the target's module must not call directly
+  into given modules (layering), even through injected objects
+- `require_runtime_calls` — it must call into given modules (delegation to a
+  layer instead of doing the work in place)
+- `enforce_reference_calls` — the reference is run and its module-to-module
+  call graph becomes the allowed one: one marker on the entry point checks the
+  whole layering
+- `forbid_foreign_writes` — an object's attributes may be assigned only by its
+  own class's methods (encapsulation)
+- `forbid_runtime_instantiation` — the code must receive objects of given
+  modules instead of creating them (dependency injection)
+- `require_runtime_members`, `forbid_runtime_members`,
+  `is_runtime_concrete_class`, `is_runtime_abstract_class`,
+  `implements_runtime_protocol` — the runtime counterparts of the static class
+  rules: checked on the object Python builds, so attributes created
+  dynamically, abstract methods of library bases, and members attached at run
+  time count
+- `is_runtime_singleton`, `enforce_runtime_observer`,
+  `require_runtime_delegation` — design patterns checked by what the code
+  does: one shared instance, listeners notified (and not after unsubscribing),
+  work delegated to an injected strategy
+- `forbid_runtime_imports` — modules the target module actually imports when it
+  is loaded, including `importlib` and `__import__` calls
+- `enforce_flow(..., cases=[...])` — the runtime form of `enforce_flow`: the
+  reference runs to learn which of the project's functions each `flow` stage
+  calls, and the target must call them in the same stage order, without
+  carrying any markers; values are never compared
+
 At the report level these markers map to four evaluator families:
 `api_signature`, `import_policy`, `protocol_conformance`, and `variable_flow`.
+With `--dynamic`, runtime results are reported under `runtime_calls`,
+`runtime_reference_calls`, `runtime_writes`, `runtime_instances`,
+`runtime_members`, `runtime_class_kind`, `runtime_protocol`, `runtime_pattern`,
+`runtime_imports`, and `runtime_flow`.
 
 A separate CLI mode validates the reference declarations themselves before any
 target is analyzed:
@@ -184,6 +226,17 @@ python-arch-test \
     --targets-dir example/checkout_assignment/assignments \
     --format markdown \
     --output example/checkout_assignment/reports/report_md
+```
+
+Run the runtime checks as well (executes target code, see
+[docs/dynamic-checks.md](docs/dynamic-checks.md#security)):
+
+```bash
+python-arch-test \
+    --source example/rule_showcase/dyn001_layers/reference \
+    --target example/rule_showcase/dyn001_layers/assignments/target_fail_bypass_service \
+    --format json \
+    --dynamic --sandbox bwrap
 ```
 
 A pre-rendered Markdown bundle for this example lives at

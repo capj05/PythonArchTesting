@@ -1,7 +1,7 @@
 # Rule Showcase — Synthesis Report
 
 This document synthesises the per-family `findings.md` reports across all
-13 rule families. For each family it captures (a) the practical
+22 showcases. For each family it captures (a) the practical
 parameter surface, (b) limitations / things the rule cannot express, (c)
 behavioural gotchas observed during validation, and (d) defects — cases
 where the observed verdict diverged from the expected verdict.
@@ -257,6 +257,135 @@ that the rule cannot express in v1; it is not a bug.
   control flow is structurally correct. Targets must repeat the
   `__archtest__: Annotated[None, flow(<stage>, variable=...)]` markers
   alongside the assignments.
+- **Runtime alternative (FLW002, `flw002_runtime_flow/`):** give
+  `enforce_flow` a `cases=` list and run with `--dynamic`. The reference is
+  executed to record which of the project's functions each stage calls, and
+  the target must call them in the same stage order — no markers in the
+  target, and no value is ever compared. A stage that calls no project
+  function is reported as not checked; each case must take the reference
+  through every stage.
+
+---
+
+## DYN001 — `forbid_runtime_calls`, `require_runtime_calls`
+
+**Capabilities**
+- Calls the matched target with the reference's cases in a separate
+  interpreter, only with `--dynamic`, and records every call that code of the
+  target's module makes into another module.
+- Catches layer bypasses that the static import graph cannot see because the
+  dependency arrives as an injected object: a controller reading
+  `service.repository` directly.
+- `require_runtime_calls` catches work done in place instead of delegated.
+- A target with different results but the same layering passes
+  (`target_pass_other_pricing`): results are never compared.
+
+**Notes**
+- Only direct calls count; the service calling the repository is the
+  service's business.
+- Without `--dynamic` every rule is `SKIPPED`, so the `target_fail_*`
+  verdicts hold only for dynamic runs.
+- Cases must reach the code paths whose structure matters.
+
+---
+
+## DYN001 — `enforce_reference_calls` (`dyn001_reference_calls/`)
+
+**Capabilities**
+- Runs the reference from the marked entry point and records every call
+  between two of its modules; the target may only use those edges, and with
+  `require_all` must use all of them.
+- One marker covers a whole layered design, including violations two layers
+  below the marked function (`notifier -> repository`).
+- Different results with the same call graph pass.
+
+**Notes**
+- Edges only: which function of a module is called, and how often, is not
+  compared.
+- Edges into the standard library are not part of the graph.
+
+---
+
+## DYN002 — `forbid_runtime_imports`
+
+**Capabilities**
+- Imports the target module in a child interpreter and records every import
+  its code performs, including `importlib.import_module` and `__import__`
+  with computed names that the static `forbid_imports` cannot follow.
+- `allow` exempts submodules under a forbidden prefix.
+- A module imported lazily inside a function and then used is caught by
+  `forbid_runtime_calls` on that function (`target_fail_lazy_import`).
+
+**Notes**
+- Only imports executed from files under the target root count; the
+  standard library's own imports are ignored.
+- Code paths that the import does not run are not observed.
+
+---
+
+## DYN003 — `forbid_foreign_writes`
+
+**Capabilities**
+- While the target runs, every attribute assignment on an instance of a class
+  from the analysed project is attributed to the code that made it; anything
+  other than the class's own methods is a violation.
+- Catches writes hidden in module-level helpers (`target_fail_helper_write`).
+- A different order of operations passes as long as encapsulation holds
+  (`target_pass_other_order`).
+
+**Notes**
+- Mutating a contained object (`account.history.append(...)`) is not an
+  attribute assignment and is not seen.
+
+---
+
+## DYN004 — `forbid_runtime_instantiation`
+
+**Capabilities**
+- Records which project code creates instances of the project's classes,
+  including while a method's instance is built, so a dependency created in
+  `__init__` instead of being injected is caught.
+- Objects built by the case (`$new`) belong to the caller and do not count;
+  creating other domain objects stays allowed.
+
+**Notes**
+- Only classes of the analysed project are watched.
+
+---
+
+## DYN005–DYN007 — runtime class rules (`dyn005_runtime_members/`, `dyn006_runtime_classes/`)
+
+**Capabilities**
+- Check the object Python builds rather than the class body: attributes
+  created by `setattr` in a loop or `__dict__.update` (`dyn005`), abstract
+  methods required by a standard-library base, and protocol members bound in
+  `__init__` or inherited from a mixin (`dyn006`).
+- Each is the runtime counterpart of a static rule (`required_attribute`,
+  `does_not_have`, `is_concrete_class`, `is_abstract_class`,
+  `implements_protocol`) and closes a gap that rule documents.
+
+**Notes**
+- Only the freshly built instance is inspected; members added by later calls
+  are not.
+- Protocol checks cover presence, callability, and positional arity, not
+  annotations.
+
+---
+
+## DYN008 — design patterns (`dyn008_patterns/`)
+
+**Capabilities**
+- Singleton, Observer, and Strategy checked by behaviour that defines them:
+  identity of two accesses, a probe listener being called (and not after
+  unsubscribing), and calls on an injected spy.
+- Implementation freedom: `__new__` vs `classmethod` singletons, list vs dict
+  listener storage, and different arithmetic around the strategy all pass.
+
+**Notes**
+- A spy returns its first argument; code that needs another value may raise
+  after delegating, which is reported but not judged.
+- A singleton's constructor can still be called directly; Python has no
+  private constructors.
 
 ---
 

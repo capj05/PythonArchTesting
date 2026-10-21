@@ -79,6 +79,90 @@ confidence and candidate details for reporting.
 Each evaluator owns one rule family and produces result rows with messages, fix
 hints, evidence, and status.
 
+### Dynamic Checks
+
+- `pythonarchtesting.execution.evaluators.runtime_structure`
+- `pythonarchtesting.execution.evaluators.runtime_imports`
+- `pythonarchtesting.execution.evaluators.runtime_flow`
+- `pythonarchtesting.dynamic.batch`
+- `pythonarchtesting.dynamic.sandbox`
+- `pythonarchtesting.dynamic.runner`
+- `pythonarchtesting.dynamic.probe`
+
+`runtime_calls`, `runtime_reference_calls`, `runtime_writes`,
+`runtime_instances`, `runtime_members`, `runtime_class_kind`,
+`runtime_protocol`, `runtime_pattern`, `runtime_imports`, and `runtime_flow`
+are the only evaluators that execute target code, and only
+when the run was started with `--dynamic`: `run_projects(dynamic=True)` sets
+`RunState.dynamic_enabled`, and `runner.target_eval` then passes the target root
+to evaluation as `EvalContext.target_root`. When it is `None`, the evaluator
+returns `SKIPPED` without starting anything.
+
+Before a target's rules are evaluated, `dynamic.batch.prefetch` groups the
+matched call, write, instance, and class rules by target module and runs each group of two or
+more as one batch (`runner.run_case_batch`); the probe bounds each job with an
+interval timer. Outcomes land in `EvalContext.dynamic_cache`, which the
+evaluator reads first. A batch that times out or crashes as a whole is not
+cached, so its rules fall back to one interpreter each. `runtime_flow`
+(`enforce_flow` with `cases`) and `runtime_reference_calls` run the reference
+from `EvalContext.source_root` first, to record each stage's calls or the
+module call graph, then the target.
+
+Every child interpreter is confined by the run's `dynamic.sandbox.SandboxPolicy`
+(`--sandbox`): `limits` sets POSIX resource limits in a pre-exec hook and
+replaces the environment; `bwrap` also wraps the command in bubblewrap with
+read-only binds of only the paths the interpreter, the framework, and the
+analysed project need. The CLI checks that `bwrap` can start an interpreter
+before any target is analysed. The policy travels as `RunState.sandbox` →
+`EvalContext.sandbox` to the evaluators and the batch prefetch. The runner
+starts the child in its own process group and kills the group when the probe
+exits or times out, so processes the target started neither survive nor hold
+the output pipes open.
+
+`dynamic.runner` starts a child interpreter (`python -I -B`, wall-clock
+timeout, working directory set to the target root) and hands the cases to
+`dynamic.probe` as JSON on stdin. The probe is a standard-library-only script:
+it imports the target, calls it once per case, and writes one JSON result to stdout
+while the target's own output is redirected to stderr. Import errors, timeouts,
+and crashed interpreters come back as probe statuses rather than exceptions, so
+one broken target cannot abort a multi-target run.
+
+The probe never compares what a call returns; it reports what the code did,
+through five observers chosen per request (`observe`):
+
+- `ImportRecorder` wraps `builtins.__import__`, `importlib.__import__`, and
+  `importlib.import_module` before the target is imported and keeps each
+  import whose calling frame lives under the target root; the probe's
+  `imports` mode reports those made while the module loads
+  (`forbid_runtime_imports`).
+- `CallRecorder` installs a `sys.setprofile` hook for one call and records each
+  call whose caller is code of the target's module and whose callee lives in
+  another module, for Python functions (`call`) and C functions (`c_call`)
+  alike (`forbid_runtime_calls`, `require_runtime_calls`). In `edges` mode
+  it records every call between two different project modules instead
+  (`enforce_reference_calls`).
+- `WriteRecorder` wraps `__setattr__` of every class defined under the target
+  root and, while a case runs, records assignments whose code object is not a
+  method found along the object's class MRO (`forbid_foreign_writes`).
+- `InstanceRecorder` wraps `__init__` of every class defined under the target
+  root and records the outermost construction of each object together with
+  the project frame that asked for it, from before a method's instance is
+  built (`forbid_runtime_instantiation`).
+
+For a class target the probe does not call anything: `_inspect_class` reports
+`inspect.isabstract` and the abstract methods, builds an instance from the
+case unless told not to, and describes the requested members on it — where
+each is found and, for protocol methods, whether its signature binds the
+protocol's positional arguments (DYN005–DYN007). For the design-pattern
+rules (DYN008) it also obtains a singleton twice and compares identity, or
+subscribes a spy listener and notifies. A spy (`{"$spy": name}` in a case)
+is a probe-made stand-in whose calls are collected in `_SPY_CALLS`, cleared
+at the start of every case.
+- `_call_with_trace` installs a `sys.settrace` hook for one call and records
+  the project functions called while each statement labelled by a `flow`
+  marker runs (reference) or every project function called, in order
+  (target), for runtime `enforce_flow`. It records no values.
+
 ### Reporting
 
 - `pythonarchtesting.report.api`

@@ -64,7 +64,19 @@ Common statuses:
 - `OK`: the rule passed
 - `FAILED`: the rule failed
 - `SKIPPED`: the rule was not evaluated, usually because matching did not
-  produce a usable target
+  produce a usable target, or because it is a runtime rule (`DYN*`, `FLW002`)
+  and the run had no `--dynamic` (`details.reason` is
+  `dynamic_checks_disabled`)
+- `ERROR`: the rule could not be evaluated because of the reference, for
+  example a runtime rule whose reference did not run (`reference_failed`),
+  never reached a flow stage (`reference_misses_stage`), or whose case cannot
+  be set up even for the reference (`reference_case_invalid`)
+
+A runtime result also carries `details.reason`: `violation` (or a
+rule-specific reason such as `stage_order_mismatch`) when it failed on what
+the target did, and `probe_timeout`, `probe_crashed`, `probe_import_error`, or
+`case_setup_failed` when the target's code could not be run as the cases ask.
+See [dynamic-checks.md](dynamic-checks.md).
 
 Common severities:
 

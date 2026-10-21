@@ -1690,8 +1690,22 @@ Common options:
 
 - `stages`
 - `variable`
+- `cases` — call arguments; switches to the runtime check `FLW002/enforce_flow_runtime/v1`
+  (rule type `runtime_flow`), evaluated only with `--dynamic`
+- `init` — runtime check on a method only: constructor arguments
+- `timeout_s` — runtime check only, default `5.0`
 - `severity`
 - `message`
+
+With `cases`, the reference is executed on each case and, for every
+flow-labelled statement, the project functions it calls are recorded as that
+stage's operations; the target must call them in the same stage order (an
+ordered subsequence of every project call it makes). No value is compared.
+Stages that call no project function are listed in
+`details.unchecked_stages`. Result `details.reason` is
+`stages_reached_in_order`, `stage_order_mismatch`, `reference_failed`,
+`reference_misses_stage`, `reference_stages_call_nothing`, `case_setup_failed`,
+a `probe_*` status, or `dynamic_checks_disabled`.
 
 Example:
 
@@ -1711,6 +1725,256 @@ def process(value: str) -> str:
     ]
     return value
 ```
+
+### `forbid_runtime_calls(...)` and `require_runtime_calls(...)`
+
+See also: [markers/forbid_runtime_calls.md](markers/forbid_runtime_calls.md),
+[markers/require_runtime_calls.md](markers/require_runtime_calls.md),
+[dynamic-checks.md](dynamic-checks.md).
+
+Layering checked on the calls that actually happen. The matched target function
+or method is called once per case; every call that code of its module makes
+into another module is recorded. `forbid_runtime_calls` fails on a call into a
+listed module; `require_runtime_calls` fails when a case makes no call into a
+listed module. Runs only with `--dynamic`; `SKIPPED` otherwise.
+
+Rule ids: `DYN001/forbid_runtime_calls/v1`, `DYN001/require_runtime_calls/v1`,
+rule type `runtime_calls`, evidence type `runtime`.
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `*modules` | `str` | required | Module names, with their submodules |
+| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
+| `allow` | `list[str] \| None` | `None` | `forbid_runtime_calls` only: exemptions under a listed name |
+| `init` | `dict \| None` | `None` | Methods only: default constructor arguments `{"args": [...], "kwargs": {...}}` |
+| `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]` |
+| `severity` | `str` | `"error"` | Violation severity |
+| `message` | `str \| None` | `None` | Custom message override |
+
+An object argument is written as `{"$new": "<name>", "args": [...], "kwargs":
+{...}}` and constructed from the target's own classes before the call.
+
+Example:
+
+```python
+from typing import Annotated, Any
+from pythonarchtesting.rules import forbid_runtime_calls, require_runtime_calls
+
+_CASE = {"args": [{"id": "A1", "prices": [10.0]},
+                  {"$new": "service.OrderService",
+                   "args": [{"$new": "repository.OrderRepository"}]}]}
+
+
+def handle_order(request: dict[str, Any], service: Any) -> dict[str, Any]:
+    __archtest__: Annotated[
+        None,
+        require_runtime_calls("service", cases=[...]),     # literal cases
+        forbid_runtime_calls("repository", cases=[...]),
+    ]
+    ...
+```
+
+Markers are read from the source without executing it, so `cases` must be
+written out as literals in each marker.
+
+Result `details`:
+
+- `reason`: `no_violations`, `violation`, `case_setup_failed`,
+  `probe_import_error`, `probe_timeout`, `probe_crashed`,
+  `target_kind_mismatch`, or `dynamic_checks_disabled`
+- `violations`: one line per offending call or per missing module and case
+- `cases`: per case `calls` (`module`, `callee`, `caller`, `line`) and
+  `raised` when the call raised
+- `stderr_tail`: the last 2000 characters the target wrote to stdout or stderr
+
+Invalid declarations (no modules, `allow` on `require_runtime_calls`, empty
+`cases`, case keys other than `args`/`kwargs`/`init`, `init` on a function,
+`timeout_s` out of range) are dropped at compile time and surface as a
+`compiler_invalid_param` result.
+
+Non-goals in v1:
+
+- No indirect calls: only calls made by code of the target's module count
+- No calls of builtins (`len`, `list.append`)
+- No comparison of what the call returns
+
+### `enforce_reference_calls(...)`
+
+See also: [markers/enforce_reference_calls.md](markers/enforce_reference_calls.md).
+
+Layering learned from the reference. The reference entity and the matched
+target are called with the same cases; every call between two different
+project modules is recorded, anywhere in the call tree. Per case, the target
+may not make an edge the reference does not make; with `require_all` it must
+also make every reference edge. Runs only with `--dynamic`.
+
+Rule id: `DYN001/enforce_reference_calls/v1`, rule type
+`runtime_reference_calls`, evidence type `runtime`.
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
+| `require_all` | `bool` | `False` | Also require every reference edge |
+| `init` | `dict \| None` | `None` | Methods only: default constructor arguments |
+| `timeout_s` | `float` | `5.0` | Wall-clock limit per run, in `(0, 60]` |
+| `severity` | `str` | `"error"` | Violation severity |
+| `message` | `str \| None` | `None` | Custom message override |
+
+Result `details`: `reference_edges` (per case, `"from -> to"`), `violations`,
+`cases` with each target call's `from`, `module`, `callee`, `caller`, `line`;
+`reason` is `no_violations`, `violation`, `reference_failed` (status `ERROR`),
+`case_setup_failed`, a `probe_*` status, `target_kind_mismatch`, or
+`dynamic_checks_disabled`.
+
+Non-goals in v1:
+
+- No edges into the standard library or third-party packages
+- No call counts, order, or which function of a module is called
+
+### `forbid_runtime_instantiation(...)`
+
+See also: [markers/forbid_runtime_instantiation.md](markers/forbid_runtime_instantiation.md).
+
+Dependency injection checked at runtime: code of the target's module must not
+create instances of classes defined in the listed project modules, while a
+case runs or a method's instance is built. Runs only with `--dynamic`.
+
+Rule id: `DYN004/forbid_runtime_instantiation/v1`, rule type
+`runtime_instances`, evidence type `runtime`.
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `*modules` | `str` | required | Module names, with their submodules |
+| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
+| `allow` | `list[str] \| None` | `None` | Exemptions under a listed name |
+| `init` | `dict \| None` | `None` | Methods only: default constructor arguments |
+| `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]` |
+| `severity` | `str` | `"error"` | Violation severity |
+| `message` | `str \| None` | `None` | Custom message override |
+
+Result `details.cases[*].instances` lists `class`, `module`, `from`,
+`creator`, `file`, and `line` per object created by project code;
+`details.reason` is as for `forbid_runtime_calls`.
+
+Non-goals in v1:
+
+- No classes outside the analysed project
+- No objects created by other modules on the target's behalf
+
+### Runtime class rules (DYN005–DYN007)
+
+See also: [dynamic-checks.md § Runtime counterparts](dynamic-checks.md#runtime-counterparts-of-static-rules).
+
+Class-level markers that check the object Python builds instead of the class
+body. Each case gives constructor arguments (`args`, `kwargs`). Run only with
+`--dynamic`.
+
+| Marker | Rule id | Rule type | Options besides `severity`, `message`, `timeout_s` |
+|--------|---------|-----------|------------------|
+| `require_runtime_members(*names, cases)` | `DYN005/require_runtime_members/v1` | `runtime_members` | — |
+| `forbid_runtime_members(*names, cases)` | `DYN005/forbid_runtime_members/v1` | `runtime_members` | — |
+| `is_runtime_concrete_class(cases)` | `DYN006/is_runtime_concrete_class/v1` | `runtime_class_kind` | — |
+| `is_runtime_abstract_class()` | `DYN006/is_runtime_abstract_class/v1` | `runtime_class_kind` | no `cases`; nothing is instantiated |
+| `implements_runtime_protocol(Protocol, cases)` | `DYN007/implements_runtime_protocol/v1` | `runtime_protocol` | — |
+
+Per case the probe reports `abstract`, `abstract_methods`, `constructed`,
+`raised`, and `members` (`present`, `where`, and for protocol methods
+`callable` and `bindable`). `details.reason` is as for `forbid_runtime_calls`.
+
+Non-goals in v1:
+
+- No member types, values, or annotations — the static rules check those
+- No members that appear only after further method calls
+- No keyword-only parameters or return types for protocol methods
+
+### Design-pattern rules (DYN008)
+
+See also: [markers/is_runtime_singleton.md](markers/is_runtime_singleton.md),
+[markers/enforce_runtime_observer.md](markers/enforce_runtime_observer.md),
+[markers/require_runtime_delegation.md](markers/require_runtime_delegation.md).
+
+Rule type `runtime_pattern`, evidence type `runtime`; run only with `--dynamic`.
+
+| Marker | Placement | Options besides `cases`, `severity`, `message`, `timeout_s` | Passes when |
+|--------|-----------|------------------|-------------|
+| `is_runtime_singleton` | class | `access` (accessor name or `None` for the class) | two accesses return the same object |
+| `enforce_runtime_observer` | class | `subscribe`, `notify` (required), `unsubscribe`, `notify_args` | a subscribed spy listener is called by `notify`, and not after `unsubscribe` |
+| `require_runtime_delegation(spy)` | function, method | `member`, `init` | the code calls the spy injected as `{"$spy": spy}` (on `member`, if given) |
+
+Per case the probe reports `singleton` (`access`, `same`, `type`, `error`),
+`observer` (`notified`, `after_unsubscribe`, `error`), or `spy_calls`
+(`spy`, `member`, `args`). Invalid declarations (non-identifier method names,
+`notify_args` that are not a list, a spy no case injects) surface as
+`compiler_invalid_param`.
+
+Non-goals in v1:
+
+- No check that a singleton's constructor is unusable
+- No inspection of notification payloads or delegated arguments
+
+### `forbid_foreign_writes(...)`
+
+See also: [markers/forbid_foreign_writes.md](markers/forbid_foreign_writes.md).
+
+Encapsulation checked at runtime. While the matched target function or method
+runs on each case, an attribute of an instance of a class defined in the
+analysed project may be assigned only by a method of that class or its bases.
+Runs only with `--dynamic`.
+
+Rule id: `DYN003/forbid_foreign_writes/v1`, rule type `runtime_writes`,
+evidence type `runtime`.
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
+| `init` | `dict \| None` | `None` | Methods only: default constructor arguments |
+| `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]` |
+| `severity` | `str` | `"error"` | Violation severity |
+| `message` | `str \| None` | `None` | Custom message override |
+
+Result `details.cases[*].writes` lists `class`, `attribute`, `writer`, `file`,
+and `line` per foreign assignment; `details.reason` is as for
+`forbid_runtime_calls`.
+
+Non-goals in v1:
+
+- No changes inside mutable attributes (`obj.items.append(x)`)
+- No `del obj.x`, `object.__setattr__`, or `obj.__dict__` writes
+- No exceptions, enums, or classes outside the analysed project
+
+### `forbid_runtime_imports(...)`
+
+See also: [markers/forbid_runtime_imports.md](markers/forbid_runtime_imports.md) — focused per-marker page(s).
+
+Forbid modules that the matched target module imports when it is loaded,
+observed at runtime. Module-level placement. Runs only with `--dynamic`.
+
+Rule id: `DYN002/forbid_runtime_imports/v1`, rule type `runtime_imports`,
+evidence type `runtime`.
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `*forbidden` | `str` | required | Module names to forbid, with their submodules |
+| `allow` | `list[str] \| None` | `None` | Exemptions under a forbidden name |
+| `timeout_s` | `float` | `5.0` | Wall-clock limit, in `(0, 60]` |
+| `severity` | `str` | `"error"` | Violation severity |
+| `message` | `str \| None` | `None` | Custom message override |
+
+Imports are recorded by wrapping `builtins.__import__`, `importlib.__import__`,
+and `importlib.import_module` in the child interpreter; an import counts when the
+importing frame's file lies under the target root. Result `details.violations`
+lists `module`, `file`, `line`, and `phase` per offending import;
+`details.reason` is `no_forbidden_imports`, `forbidden_import_executed`, a
+`probe_*` status, or `dynamic_checks_disabled`.
+
+Non-goals in v1:
+
+- No discovery of imports inside functions that importing the module does not
+  call (a lazily imported module that is then used is caught by
+  `forbid_runtime_calls`)
+- No attribution of imports made by the standard library or third-party code
+- No detection of loading through `importlib.util` / `exec_module`,
+  `importlib._bootstrap`, or `exec` with fresh globals
 
 ## Placement Rules
 

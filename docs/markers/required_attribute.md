@@ -70,3 +70,4 @@ class User:
 
 - [../api-reference.md](../api-reference.md) — full option surface, including dataclass and descriptor examples
 - [require_member_set](require_member_set.md) — for set-cardinality checks
+- [require_runtime_members](require_runtime_members.md) — presence checked on a built instance, however the attribute is created

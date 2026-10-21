@@ -59,3 +59,4 @@ class RepositoryContract:
 - [../api-reference.md](../api-reference.md) — full option surface
 - [is_concrete_class](is_concrete_class.md) — the inverse classification
 - [is_abstract_method](is_abstract_method.md) — the method-level form
+- [is_runtime_abstract_class](is_runtime_abstract_class.md) — decided by Python at run time, external bases included

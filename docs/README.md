@@ -14,10 +14,12 @@ purpose-line.
    page per marker
 6. [pattern-recipes.md](pattern-recipes.md) — ready-to-use marker
    combinations for common patterns
-7. [reporting.md](reporting.md) — JSON and Markdown output, statuses, and exit
+7. [dynamic-checks.md](dynamic-checks.md) — the `--dynamic` runtime rules,
+   their cases, what a pass means, and the sandbox
+8. [reporting.md](reporting.md) — JSON and Markdown output, statuses, and exit
    codes
-8. [architecture.md](architecture.md) — pipeline, module map, and extension
+9. [architecture.md](architecture.md) — pipeline, module map, and extension
    points
-9. [testing.md](testing.md) — running tests and quality gates (contributors)
-10. [dependency-management.md](dependency-management.md) — dependency policy
+10. [testing.md](testing.md) — running tests and quality gates (contributors)
+11. [dependency-management.md](dependency-management.md) — dependency policy
     (contributors)

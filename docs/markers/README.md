@@ -46,3 +46,25 @@ All markers are imported from `pythonarchtesting.rules`.
 
 - [flow](flow.md) — mark a statement as a stage in a tracked variable flow
 - [enforce_flow](enforce_flow.md) — require flow stages to appear in declared order
+
+## Runtime Structure
+
+Opt-in: these markers execute target code and run only with `--dynamic`. Cases
+only give call arguments; results are never compared. See
+[../dynamic-checks.md](../dynamic-checks.md).
+
+- [forbid_runtime_calls](forbid_runtime_calls.md) — calls from the target's module into a layer it must not reach
+- [require_runtime_calls](require_runtime_calls.md) — calls into a layer the target must delegate to
+- [enforce_reference_calls](enforce_reference_calls.md) — module-to-module call graph learned from the reference
+- [forbid_foreign_writes](forbid_foreign_writes.md) — attribute assignments from outside the object's class
+- [forbid_runtime_instantiation](forbid_runtime_instantiation.md) — dependencies created instead of injected
+- [require_runtime_members](require_runtime_members.md) — members a built instance must have, dynamic ones included
+- [forbid_runtime_members](forbid_runtime_members.md) — members a built instance must not have
+- [is_runtime_concrete_class](is_runtime_concrete_class.md) — instantiable as Python decides, external abstract bases included
+- [is_runtime_abstract_class](is_runtime_abstract_class.md) — abstract as Python decides
+- [implements_runtime_protocol](implements_runtime_protocol.md) — protocol conformance of a built instance
+- [is_runtime_singleton](is_runtime_singleton.md) — Singleton: one shared instance
+- [enforce_runtime_observer](enforce_runtime_observer.md) — Observer: listeners notified, and not after unsubscribing
+- [require_runtime_delegation](require_runtime_delegation.md) — Strategy/Decorator/Proxy: work delegated to an injected collaborator
+- [forbid_runtime_imports](forbid_runtime_imports.md) — modules a target module actually imports when it is loaded
+- [enforce_flow with `cases`](enforce_flow.md#runtime-check-with-cases) — processing stages run in the reference's order, told apart by the project functions each calls

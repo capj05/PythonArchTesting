@@ -53,3 +53,4 @@ class RepositoryImplementationContract:
 
 - [../api-reference.md](../api-reference.md) — full option surface
 - [is_abstract_class](is_abstract_class.md) — the inverse classification
+- [is_runtime_concrete_class](is_runtime_concrete_class.md) — instantiability decided by Python, external abstract bases included

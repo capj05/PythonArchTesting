@@ -60,3 +60,4 @@ class RepositoryAdapter:
 
 - [../api-reference.md](../api-reference.md) — full option surface
 - [subclass_of](subclass_of.md) — for nominal inheritance instead of structural conformance
+- [implements_runtime_protocol](implements_runtime_protocol.md) — conformance of a built instance, members attached at run time included
