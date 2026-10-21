@@ -5,6 +5,7 @@ Command-line interface for Python Architecture Testing.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -137,17 +138,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _runtime_rules_skipped(target_states: List[Any]) -> int:
-    """How many rule results were skipped only because --dynamic was missing."""
-    return sum(
-        1
-        for state in target_states
-        for result in state.rule_results
-        if result.status == "SKIPPED"
-        and (result.details or {}).get("reason") == "dynamic_checks_disabled"
-    )
-
-
 def _sandbox_policy(
     parser: argparse.ArgumentParser, args: argparse.Namespace
 ) -> Optional[Any]:
@@ -182,25 +172,23 @@ def _run_declaration_validation(
     output_format: Optional[str],
     validation_scope: str = VALIDATION_SCOPE_ALL,
 ) -> int:
-    from pythonarchtesting.declaration_validation import (
-        build_declaration_validation_report,
-        get_declaration_validation_exit_code,
-    )
-    from pythonarchtesting.runner.source_prep import prepare_source
+    from pythonarchtesting.declaration_validation import validate_declarations
 
-    run_state = prepare_source(
-        config=config,
-        source_path=Path(source_path),
-        reference_modules=reference_modules or None,
-        validation_scope=validation_scope,
+    if (output_format or "json") != "json":
+        raise ValueError(
+            f"Unsupported declaration validation output format: {output_format}"
+        )
+    payload = validate_declarations(
+        config, Path(source_path), reference_modules or None, validation_scope
     )
-    report = build_declaration_validation_report(run_state, output_format or "json")
+    exit_code = payload.pop("exit_code")
+    report = json.dumps(payload, indent=2, sort_keys=True)
     if output_file:
         _write_report(output_file, report)
         print(f"Report written to {output_file}")
     else:
         print(report)
-    return get_declaration_validation_exit_code(run_state)
+    return int(exit_code)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -309,7 +297,9 @@ def _run(argv: Optional[List[str]] = None) -> int:
         dynamic=args.dynamic,
         sandbox=_sandbox_policy(parser, args),
     )
-    skipped = _runtime_rules_skipped(target_states)
+    from pythonarchtesting.runner.skips import count_runtime_rules_skipped
+
+    skipped = count_runtime_rules_skipped(target_states)
     if skipped:
         # Otherwise a run without --dynamic reads as a pass for every target.
         print(

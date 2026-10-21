@@ -8,7 +8,11 @@ import pytest
 
 import pythonarchtesting.cli as cli
 from pythonarchtesting.config.data import create_config_from_dict
-from pythonarchtesting.declaration_validation import collect_declaration_diagnostics
+from pythonarchtesting.declaration_validation import (
+    build_declaration_validation_report,
+    collect_declaration_diagnostics,
+    validate_declarations,
+)
 from pythonarchtesting.runner.source_prep import prepare_source
 
 
@@ -436,3 +440,23 @@ def test_cli_validate_declarations_rejects_markdown_format(tmp_path):
                 "markdown",
             ]
         )
+
+
+def test_validate_declarations_returns_payload_with_exit_code():
+    reference = (
+        Path(__file__).parents[3] / "example" / "architectural_mutants" / "reference"
+    )
+    payload = validate_declarations(_config(), reference, None, "all")
+    run_state = prepare_source(
+        config=_config(),
+        source_path=reference,
+        reference_modules=None,
+        validation_scope="all",
+    )
+
+    assert payload["mode"] == "validate-declarations"
+    assert payload["exit_code"] in (0, 1)
+    without_exit_code = {k: v for k, v in payload.items() if k != "exit_code"}
+    assert (
+        json.loads(build_declaration_validation_report(run_state)) == without_exit_code
+    )

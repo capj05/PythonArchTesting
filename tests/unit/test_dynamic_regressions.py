@@ -14,8 +14,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from pythonarchtesting.cli import _runtime_rules_skipped
 from pythonarchtesting.dynamic.runner import run_case_batch, run_cases
+from pythonarchtesting.runner.skips import count_runtime_rules_skipped
 
 _TARGET = """
 import collections
@@ -326,5 +326,5 @@ def test_runtime_rules_skipped_counts_only_skips_for_missing_dynamic() -> None:
         _state(),
     ]
 
-    assert _runtime_rules_skipped(states) == 2
-    assert _runtime_rules_skipped([]) == 0
+    assert count_runtime_rules_skipped(states) == 2
+    assert count_runtime_rules_skipped([]) == 0

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from pathlib import Path
+from typing import Any, List, Optional
 
+from pythonarchtesting.config import Config
 from pythonarchtesting.rules.compilation.declarations import (
     is_invalid_annotation_declaration,
     normalize_declaration_entries,
@@ -149,16 +151,43 @@ def get_declaration_validation_exit_code(run_state: RunState) -> int:
     return 1 if any(item["severity"] == "error" for item in diagnostics) else 0
 
 
+def _build_payload(run_state: RunState) -> dict[str, Any]:
+    diagnostics = collect_declaration_diagnostics(run_state)
+    return {
+        "mode": "validate-declarations",
+        "summary": summarize_declaration_diagnostics(run_state, diagnostics),
+        "diagnostics": diagnostics,
+    }
+
+
+def validate_declarations(
+    config: Config,
+    source_path: Path,
+    reference_modules: Optional[List[str]],
+    validation_scope: str,
+) -> dict[str, Any]:
+    """Validate the reference declarations and return the report payload.
+
+    The payload is what the JSON report holds, plus an ``exit_code`` key (1 when
+    any diagnostic is an error, else 0) that the report itself leaves out.
+    """
+    from pythonarchtesting.runner.source_prep import prepare_source
+
+    run_state = prepare_source(
+        config=config,
+        source_path=source_path,
+        reference_modules=reference_modules or None,
+        validation_scope=validation_scope,
+    )
+    payload = _build_payload(run_state)
+    payload["exit_code"] = get_declaration_validation_exit_code(run_state)
+    return payload
+
+
 def build_declaration_validation_report(
     run_state: RunState, output_format: str = "json"
 ) -> str:
-    diagnostics = collect_declaration_diagnostics(run_state)
-    summary = summarize_declaration_diagnostics(run_state, diagnostics)
-    payload = {
-        "mode": "validate-declarations",
-        "summary": summary,
-        "diagnostics": diagnostics,
-    }
+    payload = _build_payload(run_state)
     if output_format == "json":
         return json.dumps(payload, indent=2, sort_keys=True)
     raise ValueError(
@@ -171,4 +200,5 @@ __all__ = [
     "collect_declaration_diagnostics",
     "get_declaration_validation_exit_code",
     "summarize_declaration_diagnostics",
+    "validate_declarations",
 ]

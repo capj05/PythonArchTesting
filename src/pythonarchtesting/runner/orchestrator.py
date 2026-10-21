@@ -100,6 +100,7 @@ def run_projects(
     load_config_first: bool = True,
     dynamic: bool = False,
     sandbox: Any = None,
+    on_target_done: Optional[Callable[[int, int, str], None]] = None,
     _prepare_source_fn: Callable[..., RunState] = prepare_source,
     _evaluate_target_fn: Callable[..., TargetRunState] = evaluate_target,
 ) -> Tuple[RunState, List[TargetRunState]]:
@@ -137,7 +138,8 @@ def run_projects(
     )
 
     target_states: List[TargetRunState] = []
-    for spec in projects_cfg.targets:
+    total = len(projects_cfg.targets)
+    for index, spec in enumerate(projects_cfg.targets, start=1):
         logger.info("Target start: id=%s path=%s", spec.target_id, spec.path)
         target_state = _evaluate_target_safe(
             run_state=run_state,
@@ -155,5 +157,7 @@ def run_projects(
             len(target_state.validation_results),
         )
         target_states.append(target_state)
+        if on_target_done is not None:
+            on_target_done(index, total, spec.target_id)
 
     return run_state, target_states
