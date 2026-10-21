@@ -9,6 +9,7 @@ example/*
 !example/checkout_assignment/
 !example/project_1/
 !example/rule_showcase/
+!example/architectural_mutants/
 example/project_1/reports/
 example/rule_showcase/*/reports/
 example/checkout_assignment/reports/report.json
