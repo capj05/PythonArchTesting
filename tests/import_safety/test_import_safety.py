@@ -16,6 +16,8 @@ from tests.utils.subprocess_imports import capture_module_imports, run_python_js
 @pytest.mark.parametrize(
     "target_module",
     [
+        "pythonarchtesting",
+        "pythonarchtesting.rules",
         "pythonarchtesting.util.type_utils",
         "pythonarchtesting.report.dispatcher",
         "pythonarchtesting.cli",

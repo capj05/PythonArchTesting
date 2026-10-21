@@ -23,3 +23,5 @@ purpose-line.
 10. [testing.md](testing.md) — running tests and quality gates (contributors)
 11. [dependency-management.md](dependency-management.md) — dependency policy
     (contributors)
+12. [mcp.md](mcp.md) — the optional MCP server for marker authoring,
+    evaluation and report reading

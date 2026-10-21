@@ -8,6 +8,9 @@ from typing import Dict, List
 
 # Forbidden import patterns for each target module
 FORBIDDEN_IMPORTS: Dict[str, List[str]] = {
+    # The optional MCP server (and the mcp SDK) must stay out of the base package.
+    "pythonarchtesting": ["pythonarchtesting.mcp_server", "mcp"],
+    "pythonarchtesting.rules": ["pythonarchtesting.mcp_server", "mcp"],
     "pythonarchtesting.util.type_utils": [
         "pythonarchtesting.execution",
         "pythonarchtesting.report",

@@ -132,6 +132,7 @@ CLI entrypoints:
 
 - `python-arch-test` — installed console script
 - `python -m pythonarchtesting.cli` — direct invocation from a source checkout
+- `python-arch-test-mcp` — optional MCP server, see [docs/mcp.md](docs/mcp.md)
 
 ## Quick Example
 

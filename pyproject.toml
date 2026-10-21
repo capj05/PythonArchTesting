@@ -36,7 +36,11 @@ dependencies = [
 # parenthesized single-name imports, and mypy changed which casts it considers
 # redundant. Without a ceiling, `pip install .[dev]` silently changes what the
 # quality gates accept.
+mcp = [
+    "mcp>=2.3,<3",
+]
 dev = [
+    "mcp>=2.3,<3",
     "pytest>=7.4.0,<10",
     "pytest-cov>=4.1.0,<8",
     "pytest-xdist>=3.3.1,<4",
@@ -68,9 +72,15 @@ Repository = "https://github.com/capj05/PythonArchTesting.git"
 
 [project.scripts]
 python-arch-test = "pythonarchtesting.cli:main"
+python-arch-test-mcp = "pythonarchtesting.mcp_server.server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+
+# The marker docs stay the only copy; the MCP server reads them from here
+# when it is not run from a checkout.
+[tool.setuptools.data-files]
+"share/pythonarchtesting/markers" = ["docs/markers/*.md"]
 
 [tool.setuptools.package-data]
 pythonarchtesting = ["*.conf"]
