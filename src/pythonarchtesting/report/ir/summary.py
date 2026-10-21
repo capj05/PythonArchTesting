@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Dict, Iterable, List, Optional
 
+# Statuses that count towards "Top Rules by Violation Count".
+VIOLATION_STATUSES = frozenset({"FAILED", "ERROR"})
+
 
 def _as_float(value: Any) -> Optional[float]:
     try:
@@ -60,7 +63,13 @@ def build_results_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
                 key=lambda kv: kv[0],
             )
         ),
-        "top_rules": top_counts([str(item.get("rule_id") or "") for item in results]),
+        "top_rules": top_counts(
+            [
+                str(item.get("rule_id") or "")
+                for item in results
+                if item.get("status") in VIOLATION_STATUSES
+            ]
+        ),
         "top_source_files": top_counts(
             [
                 str((item.get("source") or {}).get("file") or "<unknown>")

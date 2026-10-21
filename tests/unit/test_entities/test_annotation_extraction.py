@@ -15,6 +15,30 @@ def _extract_entities(source: str):
     )
 
 
+def test_a_protocol_named_by_reference_is_not_reported_as_unsupported() -> None:
+    entities = _extract_entities("""
+        from typing import Annotated
+
+        class Storage: ...
+
+        class Disk:
+            __archtest__: Annotated[
+                None,
+                implements_protocol(Storage),
+                implements_runtime_protocol(protocol=protocols.Storage),
+                implements_protocol(make_protocol()),
+            ]
+        """)
+    disk = next(entity for entity in entities if entity.qualname == "Disk")
+    named, keyword, called = disk.annotation_declarations
+
+    assert named.unsupported == []
+    assert named.params["protocol_expr"] == "Storage"
+    assert keyword.unsupported == []
+    assert keyword.params["protocol_expr"] == "protocols.Storage"
+    assert [issue["kind"] for issue in called.unsupported] == ["arg"]
+
+
 def test_annotation_marker_extraction_across_supported_scopes() -> None:
     entities = _extract_entities("""
         import typing

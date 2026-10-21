@@ -31,10 +31,6 @@
         {
           "count": 1,
           "name": "arch/fail"
-        },
-        {
-          "count": 1,
-          "name": "arch/ok"
         }
       ],
       "top_source_files": [
@@ -132,12 +128,7 @@
           "OK": 1
         },
         "timings": null,
-        "top_rules": [
-          {
-            "count": 1,
-            "name": "arch/ok"
-          }
-        ],
+        "top_rules": [],
         "top_source_files": [
           {
             "count": 1,

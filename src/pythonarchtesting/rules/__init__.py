@@ -35,10 +35,18 @@ def _get_core_decorators() -> dict[str, Any]:
     from pythonarchtesting.rules.declaration.core import (
         does_not_have,
         enforce_flow,
+        enforce_reference_calls,
+        enforce_runtime_observer,
         exact_type,
         flow,
+        forbid_foreign_writes,
         forbid_imports,
+        forbid_runtime_calls,
+        forbid_runtime_imports,
+        forbid_runtime_instantiation,
+        forbid_runtime_members,
         implements_protocol,
+        implements_runtime_protocol,
         inherits_directly_from,
         is_abstract_class,
         is_abstract_method,
@@ -49,9 +57,15 @@ def _get_core_decorators() -> dict[str, Any]:
         is_non_abstract_method,
         is_non_final_class,
         is_non_final_method,
+        is_runtime_abstract_class,
+        is_runtime_concrete_class,
+        is_runtime_singleton,
         not_subclass_of,
         require_member_set,
         require_method_set,
+        require_runtime_calls,
+        require_runtime_delegation,
+        require_runtime_members,
         required_attribute,
         required_constructor,
         required_entity_signature,
@@ -86,6 +100,20 @@ def _get_core_decorators() -> dict[str, Any]:
         "is_non_final_method": is_non_final_method,
         "flow": flow,
         "enforce_flow": enforce_flow,
+        "forbid_runtime_calls": forbid_runtime_calls,
+        "require_runtime_calls": require_runtime_calls,
+        "forbid_foreign_writes": forbid_foreign_writes,
+        "forbid_runtime_instantiation": forbid_runtime_instantiation,
+        "enforce_reference_calls": enforce_reference_calls,
+        "is_runtime_singleton": is_runtime_singleton,
+        "enforce_runtime_observer": enforce_runtime_observer,
+        "require_runtime_delegation": require_runtime_delegation,
+        "require_runtime_members": require_runtime_members,
+        "forbid_runtime_members": forbid_runtime_members,
+        "is_runtime_concrete_class": is_runtime_concrete_class,
+        "is_runtime_abstract_class": is_runtime_abstract_class,
+        "implements_runtime_protocol": implements_runtime_protocol,
+        "forbid_runtime_imports": forbid_runtime_imports,
     }
 
 
@@ -120,6 +148,44 @@ is_non_abstract_method = _LazyMarkerFactory(
 is_non_final_method = _LazyMarkerFactory("is_non_final_method", _get_core_decorators)
 flow = _LazyMarkerFactory("flow", _get_core_decorators)
 enforce_flow = _LazyMarkerFactory("enforce_flow", _get_core_decorators)
+forbid_runtime_calls = _LazyMarkerFactory("forbid_runtime_calls", _get_core_decorators)
+require_runtime_calls = _LazyMarkerFactory(
+    "require_runtime_calls", _get_core_decorators
+)
+forbid_foreign_writes = _LazyMarkerFactory(
+    "forbid_foreign_writes", _get_core_decorators
+)
+forbid_runtime_instantiation = _LazyMarkerFactory(
+    "forbid_runtime_instantiation", _get_core_decorators
+)
+enforce_reference_calls = _LazyMarkerFactory(
+    "enforce_reference_calls", _get_core_decorators
+)
+is_runtime_singleton = _LazyMarkerFactory("is_runtime_singleton", _get_core_decorators)
+enforce_runtime_observer = _LazyMarkerFactory(
+    "enforce_runtime_observer", _get_core_decorators
+)
+require_runtime_delegation = _LazyMarkerFactory(
+    "require_runtime_delegation", _get_core_decorators
+)
+require_runtime_members = _LazyMarkerFactory(
+    "require_runtime_members", _get_core_decorators
+)
+forbid_runtime_members = _LazyMarkerFactory(
+    "forbid_runtime_members", _get_core_decorators
+)
+is_runtime_concrete_class = _LazyMarkerFactory(
+    "is_runtime_concrete_class", _get_core_decorators
+)
+is_runtime_abstract_class = _LazyMarkerFactory(
+    "is_runtime_abstract_class", _get_core_decorators
+)
+implements_runtime_protocol = _LazyMarkerFactory(
+    "implements_runtime_protocol", _get_core_decorators
+)
+forbid_runtime_imports = _LazyMarkerFactory(
+    "forbid_runtime_imports", _get_core_decorators
+)
 
 __all__ = [
     "required_entity_signature",
@@ -147,4 +213,18 @@ __all__ = [
     "is_non_final_method",
     "flow",
     "enforce_flow",
+    "forbid_runtime_calls",
+    "require_runtime_calls",
+    "forbid_foreign_writes",
+    "forbid_runtime_instantiation",
+    "enforce_reference_calls",
+    "is_runtime_singleton",
+    "enforce_runtime_observer",
+    "require_runtime_delegation",
+    "require_runtime_members",
+    "forbid_runtime_members",
+    "is_runtime_concrete_class",
+    "is_runtime_abstract_class",
+    "implements_runtime_protocol",
+    "forbid_runtime_imports",
 ]

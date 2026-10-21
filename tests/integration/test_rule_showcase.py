@@ -23,13 +23,35 @@ SHOWCASE_CASES = (
     "api005_method_set",
     "api006_member_set",
     "dep001_imports",
+    "dyn001_layers",
+    "dyn001_reference_calls",
+    "dyn002_runtime_imports",
+    "dyn003_encapsulation",
+    "dyn004_injection",
+    "dyn005_runtime_members",
+    "dyn006_runtime_classes",
+    "dyn008_patterns",
     "enum001_enum",
     "flw001_flow",
+    "flw002_runtime_flow",
     "mod001_modifiers",
     "neg001_absence",
     "nom001_inheritance",
     "pro001_protocol",
 )
+
+# Cases whose rules only decide a verdict when target code is executed.
+SHOWCASE_EXTRA_ARGS = {
+    "dyn001_layers": ["--dynamic"],
+    "dyn001_reference_calls": ["--dynamic"],
+    "dyn002_runtime_imports": ["--dynamic"],
+    "dyn003_encapsulation": ["--dynamic"],
+    "dyn004_injection": ["--dynamic"],
+    "dyn005_runtime_members": ["--dynamic"],
+    "dyn006_runtime_classes": ["--dynamic"],
+    "dyn008_patterns": ["--dynamic"],
+    "flw002_runtime_flow": ["--dynamic"],
+}
 
 
 def _repo_root() -> Path:
@@ -105,6 +127,7 @@ def test_showcase_targets_match_the_verdict_their_name_promises(
         assert target.name.startswith(("target_pass_", "target_fail_")), target.name
         observed[target.name] = main(
             ["--source", str(reference), "--target", str(target), "--format", "json"]
+            + SHOWCASE_EXTRA_ARGS.get(case_name, [])
         )
         capsys.readouterr()
 

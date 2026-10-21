@@ -591,6 +591,478 @@ def is_enum(
     )
 
 
+def _runtime_calls_marker(
+    name: str,
+    modules: tuple[str, ...],
+    *,
+    cases: list[dict[str, Any]],
+    allow: list[str] | None,
+    init: dict[str, Any] | None,
+    timeout_s: float,
+    severity: str,
+    message: str | None,
+) -> RuleMarker:
+    cleaned = _clean_kwargs(
+        {
+            "modules": list(modules),
+            "allow": list(allow or []),
+            "cases": list(cases),
+            "init": dict(init) if init is not None else None,
+            "timeout_s": timeout_s,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        name,
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def forbid_runtime_calls(
+    *modules: str,
+    cases: list[dict[str, Any]],
+    allow: list[str] | None = None,
+    init: dict[str, Any] | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a runtime layering policy for the rule engine.
+
+    The matched target function or method is called once per case, and every
+    call that code of its module makes into another module is recorded. Calls
+    into the listed modules are violations, including calls that static
+    analysis cannot attribute (duck typing, injected objects, ``getattr``).
+    Cases only give call arguments; what the call computes is not checked. The
+    check only runs when the CLI is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_calls_marker(
+        "forbid_runtime_calls",
+        modules,
+        cases=cases,
+        allow=allow,
+        init=init,
+        timeout_s=timeout_s,
+        severity=severity,
+        message=message,
+    )
+
+
+def require_runtime_calls(
+    *modules: str,
+    cases: list[dict[str, Any]],
+    init: dict[str, Any] | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a runtime delegation policy for the rule engine.
+
+    Like ``forbid_runtime_calls``, but code of the target's module must call
+    into each listed module directly in every case, so the work is delegated
+    to that layer rather than done in place. The check only runs when the CLI
+    is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_calls_marker(
+        "require_runtime_calls",
+        modules,
+        cases=cases,
+        allow=None,
+        init=init,
+        timeout_s=timeout_s,
+        severity=severity,
+        message=message,
+    )
+
+
+def forbid_runtime_instantiation(
+    *modules: str,
+    cases: list[dict[str, Any]],
+    allow: list[str] | None = None,
+    init: dict[str, Any] | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a dependency-injection policy for the rule engine.
+
+    The matched target function or method is called once per case (a method's
+    instance is built first, and that counts too). Code of its module must not
+    create instances of classes defined in the listed modules: it has to
+    receive such objects from its caller. Calling their methods stays allowed.
+    The check only runs when the CLI is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_calls_marker(
+        "forbid_runtime_instantiation",
+        modules,
+        cases=cases,
+        allow=allow,
+        init=init,
+        timeout_s=timeout_s,
+        severity=severity,
+        message=message,
+    )
+
+
+def enforce_reference_calls(
+    *,
+    cases: list[dict[str, Any]],
+    require_all: bool = False,
+    init: dict[str, Any] | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a reference-derived layering policy for the rule engine.
+
+    The reference entity and the matched target are called with the same
+    cases, and every call between two different modules of the project is
+    recorded. The target must not make a module-to-module call the reference
+    does not make; with ``require_all`` it must also make every one the
+    reference makes. The check only runs when the CLI is started with
+    ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "cases": list(cases),
+            "require_all": require_all,
+            "init": dict(init) if init is not None else None,
+            "timeout_s": timeout_s,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "enforce_reference_calls",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def _runtime_class_marker(
+    name: str,
+    kwargs: dict[str, Any],
+    *,
+    severity: str,
+    message: str | None,
+) -> RuleMarker:
+    cleaned = _clean_kwargs({**kwargs, "severity": severity})
+    return _make_rule_marker(
+        name,
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def require_runtime_members(
+    *names: str,
+    cases: list[dict[str, Any]],
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a runtime member requirement for the rule engine.
+
+    An instance of the matched target class is built from each case's
+    constructor arguments and must have every listed member, however it got
+    there: assigned in ``__init__``, through ``setattr`` in a loop,
+    ``__dict__.update``, a mixin, a decorator, or a base class from a library.
+    The check only runs when the CLI is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_class_marker(
+        "require_runtime_members",
+        {"names": list(names), "cases": list(cases), "timeout_s": timeout_s},
+        severity=severity,
+        message=message,
+    )
+
+
+def forbid_runtime_members(
+    *names: str,
+    cases: list[dict[str, Any]],
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a runtime member prohibition for the rule engine.
+
+    Like ``require_runtime_members``, but an instance built from any case must
+    not have any of the listed members. The check only runs when the CLI is
+    started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_class_marker(
+        "forbid_runtime_members",
+        {"names": list(names), "cases": list(cases), "timeout_s": timeout_s},
+        severity=severity,
+        message=message,
+    )
+
+
+def is_runtime_concrete_class(
+    *,
+    cases: list[dict[str, Any]],
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a runtime instantiability requirement for the rule engine.
+
+    The matched target class must be instantiable from each case's constructor
+    arguments. Python decides abstractness, so abstract methods inherited from
+    bases outside the project (``collections.abc``, a framework) count. The
+    check only runs when the CLI is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_class_marker(
+        "is_runtime_concrete_class",
+        {"cases": list(cases), "timeout_s": timeout_s},
+        severity=severity,
+        message=message,
+    )
+
+
+def is_runtime_abstract_class(
+    *,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a runtime abstractness requirement for the rule engine.
+
+    The matched target class is imported and must be abstract as Python sees
+    it (``inspect.isabstract``), bases outside the project included. Nothing
+    is instantiated. The check only runs when the CLI is started with
+    ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_class_marker(
+        "is_runtime_abstract_class",
+        {"timeout_s": timeout_s},
+        severity=severity,
+        message=message,
+    )
+
+
+def implements_runtime_protocol(
+    protocol: Any,
+    *,
+    cases: list[dict[str, Any]],
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a runtime protocol conformance requirement for the rule engine.
+
+    An instance of the matched target class is built from each case and must
+    have every member of the protocol, with methods callable with the
+    protocol's positional arguments — wherever they come from at run time.
+    The check only runs when the CLI is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_class_marker(
+        "implements_runtime_protocol",
+        {
+            "protocol": protocol,
+            "cases": list(cases),
+            "timeout_s": timeout_s,
+        },
+        severity=severity,
+        message=message,
+    )
+
+
+def is_runtime_singleton(
+    *,
+    cases: list[dict[str, Any]],
+    access: str | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a Singleton requirement for the rule engine.
+
+    The instance of the matched target class is obtained twice per case —
+    through the class method named by ``access`` (``Config.instance()``), or
+    by calling the class itself — and both must be the same object. The check
+    only runs when the CLI is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_class_marker(
+        "is_runtime_singleton",
+        {"cases": list(cases), "access": access, "timeout_s": timeout_s},
+        severity=severity,
+        message=message,
+    )
+
+
+def enforce_runtime_observer(
+    *,
+    subscribe: str,
+    notify: str,
+    cases: list[dict[str, Any]],
+    notify_args: list[Any] | None = None,
+    unsubscribe: str | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture an Observer requirement for the rule engine.
+
+    An instance of the matched target class is built per case, a recording
+    listener is registered through ``subscribe``, and ``notify`` is called
+    with ``notify_args``: the listener must be called. With ``unsubscribe``
+    the listener is removed and a second notification must not reach it. The
+    check only runs when the CLI is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_class_marker(
+        "enforce_runtime_observer",
+        {
+            "subscribe": subscribe,
+            "notify": notify,
+            "unsubscribe": unsubscribe,
+            "notify_args": list(notify_args or []),
+            "cases": list(cases),
+            "timeout_s": timeout_s,
+        },
+        severity=severity,
+        message=message,
+    )
+
+
+def require_runtime_delegation(
+    spy: str,
+    *,
+    cases: list[dict[str, Any]],
+    member: str | None = None,
+    init: dict[str, Any] | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a delegation requirement (Strategy, Decorator, Proxy) for the rule engine.
+
+    The cases inject a recording stand-in with ``{"$spy": spy}`` in the call
+    or constructor arguments. While the matched target function or method
+    runs, it must call that collaborator — ``member`` on it, if given. The
+    check only runs when the CLI is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    return _runtime_class_marker(
+        "require_runtime_delegation",
+        {
+            "spy": spy,
+            "member": member,
+            "cases": list(cases),
+            "init": dict(init) if init is not None else None,
+            "timeout_s": timeout_s,
+        },
+        severity=severity,
+        message=message,
+    )
+
+
+def forbid_foreign_writes(
+    *,
+    cases: list[dict[str, Any]],
+    init: dict[str, Any] | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture an encapsulation policy for the rule engine.
+
+    The matched target function or method is called once per case. While it
+    runs, an attribute of an object whose class is defined in the target may
+    only be assigned by that class's own methods; ``order.total = ...`` from
+    outside ``Order`` is a violation. Cases only give call arguments. The
+    check only runs when the CLI is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "cases": list(cases),
+            "init": dict(init) if init is not None else None,
+            "timeout_s": timeout_s,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "forbid_foreign_writes",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def forbid_runtime_imports(
+    *forbidden: str,
+    allow: list[str] | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture runtime import policy for the rule engine.
+
+    The matched target module is imported in a child interpreter and every
+    import its code performs is recorded, including ``importlib.import_module``
+    and ``__import__`` calls that static analysis cannot see. The check only
+    runs when the CLI is started with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "forbidden": list(forbidden),
+            "allow": list(allow or []),
+            "timeout_s": timeout_s,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "forbid_runtime_imports",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
 def is_abstract_class(
     *,
     severity: str = "error",
@@ -804,11 +1276,21 @@ def enforce_flow(
     stages: list[str] | tuple[str, ...],
     *,
     variable: str | None = None,
+    cases: list[dict[str, Any]] | None = None,
+    init: dict[str, Any] | None = None,
+    timeout_s: float = 5.0,
     severity: str = "error",
     message: str | None = None,
 ) -> RuleMarker:
     """
     Capture variable-flow validation intent for the rule engine.
+
+    Without ``cases`` the target must carry its own ``flow(...)`` markers, which
+    are checked statically. With ``cases`` (call arguments only) the check runs
+    with ``--dynamic`` instead: the reference is executed to learn which of
+    the project's functions each stage calls, and the target must call them
+    in the same stage order. Values are never compared. The target then needs
+    no markers.
 
     This helper is declaration-only and returns passive annotation metadata.
     """
@@ -816,6 +1298,9 @@ def enforce_flow(
         {
             "stages": list(stages),
             "variable": variable,
+            "cases": list(cases) if cases is not None else None,
+            "init": dict(init) if init is not None else None,
+            "timeout_s": timeout_s if cases is not None else None,
             "severity": severity,
         }
     )

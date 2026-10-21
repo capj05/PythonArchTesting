@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.config.projects import (
@@ -97,6 +98,8 @@ def run_projects(
     validation_scope: str = "all",
     custom_config: Optional[str] = None,
     load_config_first: bool = True,
+    dynamic: bool = False,
+    sandbox: Any = None,
     _prepare_source_fn: Callable[..., RunState] = prepare_source,
     _evaluate_target_fn: Callable[..., TargetRunState] = evaluate_target,
 ) -> Tuple[RunState, List[TargetRunState]]:
@@ -124,6 +127,8 @@ def run_projects(
         reference_modules=reference_modules,
         validation_scope=validation_scope,
     )
+    if dynamic:
+        run_state = replace(run_state, dynamic_enabled=True, sandbox=sandbox)
 
     logger.info(
         "Run started: source_path=%s targets=%d",

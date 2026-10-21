@@ -4,6 +4,7 @@
 
 - Target ID: b
 - Path: /targets/b
+- Mode: static-only
 - Exit Code: 1
 
 ## Summary

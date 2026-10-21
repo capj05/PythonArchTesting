@@ -55,6 +55,20 @@ def test_rules_public_surface_is_core_only() -> None:
         "is_non_final_method",
         "flow",
         "enforce_flow",
+        "forbid_runtime_calls",
+        "require_runtime_calls",
+        "forbid_foreign_writes",
+        "forbid_runtime_imports",
+        "enforce_reference_calls",
+        "forbid_runtime_instantiation",
+        "require_runtime_members",
+        "forbid_runtime_members",
+        "is_runtime_concrete_class",
+        "is_runtime_abstract_class",
+        "implements_runtime_protocol",
+        "is_runtime_singleton",
+        "enforce_runtime_observer",
+        "require_runtime_delegation",
     }
     assert set(rules.__all__) == expected
 
@@ -63,6 +77,7 @@ def test_rules_public_surface_is_core_only() -> None:
         "detect_singleton",
         "forbid_dependencies",
         "forbid_calls",
+        "behaves_like",
         "dynamic_imports_observed",
         "no_god_class",
         "Rule",

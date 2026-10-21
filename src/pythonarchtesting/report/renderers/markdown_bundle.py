@@ -99,6 +99,7 @@ def _render_target_page(
             "",
             f"- Target ID: {escape_markdown(target.target_id)}",
             f"- Path: {escape_markdown(target.target_path)}",
+            f"- Mode: {escape_markdown(str(target.mode))}",
             f"- Exit Code: {target.exit_code}",
             "",
             "## Summary",
@@ -173,7 +174,9 @@ def _render_target_page(
                 item.rule_id,
                 format_entity(source),
                 format_entity(target_ref),
-                format_location(source),
+                # A target's report points into the target's files; the
+                # reference's location only stands in when there is none.
+                format_location(target_ref) or format_location(source),
                 item.message,
             )
         )
@@ -239,6 +242,7 @@ def render_markdown_bundle(
         f"**Generated:** {escape_markdown(str(document.generated_at))}",
         f"**Framework:** {escape_markdown(str(document.framework_version))}",
         f"**Source:** {escape_markdown(str(document.run.source_path or ''))}",
+        f"**Mode:** {escape_markdown(str(document.run.mode))}",
         f"**Exit Code:** {document.exit_code}",
         "",
         "## Run Summary",

@@ -80,6 +80,18 @@ def render_message(template: str, mapping: Dict[str, Any]) -> Tuple[str, str | N
         return "", str(exc)
 
 
+def _has_caveat(details: Dict[str, Any]) -> bool:
+    """Whether a passing runtime result left something unchecked."""
+    if not details.get("summary"):
+        return False
+    coverage = details.get("coverage") or {}
+    return bool(
+        coverage.get("unexercised_lines")
+        or details.get("unchecked_stages")
+        or details.get("absences")
+    )
+
+
 def _build_rule_result(
     rule: Rule,
     source: Entity,
@@ -91,7 +103,8 @@ def _build_rule_result(
 ) -> RuleResult:
     """Build a RuleResult from evaluation data."""
     if status == "OK":
-        message = "OK"
+        # A runtime pass holds for what ran; say so when something did not.
+        message = f"OK: {details['summary']}" if _has_caveat(details) else "OK"
     else:
         mapping = _message_mapping(rule, source, target, details)
         rendered, error = render_message(rule.message_template, mapping)

@@ -17,6 +17,18 @@ from .nominal_type_relationship import NominalTypeRelationshipEvaluator
 from .protocol_conformance import ProtocolConformanceEvaluator
 from .python_modifiers import PythonModifierEvaluator
 from .registry import get_rule_evaluator, register_rule_evaluator
+from .runtime_flow import RuntimeFlowEvaluator
+from .runtime_imports import RuntimeImportsEvaluator
+from .runtime_structure import (
+    RuntimeCallsEvaluator,
+    RuntimeClassKindEvaluator,
+    RuntimeInstancesEvaluator,
+    RuntimeMembersEvaluator,
+    RuntimePatternEvaluator,
+    RuntimeProtocolEvaluator,
+    RuntimeReferenceCallsEvaluator,
+    RuntimeWritesEvaluator,
+)
 from .variable_flow import VariableFlowEvaluator
 
 __all__ = [
@@ -30,6 +42,16 @@ __all__ = [
     "NominalTypeRelationshipEvaluator",
     "PythonModifierEvaluator",
     "ProtocolConformanceEvaluator",
+    "RuntimeCallsEvaluator",
+    "RuntimeClassKindEvaluator",
+    "RuntimeMembersEvaluator",
+    "RuntimePatternEvaluator",
+    "RuntimeProtocolEvaluator",
+    "RuntimeFlowEvaluator",
+    "RuntimeImportsEvaluator",
+    "RuntimeInstancesEvaluator",
+    "RuntimeReferenceCallsEvaluator",
+    "RuntimeWritesEvaluator",
     "VariableFlowEvaluator",
     "get_rule_evaluator",
     "register_rule_evaluator",

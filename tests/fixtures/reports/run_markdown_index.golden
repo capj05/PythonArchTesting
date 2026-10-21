@@ -3,6 +3,7 @@
 **Generated:** 2026-02-22T10:00:00Z
 **Framework:** test
 **Source:** /source
+**Mode:** static-only
 **Exit Code:** 1
 
 ## Run Summary
@@ -23,7 +24,6 @@
 | Rule | Violations |
 |---|---|
 | arch/fail | 1 |
-| arch/ok | 1 |
 
 ## Top Source Files
 

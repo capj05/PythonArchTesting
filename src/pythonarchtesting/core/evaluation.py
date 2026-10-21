@@ -7,6 +7,7 @@ with explicit inputs and outputs for testability.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from pythonarchtesting.config import Config
@@ -174,7 +175,15 @@ def evaluate_rule(
                     rule, source_entity, promoted_target, match, ctx
                 )
 
-        if bool(rule.params.get("fail_on_unmatched", False)):
+        # A runtime rule in a static-only run must not decide the verdict, so an
+        # unmatched source falls through to SKIPPED instead of failing.
+        runtime_rule_skipped = (
+            rule.evidence_type == "runtime" and ctx.target_root is None
+        )
+        if (
+            bool(rule.params.get("fail_on_unmatched", False))
+            and not runtime_rule_skipped
+        ):
             return RuleResult(
                 rule_id=rule.rule_id,
                 status="FAILED",
@@ -254,6 +263,9 @@ def evaluate_rules_for_target(
     config: Config,
     source_by_id: Dict[str, Entity] | None = None,
     target_by_id: Dict[str, Entity] | None = None,
+    target_root: Path | None = None,
+    source_root: Path | None = None,
+    sandbox: Any = None,
 ) -> Tuple[List[Any], List[Dict[str, Any]]]:
     """
     Evaluate all rules for a target.
@@ -266,6 +278,9 @@ def evaluate_rules_for_target(
         config: Configuration object
         source_by_id: Optional pre-built source entity lookup
         target_by_id: Optional pre-built target entity lookup
+        target_root: Target project root; only set when dynamic checks run
+        source_root: Reference project root; only set when dynamic checks run
+        sandbox: SandboxPolicy for child interpreters in dynamic checks
 
     Returns:
         Tuple of (rule_results, errors)
@@ -279,9 +294,17 @@ def evaluate_rules_for_target(
         config=config,
         source_by_id=source_by_id or {},
         target_by_id=target_by_id or {},
+        target_root=target_root,
+        source_root=source_root,
+        sandbox=sandbox,
     )
     rule_results: List[Any] = []
     errors: List[Dict[str, Any]] = []
+
+    if target_root is not None:
+        from pythonarchtesting.dynamic.batch import prefetch
+
+        prefetch(rules, ctx)
 
     for rule in rules:
         if not rule.enabled:

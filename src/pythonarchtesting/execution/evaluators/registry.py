@@ -13,6 +13,18 @@ from .method_set import MethodSetEvaluator
 from .nominal_type_relationship import NominalTypeRelationshipEvaluator
 from .protocol_conformance import ProtocolConformanceEvaluator
 from .python_modifiers import PythonModifierEvaluator
+from .runtime_flow import RuntimeFlowEvaluator
+from .runtime_imports import RuntimeImportsEvaluator
+from .runtime_structure import (
+    RuntimeCallsEvaluator,
+    RuntimeClassKindEvaluator,
+    RuntimeInstancesEvaluator,
+    RuntimeMembersEvaluator,
+    RuntimePatternEvaluator,
+    RuntimeProtocolEvaluator,
+    RuntimeReferenceCallsEvaluator,
+    RuntimeWritesEvaluator,
+)
 from .variable_flow import VariableFlowEvaluator
 
 # Registry of evaluators for different rule types.
@@ -28,6 +40,16 @@ _EVALUATORS: Dict[str, Any] = {
     "nominal_type_relationship": NominalTypeRelationshipEvaluator(),
     "python_modifier": PythonModifierEvaluator(),
     "protocol_conformance": ProtocolConformanceEvaluator(),
+    "runtime_calls": RuntimeCallsEvaluator(),
+    "runtime_writes": RuntimeWritesEvaluator(),
+    "runtime_instances": RuntimeInstancesEvaluator(),
+    "runtime_members": RuntimeMembersEvaluator(),
+    "runtime_class_kind": RuntimeClassKindEvaluator(),
+    "runtime_protocol": RuntimeProtocolEvaluator(),
+    "runtime_pattern": RuntimePatternEvaluator(),
+    "runtime_reference_calls": RuntimeReferenceCallsEvaluator(),
+    "runtime_flow": RuntimeFlowEvaluator(),
+    "runtime_imports": RuntimeImportsEvaluator(),
     "variable_flow": VariableFlowEvaluator(),
 }
 

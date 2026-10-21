@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from pythonarchtesting.config.data import create_config_from_dict
 from pythonarchtesting.entities import build_entity_index
@@ -70,3 +74,28 @@ def test_build_run_report_ir_roundtrip():
     assert doc.run.mode == "static-only"
 
     assert to_legacy_schema_v2(doc) == build_run_report_payload(run_state, targets, cfg)
+
+
+@pytest.mark.parametrize(
+    ("dynamic_enabled", "sandbox", "mode"),
+    [
+        (False, None, "static-only"),
+        # A sandbox left over without --dynamic ran nothing.
+        (False, SimpleNamespace(mode="limits"), "static-only"),
+        (True, SimpleNamespace(mode="limits"), "dynamic (sandbox: limits)"),
+        (True, None, "dynamic"),
+    ],
+)
+def test_run_mode_names_whether_and_how_target_code_ran(
+    dynamic_enabled: bool, sandbox: object, mode: str
+):
+    cfg = _cfg()
+    run_state = replace(
+        _run_state(cfg), dynamic_enabled=dynamic_enabled, sandbox=sandbox
+    )
+
+    doc = build_run_report_ir(run_state, [_target("a", False)], cfg)
+
+    assert doc.run.mode == mode
+    payload = build_run_report_payload(run_state, [_target("a", False)], cfg)
+    assert payload["run"]["mode"] == mode

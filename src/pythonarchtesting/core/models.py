@@ -8,6 +8,7 @@ previously in rules.py, providing a clean separation of data from behavior.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Literal, Optional, Protocol, Tuple
 
 # Type aliases
@@ -91,6 +92,14 @@ class EvalContext:
     target_by_id: Dict[str, Any] = field(default_factory=dict)  # Dict[str, Entity]
     evidence_store: Dict[Tuple[str, str, str], Evidence] = field(default_factory=dict)
     evidence_stats: Dict[str, int] = field(default_factory=dict)
+    # Set only when the run enabled dynamic checks; None keeps evaluation static.
+    target_root: Path | None = None
+    # Reference project root for dynamic checks that execute the reference.
+    source_root: Path | None = None
+    # dynamic.sandbox.SandboxPolicy confining every child interpreter.
+    sandbox: Any = None
+    # Batched dynamic outcomes, keyed by (rule_id, source id, target id).
+    dynamic_cache: Dict[Tuple[str, str, str], Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Initialize entity lookup dictionaries."""

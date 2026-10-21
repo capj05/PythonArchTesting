@@ -199,6 +199,17 @@ def compile_enforce_flow(
         for entry in selected_flow_entries
     ]
 
+    if "cases" in params_kwargs:
+        return _compile_runtime_flow(
+            source_entity,
+            declaration,
+            stages=stages,
+            variable=selected_variable,
+            flow_entries=selected_flow_entries,
+            severity=base_severity,
+            rule_id_suffix=rule_id_suffix,
+        )
+
     rule = Rule(
         rule_id=with_rule_id_suffix("FLW001/enforce_flow/v1", rule_id_suffix),
         rule_type="variable_flow",
@@ -229,6 +240,99 @@ def compile_enforce_flow(
     )
 
     return [rule], compiler_evidence, []
+
+
+def _compile_runtime_flow(
+    source_entity: Entity,
+    declaration: DeclarationEntry,
+    *,
+    stages: list[str],
+    variable: str,
+    flow_entries: list[DeclarationEntry],
+    severity: Literal["error", "warning", "info"],
+    rule_id_suffix: str,
+) -> Tuple[List[Any], List[Any], List[Any]]:
+    """Compile ``enforce_flow(..., cases=[...])`` into a runtime rule.
+
+    Each stage's flow marker sits on the line after the statement it labels,
+    so the statement spans from its anchor line to the line before the marker.
+    The runtime check records the project functions called while that span
+    runs, which identify the stage in a target that carries no markers.
+    """
+    from pythonarchtesting.core.models import Rule, RuleSelector
+
+    from ..common import build_invalid_param_sentinel_rule
+
+    params_kwargs = dict(declaration.params)
+    from .runtime_structure import runtime_cases_problem
+
+    problem = runtime_cases_problem(params_kwargs, source_entity.kind, "enforce_flow")
+    if problem is not None:
+        param, reason = problem
+        sentinel = build_invalid_param_sentinel_rule(
+            source_entity,
+            decorator_name="enforce_flow",
+            rule_id_prefix="FLW002/enforce_flow_runtime/invalid_declaration",
+            param=param,
+            reason=reason,
+            rule_id_suffix=rule_id_suffix,
+        )
+        payload = {
+            "declaration": "enforce_flow",
+            "issue": "compiler_invalid_param",
+            "param": param,
+            "reason": reason,
+        }
+        return [sentinel], [_evidence(source_entity, declaration, payload=payload)], []
+
+    spans = []
+    for entry in flow_entries:
+        stage = str(entry.params.get("stage"))
+        if stage not in stages:
+            continue
+        anchor = int(entry.params.get("anchor_lineno", 0) or 0)
+        marker_line = int(entry.lineno or anchor)
+        spans.append(
+            {
+                "stage": stage,
+                "start": anchor,
+                "end": max(anchor, marker_line - 1),
+                "variable": variable,
+            }
+        )
+
+    rule = Rule(
+        rule_id=with_rule_id_suffix("FLW002/enforce_flow_runtime/v1", rule_id_suffix),
+        rule_type="runtime_flow",
+        name="enforce_flow",
+        severity=severity,
+        scope=source_entity.kind,
+        evidence_type="runtime",
+        selector=RuleSelector(
+            source_entity_id=source_entity.canonical_id,
+            explicit_target=None,
+        ),
+        params={
+            "stages": stages,
+            "variable": variable,
+            "spans": spans,
+            "cases": params_kwargs["cases"],
+            "init": params_kwargs.get("init"),
+            "timeout_s": float(params_kwargs.get("timeout_s", 5.0)),
+            "fail_on_unmatched": True,
+        },
+        message_template=(
+            "enforce_flow (runtime) for "
+            "{target.module_path}:{target.qualname}: {details.summary}"
+        ),
+        fix_hints=(
+            "Run the stages in the reference's order: call the project "
+            "function each stage uses before those of the later stages.",
+            "Runs only with --dynamic; without it the rule is SKIPPED.",
+        ),
+        enabled=True,
+    )
+    return [rule], [], []
 
 
 __all__ = ["compile_enforce_flow"]

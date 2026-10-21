@@ -14,11 +14,19 @@ from pythonarchtesting.protocols.type_expr import (
 _MARKER_NAME = "__archtest__"
 _POSITIONAL_LIST_ARG_NAMES = {
     "forbid_imports": "forbidden",
+    "forbid_runtime_imports": "forbidden",
+    "forbid_runtime_calls": "modules",
+    "require_runtime_calls": "modules",
+    "forbid_runtime_instantiation": "modules",
+    "require_runtime_members": "names",
+    "forbid_runtime_members": "names",
 }
 _POSITIONAL_SINGLE_ARG_NAMES = {
     "does_not_have": "name",
     "exact_type": "base",
     "implements_protocol": "protocol",
+    "implements_runtime_protocol": "protocol",
+    "require_runtime_delegation": "spy",
     "inherits_directly_from": "base",
     "not_subclass_of": "base",
     "required_attribute": "name",
@@ -29,8 +37,22 @@ _POSITIONAL_SINGLE_ARG_NAMES = {
 _SUPPORTED_MARKER_NAMES = {
     "does_not_have",
     "enforce_flow",
+    "enforce_reference_calls",
+    "is_runtime_singleton",
+    "enforce_runtime_observer",
+    "require_runtime_delegation",
+    "require_runtime_members",
+    "forbid_runtime_members",
+    "is_runtime_concrete_class",
+    "is_runtime_abstract_class",
+    "implements_runtime_protocol",
     "exact_type",
+    "forbid_foreign_writes",
     "forbid_imports",
+    "forbid_runtime_calls",
+    "forbid_runtime_imports",
+    "forbid_runtime_instantiation",
+    "require_runtime_calls",
     "flow",
     "inherits_directly_from",
     "implements_protocol",
@@ -57,6 +79,13 @@ _SIGNATURE_SUPPORTED_MARKER_NAMES = {
     "required_entity_signature",
     "implements_protocol",
 }
+
+
+def _is_name_reference(node: ast.AST) -> bool:
+    """``Storage`` or ``protocols.Storage``: a dotted name, nothing evaluated."""
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return isinstance(node, ast.Name)
 
 
 def _literal_value(node: ast.AST) -> tuple[bool, Any]:
@@ -285,7 +314,12 @@ def _parse_metadata_item(
             is_lit, lit_val = _literal_value(arg)
             if is_lit:
                 positional_literals.append(lit_val)
-            else:
+            elif not (
+                idx == 0
+                and _POSITIONAL_SINGLE_ARG_NAMES.get(name) == "protocol"
+                and _is_name_reference(arg)
+            ):
+                # A protocol is named by a reference to its class, not a literal.
                 unsupported.append(
                     _issue("arg", arg, expr=value_repr, index=idx, name=name)
                 )
@@ -329,13 +363,17 @@ def _parse_metadata_item(
             if name == "required_attribute" and kw.arg == "annotation":
                 params["annotation"] = lit_val if is_lit else value_repr
                 continue
+            names_protocol = (
+                _POSITIONAL_SINGLE_ARG_NAMES.get(name) == "protocol"
+                and kw.arg == "protocol"
+            )
             if is_lit and kw.arg is not None:
                 params[kw.arg] = lit_val
                 if kw.arg == "variable":
                     explicit_variable = True
-            else:
+            elif not (names_protocol and _is_name_reference(kw.value)):
                 unsupported.append(_issue("kw", kw.value, expr=value_repr, name=key))
-            if name == "implements_protocol" and kw.arg == "protocol":
+            if names_protocol:
                 params["protocol_expr"] = value_repr
         if name == "flow":
             params["variable_explicit"] = explicit_variable

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.config.projects import ProjectsConfig, TargetSpec
@@ -39,6 +39,8 @@ def run_projects(
     validation_scope: str = "all",
     custom_config: Optional[str] = None,
     load_config_first: bool = True,
+    dynamic: bool = False,
+    sandbox: Any = None,
 ) -> Tuple[RunState, List[TargetRunState]]:
     return _run_projects_impl(
         config=config,
@@ -52,6 +54,8 @@ def run_projects(
         validation_scope=validation_scope,
         custom_config=custom_config,
         load_config_first=load_config_first,
+        dynamic=dynamic,
+        sandbox=sandbox,
         _evaluate_target_fn=evaluate_target,
     )
 

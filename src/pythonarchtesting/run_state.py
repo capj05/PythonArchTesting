@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Rule, RuleResult
@@ -28,6 +28,10 @@ class RunState:
     run_generated_at: datetime
     framework_version: str
     validation_scope: str = "all"
+    dynamic_enabled: bool = False
+    # dynamic.sandbox.SandboxPolicy for dynamic runs; typed loosely so static
+    # runs never import the dynamic package.
+    sandbox: Any = None
 
 
 @dataclass

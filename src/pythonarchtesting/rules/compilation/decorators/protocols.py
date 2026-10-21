@@ -68,7 +68,7 @@ def _resolve_protocol_entity(
     ).strip()
     if not protocol_expr:
         payload = {
-            "declaration": "implements_protocol",
+            "declaration": declaration.kind or "implements_protocol",
             "issue": "compiler_invalid_protocol_reference",
             "reason": "missing_protocol",
         }
@@ -92,7 +92,7 @@ def _resolve_protocol_entity(
     )
     if resolution.entity is None or resolution.normalized is None:
         payload = {
-            "declaration": "implements_protocol",
+            "declaration": declaration.kind or "implements_protocol",
             "issue": "compiler_invalid_protocol_reference",
             "reason": resolution.reason or "ambiguous_or_missing",
             "protocol": protocol_expr,
@@ -114,7 +114,7 @@ def _resolve_protocol_entity(
 
     if not is_protocol_entity(resolution.entity, source_entities):
         payload = {
-            "declaration": "implements_protocol",
+            "declaration": declaration.kind or "implements_protocol",
             "issue": "compiler_invalid_protocol_reference",
             "reason": "not_typing_protocol",
             "protocol": protocol_expr,

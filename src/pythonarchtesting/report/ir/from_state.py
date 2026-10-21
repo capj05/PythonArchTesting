@@ -59,6 +59,16 @@ _RESULT_TIMING_KEYS = (
     "phase_duration",
 )
 STATIC_ANALYSIS_MODE = "static-only"
+# Statuses that count towards "Top Rules by Violation Count".
+_VIOLATION_STATUSES = frozenset({"FAILED", "ERROR"})
+
+
+def _analysis_mode(run_state: RunState) -> str:
+    """``static-only``, or ``dynamic (sandbox: limits)`` when target code ran."""
+    if not getattr(run_state, "dynamic_enabled", False):
+        return STATIC_ANALYSIS_MODE
+    sandbox = getattr(getattr(run_state, "sandbox", None), "mode", None)
+    return f"dynamic (sandbox: {sandbox})" if sandbox else "dynamic"
 
 
 def _getattr_required(obj: Any, name: str) -> Any:
@@ -907,7 +917,13 @@ def _build_results_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
                 key=lambda kv: kv[0],
             )
         ),
-        "top_rules": _top_counts([str(item.get("rule_id") or "") for item in results]),
+        "top_rules": _top_counts(
+            [
+                str(item.get("rule_id") or "")
+                for item in results
+                if item.get("status") in _VIOLATION_STATUSES
+            ]
+        ),
         "top_source_files": _top_counts(
             [
                 str((item.get("source") or {}).get("file") or "<unknown>")
@@ -940,7 +956,7 @@ def _build_run_report_document(
         config_snapshot=config_snapshot,
         config_fingerprint=_config_fingerprint(config_snapshot),
         tool_version=run_state.framework_version,
-        mode=STATIC_ANALYSIS_MODE,
+        mode=_analysis_mode(run_state),
     )
 
     target_id_map = normalize_target_ids(

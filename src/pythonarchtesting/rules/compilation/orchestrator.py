@@ -62,6 +62,22 @@ from pythonarchtesting.rules.compilation.decorators.python_modifiers import (
     compile_is_non_final_class,
     compile_is_non_final_method,
 )
+from pythonarchtesting.rules.compilation.decorators.runtime_structure import (
+    compile_enforce_reference_calls,
+    compile_enforce_runtime_observer,
+    compile_forbid_foreign_writes,
+    compile_forbid_runtime_calls,
+    compile_forbid_runtime_imports,
+    compile_forbid_runtime_instantiation,
+    compile_forbid_runtime_members,
+    compile_implements_runtime_protocol,
+    compile_is_runtime_abstract_class,
+    compile_is_runtime_concrete_class,
+    compile_is_runtime_singleton,
+    compile_require_runtime_calls,
+    compile_require_runtime_delegation,
+    compile_require_runtime_members,
+)
 
 
 def _invalid_declaration_evidence(
@@ -122,6 +138,20 @@ def compile_rules(
         "is_non_final_class": compile_is_non_final_class,
         "is_non_abstract_method": compile_is_non_abstract_method,
         "is_non_final_method": compile_is_non_final_method,
+        "forbid_runtime_calls": compile_forbid_runtime_calls,
+        "require_runtime_calls": compile_require_runtime_calls,
+        "forbid_foreign_writes": compile_forbid_foreign_writes,
+        "forbid_runtime_instantiation": compile_forbid_runtime_instantiation,
+        "enforce_reference_calls": compile_enforce_reference_calls,
+        "is_runtime_singleton": compile_is_runtime_singleton,
+        "enforce_runtime_observer": compile_enforce_runtime_observer,
+        "require_runtime_delegation": compile_require_runtime_delegation,
+        "require_runtime_members": compile_require_runtime_members,
+        "forbid_runtime_members": compile_forbid_runtime_members,
+        "is_runtime_concrete_class": compile_is_runtime_concrete_class,
+        "is_runtime_abstract_class": compile_is_runtime_abstract_class,
+        "implements_runtime_protocol": compile_implements_runtime_protocol,
+        "forbid_runtime_imports": compile_forbid_runtime_imports,
     }
 
     rules: List[Any] = []
@@ -151,6 +181,7 @@ def compile_rules(
             compiler_kwargs: dict[str, Any] = {"rule_id_suffix": rule_id_suffix}
             if declaration.kind in {
                 "implements_protocol",
+                "implements_runtime_protocol",
                 "subclass_of",
                 "exact_type",
                 "not_subclass_of",

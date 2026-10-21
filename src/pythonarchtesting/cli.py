@@ -103,7 +103,75 @@ def build_parser() -> argparse.ArgumentParser:
         choices=list(VALIDATION_SCOPES),
         help="Limit validation to a specific scope",
     )
+    parser.add_argument(
+        "--dynamic",
+        action="store_true",
+        help=(
+            "Run the runtime rules (calls between modules, imports, attribute "
+            "writes, instantiation, class shape, design patterns, flow order) "
+            "by executing target code in a child interpreter; without it those "
+            "rules are SKIPPED"
+        ),
+    )
+    parser.add_argument(
+        "--sandbox",
+        default="limits",
+        choices=["none", "limits", "bwrap"],
+        help=(
+            "How --dynamic confines target code: 'limits' (default) caps memory, "
+            "CPU time, processes and file sizes and scrubs the environment, but "
+            "leaves the file system and network open; 'bwrap' adds no network "
+            "and a read-only file system without your home directory; 'none' "
+            "only isolates the process"
+        ),
+    )
+    parser.add_argument(
+        "--sandbox-memory-mb",
+        type=int,
+        default=1024,
+        help=(
+            "Data-segment (heap) limit per child interpreter with --sandbox "
+            "limits/bwrap"
+        ),
+    )
     return parser
+
+
+def _runtime_rules_skipped(target_states: List[Any]) -> int:
+    """How many rule results were skipped only because --dynamic was missing."""
+    return sum(
+        1
+        for state in target_states
+        for result in state.rule_results
+        if result.status == "SKIPPED"
+        and (result.details or {}).get("reason") == "dynamic_checks_disabled"
+    )
+
+
+def _sandbox_policy(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> Optional[Any]:
+    """Build and check the sandbox for a --dynamic run; None for static runs."""
+    if not args.dynamic:
+        if args.sandbox != parser.get_default(
+            "sandbox"
+        ) or args.sandbox_memory_mb != parser.get_default("sandbox_memory_mb"):
+            parser.error("--sandbox and --sandbox-memory-mb apply only with --dynamic.")
+        return None
+    from pythonarchtesting.dynamic.sandbox import (
+        SandboxPolicy,
+        SandboxUnavailableError,
+        check_available,
+    )
+
+    if args.sandbox_memory_mb <= 0:
+        parser.error("--sandbox-memory-mb must be positive.")
+    policy = SandboxPolicy(mode=args.sandbox, memory_mb=args.sandbox_memory_mb)
+    try:
+        check_available(policy)
+    except SandboxUnavailableError as exc:
+        parser.error(f"--sandbox {args.sandbox} is not available here: {exc}")
+    return policy
 
 
 def _run_declaration_validation(
@@ -179,6 +247,8 @@ def _run(argv: Optional[List[str]] = None) -> int:
     exclude_patterns = _parse_csv(args.exclude_patterns) or None
 
     if args.validate_declarations:
+        if args.dynamic:
+            parser.error("--validate-declarations runs no target code; drop --dynamic.")
         if args.format != "json":
             parser.error("Declaration validation supports only --format json.")
         if (
@@ -236,7 +306,17 @@ def _run(argv: Optional[List[str]] = None) -> int:
         exclude_patterns=exclude_patterns,
         validation_scope=args.validation_scope,
         load_config_first=False,
+        dynamic=args.dynamic,
+        sandbox=_sandbox_policy(parser, args),
     )
+    skipped = _runtime_rules_skipped(target_states)
+    if skipped:
+        # Otherwise a run without --dynamic reads as a pass for every target.
+        print(
+            f"warning: {skipped} runtime rule result(s) were SKIPPED because "
+            "--dynamic was not given; their targets are not checked by them",
+            file=sys.stderr,
+        )
     report = generate_run_report(
         run_state, target_states, args.format, config, args.output
     )
