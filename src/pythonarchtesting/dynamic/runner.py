@@ -1,13 +1,15 @@
 """Run dynamic checks against a target in an isolated interpreter.
 
-Target code is executed only here, in a child process started with ``-I`` (no
-``PYTHONPATH``, no user site-packages) and ``-B`` (no bytecode written into the
-project), in its own process group, with a wall-clock timeout. How much more
+Target code is executed only here, in a child process started with ``-s`` (no
+user site-packages) and ``-B`` (no bytecode written into the project), in an
+environment stripped of every ``PYTHON*`` variable but a fixed
+``PYTHONHASHSEED``, in its own process group, with a wall-clock timeout. How much more
 it is confined depends on the ``SandboxPolicy`` (see ``dynamic.sandbox``).
 """
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import signal
@@ -100,6 +102,21 @@ def _tail(handle: IO[bytes], limit: int) -> str:
     return handle.read().decode("utf-8", errors="replace")
 
 
+def _child_environment(policy: SandboxPolicy, home: Path) -> dict[str, str]:
+    """The policy's environment with no ``PYTHON*`` variable but a fixed hash seed.
+
+    ``-I`` would drop ``PYTHONPATH`` and friends, but also ``PYTHONHASHSEED``:
+    with a random seed the order a target iterates a set of strings in, and so
+    the order of the calls it makes, changes from run to run.
+    """
+    base = policy.environment(home)
+    environment = dict(os.environ if base is None else base)
+    for name in [name for name in environment if name.startswith("PYTHON")]:
+        del environment[name]
+    environment["PYTHONHASHSEED"] = "0"
+    return environment
+
+
 def _exchange(
     command: list[str],
     *,
@@ -130,7 +147,7 @@ def _exchange(
             stdout=stdout,
             stderr=stderr,
             cwd=str(cwd),
-            env=policy.environment(home),
+            env=_child_environment(policy, home),
             preexec_fn=policy.preexec(timeout_s),  # noqa: PLW1509
             start_new_session=hasattr(os, "setsid"),
         )
@@ -162,8 +179,9 @@ def _run_probe(
     policy = sandbox or _NO_SANDBOX
     root, package = import_target_spec(target_root)
     request = {**request, "target_root": str(root), "package": package}
-    # -B: never write __pycache__ into the analysed project.
-    argv = [sys.executable, "-I", "-B", str(PROBE_PATH)]
+    # -s: no user site-packages; -B: never write __pycache__ into the analysed
+    # project. Not -I, which would ignore PYTHONHASHSEED (_child_environment).
+    argv = [sys.executable, "-s", "-B", str(PROBE_PATH)]
     with tempfile.TemporaryDirectory(prefix="pat-home-") as home:
         exchange = _exchange(
             policy.wrap(argv, visible=[root, *interpreter_paths()], cwd=root),
@@ -231,6 +249,27 @@ def run_cases(
     )
 
 
+def run_reference_cases(
+    runs: dict[str, ProbeOutcome] | None, **kwargs: Any
+) -> ProbeOutcome:
+    """``run_cases(**kwargs)`` on the reference, once per request in ``runs``.
+
+    The reference does the same on the same cases whatever target it is
+    compared with, so every target of a run shares one outcome per distinct
+    request (``runs`` lives as long as the run). Each caller gets its own copy.
+    """
+    if runs is None:
+        return run_cases(**kwargs)
+    key = json.dumps(
+        {name: value for name, value in kwargs.items() if name != "sandbox"},
+        sort_keys=True,
+        default=str,
+    ) + repr(kwargs.get("sandbox"))
+    if key not in runs:
+        runs[key] = run_cases(**kwargs)
+    return copy.deepcopy(runs[key])
+
+
 # Head-room for interpreter start-up and the module import, which the per-job
 # deadlines inside the child do not cover.
 _BATCH_STARTUP_S = 5.0
@@ -292,4 +331,5 @@ __all__ = [
     "run_cases",
     "run_case_batch",
     "run_import_check",
+    "run_reference_cases",
 ]

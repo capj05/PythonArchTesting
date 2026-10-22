@@ -92,6 +92,21 @@ class Settings:
         ),
         ('require_runtime_members("port", cases=[])', "cases", "non-empty list"),
         (
+            'forbid_runtime_members("port", types={"port": "int"}, cases=[{}])',
+            "types",
+            "types does not apply to forbid_runtime_members",
+        ),
+        (
+            'require_runtime_members("port", types={"host": "str"}, cases=[{}])',
+            "types",
+            "types names members not listed: host",
+        ),
+        (
+            'require_runtime_members("port", types={"port": 1}, cases=[{}])',
+            "types",
+            "types must map member names to class names",
+        ),
+        (
             'require_runtime_members("port", cases=[{"expect": 1}])',
             "cases",
             "unknown keys: expect",
@@ -123,3 +138,15 @@ def test_invalid_params_compile_to_a_sentinel(
     assert reason in rules[0].params["compiler_reason"]
     assert rules[0].rule_id.startswith("DYN005/")
     assert [item.type for item in evidence] == ["compiler_invalid_param"]
+
+
+def test_types_reach_the_rule_only_when_given() -> None:
+    typed, evidence, _ = _on_class(
+        'require_runtime_members("repo", types={"repo": "repository.Repo"}, '
+        "cases=[{}])"
+    )
+    plain, _, _ = _on_class('require_runtime_members("repo", cases=[{}])')
+
+    assert evidence == []
+    assert typed[0].params["types"] == {"repo": "repository.Repo"}
+    assert "types" not in plain[0].params

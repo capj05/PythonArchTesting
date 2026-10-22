@@ -72,6 +72,39 @@ class Bus:
         pass
 
 
+class TopicBus:
+    def __init__(self):
+        self.listeners = {}
+
+    def on(self, topic, listener):
+        self.listeners.setdefault(topic, []).append(listener)
+
+    def off(self, topic, listener):
+        self.listeners[topic].remove(listener)
+
+    def emit(self, topic, *args):
+        for listener in self.listeners.get(topic, []):
+            listener(*args)
+
+
+class Config:
+    pass
+
+
+_CONFIG = None
+
+
+def get_config():
+    global _CONFIG
+    if _CONFIG is None:
+        _CONFIG = Config()
+    return _CONFIG
+
+
+def new_config():
+    return Config()
+
+
 def apply(strategy, value):
     return strategy.apply(value)
 
@@ -366,3 +399,47 @@ def test_observer_is_not_checked_when_the_subject_cannot_be_built(
     assert outcome["constructed"] is False
     assert outcome["raised"] == "ValueError: no bus"
     assert "observer" not in outcome
+
+
+# --- keyed observers and module-level accessors ----------------------------
+
+
+def test_an_observer_keyed_by_topic_is_subscribed_with_the_topic(
+    module: types.ModuleType,
+) -> None:
+    spec = {
+        "subscribe": "on",
+        "notify": "emit",
+        "unsubscribe": "off",
+        "subscribe_args": ["created"],
+        "notify_args": ["created", 1],
+    }
+
+    outcome = _run(module, "TopicBus", observer=spec)
+
+    assert outcome["observer"] == {"notified": 1, "after_unsubscribe": 0}
+
+
+def test_a_keyed_observer_that_misses_the_topic_is_not_notified(
+    module: types.ModuleType,
+) -> None:
+    spec = {
+        "subscribe": "on",
+        "notify": "emit",
+        "subscribe_args": ["created"],
+        "notify_args": ["deleted"],
+    }
+
+    assert _run(module, "TopicBus", observer=spec)["observer"] == {"notified": 0}
+
+
+@pytest.mark.parametrize(
+    ("access", "same"), [("get_config", True), ("new_config", False)]
+)
+def test_a_singleton_may_be_obtained_through_a_function_of_its_module(
+    module: types.ModuleType, access: str, same: bool
+) -> None:
+    outcome = _run(module, "Config", construct=False, singleton={"access": access})
+
+    assert outcome["singleton"]["same"] is same
+    assert outcome["singleton"]["access"] == access

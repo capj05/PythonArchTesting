@@ -297,7 +297,10 @@ def _run(argv: Optional[List[str]] = None) -> int:
         dynamic=args.dynamic,
         sandbox=_sandbox_policy(parser, args),
     )
-    from pythonarchtesting.runner.skips import count_runtime_rules_skipped
+    from pythonarchtesting.runner.skips import (
+        count_runtime_results_unverified,
+        count_runtime_rules_skipped,
+    )
 
     skipped = count_runtime_rules_skipped(target_states)
     if skipped:
@@ -305,6 +308,14 @@ def _run(argv: Optional[List[str]] = None) -> int:
         print(
             f"warning: {skipped} runtime rule result(s) were SKIPPED because "
             "--dynamic was not given; their targets are not checked by them",
+            file=sys.stderr,
+        )
+    unverified = count_runtime_results_unverified(target_states)
+    if unverified:
+        # A runtime pass holds only for the code its cases ran.
+        print(
+            f"warning: {unverified} runtime rule result(s) passed with code or "
+            "cases left unchecked; see details.unverified",
             file=sys.stderr,
         )
     report = generate_run_report(

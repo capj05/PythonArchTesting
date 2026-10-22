@@ -134,7 +134,10 @@ def run_evaluation(
 ) -> dict[str, Any]:
     """Evaluate targets against ``source`` and write JSON and Markdown reports."""
     from pythonarchtesting.runner import run_projects
-    from pythonarchtesting.runner.skips import count_runtime_rules_skipped
+    from pythonarchtesting.runner.skips import (
+        count_runtime_results_unverified,
+        count_runtime_rules_skipped,
+    )
 
     _check_scope(validation_scope)
     source_path = require_absolute(source, "source")
@@ -191,6 +194,9 @@ def run_evaluation(
             "report_json": str(report_json),
             "report_markdown": str(report_markdown),
             "runtime_rules_skipped": count_runtime_rules_skipped(target_states),
+            "runtime_results_unverified": count_runtime_results_unverified(
+                target_states
+            ),
         }
     )
     return result

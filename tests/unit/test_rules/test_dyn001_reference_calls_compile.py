@@ -58,6 +58,16 @@ def test_require_all_is_carried_into_the_rule() -> None:
     assert rules[0].params["require_all"] is True
 
 
+def test_allow_new_modules_is_carried_only_when_set() -> None:
+    allowed, _, _ = _on_function(
+        "enforce_reference_calls(cases=[{}], allow_new_modules=True)"
+    )
+    plain, _, _ = _on_function("enforce_reference_calls(cases=[{}])")
+
+    assert allowed[0].params["allow_new_modules"] is True
+    assert "allow_new_modules" not in plain[0].params
+
+
 def test_a_method_accepts_an_init() -> None:
     rules, evidence, _ = _compile("""
 from typing import Annotated
@@ -94,6 +104,11 @@ __archtest__: Annotated[None, enforce_reference_calls(cases=[{}])]
             'enforce_reference_calls(cases=[{}], require_all="yes")',
             "require_all",
             "require_all must be True or False",
+        ),
+        (
+            "enforce_reference_calls(cases=[{}], allow_new_modules=1)",
+            "allow_new_modules",
+            "allow_new_modules must be True or False",
         ),
         ("enforce_reference_calls(cases=[])", "cases", "non-empty list"),
         ("enforce_reference_calls()", "cases", "non-empty list"),

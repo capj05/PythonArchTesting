@@ -100,6 +100,8 @@ class EvalContext:
     sandbox: Any = None
     # Batched dynamic outcomes, keyed by (rule_id, source id, target id).
     dynamic_cache: Dict[Tuple[str, str, str], Any] = field(default_factory=dict)
+    # Reference outcomes of dynamic checks, shared by every target of the run.
+    reference_runs: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Initialize entity lookup dictionaries."""

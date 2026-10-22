@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from pythonarchtesting.dynamic.runner import ProbeOutcome, run_case_batch
+from pythonarchtesting.dynamic.translation import NameTranslation
 
 _BATCHED_RULE_TYPES = frozenset(
     {
@@ -39,7 +40,7 @@ def _pattern_observation(params: dict[str, Any]) -> dict[str, Any]:
     if pattern == "singleton":
         return {"construct": False, "singleton": {"access": params.get("access")}}
     if pattern == "observer":
-        keys = ("subscribe", "notify", "unsubscribe", "notify_args")
+        keys = ("subscribe", "notify", "unsubscribe", "notify_args", "subscribe_args")
         return {"observer": {key: params.get(key) for key in keys}}
     return {"spies": True}
 
@@ -49,9 +50,12 @@ def observation(rule: Any) -> dict[str, Any]:
     if rule.rule_type == "runtime_writes":
         return {"writes": True}
     if rule.rule_type == "runtime_instances":
-        return {"instances": True}
+        return {"instances": "transitive" if rule.params.get("transitive") else True}
     if rule.rule_type == "runtime_members":
-        return {"names": list(rule.params.get("names") or [])}
+        observe: dict[str, Any] = {"names": list(rule.params.get("names") or [])}
+        if rule.params.get("types"):
+            observe["types"] = dict(rule.params["types"])
+        return observe
     if rule.rule_type == "runtime_class_kind":
         return {"construct": rule.params.get("expect") == "concrete"}
     if rule.rule_type == "runtime_pattern":
@@ -61,6 +65,8 @@ def observation(rule: Any) -> dict[str, Any]:
             "names": list(rule.params.get("attributes") or []),
             "callables": dict(rule.params.get("methods") or {}),
         }
+    if rule.params.get("transitive"):
+        return {"calls": "transitive"}
     return {"calls": True}
 
 
@@ -88,20 +94,21 @@ def _batchable(rule: Any, ctx: Any) -> tuple[Any, Any] | None:
 def prefetch(rules: Iterable[Any], ctx: Any) -> None:
     """Fill ``ctx.dynamic_cache`` for every module with two or more rules."""
     groups: dict[str, list[tuple[tuple[str, str, str], dict[str, Any]]]] = {}
+    names = NameTranslation.from_context(ctx)
     for rule in rules:
         pair = _batchable(rule, ctx)
         if pair is None:
             continue
-        _, target = pair
+        source, target = pair
         entries = groups.setdefault(target.module_path, [])
         job = {
             "id": str(len(entries)),
             "qualname": target.qualname,
             "kind": target.kind,
-            "cases": list(rule.params.get("cases") or []),
-            "init": rule.params.get("init"),
+            "cases": names.cases(list(rule.params.get("cases") or []), source, target),
+            "init": names.value(rule.params.get("init"), source, target),
             "timeout_s": float(rule.params.get("timeout_s", 5.0)),
-            "observe": observation(rule),
+            "observe": names.observation(observation(rule), source, target),
         }
         entries.append((cache_key(rule, target), job))
 

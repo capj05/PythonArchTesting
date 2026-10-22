@@ -92,6 +92,7 @@ def _matching_to_dict(section: MatchingSection) -> Dict[str, Any]:
 def _results_summary_to_dict(summary: Any) -> Dict[str, Any]:
     return {
         "results_total": summary.results_total,
+        "unverified_total": summary.unverified_total,
         "status_counts": dict(summary.status_counts),
         "severity_counts": dict(summary.severity_counts),
         "category_counts": dict(summary.category_counts),

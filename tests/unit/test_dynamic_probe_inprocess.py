@@ -114,15 +114,20 @@ def test_call_recorder_attributes_calls_to_the_callee_module(
 
     assert sys.getprofile() is before
     # The loop calls Store.put three times from one line: reported once. The
-    # same-module helper is followed to its own outward call; builtins
-    # (open() included, whose module reads _io) are not a layer; C functions
-    # and C methods are attributed to their modules.
-    assert [(c["module"], c["callee"], c["caller"]) for c in recorder.calls] == [
-        ("other_mod", "Store.put", "work"),
-        ("other_mod", "helper", "_local"),
-        ("json", "dumps", "work"),
-        ("pickle", "dumps", "work"),
-        ("collections", "deque.append", "work"),
+    # same-module helper is reported as a local call and followed to its own
+    # outward call; builtins are not a layer, except open(), which is io's;
+    # C functions and C methods are attributed to their modules.
+    assert [
+        (c["module"], c["callee"], c["caller"], bool(c.get("local")))
+        for c in recorder.calls
+    ] == [
+        ("other_mod", "Store.put", "work", False),
+        ("caller_mod", "_local", "work", True),
+        ("other_mod", "helper", "_local", False),
+        ("io", "open", "work", False),
+        ("json", "dumps", "work", False),
+        ("pickle", "dumps", "work", False),
+        ("collections", "deque.append", "work", False),
     ]
 
 
@@ -249,6 +254,7 @@ def test_write_recorder_records_only_while_active(
             "writer": "model_mod:poke",
             "file": "model_mod.py",
             "line": _MODEL.splitlines().index("    account.balance = 5") + 1,
+            "change": "assigned",
         }
     ]
 

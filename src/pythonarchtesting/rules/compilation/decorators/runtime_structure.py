@@ -14,7 +14,9 @@ from ..common import (
 )
 
 _SUPPORTED_KINDS = frozenset({"function", "method"})
-_RUNTIME_CASE_KEYS = frozenset({"args", "kwargs", "init"})
+_RUNTIME_CASE_KEYS = frozenset({"args", "kwargs", "init", "steps"})
+_STEP_KEYS = frozenset({"call", "args", "kwargs"})
+_SPY_KEYS = frozenset({"$spy", "returns"})
 _MAX_TIMEOUT_S = 60.0
 
 # marker name -> (rule id, rule type, whether the listed modules are
@@ -111,6 +113,40 @@ def _init_problem(init: Any) -> str | None:
     return None
 
 
+def _steps_problem(steps: Any) -> str | None:
+    """``steps``: methods of the same instance called to prepare its state."""
+    if not isinstance(steps, list):
+        return "'steps' must be a list of {'call': name, 'args', 'kwargs'}"
+    for number, step in enumerate(steps):
+        if not isinstance(step, dict) or not str(step.get("call") or "").isidentifier():
+            return f"step {number} needs 'call', the name of a method"
+        unknown = sorted(set(step) - _STEP_KEYS)
+        if unknown:
+            return f"step {number} has unknown keys: {', '.join(unknown)}"
+        if not isinstance(step.get("args", []), list):
+            return f"step {number} 'args' must be a list"
+        if not isinstance(step.get("kwargs", {}), dict):
+            return f"step {number} 'kwargs' must be a dict"
+    return None
+
+
+def _spy_problem(value: Any) -> str | None:
+    """A ``{"$spy": name}`` value, optionally with ``returns`` per member."""
+    if isinstance(value, list):
+        return next(filter(None, (_spy_problem(item) for item in value)), None)
+    if not isinstance(value, dict):
+        return None
+    if "$spy" in value:
+        if not isinstance(value["$spy"], str) or not value["$spy"]:
+            return "a spy needs a name: {'$spy': 'name'}"
+        unknown = sorted(set(value) - _SPY_KEYS)
+        if unknown:
+            return f"spy {value['$spy']!r} has unknown keys: {', '.join(unknown)}"
+        if not isinstance(value.get("returns", {}), dict):
+            return f"spy {value['$spy']!r}: 'returns' must be a dict of member -> value"
+    return next(filter(None, (_spy_problem(item) for item in value.values())), None)
+
+
 def runtime_cases_problem(
     params: dict[str, Any], kind: str, marker: str
 ) -> tuple[str, str] | None:
@@ -132,9 +168,15 @@ def runtime_cases_problem(
                 f"case {index} has unknown keys: {', '.join(unknown)}; "
                 f"{marker} cases only give call arguments",
             )
-        problem = _transport_problem(case)
+        problem = _transport_problem(case) or _spy_problem(case)
         if problem:
             return "cases", f"case {index}: {problem}"
+        if "steps" in case:
+            if kind not in ("method", "class"):
+                return "cases", f"case {index} uses 'steps', which need an instance"
+            problem = _steps_problem(case["steps"])
+            if problem:
+                return "cases", f"case {index}: {problem}"
         if not isinstance(case.get("args", []), list):
             return "cases", f"case {index} 'args' must be a list"
         if not isinstance(case.get("kwargs", {}), dict):
@@ -255,6 +297,8 @@ def _compile_module_list(
 
     modules = _module_names(params_kwargs.get("modules", []))
     allow = _module_names(params_kwargs.get("allow") or [])
+    transitive = params_kwargs.get("transitive", False)
+    through = _module_names(params_kwargs.get("through") or [])
     problem: tuple[str, str] | None = None
     if not modules:
         problem = ("modules", "give at least one module name")
@@ -262,6 +306,14 @@ def _compile_module_list(
         problem = ("allow", "allow must be a list of module names")
     elif mode == "require" and allow:
         problem = ("allow", f"allow does not apply to {marker}")
+    elif not isinstance(transitive, bool):
+        problem = ("transitive", "transitive must be True or False")
+    elif transitive and mode != "forbid":
+        problem = ("transitive", f"transitive does not apply to {marker}")
+    elif through is None:
+        problem = ("through", "through must be a list of module names")
+    elif through and not transitive:
+        problem = ("through", "through applies only with transitive=True")
     else:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     if problem is not None:
@@ -290,6 +342,11 @@ def _compile_module_list(
             "mode": mode,
             "modules": sorted(set(modules or [])),
             "allow": sorted(set(allow or [])),
+            **(
+                {"transitive": True, "through": sorted(set(through or []))}
+                if transitive
+                else {}
+            ),
         },
         message_template=(
             f"{marker} for " "{target.module_path}:{target.qualname}: {details.summary}"
@@ -357,9 +414,12 @@ def compile_enforce_reference_calls(
             source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
         )
     require_all = params_kwargs.get("require_all", False)
+    allow_new_modules = params_kwargs.get("allow_new_modules", False)
     problem: tuple[str, str] | None = None
     if not isinstance(require_all, bool):
         problem = ("require_all", "require_all must be True or False")
+    elif not isinstance(allow_new_modules, bool):
+        problem = ("allow_new_modules", "allow_new_modules must be True or False")
     else:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     if problem is not None:
@@ -384,7 +444,11 @@ def compile_enforce_reference_calls(
             source_entity_id=source_entity.canonical_id,
             explicit_target=None,
         ),
-        params={**_case_params(params_kwargs), "require_all": require_all},
+        params={
+            **_case_params(params_kwargs),
+            "require_all": require_all,
+            **({"allow_new_modules": True} if allow_new_modules else {}),
+        },
         message_template=(
             "enforce_reference_calls for "
             "{target.module_path}:{target.qualname}: {details.summary}"
@@ -453,9 +517,20 @@ def _compile_runtime_members(
     if source_entity.kind != "class":
         return _invalid_target(source_entity, declaration, marker, "class")
     names = _module_names(params_kwargs.get("names", []))
+    types = params_kwargs.get("types")
     problem: tuple[str, str] | None = None
     if not names or not all(name.isidentifier() for name in names):
         problem = ("names", "give at least one attribute name")
+    elif types is not None and mode != "require":
+        problem = ("types", f"types does not apply to {marker}")
+    elif types is not None and not (
+        isinstance(types, dict)
+        and all(isinstance(v, str) and v for v in types.values())
+    ):
+        problem = ("types", "types must map member names to class names")
+    elif types is not None and set(types) - set(names):
+        unknown = ", ".join(sorted(set(types) - set(names)))
+        problem = ("types", f"types names members not listed: {unknown}")
     else:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     if problem is not None:
@@ -476,6 +551,7 @@ def _compile_runtime_members(
             **_case_params(params_kwargs),
             "mode": mode,
             "names": sorted(set(names or [])),
+            **({"types": dict(types)} if types else {}),
         },
         severity=_severity(params_kwargs),
         hint=hint,
@@ -692,6 +768,15 @@ def _identifier_problem(
     return None
 
 
+def _no_steps_problem(params: dict[str, Any], marker: str) -> tuple[str, str] | None:
+    cases = params.get("cases")
+    if isinstance(cases, list) and any(
+        isinstance(case, dict) and "steps" in case for case in cases
+    ):
+        return "cases", f"{marker} builds no instance to run steps on"
+    return None
+
+
 def _mentions_spy(value: Any, spy: str) -> bool:
     if isinstance(value, dict):
         if value.get("$spy") == spy:
@@ -754,7 +839,8 @@ def compile_is_runtime_singleton(
         declaration,
         marker=marker,
         params={"pattern": "singleton", "access": params_kwargs.get("access")},
-        problem=_identifier_problem(params_kwargs, "access", required=False),
+        problem=_identifier_problem(params_kwargs, "access", required=False)
+        or _no_steps_problem(params_kwargs, marker),
         hint=(
             "Hand out one shared instance: keep it on the class and return it "
             "on every access."
@@ -787,6 +873,16 @@ def compile_enforce_runtime_observer(
         problem = ("notify_args", "notify_args must be a list")
     if problem is None and _transport_problem(notify_args):
         problem = ("notify_args", f"notify_args: {_transport_problem(notify_args)}")
+    subscribe_args = params_kwargs.get("subscribe_args")
+    if subscribe_args is None:
+        subscribe_args = []
+    if problem is None and not isinstance(subscribe_args, list):
+        problem = ("subscribe_args", "subscribe_args must be a list")
+    if problem is None and _transport_problem(subscribe_args):
+        problem = (
+            "subscribe_args",
+            f"subscribe_args: {_transport_problem(subscribe_args)}",
+        )
     return _pattern_rule(
         source_entity,
         declaration,
@@ -797,6 +893,7 @@ def compile_enforce_runtime_observer(
             "notify": params_kwargs.get("notify"),
             "unsubscribe": params_kwargs.get("unsubscribe"),
             "notify_args": notify_args,
+            "subscribe_args": subscribe_args,
         },
         problem=problem,
         hint=(

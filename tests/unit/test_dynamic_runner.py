@@ -166,16 +166,18 @@ def test_a_same_module_helper_is_followed_to_its_outward_call(package_root: Path
     )
 
     calls = outcome.cases[0]["calls"]
-    assert [(c["module"], c["callee"], c["caller"]) for c in calls] == [
-        ("repo", "Store.put", "_put")
-    ]
+    assert [
+        (c["module"], c["callee"], c["caller"]) for c in calls if not c.get("local")
+    ] == [("repo", "Store.put", "_put")]
 
 
-def test_same_module_helpers_and_builtins_are_not_reported(package_root: Path):
+def test_same_module_helpers_are_local_and_builtins_are_not_reported(
+    package_root: Path,
+):
     outcome = _run(package_root, "local_only", "function", [{"args": [[3, 1, 2]]}])
 
     assert outcome.cases[0]["status"] == "passed"
-    assert outcome.cases[0]["calls"] == []
+    assert all(call.get("local") for call in outcome.cases[0]["calls"])
 
 
 def test_a_c_function_is_reported_under_its_public_module(package_root: Path):

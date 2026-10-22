@@ -209,6 +209,7 @@ def _results_summary(payload: Optional[Dict[str, Any]]) -> ResultsSummary:
             dict(row) for row in (data.get("top_source_files") or [])
         ),
         timings=(dict(data["timings"]) if data.get("timings") is not None else None),
+        unverified_total=int(data.get("unverified_total", 0)),
     )
 
 

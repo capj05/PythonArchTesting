@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
+from pythonarchtesting.dynamic.translation import NameTranslation
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 
@@ -16,15 +17,43 @@ def _in_module(module: str, prefix: str) -> bool:
 
 
 def _describe_call(call: dict[str, Any]) -> str:
+    origin = call.get("origin")
+    if origin:
+        # A call another module made while the target ran: name the detour.
+        chain = " -> ".join(
+            [f"{origin.get('from')}:{origin.get('caller')}"]
+            + [f"{step.get('module')}:{step.get('caller')}" for step in call["via"]]
+        )
+        return (
+            f"{chain} calls {call.get('module')}:{call.get('callee')} "
+            f"(line {call.get('line')} of {call.get('from')})"
+        )
     return (
         f"{call.get('caller')} calls {call.get('module')}:{call.get('callee')} "
         f"(line {call.get('line')})"
     )
 
 
+_WRITE_VERBS = {
+    "assigned": "sets",
+    "mutated": "changes what is held in",
+    "deleted": "deletes",
+    "bypassed": "sets, past the class's __setattr__,",
+}
+
+
+def _started_by(call: dict[str, Any]) -> tuple[Any, Any]:
+    """The target code a call is charged to: its origin, if made on its behalf."""
+    origin = call.get("origin") or {}
+    return origin.get("from", call.get("from")), origin.get(
+        "caller", call.get("caller")
+    )
+
+
 def _describe_write(write: dict[str, Any]) -> str:
+    verb = _WRITE_VERBS.get(str(write.get("change", "assigned")), "sets")
     return (
-        f"{write.get('writer')} sets {write.get('class')}.{write.get('attribute')} "
+        f"{write.get('writer')} {verb} {write.get('class')}.{write.get('attribute')} "
         f"at {write.get('file')}:{write.get('line')}"
     )
 
@@ -70,6 +99,17 @@ def _coverage_note(coverage: dict[str, Any] | None) -> str:
     )
 
 
+def _raised_note(cases: list[dict[str, Any]]) -> str:
+    """Why a pass may hold for part of the code: a case stopped at an exception."""
+    raised = next((case for case in cases if case.get("raised")), None)
+    if raised is None:
+        return ""
+    return (
+        f"; case {raised.get('index')} raised {raised['raised']}, "
+        "so the code after it was not checked"
+    )
+
+
 def _missed_in_case(case: dict[str, Any]) -> str:
     """Why a call may be absent: the code that would make it did not run."""
     missed = (case.get("lines") or {}).get("missed") or []
@@ -94,9 +134,10 @@ def _reference_cannot_run(
     if not 0 <= index < len(cases):
         return False
     from pythonarchtesting.dynamic.batch import observation
-    from pythonarchtesting.dynamic.runner import run_cases
+    from pythonarchtesting.dynamic.runner import run_reference_cases
 
-    outcome = run_cases(
+    outcome = run_reference_cases(
+        getattr(ctx, "reference_runs", None),
         target_root=source_root,
         module_path=source.module_path,
         qualname=source.qualname,
@@ -121,6 +162,36 @@ class _ObservingEvaluator:
     """
 
     supported_kinds = _SUPPORTED_TARGET_KINDS
+    # Reference names of what the target ran, and the reference module the
+    # rule's entity belongs to; set by ``evaluate``.
+    _names = NameTranslation([])
+    _source_module: str | None = None
+
+    def _own(self, module: Any, code: Any) -> bool:
+        """Whether ``code`` of the target's ``module`` plays the rule module's part.
+
+        A target that keeps several layers in one module runs the other
+        layers' code in the same module; only the entity tells them apart.
+        Code no matched entity encloses (a helper the reference lacks) counts
+        as the module's own, as it always has.
+        """
+        if self._source_module is None or module is None:
+            return True
+        found = self._names.entity_module(str(module), str(code))
+        return found is None or found == self._source_module
+
+    def _passes_through(self, item: dict[str, Any], through: list[str]) -> bool:
+        """Whether a transitive call or instance came from a ``through`` module."""
+        return any(
+            _in_module(
+                self._names.source_module(
+                    str(step.get("module")), str(step.get("caller"))
+                ),
+                prefix,
+            )
+            for step in item.get("via") or []
+            for prefix in through
+        )
 
     def _violations(
         self, rule: Rule, cases: list[dict[str, Any]], details: dict[str, Any]
@@ -163,6 +234,8 @@ class _ObservingEvaluator:
         from pythonarchtesting.dynamic.batch import cache_key, observation
         from pythonarchtesting.dynamic.runner import run_cases
 
+        self._names = NameTranslation.from_context(ctx)
+        self._source_module = source.module_path
         batched = ctx.dynamic_cache.get(cache_key(rule, target))
         details["batched"] = batched is not None
         outcome = batched or run_cases(
@@ -170,11 +243,11 @@ class _ObservingEvaluator:
             module_path=target.module_path,
             qualname=target.qualname,
             kind=target.kind,
-            cases=cases,
-            init=rule.params.get("init"),
+            cases=self._names.cases(cases, source, target),
+            init=self._names.value(rule.params.get("init"), source, target),
             timeout_s=float(rule.params.get("timeout_s", 5.0)),
             sandbox=ctx.sandbox,
-            observe=observation(rule),
+            observe=self._names.observation(observation(rule), source, target),
         )
         details["probe_status"] = outcome.status
         details["cases"] = outcome.cases
@@ -217,9 +290,11 @@ class _ObservingEvaluator:
         violations = self._violations(rule, outcome.cases, details)
         if not violations:
             details["reason"] = "no_violations"
-            details["summary"] = self._passed_summary(
-                rule, len(cases)
-            ) + _coverage_note(coverage)
+            details["summary"] = (
+                self._passed_summary(rule, len(cases))
+                + _raised_note(outcome.cases)
+                + _coverage_note(coverage)
+            )
             return _build_rule_result(rule, source, target, match, "OK", details, ())
         details["violations"] = violations
         details["reason"] = "violation"
@@ -236,13 +311,18 @@ class RuntimeCallsEvaluator(_ObservingEvaluator):
     ) -> list[str]:
         modules = [str(name) for name in rule.params.get("modules") or []]
         allow = [str(name) for name in rule.params.get("allow") or []]
+        through = [str(name) for name in rule.params.get("through") or []]
         details["modules"] = modules
         violations: list[str] = []
         for case in cases:
-            calls = list(case.get("calls") or [])
+            calls = [
+                call
+                for call in case.get("calls") or []
+                if self._own(*_started_by(call))
+            ]
             if rule.params.get("mode") == "require":
                 for module in modules:
-                    if not any(_in_module(str(c["module"]), module) for c in calls):
+                    if not any(self._hits(c, [module]) for c in calls):
                         raised = case.get("raised")
                         suffix = f"; the call raised {raised}" if raised else ""
                         violations.append(
@@ -251,14 +331,30 @@ class RuntimeCallsEvaluator(_ObservingEvaluator):
                         )
                 continue
             for call in calls:
-                name = str(call["module"])
-                if any(_in_module(name, prefix) for prefix in allow):
+                if self._hits(call, allow) or self._passes_through(call, through):
                     continue
-                if any(_in_module(name, prefix) for prefix in modules):
+                if self._hits(call, modules):
                     violations.append(
                         f"case {case.get('index')}: {_describe_call(call)}"
                     )
         return violations
+
+    def _layer(self, call: dict[str, Any]) -> str:
+        """The reference module of the code a recorded call went into."""
+        return self._names.source_module(str(call["module"]), str(call.get("callee")))
+
+    def _hits(self, call: dict[str, Any], prefixes: list[str]) -> bool:
+        """Whether ``call`` goes into one of ``prefixes``.
+
+        A prefix names a module (``"repository"``) or, dotted, a function of
+        one (``"builtins.print"``).
+        """
+        module = self._layer(call)
+        qualified = f"{module}.{call.get('callee')}"
+        return any(
+            _in_module(module, prefix) or _in_module(qualified, prefix)
+            for prefix in prefixes
+        )
 
     def _passed_summary(self, rule: Rule, case_count: int) -> str:
         modules = ", ".join(rule.params.get("modules") or [])
@@ -286,8 +382,16 @@ class RuntimeWritesEvaluator(_ObservingEvaluator):
 
 
 def _describe_instance(instance: dict[str, Any]) -> str:
+    origin = instance.get("origin")
+    creator = instance.get("creator")
+    if origin:
+        # Built by other code while the target ran: name the way there.
+        creator = " -> ".join(
+            [f"{origin.get('from')}:{origin.get('caller')}"]
+            + [f"{step.get('module')}:{step.get('caller')}" for step in instance["via"]]
+        )
     return (
-        f"{instance.get('creator')} creates {instance.get('module')}:"
+        f"{creator} creates {instance.get('module')}:"
         f"{instance.get('class')} at {instance.get('file')}:{instance.get('line')}"
     )
 
@@ -304,13 +408,28 @@ class RuntimeInstancesEvaluator(_ObservingEvaluator):
     ) -> list[str]:
         modules = [str(name) for name in rule.params.get("modules") or []]
         allow = [str(name) for name in rule.params.get("allow") or []]
+        through = [str(name) for name in rule.params.get("through") or []]
         own = str(details.get("target_module"))
         violations: list[str] = []
         for case in cases:
             for instance in case.get("instances") or []:
-                name = str(instance.get("module"))
-                if instance.get("from") != own:
-                    continue
+                name = self._names.source_module(
+                    str(instance.get("module")), str(instance.get("class"))
+                )
+                origin = instance.get("origin")
+                if origin:
+                    # Built by other code on the target's behalf (transitive).
+                    if origin.get("from") != own or not self._own(
+                        own, origin.get("caller")
+                    ):
+                        continue
+                    if self._passes_through(instance, through):
+                        continue
+                else:
+                    # "creator" is "module:qualname" of the code that built it.
+                    creator = str(instance.get("creator") or "").partition(":")[2]
+                    if instance.get("from") != own or not self._own(own, creator):
+                        continue
                 if any(_in_module(name, prefix) for prefix in allow):
                     continue
                 if any(_in_module(name, prefix) for prefix in modules):
@@ -324,11 +443,50 @@ class RuntimeInstancesEvaluator(_ObservingEvaluator):
         return f"no instance of {modules} created in {case_count} case(s)"
 
 
-def _edges(case: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
-    """First call per ``(from, to)`` module pair, in the order they happened."""
+def _edges(
+    case: dict[str, Any], names: NameTranslation | None = None
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """First call per ``(from, to)`` module pair, in the order they happened.
+
+    With ``names`` the pair is named by the reference's modules, so a target
+    that renamed or merged modules is compared module for module.
+    """
     edges: dict[tuple[str, str], dict[str, Any]] = {}
     for call in case.get("calls") or []:
-        edges.setdefault((str(call.get("from")), str(call.get("module"))), call)
+        origin, module = str(call.get("from")), str(call.get("module"))
+        if names is not None:
+            origin = names.source_module(origin, str(call.get("caller")))
+            module = names.source_module(module, str(call.get("callee")))
+        if origin == module:
+            continue  # within one module: not an edge of the module graph
+        edges.setdefault((origin, module), call)
+    return edges
+
+
+def _fold_new_modules(
+    edges: dict[tuple[str, str], dict[str, Any]], known: set[str]
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """``edges`` with every module outside ``known`` folded into its callers.
+
+    A module the reference does not have (a helper of the target's own) is
+    treated as part of each module that calls it: its calls become theirs, and
+    the calls into it disappear. A chain of new modules folds step by step.
+    """
+    for _ in range(len(edges) + 1):
+        new = sorted({module for pair in edges for module in pair} - known)
+        if not new:
+            break
+        module = new[0]
+        callers = {origin for origin, callee in edges if callee == module}
+        callers.discard(module)
+        folded: dict[tuple[str, str], dict[str, Any]] = {}
+        for (origin, callee), call in edges.items():
+            if callee == module:
+                continue
+            for start in callers if origin == module else (origin,):
+                if start != callee:
+                    folded.setdefault((start, callee), call)
+        edges = folded
     return edges
 
 
@@ -351,6 +509,7 @@ class RuntimeReferenceCallsEvaluator:
         cases: list[dict[str, Any]] = list(rule.params.get("cases") or [])
         timeout_s = float(rule.params.get("timeout_s", 5.0))
         require_all = bool(rule.params.get("require_all"))
+        allow_new = bool(rule.params.get("allow_new_modules"))
         details: dict[str, Any] = {
             "reason": "",
             "summary": "",
@@ -371,9 +530,10 @@ class RuntimeReferenceCallsEvaluator:
             details["summary"] = f"expected a {source.kind}, matched a {target.kind}"
             return result("FAILED")
 
-        from pythonarchtesting.dynamic.runner import run_cases
+        from pythonarchtesting.dynamic.runner import run_cases, run_reference_cases
 
-        reference = run_cases(
+        reference = run_reference_cases(
+            getattr(ctx, "reference_runs", None),
             target_root=ctx.source_root,
             module_path=source.module_path,
             qualname=source.qualname,
@@ -405,13 +565,14 @@ class RuntimeReferenceCallsEvaluator:
             sorted(f"{a} -> {b}" for a, b in edges) for edges in expected
         ]
 
+        names = NameTranslation.from_context(ctx)
         outcome = run_cases(
             target_root=ctx.target_root,
             module_path=target.module_path,
             qualname=target.qualname,
             kind=target.kind,
-            cases=cases,
-            init=rule.params.get("init"),
+            cases=names.cases(cases, source, target),
+            init=names.value(rule.params.get("init"), source, target),
             timeout_s=timeout_s,
             sandbox=ctx.sandbox,
             observe={"calls": "edges"},
@@ -438,9 +599,17 @@ class RuntimeReferenceCallsEvaluator:
         # make, an absence a call of the reference the target does not make.
         divergences: list[str] = []
         absences: list[str] = []
+        # Modules of the reference, which new modules of the target fold into.
+        known = (
+            {str(entity.module_path) for entity in ctx.source_by_id.values()}
+            if allow_new
+            else set()
+        )
         for case, allowed in zip(outcome.cases, expected):
             index = case.get("index")
-            actual = _edges(case)
+            actual = _edges(case, names)
+            if allow_new:
+                actual = _fold_new_modules(actual, known)
             for (origin, module), call in actual.items():
                 if (origin, module) not in allowed:
                     divergences.append(
@@ -492,6 +661,7 @@ class RuntimeMembersEvaluator(_ObservingEvaluator):
     ) -> list[str]:
         _ = details
         names = [str(name) for name in rule.params.get("names") or []]
+        types = dict(rule.params.get("types") or {})
         require = rule.params.get("mode") == "require"
         violations: list[str] = []
         for case in cases:
@@ -507,6 +677,12 @@ class RuntimeMembersEvaluator(_ObservingEvaluator):
                 member = members.get(name) or {}
                 if require and not member.get("present"):
                     violations.append(f"case {index}: the instance has no {name!r}")
+                elif require and name in types and not member.get("type_ok"):
+                    held = member.get("type_error") or f"a {member.get('type')}"
+                    violations.append(
+                        f"case {index}: {name!r} is {held}, not an instance of "
+                        f"{types[name]}"
+                    )
                 elif not require and member.get("present"):
                     violations.append(
                         f"case {index}: the instance has {name!r} "

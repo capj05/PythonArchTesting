@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
+from pythonarchtesting.dynamic.translation import NameTranslation
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 
@@ -54,11 +55,20 @@ class RuntimeImportsEvaluator:
 
         from pythonarchtesting.dynamic.runner import run_import_check
 
+        # The probe filters by name, so project modules are sent under the
+        # names the target gave them.
+        names = NameTranslation.from_context(ctx)
         outcome = run_import_check(
             target_root=ctx.target_root,
             module_path=target.module_path,
-            forbidden=forbidden,
-            allow=details["allow"],
+            forbidden=[
+                mapped for name in forbidden for mapped in names.target_modules(name)
+            ],
+            allow=[
+                mapped
+                for name in details["allow"]
+                for mapped in names.target_modules(name)
+            ],
             timeout_s=float(rule.params.get("timeout_s", 5.0)),
             sandbox=ctx.sandbox,
         )

@@ -91,12 +91,17 @@ def test_edges_mode_records_only_calls_between_project_modules(
         modules[""].entry(modules["repo"].Store())
 
     # The call from this test file into the package is not an edge; the
-    # same-module helper, the comprehension, json and len() are not either.
-    # The package itself is named "__init__".
-    assert [(c["from"], c["module"], c["callee"]) for c in recorder.calls] == [
-        ("__init__", "controller", "handle"),
-        ("controller", "service", "run"),
-        ("service", "repo", "Store.put"),
+    # comprehension, json and len() are not either. The same-module helper is
+    # reported as a local call (two entities of one module may still belong
+    # to different layers). The package itself is named "__init__".
+    assert [
+        (c["from"], c["module"], c["callee"], bool(c.get("local")))
+        for c in recorder.calls
+    ] == [
+        ("__init__", "controller", "handle", False),
+        ("controller", "service", "run", False),
+        ("service", "service", "_helper", True),
+        ("service", "repo", "Store.put", False),
     ]
 
 
@@ -150,7 +155,9 @@ def test_run_case_in_edges_mode_needs_the_target_root(
     )
 
     assert outcome["status"] == "passed", outcome["failures"]
-    assert [(c["from"], c["module"]) for c in outcome["calls"]] == [
+    assert [
+        (c["from"], c["module"]) for c in outcome["calls"] if not c.get("local")
+    ] == [
         ("controller", "service"),
         ("service", "repo"),
     ]

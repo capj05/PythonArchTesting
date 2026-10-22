@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
@@ -32,6 +32,9 @@ class RunState:
     # dynamic.sandbox.SandboxPolicy for dynamic runs; typed loosely so static
     # runs never import the dynamic package.
     sandbox: Any = None
+    # Outcomes of running the reference in dynamic checks; the reference does
+    # the same for every target, so the targets of a run share them.
+    reference_runs: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

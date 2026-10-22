@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
+from pythonarchtesting.dynamic.translation import NameTranslation
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 
@@ -130,10 +131,11 @@ class RuntimeFlowEvaluator:
             details["summary"] = f"expected a {source.kind}, matched a {target.kind}"
             return result("FAILED")
 
-        from pythonarchtesting.dynamic.runner import run_cases
+        from pythonarchtesting.dynamic.runner import run_cases, run_reference_cases
 
         spans = list(rule.params.get("spans") or [])
-        reference = run_cases(
+        reference = run_reference_cases(
+            getattr(ctx, "reference_runs", None),
             target_root=ctx.source_root,
             module_path=source.module_path,
             qualname=source.qualname,
@@ -184,13 +186,17 @@ class RuntimeFlowEvaluator:
             )
             return result("ERROR")
 
+        names = NameTranslation.from_context(ctx)
         outcome = run_cases(
             target_root=ctx.target_root,
             module_path=target.module_path,
             qualname=target.qualname,
             kind=target.kind,
-            cases=[{**case, "flow_calls": True} for case in cases],
-            init=init,
+            cases=[
+                {**case, "flow_calls": True}
+                for case in names.cases(cases, source, target)
+            ],
+            init=names.value(init, source, target),
             timeout_s=timeout_s,
             sandbox=ctx.sandbox,
         )

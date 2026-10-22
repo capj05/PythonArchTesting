@@ -18,6 +18,7 @@
         "arch": 2
       },
       "results_total": 2,
+      "unverified_total": 0,
       "severity_counts": {
         "error": 1,
         "info": 1
@@ -121,6 +122,7 @@
           "arch": 1
         },
         "results_total": 1,
+        "unverified_total": 0,
         "severity_counts": {
           "info": 1
         },
@@ -216,6 +218,7 @@
           "arch": 1
         },
         "results_total": 1,
+        "unverified_total": 0,
         "severity_counts": {
           "error": 1
         },

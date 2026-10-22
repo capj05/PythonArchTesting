@@ -80,16 +80,27 @@ def render_message(template: str, mapping: Dict[str, Any]) -> Tuple[str, str | N
         return "", str(exc)
 
 
+def _unverified_reasons(details: Dict[str, Any]) -> list[str]:
+    """What a passing runtime result left unchecked, as stable reason codes."""
+    coverage = details.get("coverage") or {}
+    checks = (
+        ("unexercised_lines", coverage.get("unexercised_lines")),
+        ("unchecked_stages", details.get("unchecked_stages")),
+        ("reference_calls_not_made", details.get("absences")),
+        (
+            "case_raised",
+            any(
+                isinstance(case, dict) and case.get("raised")
+                for case in details.get("cases") or []
+            ),
+        ),
+    )
+    return [reason for reason, present in checks if present]
+
+
 def _has_caveat(details: Dict[str, Any]) -> bool:
     """Whether a passing runtime result left something unchecked."""
-    if not details.get("summary"):
-        return False
-    coverage = details.get("coverage") or {}
-    return bool(
-        coverage.get("unexercised_lines")
-        or details.get("unchecked_stages")
-        or details.get("absences")
-    )
+    return bool(details.get("summary")) and bool(_unverified_reasons(details))
 
 
 def _build_rule_result(
@@ -105,6 +116,9 @@ def _build_rule_result(
     if status == "OK":
         # A runtime pass holds for what ran; say so when something did not.
         message = f"OK: {details['summary']}" if _has_caveat(details) else "OK"
+        reasons = _unverified_reasons(details)
+        if reasons:
+            details = {**details, "unverified": reasons}
     else:
         mapping = _message_mapping(rule, source, target, details)
         rendered, error = render_message(rule.message_template, mapping)

@@ -15,7 +15,10 @@ from types import SimpleNamespace
 import pytest
 
 from pythonarchtesting.dynamic.runner import run_case_batch, run_cases
-from pythonarchtesting.runner.skips import count_runtime_rules_skipped
+from pythonarchtesting.runner.skips import (
+    count_runtime_results_unverified,
+    count_runtime_rules_skipped,
+)
 
 _TARGET = """
 import collections
@@ -328,3 +331,106 @@ def test_runtime_rules_skipped_counts_only_skips_for_missing_dynamic() -> None:
 
     assert count_runtime_rules_skipped(states) == 2
     assert count_runtime_rules_skipped([]) == 0
+
+
+def test_runtime_results_unverified_counts_passes_with_something_unchecked() -> None:
+    states = [
+        _state(
+            SimpleNamespace(status="OK", details={"unverified": ["case_raised"]}),
+            SimpleNamespace(status="OK", details={"unverified": []}),
+            SimpleNamespace(status="OK", details=None),
+        ),
+        _state(SimpleNamespace(status="OK", details={"unverified": ["x", "y"]})),
+    ]
+
+    assert count_runtime_results_unverified(states) == 2
+    assert count_runtime_results_unverified([]) == 0
+
+
+def test_new_builds_a_class_of_a_module_inside_a_subpackage(tmp_path: Path) -> None:
+    # A $new translated to a class the target keeps in domain/services.py.
+    package = tmp_path / "nested_pkg"
+    (package / "domain").mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "domain" / "__init__.py").write_text("", encoding="utf-8")
+    (package / "domain" / "services.py").write_text(
+        "class Service:\n    pass\n", encoding="utf-8"
+    )
+    (package / "target.py").write_text(
+        "def place(service):\n    return type(service).__name__\n", encoding="utf-8"
+    )
+
+    outcome = run_cases(
+        target_root=package,
+        module_path="target",
+        qualname="place",
+        kind="function",
+        cases=[{"args": [{"$new": "domain.services.Service"}]}],
+        init=None,
+        timeout_s=10.0,
+        observe={"calls": True},
+    )
+
+    assert outcome.status == "completed"
+    assert outcome.cases[0]["status"] == "passed", outcome.cases[0]["failures"]
+
+
+_LAZY = """
+import asyncio
+
+from . import store
+
+
+async def place(value):
+    await asyncio.sleep(0)
+    return store.save(value)
+
+
+def rows(count):
+    for index in range(count):
+        yield store.save(index)
+
+
+async def stream(count):
+    for index in range(count):
+        await asyncio.sleep(0)
+        yield store.save(index)
+"""
+
+
+@pytest.fixture
+def lazy_root(tmp_path: Path) -> Path:
+    package = tmp_path / "lazy_pkg"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "store.py").write_text(
+        "def save(value):\n    return value\n", encoding="utf-8"
+    )
+    (package / "target.py").write_text(textwrap.dedent(_LAZY), encoding="utf-8")
+    return package
+
+
+@pytest.mark.parametrize(
+    ("qualname", "args"),
+    [("place", [1]), ("rows", [2]), ("stream", [2])],
+)
+def test_the_body_of_a_coroutine_or_generator_runs_and_is_observed(
+    lazy_root: Path, qualname: str, args: list
+) -> None:
+    # Calling it only creates the coroutine or generator; unless the probe
+    # runs it, nothing is observed and the rule passes vacuously.
+    outcome = run_cases(
+        target_root=lazy_root,
+        module_path="target",
+        qualname=qualname,
+        kind="function",
+        cases=[{"args": args}],
+        init=None,
+        timeout_s=10.0,
+        observe={"calls": True},
+    )
+
+    case = outcome.cases[0]
+    assert case["status"] == "passed", case["failures"]
+    assert "store" in {call["module"] for call in case["calls"]}
+    assert case["lines"]["missed"] == []

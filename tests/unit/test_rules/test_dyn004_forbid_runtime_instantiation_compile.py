@@ -55,6 +55,17 @@ def test_forbid_runtime_instantiation_compiles_to_a_runtime_instances_rule() -> 
     assert rule.params["timeout_s"] == 5.0
 
 
+def test_transitive_and_through_reach_the_rule() -> None:
+    rules, evidence, _ = _on_method(
+        'forbid_runtime_instantiation("repository", transitive=True, '
+        'through=["repository"], cases=[{}])'
+    )
+
+    assert evidence == []
+    assert rules[0].params["transitive"] is True
+    assert rules[0].params["through"] == ["repository"]
+
+
 def test_explicit_none_for_allow_is_an_empty_allow_list() -> None:
     rules, evidence, _ = _on_method(
         'forbid_runtime_instantiation("repository", allow=None, cases=[{}])'

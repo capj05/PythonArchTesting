@@ -54,6 +54,24 @@ def test_forbid_runtime_calls_compiles_to_a_runtime_calls_rule() -> None:
     assert rule.params["timeout_s"] == 2.0
 
 
+def test_transitive_and_through_reach_the_rule() -> None:
+    rules, evidence, _ = _on_function(
+        'forbid_runtime_calls("repository", transitive=True, through=["service"], '
+        "cases=[{}])"
+    )
+
+    assert evidence == []
+    assert rules[0].params["transitive"] is True
+    assert rules[0].params["through"] == ["service"]
+
+
+def test_without_transitive_the_rule_has_no_such_params() -> None:
+    rules, _, _ = _on_function('forbid_runtime_calls("repository", cases=[{}])')
+
+    assert "transitive" not in rules[0].params
+    assert "through" not in rules[0].params
+
+
 def test_require_runtime_calls_compiles_in_require_mode() -> None:
     rules, evidence, _ = _on_function(
         'require_runtime_calls("service", cases=[{"args": [1, 2]}])'
@@ -111,6 +129,26 @@ __archtest__: Annotated[None, forbid_runtime_calls("db", cases=[{}])]
             'require_runtime_calls("service", allow=["service.x"], cases=[{}])',
             "allow",
             "allow does not apply to require_runtime_calls",
+        ),
+        (
+            'forbid_runtime_calls("db", through=["service"], cases=[{}])',
+            "through",
+            "only with transitive=True",
+        ),
+        (
+            'forbid_runtime_calls("db", transitive="yes", cases=[{}])',
+            "transitive",
+            "True or False",
+        ),
+        (
+            'require_runtime_calls("db", transitive=True, cases=[{}])',
+            "transitive",
+            "transitive does not apply to require_runtime_calls",
+        ),
+        (
+            'forbid_runtime_calls("db", transitive=True, through="service", cases=[{}])',
+            "through",
+            "list of module names",
         ),
         ('forbid_runtime_calls("db", cases=[])', "cases", "non-empty list"),
         (

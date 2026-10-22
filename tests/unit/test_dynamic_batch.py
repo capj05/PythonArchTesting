@@ -119,12 +119,18 @@ def test_observation_follows_the_rule_type() -> None:
     assert batch.observation(SimpleNamespace(rule_type="runtime_writes")) == {
         "writes": True
     }
-    assert batch.observation(SimpleNamespace(rule_type="runtime_calls")) == {
+    assert batch.observation(SimpleNamespace(rule_type="runtime_calls", params={})) == {
         "calls": True
     }
-    assert batch.observation(SimpleNamespace(rule_type="runtime_instances")) == {
-        "instances": True
-    }
+    assert batch.observation(
+        SimpleNamespace(rule_type="runtime_calls", params={"transitive": True})
+    ) == {"calls": "transitive"}
+    assert batch.observation(
+        SimpleNamespace(rule_type="runtime_instances", params={})
+    ) == {"instances": True}
+    assert batch.observation(
+        SimpleNamespace(rule_type="runtime_instances", params={"transitive": True})
+    ) == {"instances": "transitive"}
 
 
 _SHOP = """
@@ -207,7 +213,12 @@ def _ctx(
 ) -> tuple[SimpleNamespace, list[SimpleNamespace]]:
     sources, targets, matches, rules = {}, {}, {}, []
     for name in names:
-        source = SimpleNamespace(canonical_id=f"s:{name}", kind="function")
+        source = SimpleNamespace(
+            canonical_id=f"s:{name}",
+            kind="function",
+            module_path=module_path,
+            qualname=name,
+        )
         target = SimpleNamespace(
             canonical_id=f"t:{name}",
             kind="function",
@@ -463,6 +474,7 @@ def test_observation_of_the_pattern_rules() -> None:
             "notify": "emit",
             "unsubscribe": None,
             "notify_args": [1],
+            "subscribe_args": None,
         }
     }
     assert batch.observation(rule(pattern="delegation", spy="s")) == {"spies": True}

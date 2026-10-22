@@ -215,6 +215,54 @@ def test_an_ok_message_carries_the_summary_only_with_a_caveat(
     assert result.message == ("OK: s" if caveat else "OK")
 
 
+@pytest.mark.parametrize(
+    ("details", "reasons"),
+    [
+        (
+            {"summary": "s", "coverage": {"unexercised_lines": [4]}},
+            ["unexercised_lines"],
+        ),
+        ({"summary": "s", "unchecked_stages": ["save"]}, ["unchecked_stages"]),
+        ({"summary": "s", "absences": ["audit"]}, ["reference_calls_not_made"]),
+        (
+            {"summary": "s", "cases": [{"index": 0, "raised": "ValueError: x"}]},
+            ["case_raised"],
+        ),
+        ({"summary": "s", "coverage": {"unexercised_lines": []}}, None),
+    ],
+)
+def test_a_pass_that_left_something_unchecked_lists_why(
+    details: dict, reasons: list | None
+) -> None:
+    rule, entity = _rule_and_entity(_FORBID)
+    match = SimpleNamespace(status=MatchStatus.MATCHED, confidence=1.0)
+
+    result = _build_rule_result(rule, entity, entity, match, "OK", details, ())
+
+    assert result.details.get("unverified") == reasons
+
+
+def test_a_failure_is_never_marked_unverified() -> None:
+    rule, entity = _rule_and_entity(_FORBID)
+    match = SimpleNamespace(status=MatchStatus.MATCHED, confidence=1.0)
+    details = {"summary": "s", "coverage": {"unexercised_lines": [4]}}
+
+    result = _build_rule_result(rule, entity, entity, match, "FAILED", details, ())
+
+    assert "unverified" not in result.details
+
+
+def test_a_pass_whose_case_raised_says_what_did_not_run() -> None:
+    result = _evaluate(_FORBID, _cases({"raised": "KeyError: 'id'"}))
+
+    assert result.status == "OK"
+    assert result.details["summary"] == (
+        "no call into repository in 2 case(s); case 0 raised KeyError: 'id', "
+        "so the code after it was not checked"
+    )
+    assert result.message.startswith("OK: ")
+
+
 def test_a_missing_call_names_the_lines_that_did_not_run() -> None:
     result = _evaluate(
         _REQUIRE,

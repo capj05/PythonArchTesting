@@ -108,7 +108,36 @@ def test_observer_notify_args_default_to_an_empty_list() -> None:
     )
 
     assert rules[0].params["notify_args"] == []
+    assert rules[0].params["subscribe_args"] == []
     assert rules[0].params["unsubscribe"] is None
+
+
+def test_observer_keyed_by_event_keeps_its_subscribe_args() -> None:
+    rules, evidence, _ = _compile(
+        'enforce_runtime_observer(subscribe="on", notify="emit", '
+        'subscribe_args=["created"], notify_args=["created"], cases=[{}])'
+    )
+
+    assert evidence == []
+    assert rules[0].params["subscribe_args"] == ["created"]
+
+
+@pytest.mark.parametrize(
+    ("subscribe_args", "reason"),
+    [
+        ('"created"', "subscribe_args must be a list"),
+        ("[b'x']", "subscribe_args: bytes value"),
+    ],
+)
+def test_unusable_subscribe_args_compile_to_a_sentinel(
+    subscribe_args: str, reason: str
+) -> None:
+    _assert_sentinel(
+        f'enforce_runtime_observer(subscribe="a", notify="b", '
+        f"subscribe_args={subscribe_args}, cases=[{{}}])",
+        "subscribe_args",
+        reason,
+    )
 
 
 @pytest.mark.parametrize("on", ["function", "method"])

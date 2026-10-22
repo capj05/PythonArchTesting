@@ -601,11 +601,15 @@ def _runtime_calls_marker(
     timeout_s: float,
     severity: str,
     message: str | None,
+    transitive: bool = False,
+    through: list[str] | None = None,
 ) -> RuleMarker:
     cleaned = _clean_kwargs(
         {
             "modules": list(modules),
             "allow": list(allow or []),
+            "transitive": transitive or None,
+            "through": list(through) if through is not None else None,
             "cases": list(cases),
             "init": dict(init) if init is not None else None,
             "timeout_s": timeout_s,
@@ -624,6 +628,8 @@ def forbid_runtime_calls(
     *modules: str,
     cases: list[dict[str, Any]],
     allow: list[str] | None = None,
+    transitive: bool = False,
+    through: list[str] | None = None,
     init: dict[str, Any] | None = None,
     timeout_s: float = 5.0,
     severity: str = "error",
@@ -639,6 +645,11 @@ def forbid_runtime_calls(
     Cases only give call arguments; what the call computes is not checked. The
     check only runs when the CLI is started with ``--dynamic``.
 
+    With ``transitive=True`` a call into the listed modules made by any
+    project code while the target runs counts too (a detour through a helper
+    module), unless that code was reached through a module in ``through`` —
+    the layer whose job it is to make the call.
+
     This helper is declaration-only and returns passive annotation metadata.
     """
     return _runtime_calls_marker(
@@ -646,6 +657,8 @@ def forbid_runtime_calls(
         modules,
         cases=cases,
         allow=allow,
+        transitive=transitive,
+        through=through,
         init=init,
         timeout_s=timeout_s,
         severity=severity,
@@ -687,6 +700,8 @@ def forbid_runtime_instantiation(
     *modules: str,
     cases: list[dict[str, Any]],
     allow: list[str] | None = None,
+    transitive: bool = False,
+    through: list[str] | None = None,
     init: dict[str, Any] | None = None,
     timeout_s: float = 5.0,
     severity: str = "error",
@@ -701,6 +716,10 @@ def forbid_runtime_instantiation(
     receive such objects from its caller. Calling their methods stays allowed.
     The check only runs when the CLI is started with ``--dynamic``.
 
+    With ``transitive=True`` an instance any project code builds while the
+    target runs counts too (a factory module of its own), unless it was built
+    by code of a module in ``through``.
+
     This helper is declaration-only and returns passive annotation metadata.
     """
     return _runtime_calls_marker(
@@ -708,6 +727,8 @@ def forbid_runtime_instantiation(
         modules,
         cases=cases,
         allow=allow,
+        transitive=transitive,
+        through=through,
         init=init,
         timeout_s=timeout_s,
         severity=severity,
@@ -719,6 +740,7 @@ def enforce_reference_calls(
     *,
     cases: list[dict[str, Any]],
     require_all: bool = False,
+    allow_new_modules: bool = False,
     init: dict[str, Any] | None = None,
     timeout_s: float = 5.0,
     severity: str = "error",
@@ -731,8 +753,9 @@ def enforce_reference_calls(
     cases, and every call between two different modules of the project is
     recorded. The target must not make a module-to-module call the reference
     does not make; with ``require_all`` it must also make every one the
-    reference makes. The check only runs when the CLI is started with
-    ``--dynamic``.
+    reference makes. With ``allow_new_modules`` a module the reference does
+    not have counts as part of the modules that call it. The check only runs
+    when the CLI is started with ``--dynamic``.
 
     This helper is declaration-only and returns passive annotation metadata.
     """
@@ -740,6 +763,7 @@ def enforce_reference_calls(
         {
             "cases": list(cases),
             "require_all": require_all,
+            "allow_new_modules": allow_new_modules or None,
             "init": dict(init) if init is not None else None,
             "timeout_s": timeout_s,
             "severity": severity,
@@ -772,6 +796,7 @@ def _runtime_class_marker(
 def require_runtime_members(
     *names: str,
     cases: list[dict[str, Any]],
+    types: dict[str, str] | None = None,
     timeout_s: float = 5.0,
     severity: str = "error",
     message: str | None = None,
@@ -783,13 +808,20 @@ def require_runtime_members(
     constructor arguments and must have every listed member, however it got
     there: assigned in ``__init__``, through ``setattr`` in a loop,
     ``__dict__.update``, a mixin, a decorator, or a base class from a library.
-    The check only runs when the CLI is started with ``--dynamic``.
+    ``types`` maps a listed name to a class (``"repository.OrderRepository"``)
+    whose instance, or a subclass's, the member must hold. The check only runs
+    when the CLI is started with ``--dynamic``.
 
     This helper is declaration-only and returns passive annotation metadata.
     """
     return _runtime_class_marker(
         "require_runtime_members",
-        {"names": list(names), "cases": list(cases), "timeout_s": timeout_s},
+        {
+            "names": list(names),
+            "types": dict(types) if types is not None else None,
+            "cases": list(cases),
+            "timeout_s": timeout_s,
+        },
         severity=severity,
         message=message,
     )
@@ -910,8 +942,9 @@ def is_runtime_singleton(
     Capture a Singleton requirement for the rule engine.
 
     The instance of the matched target class is obtained twice per case —
-    through the class method named by ``access`` (``Config.instance()``), or
-    by calling the class itself — and both must be the same object. The check
+    through the class method named by ``access`` (``Config.instance()``), a
+    function of the class's module of that name (``get_config()``), or by
+    calling the class itself — and both must be the same object. The check
     only runs when the CLI is started with ``--dynamic``.
 
     This helper is declaration-only and returns passive annotation metadata.
@@ -931,6 +964,7 @@ def enforce_runtime_observer(
     cases: list[dict[str, Any]],
     notify_args: list[Any] | None = None,
     unsubscribe: str | None = None,
+    subscribe_args: list[Any] | None = None,
     timeout_s: float = 5.0,
     severity: str = "error",
     message: str | None = None,
@@ -941,8 +975,10 @@ def enforce_runtime_observer(
     An instance of the matched target class is built per case, a recording
     listener is registered through ``subscribe``, and ``notify`` is called
     with ``notify_args``: the listener must be called. With ``unsubscribe``
-    the listener is removed and a second notification must not reach it. The
-    check only runs when the CLI is started with ``--dynamic``.
+    the listener is removed and a second notification must not reach it.
+    ``subscribe_args`` go before the listener in ``subscribe`` and
+    ``unsubscribe``, for a subject keyed by event (``subscribe("created",
+    fn)``). The check only runs when the CLI is started with ``--dynamic``.
 
     This helper is declaration-only and returns passive annotation metadata.
     """
@@ -953,6 +989,7 @@ def enforce_runtime_observer(
             "notify": notify,
             "unsubscribe": unsubscribe,
             "notify_args": list(notify_args or []),
+            "subscribe_args": list(subscribe_args or []),
             "cases": list(cases),
             "timeout_s": timeout_s,
         },

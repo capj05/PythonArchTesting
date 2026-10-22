@@ -20,20 +20,23 @@ from __future__ import annotations
 
 import builtins
 import contextlib
+import dis
 import enum
 import importlib
 import importlib.util
 import inspect
 import io
+import itertools
 import json
 import os
+import random
 import signal
 import sys
 import threading
 import time
 import traceback
 import types
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 _REPR_LIMIT = 200
 _MISSING = object()
@@ -84,7 +87,13 @@ def _resolve_name(name: str, namespace: dict[str, Any], package: str | None) -> 
     else:
         raise CaseSetupError(f"cannot resolve {name!r} in the target module")
     for part in rest.split(".") if rest else ():
-        value = getattr(value, part, _MISSING)
+        parent, value = value, getattr(value, part, _MISSING)
+        if value is _MISSING and hasattr(parent, "__path__"):
+            # A submodule nothing imported yet: "domain.services.Service".
+            try:
+                value = importlib.import_module(f"{parent.__name__}.{part}")
+            except ImportError:
+                value = _MISSING
         if value is _MISSING:
             raise CaseSetupError(f"cannot resolve {name!r}: no attribute {part!r}")
     return value
@@ -102,18 +111,27 @@ class _Spy:
     """A stand-in collaborator that records every call made on it.
 
     It is callable, and any attribute that is not a dunder is a method that
-    records its call. A call returns its first positional argument (or None),
-    so a strategy or decorator chain that passes a value through keeps running.
+    records its call. A call returns the value ``returns`` gives for that
+    member (``"__call__"`` for calling the spy itself), otherwise its first
+    positional argument (or None), so a strategy or decorator chain that
+    passes a value through keeps running and a query can be answered.
     """
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, returns: dict[str, Any] | None = None) -> None:
         object.__setattr__(self, "_spy_name", name)
+        object.__setattr__(self, "_spy_returns", dict(returns or {}))
+
+    def _answer(self, member: str, args: tuple[Any, ...]) -> Any:
+        returns = object.__getattribute__(self, "_spy_returns")
+        if member in returns:
+            return returns[member]
+        return args[0] if args else None
 
     def _record(
         self, member: str, args: tuple[Any, ...], kwargs: dict[str, Any]
     ) -> Any:
         if len(_SPY_CALLS) >= _SPY_CALL_LIMIT:
-            return args[0] if args else None
+            return self._answer(member, args)
         _SPY_CALLS.append(
             {
                 "spy": object.__getattribute__(self, "_spy_name"),
@@ -121,7 +139,7 @@ class _Spy:
                 "args": len(args) + len(kwargs),
             }
         )
-        return args[0] if args else None
+        return self._answer(member, args)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self._record("__call__", args, kwargs)
@@ -141,7 +159,11 @@ class _Spy:
 
 def _build_value(value: Any, namespace: dict[str, Any], package: str | None) -> Any:
     if isinstance(value, dict) and "$spy" in value:
-        return _Spy(str(value["$spy"]))
+        returns = {
+            str(member): _build_value(item, namespace, package)
+            for member, item in (value.get("returns") or {}).items()
+        }
+        return _Spy(str(value["$spy"]), returns)
     if isinstance(value, dict) and "$new" in value:
         factory = _resolve_name(str(value["$new"]), namespace, package)
         args = [
@@ -233,6 +255,8 @@ def _code_name(code: Any) -> str:
 
 
 _WRAPPER_NAMES = frozenset({"__setattr__", "__init__"})
+# Builtins that do I/O, and the module a call of each is reported under.
+_IO_BUILTINS = {"open": "io", "print": "builtins", "input": "builtins"}
 
 
 class CallRecorder:
@@ -247,6 +271,11 @@ class CallRecorder:
     on itself are followed only through the calls they make outward. Without
     it (``project`` given instead), every call between two different modules
     of the project counts: the project's runtime dependency graph.
+
+    With ``transitive`` (and ``project``) set as well, a call by other project
+    code counts too while code of ``caller_module`` is further up the stack:
+    it carries the ``origin`` (that code) and the project code ``via`` which
+    the call was reached, outermost first.
     """
 
     def __init__(
@@ -254,30 +283,62 @@ class CallRecorder:
         caller_module: str | None,
         package: str | None,
         project: _Project | None = None,
+        transitive: bool = False,
     ) -> None:
         self._caller = caller_module
         self._package = package
         self._project = project
+        self._transitive = transitive and project is not None
         self.calls: list[dict[str, Any]] = []
-        self._seen: set[tuple[str, str, str, int]] = set()
+        self._seen: set[tuple[Any, ...]] = set()
 
-    def _note(self, caller: Any, module: str | None, callee: str) -> None:
-        source = _module_of(caller)
-        if not module or module == source:
+    def _note_through(self, caller: Any, module: str | None, callee: str) -> None:
+        """Note a call by other code, if code of the caller module led to it."""
+        if not self._in_project(caller):
             return
-        key = (str(source), module, callee, caller.f_lineno)
+        chain = _origin_chain(
+            caller, str(self._caller), self._package, self._in_project
+        )
+        if chain is not None:
+            self._note(caller, module, callee, origin=chain[0], via=chain[1])
+
+    def _note(
+        self,
+        caller: Any,
+        module: str | None,
+        callee: str,
+        origin: dict[str, Any] | None = None,
+        via: list[dict[str, Any]] | None = None,
+    ) -> None:
+        source = _module_of(caller)
+        if not module:
+            return
+        caller_name = _code_name(caller.f_code)
+        local = module == source
+        if local and caller_name.split(".")[0] == callee.split(".")[0]:
+            # Within one class or function: never a call between two parts
+            # of the architecture. Calls between two top-level entities of
+            # one module are kept, marked local: a target may keep several
+            # layers in one module, and only the entities tell them apart.
+            return
+        chain = tuple((step["module"], step["caller"]) for step in via or ())
+        key: tuple[Any, ...] = (str(source), module, callee, caller.f_lineno, chain)
         if key in self._seen:
             return
         self._seen.add(key)
-        self.calls.append(
-            {
-                "from": _local_module(source, self._package),
-                "module": _local_module(module, self._package),
-                "callee": callee,
-                "caller": _code_name(caller.f_code),
-                "line": caller.f_lineno,
-            }
-        )
+        call: dict[str, Any] = {
+            "from": _local_module(source, self._package),
+            "module": _local_module(module, self._package),
+            "callee": callee,
+            "caller": caller_name,
+            "line": caller.f_lineno,
+        }
+        if local:
+            call["local"] = True
+        if origin is not None:
+            call["origin"] = origin
+            call["via"] = list(via or [])
+        self.calls.append(call)
 
     def _in_project(self, frame: Any) -> bool:
         return (
@@ -305,17 +366,26 @@ class CallRecorder:
                     self._note(caller, _module_of(frame), _code_name(frame.f_code))
             elif _module_of(caller) == self._caller:
                 self._note(caller, _module_of(frame), _code_name(frame.f_code))
-        elif (
-            event == "c_call"
-            and self._caller is not None
-            and _module_of(frame) == self._caller
-        ):
+            elif self._transitive:
+                self._note_through(caller, _module_of(frame), _code_name(frame.f_code))
+        elif event == "c_call" and self._caller is not None:
+            note: Any = self._note if _module_of(frame) == self._caller else None
+            if note is None and self._transitive and self._in_project(frame):
+                note = self._note_through
+            if note is None:
+                return
             owner = getattr(arg, "__self__", None)
             module = getattr(arg, "__module__", None)
             if not module and owner is not None:
                 # Methods of C types (``cursor.execute``) carry no __module__.
                 module = getattr(type(owner), "__module__", None)
             name = getattr(arg, "__name__", None)
+            io_module = _IO_BUILTINS.get(name) if name else None
+            if io_module and getattr(builtins, str(name), None) is arg:
+                # I/O is a layer of its own: open() is io.open, and print()
+                # and input() talk to the console.
+                note(frame, io_module, str(name))
+                return
             if module == "builtins" or (name and getattr(builtins, name, None) is arg):
                 # len(), print(), list.append() belong to no layer; open() is
                 # a builtin too, although it reports _io as its module.
@@ -323,7 +393,7 @@ class CallRecorder:
             if module and module.startswith("_") and module[1:] in sys.modules:
                 # pickle.dumps is _pickle.dumps; report the public module.
                 module = module[1:]
-            self._note(frame, module, str(getattr(arg, "__qualname__", arg)))
+            note(frame, module, str(getattr(arg, "__qualname__", arg)))
 
     @contextlib.contextmanager
     def watching(self) -> Iterator[None]:
@@ -452,6 +522,21 @@ class WriteRecorder:
     inside a method (a lambda, a local helper) counts as outside it.
     Assignments made by code outside the target root (the standard library,
     the probe) are ignored.
+
+    Changes that bypass ``__setattr__`` are found by comparison instead
+    (``watching``): the instances the case can reach are snapshotted — which
+    object each attribute holds and, for a builtin container, what it holds —
+    and compared wherever a change can have happened: after a C method of a
+    container they hold returns (``append``, ``update``), after ``delattr``,
+    after library code that was handed one of them returns
+    (``random.shuffle``), on every call and return of project code whose
+    bytecode can change state without a call (``x[i] = ...``, ``del``,
+    ``+=``, ``__dict__``, ``object.__setattr__``), and when project code
+    returns to its caller outside the project. A difference belongs to the
+    nearest project code that ran since the last comparison. It is recorded
+    with its ``change``: ``mutated`` (what a container holds), ``deleted``, or
+    ``bypassed`` (``obj.__dict__[...]``, ``object.__setattr__``); an ordinary
+    assignment is ``assigned``.
     """
 
     _MARK = "__pat_write_recorder__"
@@ -463,13 +548,198 @@ class WriteRecorder:
         self.writes: list[dict[str, Any]] = []
         self._seen: set[tuple[str, str, str, int]] = set()
         self._method_codes: dict[type, set[Any]] = {}
+        self._classes: set[type] = set()
+        # id -> (object, snapshot); the object is held so its id stays unique.
+        self._watched: dict[int, tuple[Any, dict[str, Any]]] = {}
+        self._project_codes: dict[Any, bool] = {}
+        self._changing_codes: dict[Any, bool] = {}
+        # Container id (a __dict__ included) -> ids of the watched instances
+        # holding it; a C method of the container can change only those.
+        self._held: dict[int, set[int]] = {}
+        # Library frames handed a watched object or container, compared on return.
+        self._library: set[Any] = set()
 
-    def start(self) -> None:
-        """Begin recording one case, wrapping classes imported since the last."""
+    def start(self, roots: Iterable[Any] = ()) -> None:
+        """Begin recording one case, wrapping classes imported since the last.
+
+        ``roots`` (the case's arguments, the instance a method runs on) and
+        the project instances they hold are watched for changes that bypass
+        ``__setattr__``; instances built while the case runs are added as
+        they are.
+        """
         self.install()
         self.writes = []
         self._seen = set()
+        self._classes = set(self._project.classes())
+        self._watched = {}
+        self._held = {}
+        self._library = set()
+        self._collect(roots)
         self.active = True
+
+    def _collect(self, roots: Iterable[Any]) -> None:
+        pending = [(root, 0) for root in roots]
+        visited: set[int] = set()
+        while pending:
+            obj, depth = pending.pop()
+            if id(obj) in visited or depth > _WATCH_DEPTH:
+                continue
+            visited.add(id(obj))
+            if type(obj) in self._classes:
+                self._watch(obj)
+                values = list(getattr(obj, "__dict__", {}).values())
+            elif isinstance(obj, (list, tuple, set, frozenset)):
+                values = list(obj)
+            elif isinstance(obj, dict):
+                values = list(obj.values())
+            else:
+                continue
+            pending.extend((value, depth + 1) for value in values)
+
+    def _watch(self, obj: Any) -> None:
+        snapshot = _snapshot(obj)
+        if snapshot is not None:
+            self._watched[id(obj)] = (obj, snapshot)
+            self._note_held(obj)
+
+    def _note_held(self, obj: Any) -> None:
+        """Remember the containers ``obj`` holds, whose methods can change it."""
+        state = getattr(obj, "__dict__", None)
+        if isinstance(state, dict):
+            self._held.setdefault(id(state), set()).add(id(obj))
+            for value in list(state.values()):
+                if type(value) in _CONTAINERS:
+                    self._held.setdefault(id(value), set()).add(id(obj))
+
+    def _in_project(self, frame: Any) -> bool:
+        if frame is None or frame.f_globals is _PROBE_GLOBALS:
+            return False
+        code = frame.f_code
+        known = self._project_codes.get(code)
+        if known is None:
+            known = self._project.relpath(code.co_filename) is not None
+            self._project_codes[code] = known
+        return known
+
+    def _may_change(self, code: Any) -> bool:
+        """Whether ``code`` can change state with no call the profiler sees."""
+        known = self._changing_codes.get(code)
+        if known is None:
+            known = bool(_BYPASS_NAMES.intersection(code.co_names)) or any(
+                instr.opname in _CHANGING_OPS
+                or instr.opname.startswith("INPLACE_")
+                or (instr.opname == "BINARY_OP" and "=" in instr.argrepr)
+                for instr in dis.get_instructions(code)
+            )
+            self._changing_codes[code] = known
+        return known
+
+    def _refresh(self, obj: Any, name: str) -> None:
+        """Take an assignment ``__setattr__`` saw into the snapshot."""
+        entry = self._watched.get(id(obj))
+        if entry is None or entry[0] is not obj:
+            if type(obj) in self._classes:
+                self._watch(obj)
+            return
+        state = getattr(obj, "__dict__", {})
+        if name in state:
+            entry[1][name] = _fingerprint(state[name])
+            if type(state[name]) in _CONTAINERS:
+                self._held.setdefault(id(state[name]), set()).add(id(obj))
+        else:
+            entry[1].pop(name, None)
+
+    @contextlib.contextmanager
+    def watching(self) -> Iterator[None]:
+        """Compare the watched instances wherever a change can have happened."""
+        # Chained: calls may be recorded by a profile function of their own.
+        previous: Any = sys.getprofile()
+        previous_threads = threading.getprofile()
+
+        def profile(frame: Any, event: str, arg: Any) -> None:
+            if self.active:
+                self._event(frame, event, arg)
+            if previous is not None:
+                previous(frame, event, arg)
+
+        sys.setprofile(profile)
+        threading.setprofile(profile)
+        try:
+            yield
+        finally:
+            sys.setprofile(previous)
+            threading.setprofile(previous_threads)
+
+    def _event(self, frame: Any, event: str, arg: Any) -> None:
+        if frame.f_globals is _PROBE_GLOBALS:
+            return  # the recorders' own code; they keep the snapshots current
+        if event == "c_return":
+            if not self._in_project(frame):
+                return
+            holders = self._held.get(id(getattr(arg, "__self__", None)))
+            if holders:
+                self._compare(frame, holders)
+            elif arg is delattr:
+                self._compare(frame)
+        elif event == "call":
+            caller = frame.f_back
+            if not self._in_project(caller):
+                return
+            if self._may_change(caller.f_code):
+                self._compare(caller)
+            if not self._in_project(frame) and any(
+                id(value) in self._held or id(value) in self._watched
+                for value in list(frame.f_locals.values())
+            ):
+                self._library.add(frame)
+        elif event == "return":
+            if frame in self._library:
+                self._library.discard(frame)
+                self._compare(frame)
+                return
+            if not self._in_project(frame):
+                return
+            if frame.f_code.co_name == "__init__":
+                built = frame.f_locals.get(next(iter(frame.f_code.co_varnames), ""))
+                if type(built) in self._classes and id(built) not in self._watched:
+                    self._watch(built)
+            if self._may_change(frame.f_code) or not self._in_project(frame.f_back):
+                self._compare(frame)
+
+    def _compare(self, ran: Any, keys: Iterable[int] | None = None) -> None:
+        """Record what changed since the last comparison, made by ``ran``.
+
+        ``keys`` limits the comparison to those watched instances.
+        """
+        writer = ran
+        while writer is not None and not self._in_project(writer):
+            writer = writer.f_back
+        entries = (
+            list(self._watched.items())
+            if keys is None
+            else [
+                (key, self._watched[key]) for key in list(keys) if key in self._watched
+            ]
+        )
+        for key, (obj, before) in entries:
+            after = _snapshot(obj)
+            if after is None or after == before:
+                continue
+            self._watched[key] = (obj, after)
+            self._note_held(obj)
+            if writer is None or self._owns(writer, obj):
+                continue
+            for name in sorted(set(before) | set(after)):
+                old, new = before.get(name), after.get(name)
+                if old == new:
+                    continue
+                if new is None:
+                    change = "deleted"
+                elif old is not None and old[0] == new[0]:
+                    change = "mutated"
+                else:
+                    change = "bypassed"
+                self._record(obj, name, writer, change)
 
     def install(self) -> None:
         """Wrap every target class loaded so far; safe to call repeatedly."""
@@ -489,6 +759,8 @@ class WriteRecorder:
             if recorder.active:
                 recorder._check(obj, name, sys._getframe(1))
             original(obj, name, value)
+            if recorder.active:
+                recorder._refresh(obj, name)
 
         setattr(__setattr__, self._MARK, True)
         # A class's own __setattr__ that calls super().__setattr__ is the
@@ -539,6 +811,10 @@ class WriteRecorder:
         descriptor = inspect.getattr_static(type(obj), name, None)
         if isinstance(descriptor, property) and descriptor.fset is not None:
             return  # the class's own setter decides what the assignment does
+        self._record(obj, name, frame, "assigned")
+
+    def _record(self, obj: Any, name: str, frame: Any, change: str) -> None:
+        relpath = self._project.relpath(frame.f_code.co_filename)
         owner = type(obj).__qualname__
         module = _local_module(_module_of(frame), self._package)
         writer = f"{module}:{_code_name(frame.f_code)}"
@@ -553,8 +829,97 @@ class WriteRecorder:
                 "writer": writer,
                 "file": relpath,
                 "line": frame.f_lineno,
+                "change": change,
             }
         )
+
+
+_WATCH_DEPTH = 3  # how deep the case's arguments are searched for instances
+_CONTENT_LIMIT = 1000  # a larger container is compared by its length only
+
+
+class _Held:
+    """What a builtin container holds: a shallow copy, compared item by item.
+
+    Equal items compare in C, unchanged ones by identity alone, so comparing
+    costs little more than copying. An item that cannot say whether it equals
+    itself (an array with an elementwise ``==``) makes the copy differ.
+    """
+
+    __slots__ = ("items",)
+
+    def __init__(self, value: Any) -> None:
+        self.items: Any = (
+            len(value) if len(value) > _CONTENT_LIMIT else type(value)(value)
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, _Held):
+            return NotImplemented
+        try:
+            return bool(self.items == other.items)
+        except Exception:  # noqa: BLE001 - any failure to compare is a change
+            return False
+
+    __hash__ = None  # type: ignore[assignment]
+
+
+_CONTAINERS = (list, dict, set, bytearray)
+# Bytecode that changes state without a call the profiler would report.
+_CHANGING_OPS = frozenset(
+    {"STORE_SUBSCR", "DELETE_SUBSCR", "DELETE_ATTR", "STORE_SLICE"}
+)
+# Names through which code writes past a class's __setattr__.
+_BYPASS_NAMES = frozenset({"__dict__", "__setattr__", "__delattr__"})
+
+
+def _fingerprint(value: Any) -> tuple[int, Any]:
+    """Which object ``value`` is and, for a builtin container, what it holds."""
+    if type(value) in _CONTAINERS:
+        return id(value), _Held(value)
+    return id(value), None
+
+
+def _snapshot(obj: Any) -> dict[str, Any] | None:
+    state = getattr(obj, "__dict__", None)
+    if not isinstance(state, dict):
+        return None
+    return {name: _fingerprint(value) for name, value in list(state.items())}
+
+
+def _origin_chain(
+    frame: Any, origin_module: str, package: str | None, in_project: Any
+) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+    """The code of ``origin_module`` up the stack from ``frame``, and the way there.
+
+    Returns the origin (``from``, ``caller``) and the project code ``via``
+    which it reached ``frame``, outermost first, ``frame`` included; ``None``
+    when no code of ``origin_module`` is on the stack.
+    """
+    via: list[dict[str, Any]] = []
+    while frame is not None:
+        if frame.f_globals is _PROBE_GLOBALS:
+            if frame.f_code.co_name not in _WRAPPER_NAMES:
+                return None  # the probe's own driver: the case started here
+            # A recorder's wrapper around a constructor or __setattr__.
+            frame = frame.f_back
+            continue
+        if _module_of(frame) == origin_module:
+            via.reverse()
+            origin = {
+                "from": _local_module(origin_module, package),
+                "caller": _code_name(frame.f_code),
+            }
+            return origin, via
+        if in_project(frame):
+            via.append(
+                {
+                    "module": _local_module(_module_of(frame), package),
+                    "caller": _code_name(frame.f_code),
+                }
+            )
+        frame = frame.f_back
+    return None
 
 
 class InstanceRecorder:
@@ -566,6 +931,11 @@ class InstanceRecorder:
     ``super().__init__()`` chain is one instantiation of the most derived class.
     Objects created by code outside the target root (the probe building case
     arguments, the standard library) are ignored.
+
+    With an ``origin`` module given to ``start``, an object built by other
+    code while code of that module is further up the stack carries the
+    ``origin`` and the project code ``via`` which it was built, as transitive
+    calls do in ``CallRecorder``.
     """
 
     _MARK = "__pat_instance_recorder__"
@@ -577,9 +947,17 @@ class InstanceRecorder:
         self.instances: list[dict[str, Any]] = []
         self._seen: set[tuple[str, str, int]] = set()
         self._building: set[int] = set()
+        self._origin: str | None = None
 
-    def start(self) -> None:
+    def _in_project(self, frame: Any) -> bool:
+        return (
+            frame.f_globals is not _PROBE_GLOBALS
+            and self._project.relpath(frame.f_code.co_filename) is not None
+        )
+
+    def start(self, origin: str | None = None) -> None:
         """Begin recording one case, wrapping classes imported since the last."""
+        self._origin = origin
         for cls in self._project.classes():
             klass: Any = cls  # the unbound constructor, which mypy reads as bound
             if not getattr(klass.__init__, self._MARK, False):
@@ -630,16 +1008,19 @@ class InstanceRecorder:
         if key in self._seen:
             return
         self._seen.add(key)
-        self.instances.append(
-            {
-                "class": cls.__qualname__,
-                "module": _local_module(cls.__module__, self._package),
-                "from": source,
-                "creator": f"{source}:{_code_name(frame.f_code)}",
-                "file": relpath,
-                "line": frame.f_lineno,
-            }
-        )
+        instance: dict[str, Any] = {
+            "class": cls.__qualname__,
+            "module": _local_module(cls.__module__, self._package),
+            "from": source,
+            "creator": f"{source}:{_code_name(frame.f_code)}",
+            "file": relpath,
+            "line": frame.f_lineno,
+        }
+        if self._origin is not None and _module_of(frame) != self._origin:
+            chain = _origin_chain(frame, self._origin, self._package, self._in_project)
+            if chain is not None:
+                instance["origin"], instance["via"] = chain
+        self.instances.append(instance)
 
 
 class ImportRecorder:
@@ -726,10 +1107,26 @@ class ImportRecorder:
         importlib.import_module = hooked_import_module
 
     def forbidden_hits(
-        self, forbidden: list[str], allow: list[str], phases: set[str]
+        self,
+        forbidden: list[str],
+        allow: list[str],
+        phases: set[str],
+        package: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Recorded imports of a ``forbidden`` module that ``allow`` does not lift.
+
+        A project module is named as the reference names it, without the
+        package the probe imported the target under: inside package ``t``,
+        ``from . import repository`` imports ``t.repository``, which
+        ``"repository"`` forbids.
+        """
+
         def matches(module_name: str, prefix: str) -> bool:
-            return module_name == prefix or module_name.startswith(prefix + ".")
+            local = _local_module(module_name, package) or module_name
+            return any(
+                name == prefix or name.startswith(prefix + ".")
+                for name in (module_name, local)
+            )
 
         hits: list[dict[str, Any]] = []
         seen: set[tuple[str, str, int]] = set()
@@ -901,6 +1298,22 @@ def _member_where(obj: Any, name: str, static: Any) -> str:
     return f"{owner.__module__}.{owner.__qualname__}" if owner else "dynamic"
 
 
+def _member_type(
+    obj: Any, name: str, class_name: str, namespace: dict[str, Any], package: str | None
+) -> dict[str, Any]:
+    """Whether member ``name`` of ``obj`` holds an instance of ``class_name``."""
+    try:
+        value = getattr(obj, name)
+        expected = _resolve_name(class_name, namespace, package)
+    except JobTimeout:
+        raise
+    except BaseException as exc:
+        return {"type_ok": False, "type_error": _describe_exception(exc)}
+    if not isinstance(expected, type):
+        return {"type_ok": False, "type_error": f"{class_name} is not a class"}
+    return {"type": type(value).__qualname__, "type_ok": isinstance(value, expected)}
+
+
 def _describe_member(obj: Any, name: str, arity: int | None) -> dict[str, Any]:
     """Whether ``obj`` has ``name`` at run time, and where it comes from.
 
@@ -983,11 +1396,24 @@ def _inspect_class(
         outcome["raised"] = _describe_exception(exc)
         return outcome
     outcome["constructed"] = True
+    try:
+        _run_steps(obj, list(case.get("steps") or []), namespace, package)
+    except CaseSetupError as exc:
+        outcome["status"] = "error"
+        outcome["failures"].append(f"setup: {exc}")
+        return outcome
+    _SPY_CALLS.clear()
     members: dict[str, Any] = {}
     for name in observe.get("names") or []:
         members[str(name)] = _describe_member(obj, str(name), None)
     for name, arity in (observe.get("callables") or {}).items():
         members[str(name)] = _describe_member(obj, str(name), int(arity))
+    for name, class_name in (observe.get("types") or {}).items():
+        member = members.setdefault(str(name), _describe_member(obj, str(name), None))
+        if member.get("present"):
+            member.update(
+                _member_type(obj, str(name), str(class_name), namespace, package)
+            )
     outcome["members"] = members
     if observe.get("observer"):
         outcome["observer"] = _check_observer(
@@ -999,11 +1425,18 @@ def _inspect_class(
 def _check_singleton(
     cls: type, spec: dict[str, Any], args: list[Any], kwargs: dict[str, Any]
 ) -> dict[str, Any]:
-    """Obtain the instance twice, through ``spec["access"]`` or the constructor."""
+    """Obtain the instance twice, through ``spec["access"]`` or the constructor.
+
+    ``access`` names a class or static method of ``cls`` or, failing that, a
+    function of its module (``get_config()``).
+    """
     access = spec.get("access")
     result: dict[str, Any] = {"access": access or "constructor"}
     try:
-        obtain = getattr(cls, str(access)) if access else cls
+        obtain = cls
+        if access:
+            module = sys.modules.get(cls.__module__)
+            obtain = getattr(cls, str(access), None) or getattr(module, str(access))
         first = obtain(*args, **kwargs)
         second = obtain(*args, **kwargs)
     except JobTimeout:
@@ -1033,16 +1466,82 @@ def _check_observer(
             _build_value(value, namespace, package)
             for value in spec.get("notify_args") or []
         ]
-        getattr(obj, str(spec["subscribe"]))(listener)
+        # A keyed observer takes the event first: subscribe("created", fn).
+        subscribe_args = [
+            _build_value(value, namespace, package)
+            for value in spec.get("subscribe_args") or []
+        ]
+        getattr(obj, str(spec["subscribe"]))(*subscribe_args, listener)
         result["notified"] = notify()
         if spec.get("unsubscribe"):
-            getattr(obj, str(spec["unsubscribe"]))(listener)
+            getattr(obj, str(spec["unsubscribe"]))(*subscribe_args, listener)
             result["after_unsubscribe"] = notify()
     except JobTimeout:
         raise
     except BaseException as exc:
         result["error"] = _describe_exception(exc)
     return result
+
+
+def _run_steps(
+    subject: Any,
+    steps: list[dict[str, Any]],
+    namespace: dict[str, Any],
+    package: str | None,
+) -> None:
+    """Call ``steps`` (other methods of ``subject``) to prepare its state.
+
+    A step that cannot run means the case could not be set up, like an
+    argument that cannot be built.
+    """
+    for number, step in enumerate(steps):
+        name = str(step.get("call"))
+        try:
+            args = [_build_value(v, namespace, package) for v in step.get("args", [])]
+            kwargs = {
+                k: _build_value(v, namespace, package)
+                for k, v in (step.get("kwargs") or {}).items()
+            }
+            _run_to_completion(getattr(subject, name)(*args, **kwargs))
+        except (JobTimeout, CaseSetupError):
+            raise
+        except BaseException as exc:
+            raise CaseSetupError(
+                f"step {number} ({name}) raised {_describe_exception(exc)}"
+            ) from exc
+
+
+_DRAIN_LIMIT = 10_000  # items taken from a generator the target returns
+
+
+def _run_to_completion(result: Any) -> None:
+    """Run the body of a coroutine or generator the target's call returned.
+
+    Calling an ``async def`` or generator function only creates the object;
+    without this, its body would never run and nothing would be observed.
+    A generator is drained up to ``_DRAIN_LIMIT`` items, so an endless one
+    ends instead of running into the timeout.
+    """
+    if inspect.iscoroutine(result):
+        import asyncio  # only targets that use it pay for importing it
+
+        asyncio.run(result)
+    elif inspect.isasyncgen(result):
+        import asyncio
+
+        async def drain() -> None:
+            taken = 0
+            async for _ in result:
+                taken += 1
+                if taken >= _DRAIN_LIMIT:
+                    break
+            await result.aclose()
+
+        asyncio.run(drain())
+    elif inspect.isgenerator(result):
+        for _ in itertools.islice(result, _DRAIN_LIMIT):
+            pass
+        result.close()
 
 
 def _run_case(
@@ -1068,12 +1567,14 @@ def _run_case(
     the target starts are followed. An exception the call raises is
     reported, not judged.
     """
+    _reset_random()
     if request.get("kind") == "class":
         return _inspect_class(index, case, request, module, package)
     _SPY_CALLS.clear()
     observe = request.get("observe") or {}
     if instances is not None and observe.get("instances"):
-        instances.start()
+        transitive = observe.get("instances") == "transitive"
+        instances.start(module.__name__ if transitive else None)
     namespace = vars(module)
     qualname: str = request["qualname"]
     owner_name, _, member_name = qualname.rpartition(".")
@@ -1115,6 +1616,17 @@ def _run_case(
         else:
             subject = None
             func = _resolve_name(qualname, namespace, package)
+        if case.get("steps"):
+            if subject is None:
+                raise CaseSetupError("steps need an instance to call methods on")
+            # The steps prepare the instance; what they do is not observed.
+            recording = instances is not None and instances.active
+            if instances is not None:
+                instances.active = False
+            _run_steps(subject, list(case["steps"]), namespace, package)
+            if instances is not None:
+                instances.active = recording
+            _SPY_CALLS.clear()
         args = [_build_value(v, namespace, package) for v in case.get("args", [])]
         kwargs = {
             k: _build_value(v, namespace, package)
@@ -1139,6 +1651,8 @@ def _run_case(
     project = _Project(str(root), package) if root else None
     if observe.get("calls") == "edges":
         calls = CallRecorder(None, package, project)
+    elif observe.get("calls") == "transitive":
+        calls = CallRecorder(module.__name__, package, project, transitive=True)
     elif observe.get("calls"):
         calls = CallRecorder(module.__name__, package)
     tracing = bool(capture or flow_calls)
@@ -1146,12 +1660,18 @@ def _run_case(
         project = _Project(os.path.dirname(str(module.__file__)), package)
     # Flow tracing installs its own trace function; line coverage needs one too.
     lines = LineRecorder(func, project) if project is not None and not tracing else None
-    if writes is not None and observe.get("writes"):
-        writes.start()
+    watch_writes = writes is not None and bool(observe.get("writes"))
+    if writes is not None and watch_writes:
+        writes.start([subject, *args, *kwargs.values()])
     try:
         with (
             calls.watching() if calls else contextlib.nullcontext(),
             lines.watching() if lines else contextlib.nullcontext(),
+            (
+                writes.watching()
+                if writes is not None and watch_writes
+                else contextlib.nullcontext()
+            ),
             _joining_new_threads(),
         ):
             if tracing and project is not None:
@@ -1165,7 +1685,7 @@ def _run_case(
                     called if flow_calls else None,
                 )
             else:
-                func(*args, **kwargs)
+                _run_to_completion(func(*args, **kwargs))
     except CaseSetupError as exc:
         outcome["status"] = "error"
         failures.append(f"setup: {exc}")
@@ -1306,7 +1826,17 @@ def _run_job(
     return result
 
 
+def _reset_random() -> None:
+    """Seed ``random`` alike before importing the target and before every case.
+
+    Code that shuffles or samples then makes the same calls in every run, and
+    each case starts from the same state whatever ran before it.
+    """
+    random.seed(0)
+
+
 def _import_target(request: dict[str, Any]) -> tuple[Any, str | None]:
+    _reset_random()
     root = request["target_root"]
     package = request.get("package")
     sys.path.insert(0, os.path.dirname(root) if package else root)
@@ -1349,6 +1879,7 @@ def main() -> int:
                     list(request.get("forbidden") or []),
                     list(request.get("allow") or []),
                     {"import"},
+                    package,
                 )
                 response = {"status": "completed", "cases": [], "imports": hits}
             elif "jobs" in request:

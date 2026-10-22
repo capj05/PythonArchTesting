@@ -40,6 +40,7 @@ from .models import (
 )
 from .order import sort_matches, sort_results, sort_targets
 from .serialize import to_legacy_schema_v2
+from .summary import count_unverified
 from .target_ids import normalize_target_ids
 
 _VALIDATIONRESULT_FIELD_MAP = {
@@ -457,6 +458,7 @@ def _results_summary_ir(summary_payload: Optional[Dict[str, Any]]) -> ResultsSum
             dict(row) for row in (data.get("top_source_files") or [])
         ),
         timings=(dict(data["timings"]) if data.get("timings") is not None else None),
+        unverified_total=int(data.get("unverified_total", 0)),
     )
 
 
@@ -907,6 +909,7 @@ def _build_results_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     return {
         "results_total": len(results),
+        "unverified_total": count_unverified(results),
         "status_counts": status_counts,
         "severity_counts": severity_counts,
         "category_counts": dict(

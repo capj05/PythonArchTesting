@@ -266,6 +266,7 @@ def evaluate_rules_for_target(
     target_root: Path | None = None,
     source_root: Path | None = None,
     sandbox: Any = None,
+    reference_runs: Dict[str, Any] | None = None,
 ) -> Tuple[List[Any], List[Dict[str, Any]]]:
     """
     Evaluate all rules for a target.
@@ -281,6 +282,7 @@ def evaluate_rules_for_target(
         target_root: Target project root; only set when dynamic checks run
         source_root: Reference project root; only set when dynamic checks run
         sandbox: SandboxPolicy for child interpreters in dynamic checks
+        reference_runs: Reference outcomes shared with the run's other targets
 
     Returns:
         Tuple of (rule_results, errors)
@@ -297,6 +299,7 @@ def evaluate_rules_for_target(
         target_root=target_root,
         source_root=source_root,
         sandbox=sandbox,
+        reference_runs=reference_runs if reference_runs is not None else {},
     )
     rule_results: List[Any] = []
     errors: List[Dict[str, Any]] = []

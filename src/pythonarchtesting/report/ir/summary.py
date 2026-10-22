@@ -25,6 +25,11 @@ def top_counts(values: Iterable[str], limit: int = 5) -> List[Dict[str, Any]]:
     return [{"name": name, "count": count} for name, count in ranked[:limit]]
 
 
+def count_unverified(results: Iterable[Dict[str, Any]]) -> int:
+    """Results that passed although a runtime check left something unchecked."""
+    return sum(1 for item in results if ((item.get("details") or {}).get("unverified")))
+
+
 def build_results_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Build deterministic summary fields from serialized result dictionaries."""
     status_counts: Dict[str, int] = {}
@@ -53,6 +58,7 @@ def build_results_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     return {
         "results_total": len(results),
+        "unverified_total": count_unverified(results),
         "status_counts": status_counts,
         "severity_counts": severity_counts,
         "category_counts": dict(

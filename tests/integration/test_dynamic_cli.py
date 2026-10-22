@@ -456,6 +456,54 @@ def test_with_dynamic_no_skip_warning_is_printed(tmp_path: Path, capsys) -> None
     assert "warning:" not in capsys.readouterr().err
 
 
+def test_a_pass_with_unchecked_code_is_flagged_and_counted(
+    tmp_path: Path, capsys
+) -> None:
+    # The reordered transfer leaves lines no case runs (see the showcase).
+    exit_code, rows = _run(
+        "target_pass_other_order",
+        tmp_path,
+        "--dynamic",
+        case=_SHOWCASE / "dyn003_encapsulation",
+    )
+    err = capsys.readouterr().err
+
+    assert exit_code == 0
+    assert [row["details"]["unverified"] for row in rows] == [["unexercised_lines"]]
+    warnings = [line for line in err.splitlines() if line.startswith("warning:")]
+    assert warnings == [
+        "warning: 1 runtime rule result(s) passed with code or cases left "
+        "unchecked; see details.unverified"
+    ]
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    assert report["summary"]["results"]["unverified_total"] == 1
+
+
+def test_the_markdown_report_counts_passes_with_unchecked_code(
+    tmp_path: Path, capsys
+) -> None:
+    case = _SHOWCASE / "dyn003_encapsulation"
+    main(
+        [
+            "--source",
+            str(case / "reference"),
+            "--target",
+            str(case / "assignments" / "target_pass_other_order"),
+            "--format",
+            "markdown",
+            "--output",
+            str(tmp_path / "md"),
+            "--dynamic",
+        ]
+    )
+    capsys.readouterr()
+
+    pages = "\n".join(
+        path.read_text(encoding="utf-8") for path in (tmp_path / "md").rglob("*.md")
+    )
+    assert "- Passed With Unchecked Code: 1 (see `details.unverified`)" in pages
+
+
 _BROKEN_CASE = """
 from typing import Annotated, Any
 

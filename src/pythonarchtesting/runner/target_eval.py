@@ -102,6 +102,7 @@ def evaluate_target(
         target_root=spec.path if run_state.dynamic_enabled else None,
         source_root=run_state.source_path if run_state.dynamic_enabled else None,
         sandbox=run_state.sandbox,
+        reference_runs=run_state.reference_runs,
     )
     rule_results.extend(eval_rule_results)
     rule_by_id = {rule.rule_id: rule for rule in run_state.rules}

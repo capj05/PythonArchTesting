@@ -45,6 +45,13 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _unverified_lines(total: int) -> list[str]:
+    """The count of runtime passes that hold only for the code their cases ran."""
+    if not total:
+        return []
+    return [f"- Passed With Unchecked Code: {total} (see `details.unverified`)"]
+
+
 def _format_count_dict(counts: Mapping[str, int]) -> str:
     return " · ".join(f"{escape_markdown(str(k))}: {v}" for k, v in counts.items())
 
@@ -106,6 +113,7 @@ def _render_target_page(
             "",
             f"- Total Results: {target.summary.results_total}",
             f"- Status Counts: {_format_count_dict(target.summary.status_counts)}",
+            *_unverified_lines(target.summary.unverified_total),
             f"- Severity Counts: {_format_count_dict(target.summary.severity_counts)}",
             f"- Category Counts: {_format_count_dict(target.summary.category_counts)}",
             "",
@@ -267,6 +275,7 @@ def render_markdown_bundle(
                 index_lines.append(
                     f"- Status Counts: {_format_count_dict(results_summary.status_counts)}"
                 )
+            index_lines.extend(_unverified_lines(results_summary.unverified_total))
             if results_summary.severity_counts:
                 index_lines.append(
                     f"- Severity Counts: {_format_count_dict(results_summary.severity_counts)}"

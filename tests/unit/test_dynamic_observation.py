@@ -199,6 +199,7 @@ def test_a_write_from_a_plain_function_is_foreign(bank_root: Path) -> None:
             "writer": "bank:direct",
             "file": "bank.py",
             "line": _line(_BANK, "account.balance = 99.0"),
+            "change": "assigned",
         }
     ]
 

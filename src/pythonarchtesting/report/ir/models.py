@@ -89,6 +89,8 @@ class ResultsSummary:
     top_rules: Tuple[Dict[str, Any], ...]
     top_source_files: Tuple[Dict[str, Any], ...]
     timings: Optional[Dict[str, Any]]
+    # Runtime passes that left code or cases unchecked (details.unverified).
+    unverified_total: int = 0
 
 
 @dataclass(frozen=True, slots=True)
