@@ -34,6 +34,7 @@ arguments and looks at the object itself.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
+| `types` | `dict[str, str] \| None` | `None` | Member name → class (`{"repository": "repository.OrderRepository"}`): the member must hold an instance of that class or a subclass. The class is named as in [`$new`](../dynamic-checks.md#cases), by the reference's name; a target that renamed the module or the class is checked against its matched class. |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
@@ -73,12 +74,16 @@ A target that only copies the keys it was given fails on the first case with
   `__getattr__`. The result records where the member came from.
 - That an instance can be built at all: a constructor that raises fails the
   case.
+- With `types`: what the member holds on the built instance is an instance of
+  the class (`isinstance`, so a subclass passes). A violation reads
+  `case 0: 'repository' is a dict, not an instance of repository.OrderRepository`.
 
 ## What it does not check
 
-- The member's type, value, or annotation — see
+- The member's value or annotation, or its type unless `types` names it — see
   [required_attribute](required_attribute.md) for the declared shape.
-- Members that appear only later, after other method calls.
+- Members that appear only after other method calls, unless the case calls
+  them first with `steps` ([Cases](../dynamic-checks.md#cases)).
 
 ## Security
 

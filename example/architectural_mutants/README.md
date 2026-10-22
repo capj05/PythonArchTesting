@@ -53,21 +53,24 @@ rule fails is a false positive.
 
 ## Findings
 
-- Runtime rules caught 18 of 19 mutants. Static rules caught 4 of the 10
+- Runtime rules caught all 19 mutants. Static rules caught 4 of the 10
   mutants whose intent has a static marker at all (I1, I2, I4); the other 9
   break intents no static marker can state (I3, I5–I7) and are out of their
   reach by construction. No mutant was caught by static rules alone. The
   static rules caught only violations that need an `import` statement (M02,
   M05, M07, M11). Every mutant that works through an
-  injected object (M01, M06), an attribute assignment (O3), a computed import
+  injected object (M01, M06), an attribute assignment or a change to what an
+  attribute holds (O3), a computed import
   (M12, M13), a missing call (O5), or a pattern's behaviour (O6) was caught
   at run time only. The computed imports of M12 and M13 happen inside
   `place()`, after the module has loaded, so `forbid_runtime_imports` (which
   watches the import itself) misses them and `forbid_runtime_calls` catches
   them when the module is used.
-- M10 survives both: filling `order.items` in place is a mutation of a
-  contained object, not an attribute assignment, which
-  `forbid_foreign_writes` documents as out of reach.
+- M10 fills `order.items` in place: no attribute is assigned, the list it
+  holds changes. It survived every rule until `forbid_foreign_writes` began
+  comparing what an object's attributes hold, not only watching their
+  assignment; it is now caught as `service:place changes what is held in
+  Order.items`.
 - E06 is flagged by `enforce_reference_calls`: a new helper module adds an
   edge (`controller -> responses`) the reference does not have. This is what
   the marker promises — the reference's module graph, exactly — and the

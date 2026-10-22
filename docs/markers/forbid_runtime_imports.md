@@ -38,6 +38,13 @@ or `importlib.import_module`.
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 
+A module of the project is named as in the reference, without the package the
+root is imported as: `"repository"` forbids `from . import repository`. When
+the target keeps that module under another name, the name of the matched
+module is forbidden instead (`storage` for a `repository.py` renamed to
+`storage.py`); a target module that holds several of the reference's modules
+keeps the reference name, since forbidding it would forbid the others too.
+
 ## Example
 
 ```python

@@ -19,7 +19,9 @@ Each target gets its own `exit_code`:
 - `1`: at least one result failed
 
 The CLI process itself also exits `2` when the run could not start at all — an
-invalid flag combination, a configuration error, a `--source` or `--target` path
+invalid flag combination (a non-default `--sandbox` or `--sandbox-memory-mb`
+without `--dynamic`, `--dynamic` with `--validate-declarations`, a sandbox that
+is not available on this machine), a configuration error, a `--source` or `--target` path
 that does not exist, or an output path that cannot be written. Those failures print a single `error: ...` line on stderr and produce no
 report. Exit codes `0` and `1` always mean a run completed and was judged.
 
@@ -38,6 +40,9 @@ from `[report].run_exit_policy`:
 
 Start with:
 
+- `run.mode`: `static-only` or `dynamic (sandbox: <mode>)`; read it before
+  trusting a pass. In a `static-only` run the runtime rules did not run and
+  their results are `SKIPPED` (`details.reason` = `dynamic_checks_disabled`)
 - `exit_code`
 - `summary.targets_total`
 - `summary.targets_failed`

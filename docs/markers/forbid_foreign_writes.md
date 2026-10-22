@@ -78,13 +78,33 @@ A target that writes `source.balance -= amount` fails with
 - Everything else is foreign: functions of other modules, module-level helpers
   of the same module, methods of other classes. Code nested in a method (a
   local function, a lambda) counts as outside it.
+- The same rule covers changes that assign nothing, each reported with its
+  `change` in `details.cases[i].writes`:
+  - `mutated` — what a `list`, `dict`, `set`, or `bytearray` attribute holds
+    changed: `account.history.append(x)`, `account.tags["k"] = v`,
+    `random.shuffle(account.history)`. The message reads
+    `bank:audit changes what is held in Account.history at bank.py:14`.
+  - `deleted` — `del account.balance`, `delattr(account, "balance")`.
+  - `bypassed` — an assignment past the class's `__setattr__`:
+    `account.__dict__["balance"] = 0`, `object.__setattr__(account, ...)`.
+
+  These are found by comparing the instances the case can reach — its
+  arguments, the instance a method runs on, the project instances they hold
+  (three levels deep), and every instance built while the case runs — before
+  and after the code that can change them: a container method returning, a
+  library function that was handed one of them returning, and project code
+  whose bytecode changes state without a call. A change made by library code
+  belongs to the nearest project code that called it; a method of the class
+  that hands its own list to a library function still owns the change.
 
 ## What it does not check
 
-- Changes inside a mutable attribute: `account.history.append(x)` does not
-  assign an attribute of `account`.
-- Deleting attributes (`del obj.x`), and assignments that bypass the class
-  (`object.__setattr__(obj, ...)`, `obj.__dict__[...] = ...`).
+- Changes inside objects an attribute holds other than the builtin containers,
+  and inside containers nested in them (`account.rows[0].append(x)`): only the
+  attribute's own value is compared. A container of more than 1000 items is
+  compared by its length only.
+- Changes made by threads the target starts may be attributed to the code the
+  main thread was running.
 - Instances of exceptions, enums, and classes outside the analysed project.
 - Classes defined inside functions or created after a case started.
 - What values are assigned. Results are never compared.

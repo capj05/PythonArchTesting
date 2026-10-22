@@ -3,7 +3,7 @@
 Require the matched target class to act as an Observer subject: registered
 listeners are notified, and unsubscribed ones no longer are.
 
-- **Category:** Runtime structure — design patterns
+- **Category:** Runtime structure
 - **Placement:** class-body `__archtest__: Annotated[...]`
 - **Runs only with:** `python-arch-test --dynamic`; without the flag the rule is
   `SKIPPED` and does not affect the exit code.
@@ -37,6 +37,7 @@ target's calling convention does not matter.
 |----------|------|---------|-------------|
 | `notify_args` | `list \| None` | `None` | Arguments passed to `notify`; `$new` objects allowed. |
 | `unsubscribe` | `str \| None` | `None` | Method that removes the listener; when given, a second notification must not reach it. |
+| `subscribe_args` | `list \| None` | `None` | Arguments passed before the listener to `subscribe` and `unsubscribe`, for a subject keyed by event: `subscribe_args=["created"]` calls `subscribe("created", listener)`. |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
@@ -44,6 +45,11 @@ target's calling convention does not matter.
 ## Example
 
 ```python
+from typing import Annotated, Any
+
+from pythonarchtesting.rules import enforce_runtime_observer
+
+
 class EventBus:
     __archtest__: Annotated[
         None,
@@ -65,6 +71,8 @@ was still called after unsubscribe()`. Worked example:
   called at least once (directly or through any of its methods).
 - With `unsubscribe`: after `unsubscribe(listener)`, another `notify` does
   not call it.
+- `subscribe`, `notify`, and `unsubscribe` are the reference's method names;
+  a target whose matched class renamed a method is called by its own name.
 
 ## What it does not check
 

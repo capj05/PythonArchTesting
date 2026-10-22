@@ -34,6 +34,8 @@ marker forbids the *creation* while still allowing the use.
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
 | `allow` | `list[str] \| None` | `None` | Modules exempt from `modules`. |
+| `transitive` | `bool` | `False` | Also count objects other project code builds while the target runs — a factory module of its own. |
+| `through` | `list[str] \| None` | `None` | With `transitive=True`: modules whose code may build the objects, e.g. the forbidden module itself building its internals. |
 | `init` | `dict \| None` | `None` | Methods only: constructor arguments for every case — this is where the injected object goes. |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
@@ -44,6 +46,8 @@ marker forbids the *creation* while still allowing the use.
 ```python
 from typing import Annotated, Any
 from pythonarchtesting.rules import forbid_runtime_instantiation
+
+from .models import Order
 
 
 class OrderService:
@@ -79,11 +83,30 @@ repository:OrderRepository at service.py:18`. Worked example:
 - Objects the case itself builds with `$new` are the caller's, not the
   target's, and do not count.
 
+### Factories (`transitive=True`)
+
+By default an object counts against the code that constructed it: a service
+that calls `factory.make_repository()` passes, because `OrderRepository()` ran
+in `factory`. With `transitive=True`, an object built by any project code
+while code of the target's module is further up the stack counts as well,
+and the violation names the chain:
+
+```text
+case 0: service:OrderService.place -> factory:make_repository creates repository:OrderRepository at factory.py:5
+```
+
+Code of the forbidden module itself then counts too — the repository
+building a `Row` while saving — so name it in `through`:
+`forbid_runtime_instantiation("repository", transitive=True,
+through=["repository"], ...)`. An object built by code of a `through` module,
+or by code that one called, is not the target's doing.
+
 ## What it does not check
 
 - Classes outside the analysed project (`sqlite3.Connection`); forbid the
   call that creates them with [`forbid_runtime_calls`](forbid_runtime_calls.md).
-- Objects created by other modules on the target's behalf (a factory module).
+- Objects created by other modules on the target's behalf (a factory module),
+  unless `transitive=True`.
 - Objects created through `cls.__new__` without `__init__`, or by `copy`/`pickle`.
 - What the code computes. Results are never compared.
 

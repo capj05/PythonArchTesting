@@ -19,7 +19,7 @@ different results but are layered the same way get the same verdict.
 | `DYN001` | [`require_runtime_calls`](markers/require_runtime_calls.md) | Does it delegate to the layer it must go through? |
 | `DYN001` | [`enforce_reference_calls`](markers/enforce_reference_calls.md) | Does the whole module-to-module call graph stay within the reference's? |
 | `DYN002` | [`forbid_runtime_imports`](markers/forbid_runtime_imports.md) | Which modules does importing it pull in, including by computed name? |
-| `DYN003` | [`forbid_foreign_writes`](markers/forbid_foreign_writes.md) | Are objects' attributes assigned only by their own class (encapsulation)? |
+| `DYN003` | [`forbid_foreign_writes`](markers/forbid_foreign_writes.md) | Are objects' attributes assigned, deleted, or their containers changed only by their own class (encapsulation)? |
 | `DYN004` | [`forbid_runtime_instantiation`](markers/forbid_runtime_instantiation.md) | Does the code receive its dependencies instead of creating them (dependency injection)? |
 | `DYN005` | [`require_runtime_members`](markers/require_runtime_members.md), [`forbid_runtime_members`](markers/forbid_runtime_members.md) | Which members does a built instance really have, dynamic attributes included? |
 | `DYN006` | [`is_runtime_concrete_class`](markers/is_runtime_concrete_class.md), [`is_runtime_abstract_class`](markers/is_runtime_abstract_class.md) | Is the class abstract or instantiable as Python decides it, external bases included? |
@@ -38,7 +38,9 @@ given` on stderr. The report's `run.mode` (and the Markdown header's
 
 A passing runtime result whose check left something out (lines no case ran,
 flow stages that could not be recognised, reference calls the target never
-made) carries that in its message, `OK: <summary>`, instead of a bare `OK`.
+made, a case that stopped at an exception) carries that in its message,
+`OK: <summary>`, instead of a bare `OK`, and lists it in `details.unverified`
+([What a pass means](#what-a-pass-means)).
 
 ```bash
 python-arch-test --source example/rule_showcase/dyn001_layers/reference \
@@ -76,10 +78,14 @@ and `kwargs` go to its constructor):
 | `args` | Positional arguments, a list. |
 | `kwargs` | Keyword arguments, a dict with string keys. |
 | `init` | Methods only: `{"args": [...], "kwargs": {...}}` for constructing the instance; overrides the rule-level `init`. Static and class methods are called without an instance. |
+| `steps` | Methods and classes only: other methods of the same instance called first, in order, to bring it into the state the case needs — `[{"call": "add_item", "args": [...], "kwargs": {...}}]`. For a method they run before the observed call and are not observed themselves; for a class they run after construction, before the instance is inspected. A step that raises means the case could not be set up. Not for `is_runtime_singleton`. |
 
 Values must be JSON literals (numbers, strings, booleans, `None`, lists, dicts
 with string keys). `{"$spy": "name"}` passes a recording stand-in that accepts
-any call ([`require_runtime_delegation`](markers/require_runtime_delegation.md#the-spy)). An object is built with `{"$new": "Name", "args": [...],
+any call ([`require_runtime_delegation`](markers/require_runtime_delegation.md#the-spy));
+`{"$spy": "repo", "returns": {"find": ...}}` makes `repo.find(...)` return the
+given value (built like any case value), so code that queries a collaborator
+keeps running. An object is built with `{"$new": "Name", "args": [...],
 "kwargs": {...}}`; `Name` is looked up in the target module, or as
 `module.Name` in the target package, so the target's own classes are used.
 This is how a controller gets its service injected:
@@ -89,6 +95,16 @@ This is how a controller gets its service injected:
                          "args": [{"$new": "repository.OrderRepository"}]}]}
 ```
 
+Names in cases are the reference's. When the matching step paired a
+reference class or method with a target one of another name or module, the
+target's name is used: `{"$new": "repository.OrderRepository"}` builds the
+target's `storage.OrderRepository`, and a step calling `add_item` calls the
+target's `add` when the two methods were matched.
+
+A function that is a coroutine (`async def`) or a generator only creates an
+object when called; the probe runs it to the end (`asyncio.run`, or by taking
+up to 10,000 items), so its body is observed.
+
 Pick cases that drive the code through the paths whose structure matters. An
 exception the call raises is recorded (`details.cases[i].raised`) but is not a
 failure by itself: whatever the code did before raising is still judged.
@@ -97,10 +113,15 @@ failure by itself: whatever the code did before raising is still judged.
 
 1. The target entity is found by the normal matching step, so a target that
    renamed a parameter or moved a helper is still matched.
-2. A fresh interpreter is started with `python -I -B` (no `PYTHONPATH`, no user
-   site-packages, no `__pycache__` written), working directory set to the
-   target root. A target root that contains `__init__.py` is imported as a
-   package, so its relative imports work.
+2. A fresh interpreter is started with `python -s -B` (no user site-packages,
+   no `__pycache__` written) in an environment without any `PYTHON*` variable
+   (no `PYTHONPATH`, no `PYTHONSTARTUP`) except `PYTHONHASHSEED=0`, working
+   directory set to the target root. A target root that contains `__init__.py`
+   is imported as a package, so its relative imports work.
+   The fixed hash seed, and `random` seeded alike before the target is
+   imported and before every case, make two runs of the same target observe
+   the same calls in the same order: iterating a set of strings, or shuffling,
+   cannot change a verdict from one run to the next.
 3. All call, write, instantiation, and class rules on the same target module
    run in one interpreter,
    each bounded by its own `timeout_s` (on platforms with `signal.setitimer`);
@@ -119,6 +140,12 @@ failure by itself: whatever the code did before raising is still judged.
    fails there as well, the case itself is wrong and the rule is `ERROR`
    (`reference_case_invalid`) instead, so a broken reference does not fail
    every student.
+6. Rules that compare the target with the reference
+   ([`enforce_reference_calls`](markers/enforce_reference_calls.md), runtime
+   [`enforce_flow`](markers/enforce_flow.md#runtime-check-with-cases)) and the
+   re-run of a case that could not be set up run the reference once per run:
+   with `--targets-dir`, every target is compared with the same outcome
+   instead of starting the reference again for each one.
 
 ## What a pass means
 
@@ -142,6 +169,22 @@ helpers it calls) and the result says what was left out:
 Line coverage is not recorded for runtime `enforce_flow`, whose stage tracing
 uses the same interpreter hook, or for rules on classes.
 
+Every passing result that left something out lists why in
+`details.unverified`, as stable codes:
+
+| Code | Left out |
+|------|----------|
+| `unexercised_lines` | Lines of the target no case ran. |
+| `unchecked_stages` | Flow stages that call no project function and could not be recognised. |
+| `reference_calls_not_made` | Edges of the reference the target never made (without `require_all`). |
+| `case_raised` | A case stopped at an exception; the summary names the case and the exception. |
+
+The status stays `OK` and the exit code is unchanged, but such a pass is not
+a clean one: the CLI prints `warning: N runtime rule result(s) passed with
+code or cases left unchecked` on stderr, the report's results summary counts
+them in `unverified_total` (**Passed With Unchecked Code** in Markdown), and
+the MCP server's `run_evaluation` returns `runtime_results_unverified`.
+
 ## Limits common to all runtime rules
 
 - Example-based: only the paths the cases execute are observed; see
@@ -153,7 +196,7 @@ uses the same interpreter hook, or for rules on classes.
   other processes, are not observed. Attribute writes, instantiation, and spy
   calls are recorded from any thread.
 - A target root without `__init__.py` whose module shares a name with a
-  standard-library module the runner itself imports (`json`, `os`, `math`,
+  standard-library module the runner itself imports (`json`, `os`, `math`, `random`,
   `inspect`, `traceback`, ...) resolves to the cached standard-library module.
   Make the root a package or rename the module.
 

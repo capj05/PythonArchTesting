@@ -76,9 +76,8 @@ accept 1 positional argument(s)`. Worked example:
 - Keyword-only parameters and defaults beyond the positional count.
 - What the methods return.
 
-`--validate-declarations` reports the protocol argument as a non-literal
-warning, as it does for `implements_protocol`; the protocol is resolved by
-name from the reference.
+The protocol is given as a reference to its class (or its dotted name) and is
+resolved by name from the reference, as for `implements_protocol`.
 
 ## Security
 

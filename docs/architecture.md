@@ -16,7 +16,12 @@ This is the current high-level pipeline for PythonArchTesting.
 For run execution, the `pythonarchtesting.runner` package prepares shared
 source state once (`runner.source_prep`) and evaluates each target separately
 (`runner.target_eval`); `runner.orchestrator` coordinates both single-target
-and multi-target runs.
+and multi-target runs. `run_projects` accepts `on_target_done(done, total,
+target_id)` to report progress per target. `runner.skips` counts the runtime
+results skipped because `--dynamic` was missing (the CLI warning, and
+`runtime_rules_skipped` in the MCP server). The declaration validation shared by
+`--validate-declarations` and the MCP server lives in
+`pythonarchtesting.declaration_validation`.
 
 ## Key Modules
 
@@ -52,6 +57,7 @@ normalizes them into shared declaration entries.
 - `pythonarchtesting.rules.compilation.decorators.nominal_type`
 - `pythonarchtesting.rules.compilation.decorators.protocols`
 - `pythonarchtesting.rules.compilation.decorators.python_modifiers`
+- `pythonarchtesting.rules.compilation.decorators.runtime_structure`
 
 `pythonarchtesting.rules.compilation` is the canonical compiler namespace.
 Each decorator module turns its normalized declaration entries into rule
@@ -119,8 +125,8 @@ starts the child in its own process group and kills the group when the probe
 exits or times out, so processes the target started neither survive nor hold
 the output pipes open.
 
-`dynamic.runner` starts a child interpreter (`python -I -B`, wall-clock
-timeout, working directory set to the target root) and hands the cases to
+`dynamic.runner` starts a child interpreter (`python -s -B`, no `PYTHON*`
+variable but `PYTHONHASHSEED=0`, wall-clock timeout, working directory set to the target root) and hands the cases to
 `dynamic.probe` as JSON on stdin. The probe is a standard-library-only script:
 it imports the target, calls it once per case, and writes one JSON result to stdout
 while the target's own output is redirected to stderr. Import errors, timeouts,
@@ -128,7 +134,7 @@ and crashed interpreters come back as probe statuses rather than exceptions, so
 one broken target cannot abort a multi-target run.
 
 The probe never compares what a call returns; it reports what the code did,
-through five observers chosen per request (`observe`):
+through observers chosen per request (`observe`):
 
 - `ImportRecorder` wraps `builtins.__import__`, `importlib.__import__`, and
   `importlib.import_module` before the target is imported and keeps each
@@ -148,8 +154,10 @@ through five observers chosen per request (`observe`):
   root and records the outermost construction of each object together with
   the project frame that asked for it, from before a method's instance is
   built (`forbid_runtime_instantiation`).
+- `LineRecorder` installs a `sys.settrace` hook for one call and records which
+  lines of the target's own code run, for `details.coverage`.
 
-For a class target the probe does not call anything: `_inspect_class` reports
+Two paths use no observer. For a class target the probe does not call anything: `_inspect_class` reports
 `inspect.isabstract` and the abstract methods, builds an instance from the
 case unless told not to, and describes the requested members on it — where
 each is found and, for protocol methods, whether its signature binds the
@@ -158,10 +166,11 @@ rules (DYN008) it also obtains a singleton twice and compares identity, or
 subscribes a spy listener and notifies. A spy (`{"$spy": name}` in a case)
 is a probe-made stand-in whose calls are collected in `_SPY_CALLS`, cleared
 at the start of every case.
-- `_call_with_trace` installs a `sys.settrace` hook for one call and records
-  the project functions called while each statement labelled by a `flow`
-  marker runs (reference) or every project function called, in order
-  (target), for runtime `enforce_flow`. It records no values.
+
+`_call_with_trace` serves runtime `enforce_flow`: it installs a `sys.settrace`
+hook for one call and records the project functions called while each
+statement labelled by a `flow` marker runs (reference) or every project
+function called, in order (target). It records no values.
 
 ### Reporting
 
@@ -171,6 +180,22 @@ at the start of every case.
 
 Reporting converts run state into a stable report structure, then renders JSON
 or Markdown.
+
+### MCP Server
+
+- `pythonarchtesting.mcp_server.server`
+- `pythonarchtesting.mcp_server.evaluation`
+- `pythonarchtesting.mcp_server.reports`
+- `pythonarchtesting.mcp_server.markers`
+- `pythonarchtesting.mcp_server.errors`
+
+`mcp_server.server` registers seven tools and serves them on stdio
+(`python-arch-test-mcp`). `.evaluation` runs `run_projects` and the report
+generators exactly as the CLI does; `.reports` reads a saved `report.json`;
+`.markers` reads the marker pages from `docs/markers` in a checkout, otherwise
+from `share/pythonarchtesting/markers` (installed as data files, also looked up
+under the user base for `pip install --user`); `.errors` holds `ToolInputError`.
+Nothing outside the package imports `mcp`. See [mcp.md](mcp.md).
 
 ## Where To Extend Features
 

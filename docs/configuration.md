@@ -11,6 +11,10 @@ auto-discovery in this order:
 1. explicit `--config path/to/file.conf`
 2. auto-discovered `.pythonarchtesting` from the current working directory
 
+The [MCP server](mcp.md) never uses the working directory: it loads an
+explicit `config`, else `.pythonarchtesting` in `source` or its parent, and
+never `PYTHON_ARCH_TARGET_PATH`.
+
 CLI arguments remain the highest-priority overrides after file loading.
 Environment-variable overlays are not supported by `load_config()`.
 
@@ -141,5 +145,8 @@ user onboarding:
 
 ## Removed Sections
 
-- `[type_check]` is no longer supported. Validation now fails if it appears in
-  a user config file.
+- `[arch_rules]`, `[runtime]`, `[structural_check]`, and `[type_check]` are no
+  longer supported. Validation now fails if one appears in a user config file.
+
+Runtime checks have no config section: `--dynamic`, `--sandbox`,
+`--sandbox-memory-mb`, and the arguments of the runtime markers control them.

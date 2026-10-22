@@ -4,7 +4,7 @@ Require the matched target function or method to delegate to an injected
 collaborator — the runtime core of Strategy, Decorator, Proxy, and similar
 patterns.
 
-- **Category:** Runtime structure — design patterns
+- **Category:** Runtime structure
 - **Placement:** function- or method-body `__archtest__: Annotated[...]`
 - **Runs only with:** `python-arch-test --dynamic`; without the flag the rule is
   `SKIPPED` and does not affect the exit code.
@@ -43,6 +43,11 @@ it.
 ## Example
 
 ```python
+from typing import Annotated, Any
+
+from pythonarchtesting.rules import require_runtime_delegation
+
+
 class PriceCalculator:
     def __init__(self, strategy: Any) -> None:
         self.strategy = strategy
@@ -69,9 +74,11 @@ strategy.apply()`. Worked example:
 - It is callable, and any public attribute is a method; every call is
   recorded with the spy's name, the member, and the argument count.
 - A call returns its first positional argument (or `None`), so a pass-through
-  chain keeps running. Code that needs a different return value may raise
-  afterwards; the delegation has been recorded by then, and an exception is
-  reported but not judged.
+  chain keeps running. Code that needs a different return value gets it from
+  `returns`, a dict of member name to value (`"__call__"` for calling the spy
+  itself): `{"$spy": "repo", "returns": {"find": {"$new": "Order"}}}`. Without
+  it such code may raise afterwards; the delegation has been recorded by
+  then, and an exception is reported but not judged.
 - Data attributes are not emulated: `strategy.rate * 2` gets a method, not a
   number.
 

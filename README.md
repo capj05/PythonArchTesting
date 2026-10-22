@@ -88,8 +88,10 @@ give call arguments, results are never compared)
   calls, and the target must call them in the same stage order, without
   carrying any markers; values are never compared
 
-At the report level these markers map to four evaluator families:
-`api_signature`, `import_policy`, `protocol_conformance`, and `variable_flow`.
+At the report level each result is grouped by evaluator family
+(`results[*].category`). Static results use `api_signature`, `attribute_contract`, `enum_type`, `import_policy`,
+`member_absence`, `member_set`, `method_set`, `nominal_type_relationship`,
+`protocol_conformance`, `python_modifier`, and `variable_flow`.
 With `--dynamic`, runtime results are reported under `runtime_calls`,
 `runtime_reference_calls`, `runtime_writes`, `runtime_instances`,
 `runtime_members`, `runtime_class_kind`, `runtime_protocol`, `runtime_pattern`,
@@ -117,6 +119,13 @@ Standard install:
 
 ```bash
 pip install .
+```
+
+Optional MCP server (adds `mcp>=2.3,<3` and the `python-arch-test-mcp`
+command):
+
+```bash
+pip install ".[mcp]"
 ```
 
 Editable development install with test and lint extras:
@@ -239,6 +248,9 @@ python-arch-test \
     --format json \
     --dynamic --sandbox bwrap
 ```
+
+`--sandbox-memory-mb N` sets the heap limit per child interpreter (default
+`1024`). `--sandbox` and `--sandbox-memory-mb` apply only with `--dynamic`.
 
 A pre-rendered Markdown bundle for this example lives at
 `example/checkout_assignment/reports/report_md/`. JSON output is not checked in;

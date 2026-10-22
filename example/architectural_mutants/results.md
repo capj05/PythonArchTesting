@@ -17,7 +17,7 @@ Unchanged solution: static failures none, runtime failures none.
 | M07 | O2 broken injection | place() imports a strategy lazily and replaces the injected one | yes | yes | forbid_imports, forbid_runtime_instantiation, require_runtime_delegation | - |
 | M08 | O3 foreign write | service assigns order.total instead of calling apply_total | no | yes | forbid_foreign_writes | - |
 | M09 | O3 foreign write | service sets order.status instead of calling mark_placed | no | yes | forbid_foreign_writes | - |
-| M10 | O3 foreign write | service fills order.items in place, without an assignment | no | no | - | require_runtime_calls: lines [10] of controller.py not run |
+| M10 | O3 foreign write | service fills order.items in place, without an assignment | no | yes | forbid_foreign_writes | - |
 | M11 | O4 forbidden technology | service imports pickle and serialises the order | yes | yes | forbid_imports, forbid_runtime_calls, forbid_runtime_imports | - |
 | M12 | O4 forbidden technology | service loads pickle through importlib.import_module | no | yes | forbid_runtime_calls | - |
 | M13 | O4 forbidden technology | service opens sqlite3 through __import__ | no | yes | forbid_runtime_calls | - |
@@ -34,11 +34,11 @@ Unchanged solution: static failures none, runtime failures none.
 |---|---|---|---|---|---|---|
 | O1 layer bypass | 4 | 1 | 4 | 4 | 0 | 3 |
 | O2 broken injection | 3 | 2 | 3 | 3 | 0 | 1 |
-| O3 foreign write | 3 | 0 | 2 | 2 | 0 | 2 |
+| O3 foreign write | 3 | 0 | 3 | 3 | 0 | 3 |
 | O4 forbidden technology | 3 | 1 | 3 | 3 | 0 | 2 |
 | O5 skipped collaborator | 3 | 0 | 3 | 3 | 0 | 3 |
 | O6 broken pattern | 3 | 0 | 3 | 3 | 0 | 3 |
-| **all** | 19 | 4 | 18 | 18 | 0 | 14 |
+| **all** | 19 | 4 | 19 | 19 | 0 | 15 |
 
 ## Equivalent rewrites (false positives)
 

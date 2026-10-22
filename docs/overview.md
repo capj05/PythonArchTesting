@@ -19,7 +19,7 @@ They still never compare results ([dynamic-checks.md](dynamic-checks.md)).
 
 ## Supported Checks
 
-All markers are imported from `pythonarchtesting.rules`. They group into five
+All markers are imported from `pythonarchtesting.rules`. They group into six
 categories. See [api-reference.md](api-reference.md) for every option and
 [pattern-recipes.md](pattern-recipes.md) for ready-to-use combinations.
 
@@ -65,12 +65,10 @@ compares its results:
   `forbid_runtime_imports`, and `enforce_flow` with `cases` (stage order learned
   from running the reference)
 
-At report level, markers map to four evaluator families:
-
-- `api_signature`
-- `import_policy`
-- `protocol_conformance`
-- `variable_flow`
+At report level, results are grouped by evaluator family
+(`results[*].category`). Static results use `api_signature`, `attribute_contract`, `enum_type`, `import_policy`,
+`member_absence`, `member_set`, `method_set`, `nominal_type_relationship`,
+`protocol_conformance`, `python_modifier`, and `variable_flow`.
 
 With `--dynamic`, runtime results form ten more families,
 `runtime_calls`, `runtime_reference_calls`, `runtime_writes`,

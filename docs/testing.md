@@ -10,8 +10,8 @@ The suite is centered under `tests/` with layered coverage:
 tests/
 ├── conftest.py
 ├── test_rules_import_safety.py
-├── unit/
-├── integration/
+├── unit/                     # includes test_dynamic_*.py and test_mcp_server/
+├── integration/              # includes test_dynamic_cli.py, test_runtime_flow_cli.py
 ├── performance/
 ├── import_safety/
 ├── fixtures/
@@ -34,6 +34,11 @@ pytest tests/ -v -n auto --cov=pythonarchtesting --cov-fail-under=80
 Tests resolve fixture paths relative to the repository root, so run `pytest` from
 there.
 
+Some tests skip themselves when the environment cannot run them: the `bwrap`
+sandbox cases skip without bubblewrap, the `limits` sandbox cases skip on
+Windows, and `tests/unit/test_mcp_server/` skips without the `mcp` extra
+(`pytest.importorskip("mcp")`; the `dev` extra installs it).
+
 ## Quality Gates
 
 Two equivalent entry points ship with the repository: `check_standard.ps1` /
@@ -49,7 +54,7 @@ interpreter already on `PATH`.
 3. `black --check src/ tests/`
 4. `isort --check-only src/ tests/`
 5. `mypy src/pythonarchtesting --ignore-missing-imports`
-6. `vulture --min-confidence 70 src tests`
+6. `vulture --min-confidence 70 src tests vulture_whitelist.py`
 
 `check_full` runs `check_standard` first, then extended checks (`radon`,
 `pylint`, `bandit`).
@@ -58,13 +63,14 @@ interpreter already on `PATH`.
 
 CI is defined in `.github/workflows/ci.yml`. It runs:
 
-1. A `unit` matrix job on Python `3.10`, `3.11`, and `3.12`
-2. `python -m pip install .[dev]` in each job
-3. `pytest tests/unit`
-4. Import-safety and import-boundary checks:
+1. `syntax`: `python -m compileall -q src tests` on Python `3.10`
+2. `unit`: a matrix on Python `3.10`, `3.11`, and `3.12` running `pytest tests/unit`
+3. `quality` on Python `3.10`: `flake8 src tests`, `mypy src/pythonarchtesting`,
+   and the import-safety and import-boundary checks
    `pytest tests/import_safety tests/test_rules_import_safety.py tests/unit/test_import_safety.py tests/unit/test_import_safety_lazy.py`
-5. `mypy src/pythonarchtesting`
-6. `flake8 src tests`
+
+Every job installs with `python -m pip install .[dev]`; `unit` and `quality`
+wait for `syntax`.
 
 CI installs from package metadata only. `requirements.txt` and
 `requirements-dev.txt` are not used by the workflow.

@@ -5,6 +5,7 @@ markers within a function body.
 
 - **Category:** Variable flow
 - **Placement:** statement-level `__archtest__: Annotated[...]` inside the same function/method body that holds the `flow(...)` markers
+- **Runtime variant:** with `cases`, the rule (`FLW002`) runs only with `python-arch-test --dynamic` (see [Runtime check with `cases`](#runtime-check-with-cases)); without `cases` the static check always runs.
 
 ## Usage
 

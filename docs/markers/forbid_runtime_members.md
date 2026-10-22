@@ -38,13 +38,22 @@ wrote as `self.password = ...`. Building the instance shows it.
 ## Example
 
 ```python
-__archtest__: Annotated[
-    None,
-    forbid_runtime_members(
-        "password",
-        cases=[{"args": [{"port": 6543, "password": "s3cret"}]}],
-    ),
-]
+from typing import Annotated, Any
+
+from pythonarchtesting.rules import forbid_runtime_members
+
+
+class Settings:
+    __archtest__: Annotated[
+        None,
+        forbid_runtime_members(
+            "password",
+            cases=[{"args": [{"port": 6543, "password": "s3cret"}]}],
+        ),
+    ]
+
+    def __init__(self, overrides: dict[str, Any]):
+        self.__dict__.update(overrides)
 ```
 
 A target that copies every override fails with `case 0: the instance has

@@ -38,6 +38,10 @@ In practice, that means:
 - a recipe cannot prove runtime semantics such as side effects, persistence
   correctness, or deep immutability
 
+The recipes are static-only. The opt-in runtime markers in
+[dynamic-checks.md](dynamic-checks.md) can be added to a reference and run with
+`--dynamic`; they check structure on the executed paths, not results.
+
 ## Recipe Index
 
 - [Immutable Value Object](#immutable-value-object)

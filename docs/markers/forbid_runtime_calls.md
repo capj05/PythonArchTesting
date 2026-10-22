@@ -37,14 +37,28 @@ module** makes into another module.
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
 | `allow` | `list[str] \| None` | `None` | Modules exempt from `modules`, e.g. `["repository.queries"]` under a forbidden `"repository"`. |
+| `transitive` | `bool` | `False` | Also count calls that other project code makes while the target runs, so a detour through a helper module is caught ([Detours](#detours-transitivetrue)). |
+| `through` | `list[str] \| None` | `None` | With `transitive=True`: modules whose code may make the call on the target's behalf — the layer in between, e.g. `["service"]`. |
 | `init` | `dict \| None` | `None` | Methods only: constructor arguments for every case, `{"args": [...], "kwargs": {...}}`. |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 
-Module names are those of the analysed project, without the package the root
-is imported as (`"repository"`, not `"target_7.repository"`), or any other
-importable module (`"sqlite3"`).
+Module names are those of the reference, without the package the root is
+imported as (`"repository"`, not `"target_7.repository"`), or any other
+importable module (`"sqlite3"`). A target that keeps a layer in a module of
+another name, or several layers in one module, is judged by the matched
+entities: a call into the target's `storage.OrderRepository.get` is a call
+into `repository` when that class was matched to the reference's
+`repository.OrderRepository`. Only code of the rule's own layer counts as the
+caller, so the service's calls do not count against the controller when both
+live in one target module.
+
+A dotted name may also name one function of a module. File and console I/O
+go through builtins, which are otherwise not recorded: `"io"` forbids
+`open()` (it is `io.open`) together with the file objects' methods, and
+`"builtins.print"` and `"builtins.input"` forbid console output and input —
+for a domain layer that must not do I/O.
 
 ## Example
 
@@ -74,6 +88,30 @@ A target whose controller calls `service.repository.get(...)` fails with
 Worked example:
 [`example/rule_showcase/dyn001_layers`](../../example/rule_showcase/dyn001_layers/).
 
+### Detours (`transitive=True`)
+
+By default only the target module's own calls count: a controller that calls
+`helpers.load()`, which calls the repository, passes, because the call into
+`repository` is the helper module's. With `transitive=True` every call made
+by project code while code of the target's module is further up the stack
+counts as well, and the violation names the chain:
+
+```python
+forbid_runtime_calls(
+    "repository", transitive=True, through=["service"], cases=[...],
+)
+```
+
+```text
+case 0: controller:handle -> helpers:load calls repository:OrderRepository.get (line 6 of helpers)
+```
+
+That alone would forbid the service from using the repository on the
+controller's behalf too; `through=["service"]` names the layer in between, so
+a chain that passes through code of `service` is the layering working as
+intended. Library code on the way is skipped, and modules are judged by the
+matched entities, as for `modules`.
+
 ## What it checks
 
 - Direct calls from any code of the target's module — the entity itself and
@@ -86,10 +124,14 @@ Worked example:
 
 ## What it does not check
 
-- Indirect calls: when the target calls the service and the service calls the
-  repository, only the first call belongs to the target's module. That is the
-  layering the rule expresses.
-- Calls of builtins (`len`, `print`, `list.append`) — they belong to no layer.
+- Indirect calls, unless `transitive=True`: when the target calls the service
+  and the service calls the repository, only the first call belongs to the
+  target's module. That is the layering the rule expresses.
+- With `transitive=True`, calls whose stack does not contain the target's
+  code: calls in threads the target starts, and callbacks it registered that
+  run after it returned.
+- Calls of builtins (`len`, `list.append`) — they belong to no layer. The I/O
+  builtins `open`, `print`, and `input` are the exception (see above).
 - Calls the cases do not reach; see [Cases](../dynamic-checks.md#cases).
 - What the call computes. Results are never compared.
 

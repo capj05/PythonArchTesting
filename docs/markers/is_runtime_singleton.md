@@ -2,7 +2,7 @@
 
 Require the matched target class to hand out one shared instance (Singleton).
 
-- **Category:** Runtime structure — design patterns
+- **Category:** Runtime structure
 - **Placement:** class-body `__archtest__: Annotated[...]`
 - **Runs only with:** `python-arch-test --dynamic`; without the flag the rule is
   `SKIPPED` and does not affect the exit code.
@@ -30,7 +30,7 @@ same object.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `access` | `str \| None` | `None` | Name of the class-level accessor (`"instance"` for `Config.instance()`); `None` calls the class itself. |
+| `access` | `str \| None` | `None` | Name of the accessor: a class or static method (`"instance"` for `Config.instance()`) or, when the class has none of that name, a function of the class's module (`"get_config"` for `get_config()`); `None` calls the class itself. A target that renamed the accessor is called by its own name when the matching step paired the two. |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
@@ -38,6 +38,11 @@ same object.
 ## Example
 
 ```python
+from typing import Annotated, Any
+
+from pythonarchtesting.rules import is_runtime_singleton
+
+
 class AppConfig:
     __archtest__: Annotated[
         None, is_runtime_singleton(access="instance", cases=[{"args": []}])

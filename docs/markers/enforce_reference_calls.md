@@ -37,6 +37,7 @@ becomes the allowed dependency graph for the target.
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
 | `require_all` | `bool` | `False` | Also require every edge of the reference in each case: no layer may be skipped. |
+| `allow_new_modules` | `bool` | `False` | Let the target add modules the reference does not have: each counts as part of the modules that call it, so its own calls must be ones they may make. |
 | `init` | `dict \| None` | `None` | Methods only: constructor arguments for every case. |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per run, in `(0, 60]`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
@@ -81,7 +82,19 @@ two layers below the marked function. Worked example:
   compared without the package the root is imported as, so the reference
   package and a target package named differently compare alike (the package's
   own `__init__.py` is `__init__`).
+- The target's calls are named by the reference modules of the matched
+  entities they connect: a target that renamed `repository.py` to
+  `storage.py`, or keeps every layer in one file, makes the edge
+  `service -> repository` when its matched service class calls its matched
+  repository class. Code no matched entity encloses belongs to the reference
+  module its module's matched entities mostly come from.
 - With `require_all`: per case, every reference edge also occurs in the target.
+- With `allow_new_modules`: a module of the target no reference entity lives
+  in (a `helpers.py` of its own) is folded into each module that calls it.
+  `controller -> helpers -> service` becomes `controller -> service`, which
+  the reference makes; `controller -> helpers -> repository` becomes
+  `controller -> repository`, which it does not, so a detour through a new
+  module is still a divergence. A chain of new modules folds the same way.
 - The reference has to run: a case whose arguments cannot be built for it is
   reported as `ERROR` (`reference_failed`).
 
@@ -96,8 +109,9 @@ missing edge may sit on one of them. A pass also reports the lines no case ran
 
 ## What it does not check
 
-- Calls within one module, and calls into the standard library or third-party
-  packages — only edges between project modules form the graph.
+- Calls within one reference module, and calls into the standard library or
+  third-party packages — only edges between project modules form the graph.
+  Within one class or function of the target nothing is recorded at all.
 - How many times an edge is used, or in what order.
 - Which function of the other module is called: `service -> repository` is one
   edge whether the code calls `save` or `get`.

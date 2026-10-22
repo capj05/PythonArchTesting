@@ -149,7 +149,7 @@ The JSON shape starts with:
   "summary": {
     "diagnostics_total": 0,
     "errors_total": 0,
-    "files_scanned": 3,
+    "files_scanned": 6,
     "invalid_declarations": 0
   },
   "diagnostics": []
@@ -259,6 +259,11 @@ imported and executed in separate interpreters, confined by `--sandbox`:
   write;
 - `--sandbox none` keeps only the process boundary and the timeout.
 
+`--sandbox-memory-mb N` sets the heap limit per child interpreter under
+`limits` and `bwrap` (default `1024`). `--sandbox` and `--sandbox-memory-mb`
+apply only with `--dynamic`, and `--dynamic` cannot be combined with
+`--validate-declarations`; both mistakes exit `2` with an `error:` line.
+
 ```bash
 python-arch-test --source example/rule_showcase/dyn001_layers/reference --targets-dir example/rule_showcase/dyn001_layers/assignments --format json --dynamic --sandbox bwrap
 ```
@@ -277,11 +282,11 @@ For run-report JSON, start with:
     "targets_failed": 4,
     "targets_passed": 1,
     "results": {
-      "results_total": 25,
+      "results_total": 75,
       "status_counts": {
-        "FAILED": 14,
-        "OK": 8,
-        "SKIPPED": 3
+        "FAILED": 11,
+        "OK": 62,
+        "SKIPPED": 2
       }
     }
   }
@@ -296,7 +301,7 @@ Then inspect the failing target summary and one failing result:
   "summary": {
     "status_counts": {
       "FAILED": 3,
-      "OK": 1,
+      "OK": 11,
       "SKIPPED": 1
     }
   },
@@ -305,7 +310,7 @@ Then inspect the failing target summary and one failing result:
       "rule_id": "API001/required_entity_signature/v1",
       "status": "FAILED",
       "severity": "error",
-      "message": "Required target entity missing or not matchable (status=unmatched, confidence=0.0).",
+      "message": "Required target entity missing or not matchable (status=unmatched, confidence=0.079929).",
       "fix_hints": [
         "Match the required parameter names, kinds, and required/optional shape."
       ]
@@ -316,12 +321,18 @@ Then inspect the failing target summary and one failing result:
 
 Read the fields in this order:
 
-1. `summary`
-2. `targets[*].summary`
-3. `results[*].status`
-4. `results[*].severity`
-5. `results[*].message`
-6. `fix_hints`, `locations`, and `evidence`
+1. `run.mode`
+2. `summary`
+3. `targets[*].summary`
+4. `results[*].status`
+5. `results[*].severity`
+6. `results[*].message`
+7. `fix_hints`, `locations`, and `evidence`
+
+Check `run.mode` first. `static-only` means the runtime rules did not run:
+their results are `SKIPPED` with `details.reason` `dynamic_checks_disabled`,
+so a pass says nothing about them. A `--dynamic` run reports
+`dynamic (sandbox: <mode>)`.
 
 Use `matching` when the failure might be caused by a bad or uncertain entity
 match rather than by the rule itself.

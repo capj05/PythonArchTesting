@@ -27,6 +27,7 @@ supported public API.
 ## CLI Entrypoints
 
 - `python-arch-test`: preferred installed-package command for most users
+- `python-arch-test-mcp`: stdio MCP server for AI agents; needs the optional `[mcp]` extra, see [mcp.md](mcp.md)
 - `python -m pythonarchtesting.cli`: developer-oriented module entrypoint for source checkouts
 
 ## CLI Flags
@@ -43,6 +44,9 @@ supported public API.
 - `--output`
 - `--validate-declarations`
 - `--validation-scope {all,logical-views}`
+- `--dynamic`: run the runtime rules, see [dynamic-checks.md](dynamic-checks.md)
+- `--sandbox {none,limits,bwrap}`: confinement of target code under `--dynamic` (default `limits`)
+- `--sandbox-memory-mb`: heap limit per child interpreter under `--dynamic` (default `1024`, must be positive)
 
 ## Supported Annotation Containers
 
@@ -91,7 +95,23 @@ documented in [pattern-recipes.md](pattern-recipes.md).
 | `is_non_abstract_method(...)` | Forbid the matched target method from being decorated with a recognized abstract decorator | Method-body `__archtest__: Annotated[...]` |
 | `is_non_final_method(...)` | Forbid the matched target method from being decorated with a recognized final decorator | Method-body `__archtest__: Annotated[...]` |
 | `flow(...)` | Mark a statement as a named flow stage | Statement-level `__archtest__: Annotated[...]` immediately after the statement |
-| `enforce_flow(...)` | Require ordered flow stages for a variable | `__archtest__: Annotated[...]` in a function or method body |
+| `enforce_flow(...)` | Require ordered flow stages for a variable; with `cases` it runs reference and target under `--dynamic` (`FLW002`) | `__archtest__: Annotated[...]` in a function or method body |
+| `forbid_runtime_calls(...)` | Runtime check: forbid calls into the named modules | Function- or method-body `__archtest__: Annotated[...]` |
+| `require_runtime_calls(...)` | Runtime check: require calls into the named modules | Function- or method-body `__archtest__: Annotated[...]` |
+| `enforce_reference_calls(...)` | Runtime check: reproduce the reference's call graph | Function- or method-body `__archtest__: Annotated[...]` |
+| `forbid_foreign_writes(...)` | Runtime check: forbid attribute writes on foreign objects | Function- or method-body `__archtest__: Annotated[...]` |
+| `forbid_runtime_instantiation(...)` | Runtime check: forbid building injected collaborators internally | Function- or method-body `__archtest__: Annotated[...]` |
+| `require_runtime_delegation(...)` | Runtime check: require delegation to an injected spy | Function- or method-body `__archtest__: Annotated[...]` |
+| `forbid_runtime_imports(...)` | Runtime check: forbid modules imported when the module loads | Module-level `__archtest__: Annotated[...]` |
+| `require_runtime_members(...)` | Runtime check: require members on the built instance | Class-level `__archtest__: Annotated[...]` |
+| `forbid_runtime_members(...)` | Runtime check: forbid members on the built instance | Class-level `__archtest__: Annotated[...]` |
+| `is_runtime_concrete_class(...)` | Runtime check: the class can be instantiated | Class-level `__archtest__: Annotated[...]` |
+| `is_runtime_abstract_class(...)` | Runtime check: the class cannot be instantiated | Class-level `__archtest__: Annotated[...]` |
+| `implements_runtime_protocol(...)` | Runtime check: instances provide every protocol member | Class-level `__archtest__: Annotated[...]` |
+| `is_runtime_singleton(...)` | Runtime check: repeated access returns one object | Class-level `__archtest__: Annotated[...]` |
+| `enforce_runtime_observer(...)` | Runtime check: subscribe, notify and unsubscribe behave as an observer | Class-level `__archtest__: Annotated[...]` |
+
+The runtime markers above run only with `--dynamic`; see [dynamic-checks.md](dynamic-checks.md).
 
 ### `required_entity_signature(...)`
 
@@ -357,6 +377,8 @@ class HandlerContract:
 
 See also: [markers/require_member_set.md](markers/require_member_set.md) — focused per-marker page(s).
 
+Runtime counterpart: [`require_runtime_members`](markers/require_runtime_members.md), run with `--dynamic`; see [Runtime counterparts of static rules](dynamic-checks.md#runtime-counterparts-of-static-rules).
+
 Common options:
 
 - `member_kinds` (default `("any",)`) — any subset of `{"any", "method", "attribute", "property", "descriptor", "constructor"}`. `"any"` cannot be combined with other kinds.
@@ -435,6 +457,8 @@ class DataContract:
 ### `required_attribute(...)`
 
 See also: [markers/required_attribute.md](markers/required_attribute.md) — focused per-marker page(s).
+
+Runtime counterpart: [`require_runtime_members`](markers/require_runtime_members.md), run with `--dynamic`; see [Runtime counterparts of static rules](dynamic-checks.md#runtime-counterparts-of-static-rules).
 
 Common options:
 
@@ -762,7 +786,7 @@ Common options:
 | Option | Type | Default | Purpose |
 | --- | --- | --- | --- |
 | `signature_mode` | `"compatible" \| "exact" \| "any"` | `"compatible"` | Signature comparison mode |
-| `satisfy_with` | `tuple[str, ...]` | `("constructor", "classmethod", "staticmethod")` | Which factory kinds are accepted |
+| `satisfy_with` | `tuple[str, ...]` | `("constructor", "classmethod", "staticmethod")` | Which factory kinds are accepted; the default drops `"constructor"` when `aliases`, `pattern`, or a `name_match` other than `"any"` is given |
 | `allow_inherited` | `bool` | `True` | Allow inherited factory candidates from a base class |
 | `name_match` | `"any" \| "exact" \| "alias" \| "regex"` | `"any"` | How the factory candidate name is matched |
 | `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"` |
@@ -1004,6 +1028,8 @@ class SessionTarget:
 
 See also: [markers/does_not_have.md](markers/does_not_have.md) — focused per-marker page(s).
 
+Runtime counterpart: [`forbid_runtime_members`](markers/forbid_runtime_members.md), run with `--dynamic`; see [Runtime counterparts of static rules](dynamic-checks.md#runtime-counterparts-of-static-rules).
+
 `does_not_have(...)` stays in the existing `NEG001` rule family and now has a
 backward-compatible v1/v2 surface.
 
@@ -1136,6 +1162,8 @@ class Credentials:
 
 See also: [markers/forbid_imports.md](markers/forbid_imports.md) — focused per-marker page(s).
 
+Runtime counterpart: [`forbid_runtime_imports`](markers/forbid_runtime_imports.md), run with `--dynamic`; see [Runtime counterparts of static rules](dynamic-checks.md#runtime-counterparts-of-static-rules).
+
 Common options:
 
 - `scope`
@@ -1150,7 +1178,7 @@ Common options:
 Notes:
 
 - `scope="module"` checks the matched target module.
-- `scope="package"` checks the configured package subtree.
+- `scope="package"` checks the configured package subtree; without `package` it is the top-level package of the declaring module.
 - `scope="entity"` is accepted as a backward-compatible alias for `module`.
 - bare `forbid_imports(...)` defaults to `mode="reachable"`.
 - `mode="reachable"` enables graph-based reachable-import analysis.
@@ -1176,6 +1204,8 @@ __archtest__: Annotated[
 ### `implements_protocol(...)`
 
 See also: [markers/implements_protocol.md](markers/implements_protocol.md) — focused per-marker page(s).
+
+Runtime counterpart: [`implements_runtime_protocol`](markers/implements_runtime_protocol.md), run with `--dynamic`; see [Runtime counterparts of static rules](dynamic-checks.md#runtime-counterparts-of-static-rules).
 
 Common options:
 
@@ -1389,6 +1419,8 @@ Non-goals in v1:
 
 See also: [markers/is_abstract_class.md](markers/is_abstract_class.md) — focused per-marker page(s).
 
+Runtime counterpart: [`is_runtime_abstract_class`](markers/is_runtime_abstract_class.md), run with `--dynamic`; see [Runtime counterparts of static rules](dynamic-checks.md#runtime-counterparts-of-static-rules).
+
 Require the matched target class to classify as abstract under a conservative
 local static analysis.
 
@@ -1426,6 +1458,8 @@ class RepositoryContract:
 ### `is_concrete_class(...)`
 
 See also: [markers/is_concrete_class.md](markers/is_concrete_class.md) — focused per-marker page(s).
+
+Runtime counterpart: [`is_runtime_concrete_class`](markers/is_runtime_concrete_class.md), run with `--dynamic`; see [Runtime counterparts of static rules](dynamic-checks.md#runtime-counterparts-of-static-rules).
 
 Require the matched target class to classify as concrete under the same local
 static model used by `is_abstract_class(...)`.
@@ -1746,6 +1780,8 @@ rule type `runtime_calls`, evidence type `runtime`.
 | `*modules` | `str` | required | Module names, with their submodules |
 | `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
 | `allow` | `list[str] \| None` | `None` | `forbid_runtime_calls` only: exemptions under a listed name |
+| `transitive` | `bool` | `False` | `forbid_runtime_calls` only: also count calls other project code makes while the target runs |
+| `through` | `list[str] \| None` | `None` | With `transitive=True`: modules whose code may make the call on the target's behalf |
 | `init` | `dict \| None` | `None` | Methods only: default constructor arguments `{"args": [...], "kwargs": {...}}` |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]` |
 | `severity` | `str` | `"error"` | Violation severity |
@@ -1780,7 +1816,8 @@ written out as literals in each marker.
 Result `details`:
 
 - `reason`: `no_violations`, `violation`, `case_setup_failed`,
-  `probe_import_error`, `probe_timeout`, `probe_crashed`,
+  `reference_case_invalid` (status `ERROR`: the case cannot run on the
+  reference either), `probe_import_error`, `probe_timeout`, `probe_crashed`,
   `target_kind_mismatch`, or `dynamic_checks_disabled`
 - `violations`: one line per offending call or per missing module and case
 - `cases`: per case `calls` (`module`, `callee`, `caller`, `line`) and
@@ -1815,6 +1852,7 @@ Rule id: `DYN001/enforce_reference_calls/v1`, rule type
 |--------|------|---------|---------|
 | `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
 | `require_all` | `bool` | `False` | Also require every reference edge |
+| `allow_new_modules` | `bool` | `False` | Fold modules the reference lacks into the modules that call them |
 | `init` | `dict \| None` | `None` | Methods only: default constructor arguments |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per run, in `(0, 60]` |
 | `severity` | `str` | `"error"` | Violation severity |
@@ -1847,6 +1885,8 @@ Rule id: `DYN004/forbid_runtime_instantiation/v1`, rule type
 | `*modules` | `str` | required | Module names, with their submodules |
 | `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
 | `allow` | `list[str] \| None` | `None` | Exemptions under a listed name |
+| `transitive` | `bool` | `False` | Also count objects other project code builds while the target runs |
+| `through` | `list[str] \| None` | `None` | With `transitive=True`: modules whose code may build them |
 | `init` | `dict \| None` | `None` | Methods only: default constructor arguments |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]` |
 | `severity` | `str` | `"error"` | Violation severity |
@@ -1871,15 +1911,15 @@ body. Each case gives constructor arguments (`args`, `kwargs`). Run only with
 
 | Marker | Rule id | Rule type | Options besides `severity`, `message`, `timeout_s` |
 |--------|---------|-----------|------------------|
-| `require_runtime_members(*names, cases)` | `DYN005/require_runtime_members/v1` | `runtime_members` | — |
+| `require_runtime_members(*names, cases)` | `DYN005/require_runtime_members/v1` | `runtime_members` | `types` (member → class whose instance it must hold) |
 | `forbid_runtime_members(*names, cases)` | `DYN005/forbid_runtime_members/v1` | `runtime_members` | — |
 | `is_runtime_concrete_class(cases)` | `DYN006/is_runtime_concrete_class/v1` | `runtime_class_kind` | — |
 | `is_runtime_abstract_class()` | `DYN006/is_runtime_abstract_class/v1` | `runtime_class_kind` | no `cases`; nothing is instantiated |
 | `implements_runtime_protocol(Protocol, cases)` | `DYN007/implements_runtime_protocol/v1` | `runtime_protocol` | — |
 
 Per case the probe reports `abstract`, `abstract_methods`, `constructed`,
-`raised`, and `members` (`present`, `where`, and for protocol methods
-`callable` and `bindable`). `details.reason` is as for `forbid_runtime_calls`.
+`raised`, and `members` (`present`, `where`, for protocol methods
+`callable` and `bindable`, and with `types` `type`, `type_ok`, `type_error`). `details.reason` is as for `forbid_runtime_calls`.
 
 Non-goals in v1:
 
@@ -1895,10 +1935,13 @@ See also: [markers/is_runtime_singleton.md](markers/is_runtime_singleton.md),
 
 Rule type `runtime_pattern`, evidence type `runtime`; run only with `--dynamic`.
 
+Rule ids: `DYN008/is_runtime_singleton/v1`, `DYN008/enforce_runtime_observer/v1`,
+`DYN008/require_runtime_delegation/v1`.
+
 | Marker | Placement | Options besides `cases`, `severity`, `message`, `timeout_s` | Passes when |
 |--------|-----------|------------------|-------------|
-| `is_runtime_singleton` | class | `access` (accessor name or `None` for the class) | two accesses return the same object |
-| `enforce_runtime_observer` | class | `subscribe`, `notify` (required), `unsubscribe`, `notify_args` | a subscribed spy listener is called by `notify`, and not after `unsubscribe` |
+| `is_runtime_singleton` | class | `access` (class-level accessor or module function name, or `None` for the class) | two accesses return the same object |
+| `enforce_runtime_observer` | class | `subscribe`, `notify` (both required), `unsubscribe`, `notify_args`, `subscribe_args` (before the listener, for a subject keyed by event) | a subscribed spy listener is called by `notify`, and not after `unsubscribe` |
 | `require_runtime_delegation(spy)` | function, method | `member`, `init` | the code calls the spy injected as `{"$spy": spy}` (on `member`, if given) |
 
 Per case the probe reports `singleton` (`access`, `same`, `type`, `error`),
@@ -1933,13 +1976,16 @@ evidence type `runtime`.
 | `message` | `str \| None` | `None` | Custom message override |
 
 Result `details.cases[*].writes` lists `class`, `attribute`, `writer`, `file`,
-and `line` per foreign assignment; `details.reason` is as for
+`line`, and `change` per foreign change: `assigned` (`obj.x = ...`),
+`mutated` (what a list, dict, set, or bytearray attribute holds:
+`obj.items.append(x)`), `deleted` (`del obj.x`), or `bypassed`
+(`obj.__dict__[...] = ...`, `object.__setattr__`); `details.reason` is as for
 `forbid_runtime_calls`.
 
 Non-goals in v1:
 
-- No changes inside mutable attributes (`obj.items.append(x)`)
-- No `del obj.x`, `object.__setattr__`, or `obj.__dict__` writes
+- No changes inside objects an attribute holds other than builtin containers,
+  or inside containers nested in them (`obj.rows[0].append(x)`)
 - No exceptions, enums, or classes outside the analysed project
 
 ### `forbid_runtime_imports(...)`
@@ -1965,7 +2011,7 @@ and `importlib.import_module` in the child interpreter; an import counts when th
 importing frame's file lies under the target root. Result `details.violations`
 lists `module`, `file`, `line`, and `phase` per offending import;
 `details.reason` is `no_forbidden_imports`, `forbidden_import_executed`, a
-`probe_*` status, or `dynamic_checks_disabled`.
+`probe_*` status, `target_kind_mismatch`, or `dynamic_checks_disabled`.
 
 Non-goals in v1:
 
@@ -1981,6 +2027,10 @@ Non-goals in v1:
 - Signature-level declarations are supported for
   `required_entity_signature` and `implements_protocol`.
 - Use `__archtest__: Annotated[...]` for module, class, and body declarations.
+- Runtime markers (`DYN*`, `FLW002`) are read from source like the others but
+  evaluated only with `--dynamic`; otherwise they are `SKIPPED`
+  (`details.reason` = `dynamic_checks_disabled`) and the CLI warns on stderr.
+  Their `cases` must be literals.
 - `flow(...)` must appear immediately after the statement it annotates.
 - Signature and body declarations on the same entity are tracked separately.
 - Invalid declarations remain non-fatal in normal analysis and are reported as
