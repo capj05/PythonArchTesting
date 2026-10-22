@@ -27,7 +27,7 @@ analysis); pass `mode="direct"` for an AST-only direct-import check.
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
 | `scope` | `str` | `"package"` | Scope of the policy: `"module"`, `"package"`, or the legacy alias `"entity"` (= module). |
-| `package` | `str \| None` | `None` | Package dotted name when `scope="package"`; required for package scope. |
+| `package` | `str \| None` | `None` | Package dotted name when `scope="package"`; defaults to the top-level package of the declaring module. |
 | `mode` | `str` | `"reachable"` | Analysis mode: `"reachable"` (graph-based transitive imports) or `"direct"` (AST-only direct imports). |
 | `ignore_type_checking` | `bool` | `True` | Exclude imports inside `if TYPE_CHECKING:` guards from analysis. |
 | `allow` | `list[str] \| None` | `None` | Submodules or symbols exempt from the forbidden list. |

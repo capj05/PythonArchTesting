@@ -29,7 +29,7 @@ _None — the marker takes only optional arguments._
 | `mode` | `str` | `"compatible"` | Signature matching mode: `"compatible"`, `"exact"`, or `"any"`. |
 | `allow_extra_params` | `bool` | `True` | Accept target signatures with extra optional parameters. |
 | `allow_param_rename` | `bool` | `False` | Allow parameter-name differences when matching. |
-| `return_annotation` | `str` | `"warning"` | Return-type checking level: `"warning"`, `"error"`, or `"ignore"`. |
+| `return_annotation` | `str` | `"warning"` | Return-type checking level: `"warning"`, `"error"`, `"off"`, or `"ignore"` (an alias of `"off"`). |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 

@@ -26,14 +26,14 @@ _None — the marker takes only optional arguments._
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
 | `signature_mode` | `str` | `"compatible"` | Signature matching mode for the factory: `"compatible"`, `"exact"`, or `"any"`. |
-| `satisfy_with` | `tuple[str, ...]` | `("constructor", "classmethod", "staticmethod")` | Accepted candidate kinds; may also include `"static_attribute"`. |
+| `satisfy_with` | `tuple[str, ...]` | `("constructor", "classmethod", "staticmethod")`; `("classmethod", "staticmethod")` when `aliases`, `pattern`, or a `name_match` other than `"any"` is given | Accepted candidate kinds; may also include `"static_attribute"`, which requires `name_match` `"exact"`, `"alias"`, or `"regex"`. |
 | `allow_inherited` | `bool` | `True` | Accept a factory inherited from a base class as a satisfying candidate. |
-| `name_match` | `str` | `"any"` | Name selector: `"exact"`, `"aliases"`, `"regex"`, or `"any"`. |
-| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="aliases"`. |
+| `name_match` | `str` | `"any"` | Name selector: `"exact"`, `"alias"`, `"regex"`, or `"any"`. An unknown value is treated as `"any"`. |
+| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"`. |
 | `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"`. |
 | `allow_missing` | `bool` | `False` | Pass when no candidate factory exists on the target instead of failing. |
-| `return_annotation_mode` | `str` | `"auto"` | Return-annotation matching: `"auto"`, `"strict"`, `"compatible"`, or `"ignore"`. |
-| `detection_mode` | `str` | `"auto"` | How factories are detected: `"auto"`, `"decorator"`, or `"name"`. |
+| `return_annotation_mode` | `str` | `"ignore"` | Return-annotation matching: `"ignore"`, `"compatible"`, or `"exact"`. |
+| `detection_mode` | `str` | `"strict"` | How factories are detected: `"strict"` or `"extended"`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 

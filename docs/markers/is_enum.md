@@ -3,7 +3,7 @@
 Require the matched target class to classify as enum-like based on stdlib enum
 inheritance.
 
-- **Category:** Abstractness & finality
+- **Category:** Type identity & inheritance
 - **Placement:** class-body `__archtest__: Annotated[...]`
 ## Usage
 

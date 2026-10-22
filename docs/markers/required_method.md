@@ -28,8 +28,8 @@ _None — the marker takes only optional arguments._
 | `enforce_method_kind` | `bool` | `True` | Require method-kind parity (instance / classmethod / staticmethod) between source and target. |
 | `allow_missing` | `bool` | `False` | Pass when no candidate method exists on the target instead of failing. |
 | `declared_only` | `bool` | `False` | Restrict the search to methods declared on the target class itself, ignoring inherited methods. |
-| `name_match` | `str` | `"exact"` | Name selector: `"exact"`, `"aliases"`, `"regex"`, or `"any"`. |
-| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="aliases"`. |
+| `name_match` | `str` | `"exact"` | Name selector: `"exact"`, `"alias"`, `"regex"`, or `"any"`. |
+| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"`. |
 | `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |

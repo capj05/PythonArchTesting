@@ -20,7 +20,7 @@ project.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `protocol` (positional) | `str` | — | Dotted name of the source Protocol to satisfy (e.g. `"reference.Repository"`). |
+| `protocol` (positional) | `str \| Protocol class` | — | The source Protocol to satisfy, as a reference to its class or its dotted name (e.g. `"reference.Repository"`). |
 
 **Optional:**
 
@@ -28,7 +28,7 @@ project.
 |----------|------|---------|-------------|
 | `signature_mode` | `str` | `"compatible"` | Signature matching mode for protocol methods: `"compatible"`, `"exact"`, or `"any"`. |
 | `enforce_method_kind` | `bool` | `True` | Require method-kind parity (instance / classmethod / staticmethod) between Protocol and target. |
-| `return_annotation` | `str` | `"warning"` | Return-type checking level: `"warning"`, `"error"`, or `"ignore"`. |
+| `return_annotation` | `str` | `"warning"` | Return-type checking level: `"warning"`, `"error"`, or `"off"`; any other value is treated as `"warning"`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 

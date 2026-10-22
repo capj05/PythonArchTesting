@@ -26,11 +26,11 @@ exact name, alias list, or regex pattern. A method-body declaration derives
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `member_kind` | `str` | `"any"` | Kind of forbidden member: `"any"`, `"method"`, `"attribute"`, `"property"`, `"descriptor"`, or `"constructor"`. |
+| `member_kind` | `str` | `"any"` | Kind of forbidden member: `"any"`, `"method"`, `"attribute"`, or `"property"`; descriptors are covered with `include_descriptors=True`. |
 | `storage` | `str` | `"any"` | Attribute storage filter when forbidding attributes: `"any"`, `"class"`, or `"instance"`. |
 | `declared_only` | `bool` | `False` | Restrict the search to members declared on the target class itself, ignoring inherited members. |
-| `name_match` | `str` | `"exact"` | Name selector: `"exact"`, `"aliases"`, or `"regex"`. |
-| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="aliases"`. |
+| `name_match` | `str` | `"exact"` | Name selector: `"exact"`, `"alias"`, or `"regex"`. |
+| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"`. |
 | `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"`. |
 | `signature_mode` | `str` | `"any"` | Signature filter for forbidden methods: `"any"`, `"compatible"`, or `"exact"`. |
 | `include_descriptors` | `bool` | `False` | Include descriptor-based members in the absence check. |

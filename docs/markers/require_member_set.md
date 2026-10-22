@@ -36,7 +36,7 @@ _None — the marker takes only optional arguments._
 | `descriptor_kinds` | `tuple[str, ...] \| None` | `None` | Descriptor families to accept (e.g. `"cached_property"`, `"classproperty"`). |
 | `include_dynamic_attributes` | `bool` | `False` | Include attributes assigned at runtime via `setattr` or wrappers. |
 | `interpret_dataclass_fields` | `bool` | `False` | Treat dataclass fields as instance attributes. |
-| `constructor_kind` | `str` | `"auto"` | Constructor preference when matching constructors: `"auto"`, `"init"`, or `"new"`. |
+| `constructor_kind` | `str` | `"auto"` | Constructor preference when matching constructors: `"auto"`, `"__init__"`, or `"__new__"`. |
 | `include_dataclass_constructor` | `bool` | `True` | Count statically recognized dataclass-generated `__init__` as a constructor. |
 | `min_count` | `int` | `1` | Minimum number of matching members required. |
 | `max_count` | `int \| None` | `None` | Maximum number of matching members allowed (no upper bound when `None`). |
