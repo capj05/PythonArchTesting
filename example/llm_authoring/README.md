@@ -11,7 +11,12 @@ and write markers for every requirement.
   solution must pass);
 - condition **B**: also `tools.py check-cases` and `tools.py verify-marker`.
 
-Two runs per program and condition. The agents were told to read only the
+Two runs per program and condition (2026-10-31); a second measurement
+(2026-11-01) added four more runs per condition of program 1 only (runs 3-6),
+with the faster `verify_marker` and its operators for module interfaces and
+ports. Their prompt was the same, plus a request to list the markers changed
+because of a tool's output. `results.md` gives the mean and range per
+condition and measurement. The agents were told to read only the
 assignment, the solution, their reference and `docs/markers`,
 `docs/dynamic-checks.md`, `docs/api-reference.md` — not the authors'
 reference, the mutants or any results. `tools.py` gives them the MCP tools

@@ -114,8 +114,15 @@ def main() -> int:
                 sandbox="limits" if args.dynamic else None,
                 detail=args.detail,
             )
+            # ``why`` says why a mutant did not run or what killed it; the
+            # first measurement (runs 1-2) and the second (runs 3-6) of E4
+            # were made without it.
             result["mutants"] = [
-                {k: m[k] for k in ("operator", "file", "description", "outcome")}
+                {
+                    k: m[k]
+                    for k in ("operator", "file", "description", "outcome", "why")
+                    if k in m
+                }
                 for m in result["mutants"]
             ]
     except (ToolInputError, ValueError, ConfigurationError, OSError) as exc:

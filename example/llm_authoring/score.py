@@ -33,6 +33,10 @@ PROGRAMS = {
     "program2": EXAMPLES / "architectural_mutants_2",
 }
 RUN = EXAMPLES / "architectural_mutants" / "run.py"
+# Runs 1-2 of each condition are the first measurement (2026-10-31); runs 3-6
+# of program 1 the second (2026-11-01, N = 4 per condition, after the faster
+# verify_marker and the operators for module interfaces and ports).
+SECOND_MEASUREMENT = 3
 
 
 def _rules(reference: Path) -> tuple[int, int]:
@@ -100,6 +104,47 @@ def _harness(program: Path, reference: Path, workdir: Path) -> dict[str, Any]:
     }
 
 
+def _measurement(run: str) -> str | None:
+    """``first`` or ``second`` for a run label ``<condition>-<n>``."""
+    condition, _, number = run.partition("-")
+    if condition not in ("A", "B") or not number.isdigit():
+        return None
+    return "second" if int(number) >= SECOND_MEASUREMENT else "first"
+
+
+def _summary(rows: list[dict[str, Any]]) -> list[str]:
+    """Mean and range of the mutants caught and flagged and of the FP, per
+    program, measurement and condition."""
+    lines = [
+        "",
+        "## Per condition",
+        "",
+        "Mean (min-max) over the runs of one measurement.",
+        "",
+        "| Program | Measurement | Condition | Runs | Caught | Flagged | FP |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        measurement = _measurement(row["run"])
+        if measurement and "per_variant" in row:
+            key = (row["program"], measurement, row["run"][0])
+            groups.setdefault(key, []).append(row)
+    for (program, measurement, condition), runs in sorted(groups.items()):
+        cells = []
+        for field in ("caught", "flagged", "fp"):
+            values = [run[field] for run in runs]
+            cells.append(
+                f"{sum(values) / len(values):.2f} ({min(values)}-{max(values)})"
+            )
+        lines.append(
+            f"| {program} | {measurement} | {condition} | {len(runs)} | "
+            + " | ".join(cells)
+            + " |"
+        )
+    return lines
+
+
 def main() -> int:
     rows = []
     for name, program in PROGRAMS.items():
@@ -144,6 +189,7 @@ def main() -> int:
             f"{row['caught']}/{row['mutants']} | {row['flagged']}/{row['mutants']} | "
             f"{row['fp']}/{row['equivalents']} |"
         )
+    lines += _summary(rows)
     lines += [
         "",
         "## Variants where the runs differ",
