@@ -1,0 +1,7 @@
+[
+{"id":"w051","violates":true,"requirements":[11],"reason":"BookingService.cancel sets appointment.status and appointment.fee directly instead of calling Appointment.cancel."},
+{"id":"w052","violates":true,"requirements":[7],"reason":"ReminderService._tell appends to the notifier's 'sent' list directly instead of sending through notifier.send."},
+{"id":"w053","violates":true,"requirements":[1,12],"reason":"domain/policies.py imports ..ports.clock, so domain depends on the ports layer above it (which itself depends on domain)."},
+{"id":"w054","violates":true,"requirements":[4],"reason":"adapters/memory_store.py imports and uses pickle outside the SQLite adapter."},
+{"id":"w055","violates":false,"requirements":[],"reason":"Only Patient is rewritten as a dataclass; layering, injection and encapsulation match the intended architecture."}
+]

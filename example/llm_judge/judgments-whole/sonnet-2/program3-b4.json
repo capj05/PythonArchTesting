@@ -1,0 +1,7 @@
+[
+{"id":"w016","violates":false,"requirements":[],"reason":"Layering, injection, bus and notifier use are intact; extra application helper free_hours keeps handlers on the service only."},
+{"id":"w017","violates":false,"requirements":[],"reason":"Appointment state is encapsulated behind read-only properties and methods, and all layer and injection rules are kept."},
+{"id":"w018","violates":true,"requirements":[1,12],"reason":"domain/schedule.py Appointment.cancel imports application.bus.EventBus, so domain depends on the application layer."},
+{"id":"w019","violates":false,"requirements":[],"reason":"Dataclass Patient is a different idiom only; the layers, injection and dependency directions match the required architecture."},
+{"id":"w020","violates":true,"requirements":[10],"reason":"sqlite_store imports BOOKED, CANCELLED and ATTENDED from domain.schedule, beyond Slot, Appointment, free_slots and WORKING_HOURS."}
+]

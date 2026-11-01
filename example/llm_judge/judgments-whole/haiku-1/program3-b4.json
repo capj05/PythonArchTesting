@@ -1,0 +1,7 @@
+[
+  {"id": "w016", "violates": false, "requirements": [], "reason": "Layers, injection and event flow all follow the architecture: adapters are built only in wiring, the reminders send through the notifier, and the handlers use only the booking service and reminders."},
+  {"id": "w017", "violates": false, "requirements": [], "reason": "Dependencies run in the permitted direction, sqlite3 stays in the SQLite adapter, and the schedule is used only through Slot, Appointment and free_slots."},
+  {"id": "w018", "violates": true, "requirements": [1, 12], "reason": "domain/schedule.py Appointment.cancel imports application.bus.EventBus and instantiates it, so the domain reaches up into the application layer."},
+  {"id": "w019", "violates": false, "requirements": [], "reason": "Patient is a dataclass using only the standard library and the rest of the layering matches the reference structure."},
+  {"id": "w020", "violates": true, "requirements": [10], "reason": "adapters/sqlite_store.py imports the status constants BOOKED, CANCELLED and ATTENDED from domain.schedule, which is outside the four names other modules may use."}
+]

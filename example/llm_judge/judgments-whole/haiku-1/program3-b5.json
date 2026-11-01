@@ -1,0 +1,7 @@
+[
+  {"id": "w021", "violates": false, "requirements": [], "reason": "The layers keep their dependency order, sqlite3 is used only in the SQLite adapter, and handlers, fees and events all go through the application services, injected policy and bus."},
+  {"id": "w022", "violates": true, "requirements": [3], "reason": "api/lookup.py reaches the appointment store through the service's private attribute (service._appointments), so the request handlers touch an object reachable from the service."},
+  {"id": "w023", "violates": true, "requirements": [11], "reason": "BookingService.cancel sets appointment.status and appointment.fee directly instead of calling Appointment.cancel()."},
+  {"id": "w024", "violates": false, "requirements": [], "reason": "Slot is moved to domain/slots.py and re-exported through schedule.py without cycles, the fee comes from the injected policy, and the other layer rules hold."},
+  {"id": "w025", "violates":  false, "requirements": [], "reason": "The package re-exports keep the layer order, the handlers use only the application package, the adapters satisfy their ports, and appointment state changes only through its methods."}
+]

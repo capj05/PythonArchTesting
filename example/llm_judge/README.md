@@ -17,6 +17,12 @@ programs) are judged blind by LLM agents and compared with the tool's verdicts.
   equivalents per judge run and per tool configuration, agreement between
   runs, and the variants on which the judges' majority and the tool differ.
 
+Program 3 (the larger clinic program, T5) is judged as whole submissions
+only: `prepare.py --whole --only program3 --batch-size 5` (67 submissions:
+its 19 + 14 mutants, 8 + 8 equivalents and 18 E2 solutions), judged by Sonnet
+twice and Haiku once (`judgments-whole/<run>/program3-b<N>.json`); `--only`
+keeps the other programs' keys.
+
 The judges' inputs (`program1/`, `program2/`: `context.md`, the diffs, the
 whole submissions, the batches) are not checked in: the whole submissions
 contain the code of the generated E2 solutions, which stay out of the

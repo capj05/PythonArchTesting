@@ -58,15 +58,16 @@ The results are in [results.md](results.md) and [results.csv](results.csv).
   the probe now counts the `__init__` that `dataclasses` generates as code of
   the class's module, so the reference's `application -> domain` call is seen
   on the target too.
-- Runtime rules caught all 13 mutants, static rules 7, import-linter 6. The
+- Runtime rules caught all 13 mutants, static rules 8, import-linter 6. The
   static rules caught every mutant that needs an `import` statement (M02,
-  M04–M06, M12, M13) and M10, whose adapter no longer has the method its port
-  demands (`implements_protocol`); that one is the only difference from
-  import-linter, which checks imports only. No mutant was caught by static
+  M04–M06, M12, M13) and the two broken ports, M10 (the adapter no longer has
+  the method its port demands) and M11 (`implements_protocol`); those two are
+  the difference from import-linter, which checks imports only. No mutant was caught by static
   rules alone.
-- M11 gives `find` a second required parameter. The static
-  `implements_protocol` does not flag it; `implements_runtime_protocol`,
-  which calls the method as the port does, catches it.
+- M11 gives `find` a second required parameter. `implements_runtime_protocol`
+  catches it by calling the method as the port does; since 2026-11-01 the
+  static `implements_protocol` does too (under `signature_mode="compatible"`
+  an extra parameter must be optional; before, any extra parameter passed).
 - M03, a detour through a helper module of the handler's own, is caught both by
   `enforce_reference_calls` (the helper folds into `api`, so the edge
   `api -> adapters_memory` is a divergence) and by `forbid_runtime_calls`,

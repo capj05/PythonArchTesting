@@ -1,0 +1,7 @@
+[
+  {"id": "w061", "violates": true, "requirements": [4], "reason": "application/booking.py imports sqlite3 and opens a SQLite connection inside BookingService.book, so SQL is used outside the SQLite adapter."},
+  {"id": "w062", "violates": true, "requirements": [5], "reason": "OutboxNotifier.send takes an extra required priority parameter, so it no longer satisfies the Notifier port and ReminderService's three-argument call would fail."},
+  {"id": "w063", "violates": true, "requirements": [3], "reason": "api/handlers.py imports the domain Slot and constructs it directly in book, so the request handler talks to the domain instead of only to the application."},
+  {"id": "w064", "violates": false, "requirements": [], "reason": "The only change is a defaultdict-based event bus, which keeps the same subscribe, unsubscribe and publish behaviour and dependencies."},
+  {"id": "w065", "violates": false, "requirements": [], "reason": "run_for is restructured to count active appointments first, still sending every reminder through the injected notifier and using only Appointment's public property and the store port."}
+]

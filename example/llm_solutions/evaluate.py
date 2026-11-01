@@ -44,6 +44,7 @@ EXAMPLES = HERE.parent
 PROGRAMS = {
     "program1": EXAMPLES / "architectural_mutants",
     "program2": EXAMPLES / "architectural_mutants_2",
+    "program3": EXAMPLES / "architectural_mutants_3",
 }
 _NOT_RUN = ("case_setup_failed", "reference_failed", "target_kind_mismatch")
 _NO_MATCH = "required_target_missing"

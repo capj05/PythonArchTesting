@@ -1,0 +1,7 @@
+[
+{"id": "w056", "violates": true, "requirements": [5], "reason": "OutboxNotifier.send has its parameters in the order (subject, address, body), so it does not satisfy the Notifier port's send(address, subject, body)."},
+{"id": "w057", "violates": false, "requirements": [], "reason": "EventBus.unsubscribe is a no-op, which is a behavioural bug, but the layering, injection and encapsulation requirements are all kept."},
+{"id": "w058", "violates": false, "requirements": [], "reason": "The _announce helper still publishes through the injected bus and the appointment is changed only via cancel(); the architecture is unchanged."},
+{"id": "w059", "violates": false, "requirements": [], "reason": "Differently organised modules, but layering is respected, handlers use only the BookingService and ReminderService, adapters are built only in wiring and Appointment is encapsulated."},
+{"id": "w060", "violates": false, "requirements": [], "reason": "Only the in-memory id counter changes (itertools.count); the architecture is unchanged."}
+]

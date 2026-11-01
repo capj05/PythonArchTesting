@@ -1,0 +1,7 @@
+[
+  {"id": "w031", "violates": true, "requirements": [3], "reason": "api/serializers.py find() reads service._appointments, a port object reached through the service, and handlers.cancel calls it."},
+  {"id": "w032", "violates": true, "requirements": [8], "reason": "BookingService ignores the injected policy and hardcodes LateCancellationFee(hours=24, amount=30) for every cancellation fee."},
+  {"id": "w033", "violates": false, "requirements": [], "reason": "The only change is a private _reminder helper in ReminderService that still reads slot attributes and sends through the injected notifier."},
+  {"id": "w034", "violates": false, "requirements": [], "reason": "EventBus omits unsubscribe, which is a spec gap but not one of the graded architecture requirements; layering, injection and events are unchanged."},
+  {"id": "w035", "violates": false, "requirements": [], "reason": "Adapters explicitly subclass their ports (Notifier, AppointmentStore, PatientStore), which still satisfies requirement 5 and keeps the allowed adapter-to-ports dependency."}
+]

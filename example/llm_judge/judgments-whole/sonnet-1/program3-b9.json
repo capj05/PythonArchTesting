@@ -1,0 +1,7 @@
+[
+{"id": "w041", "violates": true, "requirements": [9], "reason": "domain/schedule.py imports domain/policies.py at the bottom while policies.py imports schedule.py, creating a dependency cycle."},
+{"id": "w042", "violates": false, "requirements": [], "reason": "Only an internal adapters re-export module was added; layering, injection and encapsulation are intact."},
+{"id": "w043", "violates": true, "requirements": [4], "reason": "application/booking.py imports sqlite3 and writes to an in-memory log database outside the SQLite adapter."},
+{"id": "w044", "violates": true, "requirements": [4], "reason": "application/booking.py loads the pickle module via importlib, outside the SQLite adapter."},
+{"id": "w045", "violates": false, "requirements": [], "reason": "Same layered structure with properties and private fields; all dependencies and state changes follow the requirements."}
+]

@@ -1,0 +1,4 @@
+[
+  {"id": "w066", "violates": false, "requirements": [], "reason": "Layers, bus, notifier injection, SQL confined to the SQLite adapter and adapters built only in wiring keep every graded requirement, with the schedule split into slots and appointments modules that are used only through their public names."},
+  {"id": "w067", "violates": true, "requirements": [10], "reason": "sqlite_store.py imports the BOOKED status constant from domain.schedule, which is not one of the four names (Slot, Appointment, free_slots, WORKING_HOURS) that requirement 10 allows other modules to use."}
+]

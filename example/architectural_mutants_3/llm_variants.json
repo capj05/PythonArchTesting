@@ -1,0 +1,396 @@
+[
+ {
+  "id": "M101",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "The book handler builds a domain Slot itself to validate the request instead of leaving it to the service.",
+  "patches": [
+   [
+    "api/handlers.py",
+    "from ..application.reminders import ReminderService\n",
+    "from ..application.reminders import ReminderService\nfrom ..domain.schedule import Slot\n"
+   ],
+   [
+    "api/handlers.py",
+    "        hour = as_int(request.get(\"hour\"), \"hour\")\n        service.register(",
+    "        hour = as_int(request.get(\"hour\"), \"hour\")\n        Slot(doctor, day, hour)\n        service.register("
+   ]
+  ]
+ },
+ {
+  "id": "M102",
+  "kind": "mutant",
+  "operator": "O1b bypass through a helper",
+  "description": "The cancel handler checks existence through a serializers helper that reaches the store inside the service.",
+  "patches": [
+   [
+    "api/serializers.py",
+    "def ok(**fields: Any) -> dict[str, Any]:",
+    "def find(service: Any, appointment_id: str) -> Any:\n    return service._appointments.get(appointment_id)\n\n\ndef ok(**fields: Any) -> dict[str, Any]:"
+   ],
+   [
+    "api/handlers.py",
+    "from .serializers import RequestError, as_int, error, ok, require",
+    "from .serializers import RequestError, as_int, error, find, ok, require"
+   ],
+   [
+    "api/handlers.py",
+    "        (appointment_id,) = require(request, \"appointment\")\n        fee = service.cancel(appointment_id)",
+    "        (appointment_id,) = require(request, \"appointment\")\n        if find(service, appointment_id) is None:\n            return error(f\"no appointment {appointment_id}\")\n        fee = service.cancel(appointment_id)"
+   ]
+  ]
+ },
+ {
+  "id": "M103",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "BookingService ignores the injected cancellation policy and builds its own.",
+  "patches": [
+   [
+    "application/booking.py",
+    "from ..domain.patients import Patient\n",
+    "from ..domain.patients import Patient\nfrom ..domain.policies import LateCancellationFee\n"
+   ],
+   [
+    "application/booking.py",
+    "        self._policy = policy\n",
+    "        self._policy = LateCancellationFee(hours=24, amount=30)\n"
+   ]
+  ]
+ },
+ {
+  "id": "M104",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "The in-memory appointment store constructs an OutboxNotifier itself to audit additions.",
+  "patches": [
+   [
+    "adapters/memory_store.py",
+    "from ..domain.patients import Patient\n",
+    "from ..domain.patients import Patient\nfrom .email_notifier import OutboxNotifier\n"
+   ],
+   [
+    "adapters/memory_store.py",
+    "        self._counter = len(self._items)\n",
+    "        self._counter = len(self._items)\n        self._audit = OutboxNotifier()\n"
+   ],
+   [
+    "adapters/memory_store.py",
+    "    def add(self, appointment: Appointment) -> None:\n        self._items[appointment.appointment_id] = appointment\n",
+    "    def add(self, appointment: Appointment) -> None:\n        self._items[appointment.appointment_id] = appointment\n        self._audit.send(appointment.patient_id, \"stored\", appointment.appointment_id)\n"
+   ]
+  ]
+ },
+ {
+  "id": "M105",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "BookingService.move rewrites the appointment's slot and history directly instead of calling move_to.",
+  "patches": [
+   [
+    "application/booking.py",
+    "        appointment.move_to(slot)\n",
+    "        appointment.history.append(appointment.slot)\n        appointment.slot = slot\n"
+   ]
+  ]
+ },
+ {
+  "id": "M106",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "BookingService.cancel sets the appointment's status and fee directly instead of calling cancel.",
+  "patches": [
+   [
+    "application/booking.py",
+    "        appointment.cancel(fee)\n",
+    "        appointment.status = \"cancelled\"\n        appointment.fee = fee\n"
+   ]
+  ]
+ },
+ {
+  "id": "M107",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "The in-memory appointment store pickles a snapshot of its ids on every add.",
+  "patches": [
+   [
+    "adapters/memory_store.py",
+    "from typing import Optional",
+    "import pickle\nfrom typing import Optional"
+   ],
+   [
+    "adapters/memory_store.py",
+    "        self._items[appointment.appointment_id] = appointment\n",
+    "        self._items[appointment.appointment_id] = appointment\n        self._snapshot = pickle.dumps(sorted(self._items))\n"
+   ]
+  ]
+ },
+ {
+  "id": "M108",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "ReminderService logs messages instead of sending them through the injected notifier.",
+  "patches": [
+   [
+    "application/reminders.py",
+    "from __future__ import annotations\n",
+    "from __future__ import annotations\n\nimport logging\n"
+   ],
+   [
+    "application/reminders.py",
+    "        self._notifier.send(patient.email, subject, f\"{patient.greeting()},\\n{text}\")",
+    "        logging.getLogger(__name__).info(\"to %s: %s\", patient.email, subject)"
+   ]
+  ]
+ },
+ {
+  "id": "M109",
+  "kind": "mutant",
+  "operator": "O6 broken pattern",
+  "description": "The EventBus loses its unsubscribe operation.",
+  "patches": [
+   [
+    "application/bus.py",
+    "    def unsubscribe(self, name: str, handler: Handler) -> None:\n        self._handlers.get(name, []).remove(handler)\n\n",
+    ""
+   ]
+  ]
+ },
+ {
+  "id": "M110",
+  "kind": "mutant",
+  "operator": "O7 dependency cycle",
+  "description": "domain/schedule.py imports domain/policies.py (which imports schedule) to offer a default fee.",
+  "patches": [
+   [
+    "domain/schedule.py",
+    "def _check_hour(hour: int) -> None:\n    if hour not in WORKING_HOURS:\n        raise ValueError(f\"the clinic is closed at {hour}:00\")",
+    "def _check_hour(hour: int) -> None:\n    if hour not in WORKING_HOURS:\n        raise ValueError(f\"the clinic is closed at {hour}:00\")\n\n\nfrom . import policies  # noqa: E402\n\n\ndef default_fee(appointment: Appointment, day: int, hour: int) -> int:\n    return policies.FreeCancellation().fee(appointment, day, hour)"
+   ]
+  ]
+ },
+ {
+  "id": "M111",
+  "kind": "mutant",
+  "operator": "O8 module interface",
+  "description": "BookingService validates the hour with the private _check_hour of domain/schedule.py.",
+  "patches": [
+   [
+    "application/booking.py",
+    "from ..domain.schedule import Appointment, Slot, free_slots",
+    "from ..domain.schedule import Appointment, Slot, _check_hour, free_slots"
+   ],
+   [
+    "application/booking.py",
+    "            slot = Slot(doctor, day, hour)\n",
+    "            _check_hour(hour)\n            slot = Slot(doctor, day, hour)\n"
+   ]
+  ]
+ },
+ {
+  "id": "M112",
+  "kind": "mutant",
+  "operator": "O9 broken port",
+  "description": "OutboxNotifier.send changes its parameter order compared with the Notifier port.",
+  "patches": [
+   [
+    "adapters/email_notifier.py",
+    "    def send(self, address: str, subject: str, body: str) -> None:\n        self.sent.append((address, subject, body))",
+    "    def send(self, subject: str, address: str, body: str) -> None:\n        self.sent.append((address, subject, body))"
+   ]
+  ]
+ },
+ {
+  "id": "M113",
+  "kind": "mutant",
+  "operator": "O10 dependent domain",
+  "description": "domain/patients.py imports the Clock port and uses it.",
+  "patches": [
+   [
+    "domain/patients.py",
+    "from __future__ import annotations\n",
+    "from __future__ import annotations\n\nfrom ..ports.clock import Clock\n"
+   ],
+   [
+    "domain/patients.py",
+    "        return f\"Dear {first}\"",
+    "        return f\"Dear {first}\"\n\n    def registered_at(self, clock: Clock) -> tuple[int, int]:\n        return clock.now()"
+   ]
+  ]
+ },
+ {
+  "id": "M114",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "BookingService logs every cancellation into an SQLite table of its own.",
+  "patches": [
+   [
+    "application/booking.py",
+    "from typing import Any, Protocol",
+    "import sqlite3\nfrom typing import Any, Protocol"
+   ],
+   [
+    "application/booking.py",
+    "class BookingError(Exception):\n    pass\n",
+    "class BookingError(Exception):\n    pass\n\n\n_LOG = sqlite3.connect(\":memory:\")\n_LOG.execute(\"CREATE TABLE IF NOT EXISTS log (id TEXT, fee INTEGER)\")\n"
+   ],
+   [
+    "application/booking.py",
+    "        appointment.cancel(fee)\n",
+    "        appointment.cancel(fee)\n        _LOG.execute(\"INSERT INTO log VALUES (?, ?)\", (appointment_id, fee))\n"
+   ]
+  ]
+ },
+ {
+  "id": "E101",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "Patient becomes a dataclass with the same validation.",
+  "patches": [
+   [
+    "domain/patients.py",
+    "from __future__ import annotations\n",
+    "from __future__ import annotations\n\nfrom dataclasses import dataclass\n"
+   ],
+   [
+    "domain/patients.py",
+    "class Patient:\n    def __init__(self, patient_id: str, name: str, email: str) -> None:\n        if not patient_id:\n            raise ValueError(\"a patient needs an id\")\n        if \"@\" not in email:\n            raise ValueError(f\"not an e-mail address: {email!r}\")\n        self.patient_id = patient_id\n        self.name = name\n        self.email = email\n",
+    "@dataclass\nclass Patient:\n    patient_id: str\n    name: str\n    email: str\n\n    def __post_init__(self) -> None:\n        if not self.patient_id:\n            raise ValueError(\"a patient needs an id\")\n        if \"@\" not in self.email:\n            raise ValueError(f\"not an e-mail address: {self.email!r}\")\n"
+   ]
+  ]
+ },
+ {
+  "id": "E102",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "BookingService publishes the cancellation through a private helper method.",
+  "patches": [
+   [
+    "application/booking.py",
+    "        self._bus.publish(\n            AppointmentCancelled(appointment_id, appointment.patient_id, fee)\n        )\n",
+    "        self._announce(\n            AppointmentCancelled(appointment_id, appointment.patient_id, fee)\n        )\n"
+   ],
+   [
+    "application/booking.py",
+    "    def _existing(self, appointment_id: str) -> Appointment:\n",
+    "    def _announce(self, event: Any) -> None:\n        self._bus.publish(event)\n\n    def _existing(self, appointment_id: str) -> Appointment:\n"
+   ]
+  ]
+ },
+ {
+  "id": "E103",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "The in-memory appointment store generates ids with itertools.count.",
+  "patches": [
+   [
+    "adapters/memory_store.py",
+    "from typing import Optional",
+    "import itertools\nfrom typing import Optional"
+   ],
+   [
+    "adapters/memory_store.py",
+    "        self._counter = len(self._items)\n",
+    "        self._ids = itertools.count(len(self._items) + 1)\n"
+   ],
+   [
+    "adapters/memory_store.py",
+    "        self._counter += 1\n        return f\"A{self._counter}\"",
+    "        return f\"A{next(self._ids)}\""
+   ]
+  ]
+ },
+ {
+  "id": "E104",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "The EventBus keeps its handlers in a defaultdict.",
+  "patches": [
+   [
+    "application/bus.py",
+    "from typing import Any, Callable",
+    "from collections import defaultdict\nfrom typing import Any, Callable"
+   ],
+   [
+    "application/bus.py",
+    "        self._handlers: dict[str, list[Handler]] = {}\n",
+    "        self._handlers: defaultdict[str, list[Handler]] = defaultdict(list)\n"
+   ],
+   [
+    "application/bus.py",
+    "        self._handlers.setdefault(name, []).append(handler)\n",
+    "        self._handlers[name].append(handler)\n"
+   ]
+  ]
+ },
+ {
+  "id": "E105",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "The outbox notifier moves to adapters/notifications.py; the old module re-exports it.",
+  "patches": [
+   [
+    "adapters/email_notifier.py",
+    "class OutboxNotifier:\n    def __init__(self) -> None:\n        self.sent: list[tuple[str, str, str]] = []\n\n    def send(self, address: str, subject: str, body: str) -> None:\n        self.sent.append((address, subject, body))",
+    "from .notifications import OutboxNotifier\n\n__all__ = [\"OutboxNotifier\"]"
+   ],
+   [
+    "wiring.py",
+    "from .adapters.email_notifier import OutboxNotifier",
+    "from .adapters.notifications import OutboxNotifier"
+   ]
+  ],
+  "new_files": {
+   "adapters/notifications.py": "\"\"\"A notifier that keeps the e-mails it would send (an outbox).\"\"\"\n\nfrom __future__ import annotations\n\n\nclass OutboxNotifier:\n    def __init__(self) -> None:\n        self.sent: list[tuple[str, str, str]] = []\n\n    def send(self, address: str, subject: str, body: str) -> None:\n        self.sent.append((address, subject, body))\n"
+  }
+ },
+ {
+  "id": "E106",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "The free handler extracts the hours with a small private helper.",
+  "patches": [
+   [
+    "api/handlers.py",
+    "    return ok(hours=[slot.hour for slot in slots])",
+    "    return ok(hours=_hours(slots))"
+   ],
+   [
+    "api/handlers.py",
+    "def remind(request",
+    "def _hours(slots: list[Any]) -> list[int]:\n    return [slot.hour for slot in slots]\n\n\ndef remind(request"
+   ]
+  ]
+ },
+ {
+  "id": "E107",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "LateCancellationFee becomes a dataclass with the same validation.",
+  "patches": [
+   [
+    "domain/policies.py",
+    "from .schedule import Appointment\n",
+    "from dataclasses import dataclass\n\nfrom .schedule import Appointment\n"
+   ],
+   [
+    "domain/policies.py",
+    "class LateCancellationFee:\n    \"\"\"``amount`` when the visit starts within ``hours`` of the cancellation.\"\"\"\n\n    def __init__(self, hours: int, amount: int) -> None:\n        if hours < 0 or amount < 0:\n            raise ValueError(\"hours and amount must not be negative\")\n        self.hours = hours\n        self.amount = amount\n",
+    "@dataclass\nclass LateCancellationFee:\n    \"\"\"``amount`` when the visit starts within ``hours`` of the cancellation.\"\"\"\n\n    hours: int\n    amount: int\n\n    def __post_init__(self) -> None:\n        if self.hours < 0 or self.amount < 0:\n            raise ValueError(\"hours and amount must not be negative\")\n"
+   ]
+  ]
+ },
+ {
+  "id": "E108",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "ReminderService.run_for filters active appointments first and counts them with len.",
+  "patches": [
+   [
+    "application/reminders.py",
+    "        sent = 0\n        for appointment in self._appointments.on_day(day):\n            if not appointment.active:\n                continue\n            slot = appointment.slot\n            self._tell(\n                appointment.patient_id,\n                \"Reminder\",\n                f\"Tomorrow at {slot.hour}:00 with {slot.doctor}.\",\n            )\n            sent += 1\n        return sent",
+    "        active = [a for a in self._appointments.on_day(day) if a.active]\n        for appointment in active:\n            slot = appointment.slot\n            self._tell(\n                appointment.patient_id,\n                \"Reminder\",\n                f\"Tomorrow at {slot.hour}:00 with {slot.doctor}.\",\n            )\n        return len(active)"
+   ]
+  ]
+ }
+]

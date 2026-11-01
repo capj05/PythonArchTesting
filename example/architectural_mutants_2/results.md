@@ -18,7 +18,7 @@ Unchanged solution: static failures none, runtime failures none, import-linter f
 | M08 | O3 foreign write | give_back() sets loan.returned instead of calling close() | no | yes | no | no | enforce_reference_calls, forbid_foreign_writes | - |
 | M09 | O5 skipped collaborator | lend() never notifies the member | no | yes | no | yes | enforce_reference_calls, require_runtime_delegation | - |
 | M10 | O9 broken port | the notifier's send() is renamed to notify() | yes | yes | no | no | implements_protocol, implements_runtime_protocol, require_runtime_delegation | - |
-| M11 | O9 broken port | the store's find() requires a second argument | no | yes | no | no | implements_runtime_protocol | - |
+| M11 | O9 broken port | the store's find() requires a second argument | yes | yes | no | no | implements_protocol, implements_runtime_protocol | - |
 | M12 | O10 dependent domain | close() tells the member through the notifier adapter | yes | yes | yes | yes | enforce_layers, enforce_reference_calls, forbid_imports | - |
 | M13 | O7 dependency cycle | the loan takes its closed state from a function of the service | yes | yes | yes | yes | enforce_layers, enforce_reference_calls, forbid_cycles, forbid_imports | - |
 
@@ -30,10 +30,10 @@ Unchanged solution: static failures none, runtime failures none, import-linter f
 | O2 broken injection | 3 | 2 | 3 | 3 | 0 | 1 | 2 | 3 |
 | O3 foreign write | 1 | 0 | 1 | 1 | 0 | 1 | 0 | 0 |
 | O5 skipped collaborator | 1 | 0 | 1 | 1 | 0 | 1 | 0 | 1 |
-| O9 broken port | 2 | 1 | 2 | 2 | 0 | 1 | 0 | 0 |
+| O9 broken port | 2 | 2 | 2 | 2 | 0 | 0 | 0 | 0 |
 | O10 dependent domain | 1 | 1 | 1 | 1 | 0 | 0 | 1 | 1 |
 | O7 dependency cycle | 1 | 1 | 1 | 1 | 0 | 0 | 1 | 1 |
-| **all** | 13 | 7 | 13 | 13 | 0 | 6 | 6 | 10 |
+| **all** | 13 | 8 | 13 | 13 | 0 | 5 | 6 | 10 |
 
 ## Equivalent rewrites (false positives)
 

@@ -1,0 +1,7 @@
+[
+{"id":"w036","violates":false,"requirements":[],"reason":"The EventBus uses a list of pairs instead of a dict, but all layers, injection and dependency rules match the reference."},
+{"id":"w037","violates":true,"requirements":[11],"reason":"BookingService.move appends to appointment.history and assigns appointment.slot directly instead of calling Appointment.move_to."},
+{"id":"w038","violates":false,"requirements":[],"reason":"LateCancellationFee is a dataclass in the domain, an idiom change only; the architecture is unchanged."},
+{"id":"w039","violates":false,"requirements":[],"reason":"The _guarded helper in the api only restructures error handling; handlers still use the application services only."},
+{"id":"w040","violates":false,"requirements":[],"reason":"A restructured package with different module names, but it keeps the layer order, injected policy, bus and notifier, sqlite only in its adapter, and state changes through Appointment methods."}
+]

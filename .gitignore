@@ -11,6 +11,7 @@ example/*
 !example/rule_showcase/
 !example/architectural_mutants/
 !example/architectural_mutants_2/
+!example/architectural_mutants_3/
 !example/llm_solutions/
 !example/llm_judge/
 !example/llm_authoring/

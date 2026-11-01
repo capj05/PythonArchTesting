@@ -39,10 +39,17 @@ PROGRAMS = {
     "program1": EXAMPLES / "architectural_mutants",
     "program2": EXAMPLES / "architectural_mutants_2",
 }
+# Whole submissions also cover the larger program 3 (T5); its diffs are not
+# judged.
+WHOLE_PROGRAMS = {
+    **PROGRAMS,
+    "program3": EXAMPLES / "architectural_mutants_3",
+}
 # The intended architecture, as the assignment states it to students.
 ASSIGNMENTS = {
     "program1": EXAMPLES / "llm_solutions" / "program1" / "assignment.md",
     "program2": EXAMPLES / "llm_solutions" / "program2" / "assignment.md",
+    "program3": EXAMPLES / "llm_solutions" / "program3" / "assignment.md",
 }
 
 
@@ -100,8 +107,21 @@ def _solutions(name: str) -> list[tuple[str, Path]]:
 
 
 def _prepare_whole(args: argparse.Namespace, run: Any) -> int:
-    key: dict[str, Any] = {}
-    for name, program in PROGRAMS.items():
+    wanted = set(args.only.split(",")) if args.only else set(WHOLE_PROGRAMS)
+    key_path = HERE / "key-whole.json"
+    # Programs not prepared now keep their keys (and their judges' verdicts).
+    key: dict[str, Any] = {
+        neutral: item
+        for neutral, item in (
+            json.loads(key_path.read_text(encoding="utf-8"))
+            if key_path.is_file()
+            else {}
+        ).items()
+        if item["program"] not in wanted
+    }
+    for name, program in WHOLE_PROGRAMS.items():
+        if name not in wanted:
+            continue
         out = HERE / name
         whole = out / "whole"
         if whole.exists():
@@ -166,7 +186,9 @@ def _prepare_whole(args: argparse.Namespace, run: Any) -> int:
             json.dumps(batches, indent=1), encoding="utf-8"
         )
         print(f"{name}: {len(ids)} whole submissions in {len(batches)} batches")
-    (HERE / "key-whole.json").write_text(json.dumps(key, indent=1), encoding="utf-8")
+    key_path.write_text(
+        json.dumps(dict(sorted(key.items())), indent=1), encoding="utf-8"
+    )
     return 0
 
 
@@ -189,6 +211,11 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument(
         "--whole", action="store_true", help="whole submissions instead of diffs"
+    )
+    parser.add_argument(
+        "--only",
+        help="comma-separated programs to prepare (whole submissions); the "
+        "others keep their keys",
     )
     args = parser.parse_args()
     sys.path.insert(0, str(EXAMPLES / "architectural_mutants"))

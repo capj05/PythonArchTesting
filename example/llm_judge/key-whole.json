@@ -918,5 +918,541 @@
   "kind": "mutant",
   "operator": "O2 broken injection",
   "description": "service builds a fresh store of the injected store's class"
+ },
+ "program3/w001": {
+  "program": "program3",
+  "set": "E2 text",
+  "id": "text/sonnet-3",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w002": {
+  "program": "program3",
+  "set": "hand",
+  "id": "E02",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "the in-memory store module is called in_memory"
+ },
+ "program3/w003": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M11",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "the booking confirmation is never sent"
+ },
+ "program3/w004": {
+  "program": "program3",
+  "set": "E2 text",
+  "id": "text/sonnet-1",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w005": {
+  "program": "program3",
+  "set": "E2 skeleton",
+  "id": "skeleton/sonnet-1",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w006": {
+  "program": "program3",
+  "set": "E2 skeleton",
+  "id": "skeleton/opus-3",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w007": {
+  "program": "program3",
+  "set": "E2 text",
+  "id": "text/opus-3",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w008": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M17",
+  "kind": "mutant",
+  "operator": "O9 broken port",
+  "description": "the patient store's get is called find"
+ },
+ "program3/w009": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M08",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "move replaces the appointment's slot itself"
+ },
+ "program3/w010": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M104",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "The in-memory appointment store constructs an OutboxNotifier itself to audit additions."
+ },
+ "program3/w011": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M04",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "the booking service builds its own in-memory store"
+ },
+ "program3/w012": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M108",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "ReminderService logs messages instead of sending them through the injected notifier."
+ },
+ "program3/w013": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M113",
+  "kind": "mutant",
+  "operator": "O10 dependent domain",
+  "description": "domain/patients.py imports the Clock port and uses it."
+ },
+ "program3/w014": {
+  "program": "program3",
+  "set": "hand",
+  "id": "E01",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "the serializers live in the handlers module"
+ },
+ "program3/w015": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M16",
+  "kind": "mutant",
+  "operator": "O8 module interface",
+  "description": "the SQLite store validates hours with the schedule's private helper"
+ },
+ "program3/w016": {
+  "program": "program3",
+  "set": "E2 skeleton",
+  "id": "skeleton/opus-1",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w017": {
+  "program": "program3",
+  "set": "E2 skeleton",
+  "id": "skeleton/haiku-1",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w018": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M14",
+  "kind": "mutant",
+  "operator": "O7 dependency cycle",
+  "description": "an appointment publishes its own cancellation on a bus"
+ },
+ "program3/w019": {
+  "program": "program3",
+  "set": "hand",
+  "id": "E05",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "a patient is a dataclass"
+ },
+ "program3/w020": {
+  "program": "program3",
+  "set": "E2 skeleton",
+  "id": "skeleton/sonnet-3",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w021": {
+  "program": "program3",
+  "set": "E2 skeleton",
+  "id": "skeleton/sonnet-2",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w022": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M03",
+  "kind": "mutant",
+  "operator": "O1b bypass through a helper",
+  "description": "handler reaches the store through a helper module of the api"
+ },
+ "program3/w023": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M07",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "cancel sets the appointment's status and fee itself"
+ },
+ "program3/w024": {
+  "program": "program3",
+  "set": "hand",
+  "id": "E03",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "slots get a module of their own, re-exported by the schedule"
+ },
+ "program3/w025": {
+  "program": "program3",
+  "set": "E2 text",
+  "id": "text/opus-1",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w026": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "E106",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "The free handler extracts the hours with a small private helper."
+ },
+ "program3/w027": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M101",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "The book handler builds a domain Slot itself to validate the request instead of leaving it to the service."
+ },
+ "program3/w028": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M05",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "reminders build their own notifier, imported inside the method"
+ },
+ "program3/w029": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M02",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "handler asks the service's store directly (no import)"
+ },
+ "program3/w030": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M06",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "cancel applies a fee policy of its own, not the injected one"
+ },
+ "program3/w031": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M102",
+  "kind": "mutant",
+  "operator": "O1b bypass through a helper",
+  "description": "The cancel handler checks existence through a serializers helper that reaches the store inside the service."
+ },
+ "program3/w032": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M103",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "BookingService ignores the injected cancellation policy and builds its own."
+ },
+ "program3/w033": {
+  "program": "program3",
+  "set": "hand",
+  "id": "E06",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "reminders format their text in a private helper method"
+ },
+ "program3/w034": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M109",
+  "kind": "mutant",
+  "operator": "O6 broken pattern",
+  "description": "The EventBus loses its unsubscribe operation."
+ },
+ "program3/w035": {
+  "program": "program3",
+  "set": "hand",
+  "id": "E08",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "the adapters inherit from the ports they implement"
+ },
+ "program3/w036": {
+  "program": "program3",
+  "set": "hand",
+  "id": "E04",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "the bus keeps its handlers as a list of (name, handler) pairs"
+ },
+ "program3/w037": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M105",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "BookingService.move rewrites the appointment's slot and history directly instead of calling move_to."
+ },
+ "program3/w038": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "E107",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "LateCancellationFee becomes a dataclass with the same validation."
+ },
+ "program3/w039": {
+  "program": "program3",
+  "set": "hand",
+  "id": "E07",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "the handlers share one wrapper for errors"
+ },
+ "program3/w040": {
+  "program": "program3",
+  "set": "E2 text",
+  "id": "text/haiku-1",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w041": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M110",
+  "kind": "mutant",
+  "operator": "O7 dependency cycle",
+  "description": "domain/schedule.py imports domain/policies.py (which imports schedule) to offer a default fee."
+ },
+ "program3/w042": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "E105",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "The outbox notifier moves to adapters/notifications.py; the old module re-exports it."
+ },
+ "program3/w043": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M114",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "BookingService logs every cancellation into an SQLite table of its own."
+ },
+ "program3/w044": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M10",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "the booking module loads pickle by name when it is imported"
+ },
+ "program3/w045": {
+  "program": "program3",
+  "set": "E2 skeleton",
+  "id": "skeleton/haiku-2",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w046": {
+  "program": "program3",
+  "set": "E2 text",
+  "id": "text/sonnet-2",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w047": {
+  "program": "program3",
+  "set": "E2 text",
+  "id": "text/haiku-3",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w048": {
+  "program": "program3",
+  "set": "E2 skeleton",
+  "id": "skeleton/opus-2",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w049": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M111",
+  "kind": "mutant",
+  "operator": "O8 module interface",
+  "description": "BookingService validates the hour with the private _check_hour of domain/schedule.py."
+ },
+ "program3/w050": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M19",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "the booking module keeps a debug helper that imports the SQLite adapter through the package name"
+ },
+ "program3/w051": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M106",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "BookingService.cancel sets the appointment's status and fee directly instead of calling cancel."
+ },
+ "program3/w052": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M12",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "reminders write to the outbox list instead of calling send"
+ },
+ "program3/w053": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M15",
+  "kind": "mutant",
+  "operator": "O10 dependent domain",
+  "description": "the cancellation policies read the clock port themselves"
+ },
+ "program3/w054": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M107",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "The in-memory appointment store pickles a snapshot of its ids on every add."
+ },
+ "program3/w055": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "E101",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "Patient becomes a dataclass with the same validation."
+ },
+ "program3/w056": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "M112",
+  "kind": "mutant",
+  "operator": "O9 broken port",
+  "description": "OutboxNotifier.send changes its parameter order compared with the Notifier port."
+ },
+ "program3/w057": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M13",
+  "kind": "mutant",
+  "operator": "O6 broken pattern",
+  "description": "unsubscribing leaves the handler on the bus"
+ },
+ "program3/w058": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "E102",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "BookingService publishes the cancellation through a private helper method."
+ },
+ "program3/w059": {
+  "program": "program3",
+  "set": "E2 text",
+  "id": "text/opus-2",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w060": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "E103",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "The in-memory appointment store generates ids with itertools.count."
+ },
+ "program3/w061": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M09",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "the booking service logs bookings to SQLite"
+ },
+ "program3/w062": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M18",
+  "kind": "mutant",
+  "operator": "O9 broken port",
+  "description": "the notifier's send requires a priority"
+ },
+ "program3/w063": {
+  "program": "program3",
+  "set": "hand",
+  "id": "M01",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "handler checks the hour with a domain Slot of its own"
+ },
+ "program3/w064": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "E104",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "The EventBus keeps its handlers in a defaultdict."
+ },
+ "program3/w065": {
+  "program": "program3",
+  "set": "held-out",
+  "id": "E108",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "ReminderService.run_for filters active appointments first and counts them with len."
+ },
+ "program3/w066": {
+  "program": "program3",
+  "set": "E2 text",
+  "id": "text/haiku-2",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
+ },
+ "program3/w067": {
+  "program": "program3",
+  "set": "E2 skeleton",
+  "id": "skeleton/haiku-3",
+  "kind": "solution",
+  "operator": "-",
+  "description": "independently written solution (E2)"
  }
 }

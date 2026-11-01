@@ -13,7 +13,11 @@ import pytest
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "example"
 EVALUATION = EXAMPLES / "architectural_mutants"
-PROGRAMS = [EVALUATION, EXAMPLES / "architectural_mutants_2"]
+PROGRAMS = [
+    EVALUATION,
+    EXAMPLES / "architectural_mutants_2",
+    EXAMPLES / "architectural_mutants_3",
+]
 
 
 @pytest.fixture(name="run")
@@ -36,16 +40,17 @@ def test_every_variant_applies_to_the_solution(
         target = tmp_path / variant["id"]
         shutil.copytree(solution, target)
         run._apply(variant, target)
+        # Modules may lie in subpackages (program 3).
         changed = [
-            path.name
-            for path in sorted(target.glob("*.py"))
-            if not (solution / path.name).exists()
-            or path.read_text() != (solution / path.name).read_text()
+            path.relative_to(target)
+            for path in sorted(target.rglob("*.py"))
+            if not (solution / path.relative_to(target)).exists()
+            or path.read_text() != (solution / path.relative_to(target)).read_text()
         ]
         removed = [
-            path.name
-            for path in solution.glob("*.py")
-            if not (target / path.name).exists()
+            path.relative_to(solution)
+            for path in solution.rglob("*.py")
+            if not (target / path.relative_to(solution)).exists()
         ]
         assert changed or removed, variant["id"]
 

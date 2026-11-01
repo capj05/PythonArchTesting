@@ -7,6 +7,9 @@ instead, several times, and the solutions are checked like submissions.
   two programs of the architectural-mutant evaluation
   (`../architectural_mutants`, `../architectural_mutants_2`): behaviour, the
   public names, and the architecture in prose.
+- `program3/` — the larger clinic program (T5, `../architectural_mutants_3`):
+  18 solutions (Haiku, Sonnet, Opus × runs 1–3 × text / skeleton), generated
+  with the same prompts; its skeleton is generated from the solution.
 - `program1/skeleton/`, `program2/skeleton/` — the code skeleton of the
   `skeleton` variant: the reference solution's modules, signatures, docstrings
   and `Protocol`s, with every function body replaced by

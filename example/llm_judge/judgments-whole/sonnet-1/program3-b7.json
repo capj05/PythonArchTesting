@@ -1,0 +1,7 @@
+[
+{"id":"w031","violates":true,"requirements":[3],"reason":"The api serializers' find() reaches into service._appointments, so the handler cancel uses the store through an object reachable from the service."},
+{"id":"w032","violates":true,"requirements":[8],"reason":"BookingService ignores the injected policy and hard-codes LateCancellationFee(24, 30) for every fee."},
+{"id":"w033","violates":false,"requirements":[],"reason":"Layering, injection and the bus are intact; the extra _reminder helper is harmless."},
+{"id":"w034","violates":false,"requirements":[],"reason":"Architecture is intact; the missing unsubscribe is a functional gap, not a layering violation."},
+{"id":"w035","violates":false,"requirements":[],"reason":"Adapters explicitly subclass the ports, which is allowed by the layer order, and everything else matches the intended structure."}
+]

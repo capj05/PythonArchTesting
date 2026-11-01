@@ -43,6 +43,10 @@ CSVS = {
     ("program2", "held-out"): EXAMPLES
     / "architectural_mutants_2"
     / "results-llm_mutants.csv",
+    ("program3", "hand"): EXAMPLES / "architectural_mutants_3" / "results.csv",
+    ("program3", "held-out"): EXAMPLES
+    / "architectural_mutants_3"
+    / "results-llm_mutants.csv",
 }
 
 
@@ -144,10 +148,9 @@ def main() -> int:
             )
             for neutral, item in key.items()
         }
+    programs = sorted({item["program"] for item in key.values()})
     groups = [
-        (program, subset)
-        for program in ("program1", "program2")
-        for subset in ("hand", "held-out")
+        (program, subset) for program in programs for subset in ("hand", "held-out")
     ]
     title = "whole submissions" if args.whole else "diffs"
     lines = [

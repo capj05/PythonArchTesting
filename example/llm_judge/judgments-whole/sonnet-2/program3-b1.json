@@ -1,0 +1,7 @@
+[
+{"id": "w001", "violates": false, "requirements": [], "reason": "Layering, injection, bus use, notifier use and appointment encapsulation all hold; helper modules (errors, views) are used within the allowed layers."},
+{"id": "w002", "violates": false, "requirements": [], "reason": "Matches the intended architecture: layers, dependencies, adapters built only in wiring, state changes only via Appointment methods."},
+{"id": "w003", "violates": false, "requirements": [], "reason": "Architecture is intact; the booked handler sends nothing, which is a behavioural gap and not a graded architecture violation."},
+{"id": "w004", "violates": false, "requirements": [], "reason": "Layers and dependency directions are respected, adapters only in wiring, sqlite only in the SQLite adapter, appointment state encapsulated."},
+{"id": "w005", "violates": true, "requirements": [10], "reason": "adapters/sqlite_store.py imports the ATTENDED and CANCELLED constants from domain.schedule, which is outside the allowed Slot/Appointment/free_slots/WORKING_HOURS surface."}
+]

@@ -1,0 +1,7 @@
+[
+{"id": "w006", "violates": false, "requirements": [], "reason": "Layers, injection, bus and notifier use, policy use and appointment encapsulation all follow the intended architecture."},
+{"id": "w007", "violates": false, "requirements": [], "reason": "Different structure (service-provided view helpers, package-level imports) but dependencies, layer order, wiring-only construction and appointment encapsulation are all respected."},
+{"id": "w008", "violates": true, "requirements": [5], "reason": "InMemoryPatientStore provides find() instead of get(), so it does not satisfy the PatientStore port."},
+{"id": "w009", "violates": true, "requirements": [11], "reason": "BookingService.move assigns appointment.slot = slot directly instead of calling Appointment.move_to."},
+{"id": "w010", "violates": true, "requirements": [6], "reason": "adapters/memory_store.py constructs an OutboxNotifier inside InMemoryAppointmentStore, building an adapter outside wiring.py."}
+]

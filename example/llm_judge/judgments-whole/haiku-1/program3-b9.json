@@ -1,0 +1,7 @@
+[
+  {"id": "w041", "violates": true, "requirements": [9], "reason": "domain/schedule.py imports policies at module bottom while policies.py imports Appointment from schedule, forming a module-level dependency cycle."},
+  {"id": "w042", "violates": false, "requirements": [], "reason": "Layers and dependencies follow the architecture; the notifier module is renamed and re-exported, an allowed structural variant."},
+  {"id": "w043", "violates": true, "requirements": [4], "reason": "application/booking.py imports sqlite3 and opens a module-level SQLite connection to log cancellations, putting SQL outside the SQLite adapter."},
+  {"id": "w044", "violates": true, "requirements": [4], "reason": "application/booking.py loads pickle via importlib at module level, a persistence library used outside the SQLite adapter, which requirement 4 names explicitly."},
+  {"id": "w045", "violates": false, "requirements": [], "reason": "Layering, injection, bus use and state changes all hold; importing the status constants BOOKED/CANCELLED/ATTENDED from schedule is a minor idiom beyond the four named names that does not break the architecture."}
+]
