@@ -27,10 +27,8 @@ from pythonarchtesting.execution.import_edges import (
 )
 from pythonarchtesting.matching import MatchResult
 
-from .messages import _build_rule_result
+from .messages import _build_rule_result, finish_violations
 from .runtime_structure import _coverage, _coverage_note, _describe_call, run_edges
-
-_MAX_REPORTED = 25
 
 
 def _public(name: str) -> bool:
@@ -266,18 +264,10 @@ def _finish(
     violations: list[str],
     module: str,
 ) -> RuleResult:
-    if violations:
-        details["violations"] = violations[:_MAX_REPORTED]
-        details["violation_count"] = len(violations)
-        details["reason"] = "violation"
-        more = f" (+{len(violations) - 1} more)" if len(violations) > 1 else ""
-        details["summary"] = violations[0] + more
-        return _build_rule_result(rule, source, target, match, "FAILED", details, ())
-    details["reason"] = "no_violations"
-    details["summary"] = details.get("summary") or (
+    passed = details.get("summary") or (
         f"other modules use {module or '__init__'} only through its interface"
     )
-    return _build_rule_result(rule, source, target, match, "OK", details, ())
+    return finish_violations(rule, source, target, match, details, violations, passed)
 
 
 class RuntimeModuleInterfaceEvaluator:

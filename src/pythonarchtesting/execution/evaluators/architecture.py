@@ -12,7 +12,7 @@ listed in ``details.undecided`` for a person to judge.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
 from pythonarchtesting.architecture.compare import (
     EdgeDiff,
@@ -41,13 +41,13 @@ from pythonarchtesting.execution.module_structure import (
     Edge,
     import_module_edges,
     module_of,
+    rename_edges,
 )
 from pythonarchtesting.matching import MatchResult
 
-from .messages import _build_rule_result
+from .messages import MAX_REPORTED, _build_rule_result, finish_violations
 from .runtime_structure import _coverage, _coverage_note, _describe_call, run_edges
 
-_MAX_REPORTED = 25
 ROOT = "__init__"
 
 
@@ -100,6 +100,29 @@ def _import_edges(
         ignore_type_checking=ignore_type_checking,
     )
     return graph, libraries, set(internal)
+
+
+def _reference_import_edges(
+    ctx: EvalContext, ignore_type_checking: bool
+) -> tuple[
+    dict[Edge, NormalizedImportEdge], dict[Edge, NormalizedImportEdge], set[str]
+]:
+    """``_import_edges`` of the reference, built once per run.
+
+    The reference is the same for every target, so the result is kept in
+    ``ctx.reference_runs``, which the run shares among its targets. Callers
+    must not change it.
+    """
+    key = f"architecture.import_edges:{ignore_type_checking}"
+    cache = ctx.reference_runs
+    if key not in cache:
+        cache[key] = _import_edges(
+            list(ctx.source_by_id.values()), ignore_type_checking, ctx.source_package
+        )
+    edges: tuple[
+        dict[Edge, NormalizedImportEdge], dict[Edge, NormalizedImportEdge], set[str]
+    ] = cache[key]
+    return edges
 
 
 def _through_subpackages(reference: set[Edge], known: set[str]) -> set[Edge]:
@@ -162,17 +185,6 @@ def _through_packages(
     return resolved
 
 
-def _rename(
-    edges: Mapping[Edge, Any], origin: Callable[[str], str], end: Callable[[str], str]
-) -> dict[Edge, Any]:
-    renamed: dict[Edge, Any] = {}
-    for (a, b), value in edges.items():
-        pair = (origin(a), end(b))
-        if pair[0] != pair[1]:
-            renamed.setdefault(pair, value)
-    return renamed
-
-
 def finish_architecture(
     rule: Rule,
     source: Entity,
@@ -186,8 +198,8 @@ def finish_architecture(
     """The rule's result: FAILED on ``violations``, else OK, noting what is undecided."""
     details["policy"] = rule.params.get("policy", "allow_new_modules")
     divergences = list(details.get("divergences") or [])
-    if len(divergences) > _MAX_REPORTED:
-        details["divergences"] = divergences[:_MAX_REPORTED]
+    if len(divergences) > MAX_REPORTED:
+        details["divergences"] = divergences[:MAX_REPORTED]
     if divergences:
         details["divergence_count"] = len(divergences)
     details["architecture"] = {name: diff.to_dict() for name, diff in diffs.items()}
@@ -197,23 +209,16 @@ def finish_architecture(
         for edge in diff.undecided
     ]
     if undecided:
-        details["undecided"] = undecided[:_MAX_REPORTED]
+        details["undecided"] = undecided[:MAX_REPORTED]
         details["undecided_count"] = len(undecided)
-    if violations:
-        details["violations"] = violations[:_MAX_REPORTED]
-        details["violation_count"] = len(violations)
-        details["reason"] = "violation"
-        more = f" (+{len(violations) - 1} more)" if len(violations) > 1 else ""
-        details["summary"] = violations[0] + more
-        return _build_rule_result(rule, source, target, match, "FAILED", details, ())
-    details["reason"] = "no_violations"
     note = (
         f"; {len(undecided)} undecided change(s) to review (details.undecided)"
         if undecided
         else ""
     )
-    details["summary"] = passed + note
-    return _build_rule_result(rule, source, target, match, "OK", details, ())
+    return finish_violations(
+        rule, source, target, match, details, violations, passed + note
+    )
 
 
 def _place(
@@ -298,9 +303,7 @@ class ArchitectureStaticEvaluator:
         ctx: EvalContext,
     ) -> RuleResult:
         ignore_tc = bool(rule.params.get("ignore_type_checking", True))
-        ref_graph, ref_libraries, ref_modules = _import_edges(
-            list(ctx.source_by_id.values()), ignore_tc, ctx.source_package
-        )
+        ref_graph, ref_libraries, ref_modules = _reference_import_edges(ctx, ignore_tc)
         target_graph, target_libraries, _ = _import_edges(
             list(ctx.target_index.all_sorted),
             ignore_tc,
@@ -314,7 +317,7 @@ class ArchitectureStaticEvaluator:
 
         known = {module_name(module) for module in ref_modules}
         policy = str(rule.params.get("policy", "allow_new_modules"))
-        renamed = _rename(target_graph, translate, translate)
+        renamed = rename_edges(target_graph, translate)
         located = renamed if policy == "strict" else fold_new_modules(renamed, known)[0]
         # A subpackage's __init__ importing its own submodules re-exports
         # them: organisation inside a layer. The root package's re-exports
@@ -326,7 +329,7 @@ class ArchitectureStaticEvaluator:
             and pair[1].startswith(f"{pair[0]}.")
             and not forbidden(pair, exceptions(rule, "forbid"))
         }
-        reference_imports = set(_rename(ref_graph, module_name, module_name))
+        reference_imports = set(rename_edges(ref_graph, module_name))
         imports = compare_edges(
             reference_imports,
             {pair: edge for pair, edge in renamed.items() if pair not in reexports},
@@ -340,7 +343,7 @@ class ArchitectureStaticEvaluator:
             imports = dataclasses.replace(
                 imports, allowed=sorted(set(imports.allowed) | set(reexports))
             )
-        libraries_target = _rename(target_libraries, translate, str)
+        libraries_target = rename_edges(target_libraries, translate, str)
         if policy != "strict":
             # A library a new helper module imports counts for its users.
             libraries_target = _fold_libraries(libraries_target, renamed, known)
@@ -530,15 +533,13 @@ class ArchitectureRuntimeEvaluator:
             ref_libraries |= {package for _, package in used}
             named, _ = _instances(case, None)
             ref_instances.update(named)
-        static_graph, static_libraries, _ = _import_edges(
-            list(ctx.source_by_id.values()),
-            bool(rule.params.get("ignore_type_checking", True)),
-            ctx.source_package,
+        static_graph, static_libraries, _ = _reference_import_edges(
+            ctx, bool(rule.params.get("ignore_type_checking", True))
         )
         # A call along an import the reference has is allowed even when the
         # reference's cases never made it: the import says the dependency is
         # intended, the cases only did not reach it.
-        static_imports = set(_rename(static_graph, module_name, module_name))
+        static_imports = set(rename_edges(static_graph, module_name))
         ref_libraries |= {package for _, package in static_libraries}
 
         calls: dict[Edge, Any] = {}

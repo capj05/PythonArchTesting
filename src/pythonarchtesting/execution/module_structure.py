@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Collection, Iterable, Literal, Mapping, Sequence
+from typing import Any, Callable, Collection, Iterable, Literal, Mapping, Sequence
 
 from pythonarchtesting.execution.import_edges import NormalizedImportEdge
 
@@ -332,15 +332,21 @@ def describe_violation(violation: LayerViolation) -> str:
     )
 
 
-def rename_edges(edges: Mapping[Edge, Any], rename: Any) -> dict[Edge, Any]:
+def rename_edges(
+    edges: Mapping[Edge, Any],
+    rename: Callable[[str], str],
+    end: Callable[[str], str] | None = None,
+) -> dict[Edge, Any]:
     """``edges`` with both ends renamed by ``rename(module)``.
 
-    Edges that become a loop (two modules renamed to one) are dropped; the
-    first edge of each renamed pair is kept.
+    ``end``, when given, renames the imported end instead (a library keeps
+    its name, say). Edges that become a loop (two modules renamed to one) are
+    dropped; the first edge of each renamed pair is kept.
     """
+    rename_end = end or rename
     renamed: dict[Edge, Any] = {}
     for (origin, target), value in edges.items():
-        pair = (rename(origin), rename(target))
+        pair = (rename(origin), rename_end(target))
         if pair[0] != pair[1]:
             renamed.setdefault(pair, value)
     return renamed

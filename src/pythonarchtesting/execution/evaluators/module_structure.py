@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from pythonarchtesting.architecture.compare import fold_new_modules
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
 from pythonarchtesting.dynamic.translation import NameTranslation
 from pythonarchtesting.entities import Entity
@@ -31,17 +32,14 @@ from pythonarchtesting.execution.module_structure import (
 )
 from pythonarchtesting.matching import MatchResult
 
-from .messages import _build_rule_result
+from .messages import MAX_REPORTED, _build_rule_result, finish_violations
 from .runtime_structure import (
     _coverage,
     _coverage_note,
     _describe_call,
     _edges,
-    _fold_new_modules,
     run_edges,
 )
-
-_MAX_REPORTED = 25
 
 
 def _import_graph(rule: Rule, ctx: EvalContext) -> dict[Edge, NormalizedImportEdge]:
@@ -84,27 +82,6 @@ def _steps(
     return steps
 
 
-def _finish(
-    rule: Rule,
-    source: Entity,
-    target: Entity,
-    match: MatchResult,
-    details: dict[str, Any],
-    violations: list[str],
-    passed: str,
-) -> RuleResult:
-    if not violations:
-        details["reason"] = "no_violations"
-        details["summary"] = passed
-        return _build_rule_result(rule, source, target, match, "OK", details, ())
-    details["violations"] = violations[:_MAX_REPORTED]
-    details["violation_count"] = len(violations)
-    details["reason"] = "violation"
-    more = f" (+{len(violations) - 1} more)" if len(violations) > 1 else ""
-    details["summary"] = violations[0] + more
-    return _build_rule_result(rule, source, target, match, "FAILED", details, ())
-
-
 class ModuleCyclesEvaluator:
     """Static ``forbid_cycles``: cycles in the target's import graph."""
 
@@ -128,10 +105,10 @@ class ModuleCyclesEvaluator:
         details: dict[str, Any] = {
             "reason": "",
             "summary": "",
-            "cycles": cycles[:_MAX_REPORTED],
+            "cycles": cycles[:MAX_REPORTED],
         }
         modules = {module for pair in graph for module in pair}
-        return _finish(
+        return finish_violations(
             rule,
             source,
             target,
@@ -179,10 +156,10 @@ class ModuleLayersEvaluator:
                     "to_layer": item.target_layer,
                     "steps": _steps(item.path, graph),
                 }
-                for item in found[:_MAX_REPORTED]
+                for item in found[:MAX_REPORTED]
             ],
         }
-        return _finish(
+        return finish_violations(
             rule,
             source,
             target,
@@ -207,7 +184,7 @@ def _target_edges(
     case: dict[str, Any], names: NameTranslation, known: set[str]
 ) -> dict[Edge, dict[str, Any]]:
     """The case's module edges in reference names, new modules folded in."""
-    return _fold_new_modules(_edges(case, names), known)
+    return fold_new_modules(_edges(case, names), known)[0]
 
 
 class _RuntimeStructureEvaluator:
@@ -253,7 +230,7 @@ class _RuntimeStructureEvaluator:
         coverage = _coverage(target_cases)
         if coverage is not None:
             details["coverage"] = coverage
-        return _finish(
+        return finish_violations(
             rule,
             source,
             target,

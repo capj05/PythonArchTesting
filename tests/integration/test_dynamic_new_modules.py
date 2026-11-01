@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from pythonarchtesting.architecture.compare import fold_new_modules
 from pythonarchtesting.cli import main
-from pythonarchtesting.execution.evaluators.runtime_structure import _fold_new_modules
 
 _REPOSITORY = """
 class OrderRepository:
@@ -138,6 +138,6 @@ def test_folding_follows_chains_of_new_modules() -> None:
         ("service", "repository"): {},
     }
 
-    folded = _fold_new_modules(edges, {"controller", "service", "repository"})
+    folded = fold_new_modules(edges, {"controller", "service", "repository"})[0]
 
     assert set(folded) == {("controller", "service"), ("service", "repository")}

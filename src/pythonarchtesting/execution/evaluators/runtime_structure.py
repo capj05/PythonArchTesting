@@ -464,17 +464,6 @@ def _edges(
     return edges
 
 
-def _fold_new_modules(
-    edges: dict[tuple[str, str], dict[str, Any]], known: set[str]
-) -> dict[tuple[str, str], dict[str, Any]]:
-    """``edges`` with every module outside ``known`` folded into its callers.
-
-    See ``architecture.compare.fold_new_modules``; the edges of a new module
-    nothing known calls are left out here.
-    """
-    return fold_new_modules(edges, known)[0]
-
-
 def run_edges(
     rule: Rule,
     source: Entity,
@@ -617,7 +606,7 @@ class RuntimeReferenceCallsEvaluator:
             index = case.get("index")
             actual = _edges(case, names)
             if allow_new:
-                actual = _fold_new_modules(actual, known)
+                actual = fold_new_modules(actual, known)[0]
             for (origin, module), call in actual.items():
                 if (origin, module) not in allowed:
                     divergences.append(
