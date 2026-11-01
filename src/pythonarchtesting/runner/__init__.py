@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.config.projects import ProjectsConfig, TargetSpec
@@ -41,6 +41,9 @@ def run_projects(
     load_config_first: bool = True,
     dynamic: bool = False,
     sandbox: Any = None,
+    architecture: bool = False,
+    mappings: Optional[Dict[str, Dict[str, str]]] = None,
+    rule_filter: Optional[Callable[[Any], bool]] = None,
     on_target_done: Optional[Callable[[int, int, str], None]] = None,
 ) -> Tuple[RunState, List[TargetRunState]]:
     return _run_projects_impl(
@@ -57,6 +60,9 @@ def run_projects(
         load_config_first=load_config_first,
         dynamic=dynamic,
         sandbox=sandbox,
+        architecture=architecture,
+        mappings=mappings,
+        rule_filter=rule_filter,
         on_target_done=on_target_done,
         _evaluate_target_fn=evaluate_target,
     )

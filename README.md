@@ -37,6 +37,15 @@ All markers are imported from `pythonarchtesting.rules`. See
 
 - `forbid_imports` — module-scoped or package-scoped import policy, in either
   direct AST mode or graph (reachable-import) mode
+- `enforce_layers`, `forbid_cycles` — one layer order and no dependency
+  cycles for the whole program, declared once in the root `__init__.py`;
+  checked on imports, and with `--dynamic` also on the calls between modules
+- `module_interface` — a module used by the others only through its interface
+  (listed or public names), on imports and with `--dynamic` on calls
+- `architecture_entry` — the reference's module dependencies as the model of
+  the architecture, with no per-module markers; `--architecture` applies its
+  static part to a reference that declares nothing, `--write-model` writes
+  the model as JSON
 
 **Type identity and inheritance**
 

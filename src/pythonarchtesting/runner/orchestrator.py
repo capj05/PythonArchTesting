@@ -6,7 +6,7 @@ import os
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.config.projects import (
@@ -100,6 +100,9 @@ def run_projects(
     load_config_first: bool = True,
     dynamic: bool = False,
     sandbox: Any = None,
+    architecture: bool = False,
+    mappings: Optional[Dict[str, Dict[str, str]]] = None,
+    rule_filter: Optional[Callable[[Any], bool]] = None,
     on_target_done: Optional[Callable[[int, int, str], None]] = None,
     _prepare_source_fn: Callable[..., RunState] = prepare_source,
     _evaluate_target_fn: Callable[..., TargetRunState] = evaluate_target,
@@ -127,9 +130,29 @@ def run_projects(
         source_path=projects_cfg.source_path,
         reference_modules=reference_modules,
         validation_scope=validation_scope,
+        **({"architecture": True} if architecture else {}),
     )
     if dynamic:
         run_state = replace(run_state, dynamic_enabled=True, sandbox=sandbox)
+    if rule_filter is not None:
+        # Only the rules asked for are evaluated (verify_marker): a dynamic
+        # run of every rule per mutant would cost all the reference's cases.
+        run_state = replace(
+            run_state, rules=[rule for rule in run_state.rules if rule_filter(rule)]
+        )
+    if mappings:
+        from pythonarchtesting.exceptions import MappingError
+        from pythonarchtesting.matching.assisted import unknown_names
+
+        for scope, pairs in mappings.items():
+            unknown = unknown_names(pairs, run_state.source_index)
+            if unknown:
+                # A typo would otherwise pair nothing, without a trace.
+                raise MappingError(
+                    f"mapping ({scope}): the reference has no "
+                    f"{', '.join(repr(name) for name in unknown)}"
+                )
+        run_state = replace(run_state, mappings=dict(mappings))
 
     logger.info(
         "Run started: source_path=%s targets=%d",

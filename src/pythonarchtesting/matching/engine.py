@@ -311,6 +311,10 @@ def run_matching(
         results.append(match)
         by_source[match.source_id] = match
 
+    if config.name_fallback:
+        from .fallback import pair_by_name
+
+        return pair_by_name(results, by_source, source_index, target_index)
     return results, by_source
 
 

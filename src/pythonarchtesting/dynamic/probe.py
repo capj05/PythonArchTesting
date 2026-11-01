@@ -157,6 +157,26 @@ class _Spy:
         return f"<spy {object.__getattribute__(self, '_spy_name')}>"
 
 
+# The instance recorder of the running case, if it records: a ``$new`` wraps
+# the classes its import just loaded before it constructs anything, so what a
+# constructor creates is recorded whichever module happened to load first.
+_RECORDING: list[Any] = []
+
+
+def _wrap_new_classes(loaded_before: int) -> None:
+    """After an import that loaded modules, wrap their classes for recording.
+
+    Code that imports a project module inside a function (a lazy import)
+    loads its classes while the case runs; they are wrapped at once, so the
+    objects the code goes on to create are recorded.
+    """
+    if len(sys.modules) == loaded_before:
+        return
+    for recorder in _RECORDING:
+        if recorder.active:
+            recorder.wrap_loaded()
+
+
 def _build_value(value: Any, namespace: dict[str, Any], package: str | None) -> Any:
     if isinstance(value, dict) and "$spy" in value:
         returns = {
@@ -166,6 +186,8 @@ def _build_value(value: Any, namespace: dict[str, Any], package: str | None) -> 
         return _Spy(str(value["$spy"]), returns)
     if isinstance(value, dict) and "$new" in value:
         factory = _resolve_name(str(value["$new"]), namespace, package)
+        for recorder in _RECORDING:
+            recorder.wrap_loaded()
         args = [
             _build_value(item, namespace, package) for item in value.get("args", [])
         ]
@@ -259,6 +281,58 @@ _WRAPPER_NAMES = frozenset({"__setattr__", "__init__"})
 _IO_BUILTINS = {"open": "io", "print": "builtins", "input": "builtins"}
 
 
+# Modules a library's code runs in under another name than the one imported.
+_LIBRARY_ALIASES = {
+    "posixpath": "os",
+    "ntpath": "os",
+    "genericpath": "os",
+    "_collections_abc": "collections",
+}
+
+
+def _library_name(module: str) -> str:
+    """The name a project imports the library running in ``module`` under."""
+    top = module.split(".")[0]
+    top = _LIBRARY_ALIASES.get(top, top)
+    if top.startswith("_") and top[1:] in sys.modules:
+        top = top[1:]  # _pickle is pickle
+    return top
+
+
+def _generated(code: Any) -> bool:
+    """Code compiled from a string (``<string>``), not a frozen module's."""
+    name = str(code.co_filename)
+    return name.startswith("<") and not name.startswith("<frozen")
+
+
+def _c_callee(arg: Any) -> tuple[str, str] | None:
+    """The module and name of a builtin or C function a frame calls.
+
+    ``None`` for what belongs to no layer: ``len()``, ``list.append()``.
+    """
+    owner = getattr(arg, "__self__", None)
+    module = getattr(arg, "__module__", None)
+    if not module and owner is not None:
+        # Methods of C types (``cursor.execute``) carry no __module__.
+        module = getattr(type(owner), "__module__", None)
+    name = getattr(arg, "__name__", None)
+    io_module = _IO_BUILTINS.get(name) if name else None
+    if io_module and getattr(builtins, str(name), None) is arg:
+        # I/O is a layer of its own: open() is io.open, and print()
+        # and input() talk to the console.
+        return io_module, str(name)
+    if module == "builtins" or (name and getattr(builtins, name, None) is arg):
+        # len(), print(), list.append() belong to no layer; open() is
+        # a builtin too, although it reports _io as its module.
+        return None
+    if not module:
+        return None
+    if module.startswith("_") and module[1:] in sys.modules:
+        # pickle.dumps is _pickle.dumps; report the public module.
+        module = module[1:]
+    return str(module), str(getattr(arg, "__qualname__", arg))
+
+
 class CallRecorder:
     """Record calls that cross from one module into another.
 
@@ -276,6 +350,11 @@ class CallRecorder:
     code counts too while code of ``caller_module`` is further up the stack:
     it carries the ``origin`` (that code) and the project code ``via`` which
     the call was reached, outermost first.
+
+    With ``external`` (and no ``caller_module``) a call from project code
+    into a module outside the project counts as well, named by its top-level
+    package and marked ``external``: the libraries the project uses. Only the
+    boundary is recorded, never what the library calls in turn.
     """
 
     def __init__(
@@ -284,8 +363,10 @@ class CallRecorder:
         package: str | None,
         project: _Project | None = None,
         transitive: bool = False,
+        external: bool = False,
     ) -> None:
         self._caller = caller_module
+        self._external = external and caller_module is None and project is not None
         self._package = package
         self._project = project
         self._transitive = transitive and project is not None
@@ -309,10 +390,13 @@ class CallRecorder:
         callee: str,
         origin: dict[str, Any] | None = None,
         via: list[dict[str, Any]] | None = None,
+        external: bool = False,
     ) -> None:
         source = _module_of(caller)
         if not module:
             return
+        if external:
+            module = _library_name(module)
         caller_name = _code_name(caller.f_code)
         local = module == source
         if local and caller_name.split(".")[0] == callee.split(".")[0]:
@@ -322,7 +406,14 @@ class CallRecorder:
             # layers in one module, and only the entities tell them apart.
             return
         chain = tuple((step["module"], step["caller"]) for step in via or ())
-        key: tuple[Any, ...] = (str(source), module, callee, caller.f_lineno, chain)
+        key: tuple[Any, ...] = (
+            str(source),
+            module,
+            callee,
+            caller.f_lineno,
+            chain,
+            external,
+        )
         if key in self._seen:
             return
         self._seen.add(key)
@@ -335,6 +426,8 @@ class CallRecorder:
         }
         if local:
             call["local"] = True
+        if external:
+            call["external"] = True
         if origin is not None:
             call["origin"] = origin
             call["via"] = list(via or [])
@@ -362,38 +455,62 @@ class CallRecorder:
                 # called by the code that made the assignment or the object.
                 caller = caller.f_back
             if self._caller is None:
-                if self._in_project(caller) and self._in_project(frame):
+                if self._in_project(caller) and (
+                    self._in_project(frame) or self._generated_in_project(frame)
+                ):
                     self._note(caller, _module_of(frame), _code_name(frame.f_code))
+                elif (
+                    self._external
+                    and self._in_project(caller)
+                    and not _generated(frame.f_code)
+                ):
+                    # Code generated from a string (a NamedTuple's __new__)
+                    # belongs to no library.
+                    self._note(
+                        caller,
+                        _module_of(frame),
+                        _code_name(frame.f_code),
+                        external=True,
+                    )
             elif _module_of(caller) == self._caller:
                 self._note(caller, _module_of(frame), _code_name(frame.f_code))
             elif self._transitive:
                 self._note_through(caller, _module_of(frame), _code_name(frame.f_code))
+        elif event == "c_call" and self._external and self._in_project(frame):
+            target = _c_callee(arg)
+            if (
+                target is not None
+                and target[0] != "builtins"  # print() and input(): the console
+                and not self._is_project_module(target[0])
+            ):
+                self._note(frame, target[0], target[1], external=True)
         elif event == "c_call" and self._caller is not None:
             note: Any = self._note if _module_of(frame) == self._caller else None
             if note is None and self._transitive and self._in_project(frame):
                 note = self._note_through
             if note is None:
                 return
-            owner = getattr(arg, "__self__", None)
-            module = getattr(arg, "__module__", None)
-            if not module and owner is not None:
-                # Methods of C types (``cursor.execute``) carry no __module__.
-                module = getattr(type(owner), "__module__", None)
-            name = getattr(arg, "__name__", None)
-            io_module = _IO_BUILTINS.get(name) if name else None
-            if io_module and getattr(builtins, str(name), None) is arg:
-                # I/O is a layer of its own: open() is io.open, and print()
-                # and input() talk to the console.
-                note(frame, io_module, str(name))
-                return
-            if module == "builtins" or (name and getattr(builtins, name, None) is arg):
-                # len(), print(), list.append() belong to no layer; open() is
-                # a builtin too, although it reports _io as its module.
-                return
-            if module and module.startswith("_") and module[1:] in sys.modules:
-                # pickle.dumps is _pickle.dumps; report the public module.
-                module = module[1:]
-            note(frame, module, str(getattr(arg, "__qualname__", arg)))
+            target = _c_callee(arg)
+            if target is not None:
+                note(frame, target[0], target[1])
+
+    def _generated_in_project(self, frame: Any) -> bool:
+        """Code generated for a project module, with no file of its own.
+
+        ``dataclasses`` builds ``__init__`` from a string, with the globals of
+        the class's module: it is that module's code all the same.
+        """
+        module = _module_of(frame)
+        return (
+            frame.f_globals is not _PROBE_GLOBALS
+            and _generated(frame.f_code)
+            and module is not None
+            and self._is_project_module(module)
+        )
+
+    def _is_project_module(self, module: str) -> bool:
+        package = self._package
+        return bool(package) and (module == package or module.startswith(f"{package}."))
 
     @contextlib.contextmanager
     def watching(self) -> Iterator[None]:
@@ -958,13 +1075,24 @@ class InstanceRecorder:
     def start(self, origin: str | None = None) -> None:
         """Begin recording one case, wrapping classes imported since the last."""
         self._origin = origin
+        _RECORDING[:] = [self]
+        self.wrap_loaded()
+        self.instances = []
+        self._seen = set()
+        self.active = True
+
+    def stop(self) -> None:
+        """End recording one case; the recorder no longer wraps new classes."""
+        self.active = False
+        if self in _RECORDING:
+            _RECORDING.remove(self)
+
+    def wrap_loaded(self) -> None:
+        """Wrap the classes of project modules imported since the last call."""
         for cls in self._project.classes():
             klass: Any = cls  # the unbound constructor, which mypy reads as bound
             if not getattr(klass.__init__, self._MARK, False):
                 self._wrap(cls)
-        self.instances = []
-        self._seen = set()
-        self.active = True
 
     def _wrap(self, cls: type) -> None:
         klass: Any = cls
@@ -1094,12 +1222,18 @@ class ImportRecorder:
             frame = sys._getframe(1)
             package = _importing_package(globals) if level else None
             self._note(name, frame, package, level, fromlist)
-            return original_import(name, globals, locals, fromlist, level)
+            loaded = len(sys.modules)
+            module = original_import(name, globals, locals, fromlist, level)
+            _wrap_new_classes(loaded)
+            return module
 
         def hooked_import_module(name: str, package: str | None = None) -> Any:
             level = len(name) - len(name.lstrip("."))
             self._note(name.lstrip("."), sys._getframe(1), package, level, ())
-            return original_import_module(name, package)
+            loaded = len(sys.modules)
+            module = original_import_module(name, package)
+            _wrap_new_classes(loaded)
+            return module
 
         builtins.__import__ = hooked_import
         # importlib.__import__ is a separate function with the same contract.
@@ -1558,7 +1692,8 @@ def _run_case(
     Cases carry call arguments only. What the probe reports is structural:
     the calls the target's module made into other modules (``observe.calls``),
     or, with ``observe.calls == "edges"``, every call between two project
-    modules; attribute assignments from outside the owning class
+    modules (and, with ``observe.external``, every call from project code
+    into a library); attribute assignments from outside the owning class
     (``observe.writes``); project classes instantiated by project code
     (``observe.instances``, including while a method's instance is built);
     and, for runtime ``enforce_flow``, the order of flow stages. Outside flow
@@ -1632,9 +1767,12 @@ def _run_case(
             k: _build_value(v, namespace, package)
             for k, v in (case.get("kwargs") or {}).items()
         }
+        if instances is not None and instances.active:
+            # Building the arguments may have imported more of the project.
+            instances.wrap_loaded()
     except CaseSetupError as exc:
         if instances is not None:
-            instances.active = False
+            instances.stop()
         outcome["status"] = "error"
         failures.append(f"setup: {exc}")
         return outcome
@@ -1650,7 +1788,9 @@ def _run_case(
     root = request.get("target_root")
     project = _Project(str(root), package) if root else None
     if observe.get("calls") == "edges":
-        calls = CallRecorder(None, package, project)
+        calls = CallRecorder(
+            None, package, project, external=bool(observe.get("external"))
+        )
     elif observe.get("calls") == "transitive":
         calls = CallRecorder(module.__name__, package, project, transitive=True)
     elif observe.get("calls"):
@@ -1702,7 +1842,7 @@ def _run_case(
         if writes is not None:
             writes.active = False
         if instances is not None:
-            instances.active = False
+            instances.stop()
 
     coverage = lines.report() if lines is not None else None
     if coverage is not None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from .api_signature import ApiSignatureEvaluator
+from .architecture import ArchitectureRuntimeEvaluator, ArchitectureStaticEvaluator
 from .attribute_contract import AttributeContractEvaluator
 from .compiler_invalid_param import CompilerInvalidParamEvaluator
 from .enum_type import EnumTypeEvaluator
@@ -10,6 +11,13 @@ from .import_policy import ImportPolicyEvaluator
 from .member_absence import MemberAbsenceEvaluator
 from .member_set import MemberSetEvaluator
 from .method_set import MethodSetEvaluator
+from .module_interface import ModuleInterfaceEvaluator, RuntimeModuleInterfaceEvaluator
+from .module_structure import (
+    ModuleCyclesEvaluator,
+    ModuleLayersEvaluator,
+    RuntimeCyclesEvaluator,
+    RuntimeLayersEvaluator,
+)
 from .nominal_type_relationship import NominalTypeRelationshipEvaluator
 from .protocol_conformance import ProtocolConformanceEvaluator
 from .python_modifiers import PythonModifierEvaluator
@@ -37,6 +45,12 @@ _EVALUATORS: Dict[str, Any] = {
     "member_absence": MemberAbsenceEvaluator(),
     "member_set": MemberSetEvaluator(),
     "method_set": MethodSetEvaluator(),
+    "module_cycles": ModuleCyclesEvaluator(),
+    "module_layers": ModuleLayersEvaluator(),
+    "module_interface": ModuleInterfaceEvaluator(),
+    "runtime_module_interface": RuntimeModuleInterfaceEvaluator(),
+    "architecture_static": ArchitectureStaticEvaluator(),
+    "architecture_runtime": ArchitectureRuntimeEvaluator(),
     "nominal_type_relationship": NominalTypeRelationshipEvaluator(),
     "python_modifier": PythonModifierEvaluator(),
     "protocol_conformance": ProtocolConformanceEvaluator(),
@@ -50,6 +64,8 @@ _EVALUATORS: Dict[str, Any] = {
     "runtime_reference_calls": RuntimeReferenceCallsEvaluator(),
     "runtime_flow": RuntimeFlowEvaluator(),
     "runtime_imports": RuntimeImportsEvaluator(),
+    "runtime_layers": RuntimeLayersEvaluator(),
+    "runtime_cycles": RuntimeCyclesEvaluator(),
     "variable_flow": VariableFlowEvaluator(),
 }
 

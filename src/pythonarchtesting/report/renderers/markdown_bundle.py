@@ -12,6 +12,7 @@ from pythonarchtesting.report.paths import (
 )
 
 from ..ir.models import EntityRef, ReportDocument, TargetReport
+from .architecture import across_targets_lines, architecture_lines, undecided_lines
 from .common import format_entity, format_location
 from .escape import escape_markdown
 from .matching_debug import (
@@ -114,6 +115,7 @@ def _render_target_page(
             f"- Total Results: {target.summary.results_total}",
             f"- Status Counts: {_format_count_dict(target.summary.status_counts)}",
             *_unverified_lines(target.summary.unverified_total),
+            *undecided_lines(results),
             f"- Severity Counts: {_format_count_dict(target.summary.severity_counts)}",
             f"- Category Counts: {_format_count_dict(target.summary.category_counts)}",
             "",
@@ -149,6 +151,8 @@ def _render_target_page(
                 "",
             ]
         )
+    if detail in ("verbose", "debug"):
+        lines.extend(architecture_lines(results))
     lines.extend(
         [
             "## Results",
@@ -276,6 +280,11 @@ def render_markdown_bundle(
                     f"- Status Counts: {_format_count_dict(results_summary.status_counts)}"
                 )
             index_lines.extend(_unverified_lines(results_summary.unverified_total))
+            index_lines.extend(
+                undecided_lines(
+                    result for target in targets for result in target.results
+                )
+            )
             if results_summary.severity_counts:
                 index_lines.append(
                     f"- Severity Counts: {_format_count_dict(results_summary.severity_counts)}"
@@ -325,6 +334,9 @@ def render_markdown_bundle(
                     "",
                 ]
             )
+
+    if detail in ("verbose", "debug"):
+        index_lines.extend(across_targets_lines(targets))
 
     index_lines.extend(
         [

@@ -80,6 +80,10 @@ documented in [pattern-recipes.md](pattern-recipes.md).
 | `required_factory(...)` | Require a factory method (constructor, classmethod, or staticmethod) on the matched class | `__archtest__: Annotated[...]` inside a factory-capable method body |
 | `does_not_have(...)` | Forbid a method, attribute, or property on the matched class | Class-level `__archtest__: Annotated[...]` |
 | `forbid_imports(...)` | Forbid imports in a declared scope | `__archtest__: Annotated[...]`, commonly at module level |
+| `enforce_layers(...)` | One layer order for the whole program; with `entry` and `cases` also on calls under `--dynamic` | Module-level `__archtest__: Annotated[...]` in the root `__init__.py` |
+| `forbid_cycles(...)` | No dependency cycle between modules; with `entry` and `cases` also on calls under `--dynamic` | Module-level `__archtest__: Annotated[...]` in the root `__init__.py` |
+| `module_interface(...)` | Other modules use the module only through its listed (or public) names; with `entry` and `cases` also on calls under `--dynamic` | Module-level `__archtest__: Annotated[...]` in the module |
+| `architecture_entry(...)` | The reference's module dependencies as the model; with `entry` and `cases` also calls, created objects and libraries under `--dynamic` | Module-level `__archtest__: Annotated[...]` in the root `__init__.py` |
 | `implements_protocol(...)` | Require structural protocol conformance | Class-level `__archtest__: Annotated[...]` or signature-level `Annotated[...]` |
 | `subclass_of(...)` | Require nominal inheritance from a matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
 | `exact_type(...)` | Require the target class to be exactly the matched base-class counterpart | Class-level `__archtest__: Annotated[...]` |
@@ -1200,6 +1204,76 @@ __archtest__: Annotated[
     ),
 ]
 ```
+
+### `enforce_layers(...)`
+
+See also: [markers/enforce_layers.md](markers/enforce_layers.md) — focused per-marker page(s).
+
+Common options:
+
+- `*layers` — module names from the highest layer to the lowest, in
+  import-linter's notation (`"a | b"` independent siblings, `"a : b"`
+  siblings that may use each other)
+- `closed`
+- `ignore_type_checking`
+- `entry`, `cases`, `init`, `timeout_s` — the runtime check
+- `severity`
+- `message`
+
+Notes:
+
+- the static rule (`DEP002`) reads every import statement of the target,
+  including imports inside functions;
+- the runtime rule (`DYN009`) runs `entry` on the reference and the target
+  and judges only calls against the layer order that the reference does not
+  make.
+
+### `forbid_cycles(...)`
+
+See also: [markers/forbid_cycles.md](markers/forbid_cycles.md) — focused per-marker page(s).
+
+Common options:
+
+- `ignore_type_checking`
+- `entry`, `cases`, `init`, `timeout_s` — the runtime check
+- `severity`
+- `message`
+
+Notes:
+
+- the static rule (`DEP003`) reports every strongly connected group of
+  modules in the import graph, with one shortest cycle and its lines;
+- the runtime rule (`DYN010`) reports cycles of calls the reference does not
+  have.
+
+### `architecture_entry(...)`
+
+See also: [markers/architecture_entry.md](markers/architecture_entry.md) — focused per-marker page(s).
+
+Common options:
+
+- `policy` — `"allow_new_modules"` (default), `"strict"`, `"layered"`
+- `allow`, `forbid` — exceptions as `"module -> module"` or `"module -> package"`
+- `ignore_external`
+- `require_all` — a call the reference makes and the target skips fails the
+  runtime check
+- `ignore_type_checking`
+- `entry`, `cases`, `init`, `timeout_s` — the runtime check
+- `severity`
+- `message`
+
+Notes:
+
+- the static rule (`DEP004`) compares the target's imports and imported
+  libraries with the reference's; `--architecture` adds it to a reference
+  that declares no `architecture_entry`;
+- the runtime rule (`DYN011`) compares the calls between modules, the objects
+  each module creates and the libraries called while `entry` runs;
+- the comparison is in `details.architecture`; what the policy cannot decide
+  passes and is listed in `details.undecided`;
+- `--write-model FILE` (with `--source` only) writes the reference's model as
+  JSON, with `--dynamic` including what the cases do; MCP
+  `describe_architecture` returns it.
 
 ### `implements_protocol(...)`
 

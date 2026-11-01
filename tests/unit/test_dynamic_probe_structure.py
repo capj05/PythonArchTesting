@@ -7,6 +7,7 @@ only ever touch classes of those modules.
 
 from __future__ import annotations
 
+import io
 import sys
 import textwrap
 import types
@@ -381,3 +382,232 @@ def test_the_call_recorder_attributes_a_constructor_through_the_wrapper(
     assert [(c["module"], c["callee"], c["caller"]) for c in calls.calls] == [
         ("model", "Repo.__init__", "build")
     ]
+
+
+# No importlib.import_module here: in a real probe run ImportRecorder hooks
+# it, so the call is made from the probe's own frame and is no library use of
+# the project (the module it loads is seen when the project calls into it).
+_TECH_SERVICE = """
+import json
+import pickle
+
+
+def run(store, key):
+    len([key])
+    [key].append(key)
+    json.dumps([key])
+    pickle.dumps(key)
+    return store.put(key)
+"""
+
+
+def _tech_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, types.ModuleType]:
+    return {
+        "repo": _module(tmp_path, "repo", _REPO, monkeypatch),
+        "service": _module(tmp_path, "service", _TECH_SERVICE, monkeypatch),
+    }
+
+
+def test_edges_with_external_record_calls_from_project_code_outward(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    modules = _tech_project(tmp_path, monkeypatch)
+    project = probe._Project(str(tmp_path), _PACKAGE)
+    recorder = probe.CallRecorder(None, _PACKAGE, project, external=True)
+
+    with recorder.watching():
+        modules["service"].run(modules["repo"].Store(), "k")
+
+    external = [(c["from"], c["module"]) for c in recorder.calls if c.get("external")]
+    internal = [
+        (c["from"], c["module"]) for c in recorder.calls if not c.get("external")
+    ]
+    # Only the boundary is recorded: json's own calls into json.encoder are
+    # not; pickle.dumps is _pickle.dumps underneath; builtins are no module.
+    assert external == [("service", "json"), ("service", "pickle")]
+    assert internal == [("service", "repo")]
+
+
+def test_edges_without_external_stay_internal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    modules = _tech_project(tmp_path, monkeypatch)
+    project = probe._Project(str(tmp_path), _PACKAGE)
+    recorder = probe.CallRecorder(None, _PACKAGE, project)
+
+    with recorder.watching():
+        modules["service"].run(modules["repo"].Store(), "k")
+
+    assert [(c["from"], c["module"]) for c in recorder.calls] == [("service", "repo")]
+
+
+def test_run_case_passes_observe_external_to_the_recorder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    modules = _tech_project(tmp_path, monkeypatch)
+    request = {
+        "qualname": "run",
+        "kind": "function",
+        "observe": {"calls": "edges", "external": True},
+        "target_root": str(tmp_path),
+    }
+
+    outcome = probe._run_case(
+        0,
+        {"args": [{"$new": "repo.Store"}, "k"]},
+        request,
+        modules["service"],
+        _PACKAGE,
+    )
+
+    assert outcome["status"] == "passed", outcome["failures"]
+    assert {c["module"] for c in outcome["calls"] if c.get("external")} == {
+        "json",
+        "pickle",
+    }
+
+
+def test_classes_loaded_after_start_are_wrapped_by_wrap_loaded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A module first imported while the case's arguments are built ($new) is
+    # loaded after start(); its classes have to be wrapped before the call.
+    recorder = probe.InstanceRecorder(str(tmp_path), _PACKAGE)
+    recorder.start()
+    model, service = _instance_project(tmp_path, monkeypatch)
+
+    recorder.wrap_loaded()
+    service.build()
+    recorder.active = False
+
+    assert [(i["module"], i["class"]) for i in recorder.instances] == [
+        ("model", "Repo")
+    ]
+
+
+def test_generated_dataclass_init_is_a_call_into_its_module_not_a_library(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # dataclasses generates __init__ with the module's globals but no file of
+    # the project; it is still code of that module.
+    _, service = _instance_project(tmp_path, monkeypatch)
+    project = probe._Project(str(tmp_path), _PACKAGE)
+    recorder = probe.CallRecorder(None, _PACKAGE, project, external=True)
+
+    with recorder.watching():
+        service.Service(repo=object()).other()
+
+    edges = {(c["from"], c["module"], bool(c.get("external"))) for c in recorder.calls}
+    assert ("service", "model", False) in edges
+    assert not {edge for edge in edges if edge[2]}
+
+
+_ALIAS_SERVICE = """
+import os
+import typing
+
+
+class Pair(typing.NamedTuple):
+    left: int
+    right: int
+
+
+def run(store, key):
+    print(key)
+    os.path.join("a", key)
+    Pair(1, 2)
+    return store.put(key)
+"""
+
+
+def test_libraries_go_by_their_import_name_and_generated_code_is_no_library(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The probe's own stdout is a plain buffer; pytest's capture would run
+    # codecs under print() and show up as a library call.
+    monkeypatch.setattr(sys, "stdout", io.StringIO())
+    modules = {
+        "repo": _module(tmp_path, "repo", _REPO, monkeypatch),
+        "service": _module(tmp_path, "service", _ALIAS_SERVICE, monkeypatch),
+    }
+    project = probe._Project(str(tmp_path), _PACKAGE)
+    recorder = probe.CallRecorder(None, _PACKAGE, project, external=True)
+
+    with recorder.watching():
+        modules["service"].run(modules["repo"].Store(), "k")
+
+    # os.path is posixpath (ntpath on Windows) underneath; print() talks to
+    # the console and is no library; NamedTuple's __new__ is generated code.
+    assert {c["module"] for c in recorder.calls if c.get("external")} == {"os"}
+
+
+def test_a_constructor_run_by_new_is_recorded_whatever_loaded_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A constructor the case runs through $new is the project's code (a
+    # service that builds its own repository there breaks injection). Its
+    # classes may be loaded by that very $new, after start(): they are
+    # wrapped before anything is constructed.
+    recorder = probe.InstanceRecorder(str(tmp_path), _PACKAGE)
+    recorder.start()
+    _, service = _instance_project(tmp_path, monkeypatch)
+
+    probe._build_value({"$new": "service.Service"}, vars(service), _PACKAGE)
+    recorder.active = False
+
+    assert [(i["module"], i["class"]) for i in recorder.instances] == [
+        ("model", "Repo")
+    ]
+
+
+def test_a_class_first_imported_inside_the_call_is_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import builtins
+    import importlib
+
+    package = tmp_path / "lazy_pkg"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "models.py").write_text("class Thing:\n    pass\n", encoding="utf-8")
+    (package / "svc.py").write_text(
+        "def run():\n    from .models import Thing\n    return Thing()\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    for name in ("lazy_pkg", "lazy_pkg.models", "lazy_pkg.svc"):
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    # The import hooks are global; monkeypatch puts the originals back.
+    monkeypatch.setattr(builtins, "__import__", builtins.__import__)
+    monkeypatch.setattr(importlib, "__import__", importlib.__import__)
+    monkeypatch.setattr(importlib, "import_module", importlib.import_module)
+    probe.ImportRecorder(str(package)).install()
+    svc = importlib.import_module("lazy_pkg.svc")
+    recorder = probe.InstanceRecorder(str(package), "lazy_pkg")
+    recorder.start()
+
+    svc.run()
+    recorder.active = False
+
+    assert [(i["module"], i["class"]) for i in recorder.instances] == [
+        ("models", "Thing")
+    ]
+
+
+def test_library_names_of_private_stdlib_modules() -> None:
+    assert probe._library_name("_collections_abc") == "collections"
+    assert probe._library_name("posixpath") == "os"
+    assert probe._library_name("_pickle") == "pickle"
+
+
+def test_a_finished_case_leaves_no_recorder_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, service = _instance_project(tmp_path, monkeypatch)
+    recorder = probe.InstanceRecorder(str(tmp_path), _PACKAGE)
+
+    _run_instances(service, "build", {"args": []}, recorder, kind="function")
+
+    assert probe._RECORDING == []

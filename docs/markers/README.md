@@ -21,6 +21,10 @@ All markers are imported from `pythonarchtesting.rules`.
 ## Imports
 
 - [forbid_imports](forbid_imports.md) — module-scoped or package-scoped import policy
+- [enforce_layers](enforce_layers.md) — one layer order for the whole program, on imports and (with `--dynamic`) on calls
+- [forbid_cycles](forbid_cycles.md) — no dependency cycle between modules, on imports and (with `--dynamic`) on calls
+- [module_interface](module_interface.md) — a module used by the others only through its listed or public names, on imports and (with `--dynamic`) on calls
+- [architecture_entry](architecture_entry.md) — the reference's module dependencies as the model, on imports and (with `--dynamic`) on calls, objects created and libraries used
 
 ## Type Identity And Inheritance
 

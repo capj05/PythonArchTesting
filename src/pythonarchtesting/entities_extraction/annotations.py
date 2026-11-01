@@ -14,6 +14,8 @@ from pythonarchtesting.protocols.type_expr import (
 _MARKER_NAME = "__archtest__"
 _POSITIONAL_LIST_ARG_NAMES = {
     "forbid_imports": "forbidden",
+    "enforce_layers": "layers",
+    "module_interface": "names",
     "forbid_runtime_imports": "forbidden",
     "forbid_runtime_calls": "modules",
     "require_runtime_calls": "modules",
@@ -35,7 +37,11 @@ _POSITIONAL_SINGLE_ARG_NAMES = {
     "enforce_flow": "stages",
 }
 _SUPPORTED_MARKER_NAMES = {
+    "architecture_entry",
+    "module_interface",
     "does_not_have",
+    "enforce_layers",
+    "forbid_cycles",
     "enforce_flow",
     "enforce_reference_calls",
     "is_runtime_singleton",

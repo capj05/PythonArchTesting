@@ -25,6 +25,10 @@ different results but are layered the same way get the same verdict.
 | `DYN006` | [`is_runtime_concrete_class`](markers/is_runtime_concrete_class.md), [`is_runtime_abstract_class`](markers/is_runtime_abstract_class.md) | Is the class abstract or instantiable as Python decides it, external bases included? |
 | `DYN007` | [`implements_runtime_protocol`](markers/implements_runtime_protocol.md) | Does a built instance satisfy a protocol, wherever its members come from? |
 | `DYN008` | [`is_runtime_singleton`](markers/is_runtime_singleton.md), [`enforce_runtime_observer`](markers/enforce_runtime_observer.md), [`require_runtime_delegation`](markers/require_runtime_delegation.md) | Does the code behave as the design pattern requires — one shared instance, notified listeners, delegation to an injected strategy? |
+| `DYN009` | [`enforce_layers`](markers/enforce_layers.md) (runtime part) | Do the calls between modules break the program's layer order where the reference's calls do not? |
+| `DYN010` | [`forbid_cycles`](markers/forbid_cycles.md) (runtime part) | Do the calls between modules form a cycle the reference does not have? |
+| `DYN011` | [`architecture_entry`](markers/architecture_entry.md) (runtime part) | Do the calls between modules, the objects each module creates and the libraries called stay within what the reference does? |
+| `DYN012` | [`module_interface`](markers/module_interface.md) (runtime part) | Do other modules call the module only through its interface? |
 | `FLW002` | [`enforce_flow(..., cases=...)`](markers/enforce_flow.md#runtime-check-with-cases) | Does the function run the reference's processing stages (the project functions each calls) in order? |
 
 Without `--dynamic` every one of them is reported as `SKIPPED` and does not
@@ -217,9 +221,12 @@ inside a container or VM.
 ## Static and runtime rules compared
 
 [`example/architectural_mutants`](../example/architectural_mutants/README.md)
-seeds 19 architectural violations into a small layered program and checks
-each against a reference that declares the static and the runtime marker for
-the same intent wherever both exist. Static rules catch the violations that
-need an `import` statement; violations through injected objects, attribute
-assignments, computed imports, missing calls, and design patterns are caught
-at run time only.
+seeds architectural violations into a small layered program, and
+[`example/architectural_mutants_2`](../example/architectural_mutants_2/README.md)
+into a ports-and-adapters one, and checks each against a reference that
+declares the static and the runtime marker for the same intent wherever both
+exist; import-linter, given the same import intents, runs as a baseline.
+Static rules catch the violations that need an `import` statement or
+change a signature a port demands;
+violations through injected objects, attribute assignments, computed imports,
+missing calls, and design patterns are caught at run time only.

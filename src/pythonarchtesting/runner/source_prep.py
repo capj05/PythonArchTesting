@@ -106,6 +106,7 @@ def prepare_source(
     reference_modules: Optional[List[str]] = None,
     validation_scope: str = VALIDATION_SCOPE_ALL,
     _source_root_label: str = "source",
+    architecture: bool = False,
 ) -> RunState:
     _require_existing_source(source_path)
     include_nested = get_bool(config, "matching", "include_nested_functions", False)
@@ -214,7 +215,7 @@ def prepare_source(
 
     if source_entities and source_index:
         rules, compiler_evidence, compiler_results = compile_rules(
-            source_entities, config
+            source_entities, config, architecture=architecture
         )
         rule_by_id = {rule.rule_id: rule for rule in rules}
         for result in compiler_results:

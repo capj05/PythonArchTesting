@@ -287,6 +287,10 @@ CONFIGURATION_SCHEMA: Dict[str, Dict[str, ValidationRule]] = {
             max_value=100000,
             default_value=0,
         ),
+        "name_fallback": ValidationRule(
+            value_type=ValueType.BOOLEAN,
+            default_value=True,
+        ),
         "include_nested_functions": ValidationRule(
             value_type=ValueType.BOOLEAN,
             default_value=False,

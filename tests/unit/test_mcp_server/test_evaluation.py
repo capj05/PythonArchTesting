@@ -28,8 +28,9 @@ def test_static_run_writes_both_reports(tmp_path: Path) -> None:
     assert result["report_json"] == str(run_dir / "report.json")
     assert result["report_markdown"] == str(run_dir / "markdown")
     assert result["exit_code"] == 0
-    assert result["runtime_rules_skipped"] == 10
+    assert result["runtime_rules_skipped"] == 13
     assert result["runtime_results_unverified"] == 0
+    assert result["results_undecided"] == 0
     assert result["mode"] == "static-only"
     assert result["config"] == "defaults"
 

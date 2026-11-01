@@ -67,6 +67,10 @@ class ConfigurationError(ArchitectureTestingError):
     """Raised when configuration errors occur."""
 
 
+class MappingError(ConfigurationError):
+    """Raised when an assisted-pairing mapping names what the reference lacks."""
+
+
 class ImportError(ArchitectureTestingError):
     """Raised when module import fails."""
 

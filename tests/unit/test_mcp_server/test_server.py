@@ -20,6 +20,20 @@ TOOL_NAMES = {
     "summarize_report",
     "explain_target",
     "explain_rule",
+    "check_cases",
+    "verify_marker",
+    "propose_mapping",
+    "check_architecture",
+    "describe_architecture",
+}
+# Tools that run reference or target code; every other tool only reads.
+RUNNING = {
+    "run_evaluation",
+    "check_cases",
+    "verify_marker",
+    "check_architecture",
+    # Runs the reference's cases in mode="full".
+    "describe_architecture",
 }
 
 
@@ -29,7 +43,7 @@ def test_tools_registered_with_annotations():
     for tool in tools:
         assert tool.annotations is not None
         assert tool.annotations.open_world_hint is False
-        if tool.name == "run_evaluation":
+        if tool.name in RUNNING:
             assert tool.annotations.read_only_hint is False
             assert tool.annotations.destructive_hint is False
         else:

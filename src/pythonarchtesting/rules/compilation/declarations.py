@@ -11,8 +11,12 @@ from pythonarchtesting.rules.compilation.common import canonicalize_payload
 
 _SUPPORTED_DECLARATION_KINDS = frozenset(
     {
+        "architecture_entry",
+        "module_interface",
         "does_not_have",
         "enforce_flow",
+        "enforce_layers",
+        "forbid_cycles",
         "enforce_reference_calls",
         "is_runtime_singleton",
         "enforce_runtime_observer",
@@ -57,8 +61,12 @@ _INVALID_ANNOTATION_ISSUES = frozenset(
 )
 _DEDUPE_DECLARATION_KINDS = frozenset(
     {
+        "architecture_entry",
+        "module_interface",
         "does_not_have",
         "enforce_flow",
+        "enforce_layers",
+        "forbid_cycles",
         "enforce_reference_calls",
         "is_runtime_singleton",
         "enforce_runtime_observer",
