@@ -251,3 +251,72 @@ def test_non_numeric_limits_are_input_errors(value: Any) -> None:
         check_cases(
             REFERENCE, "controller.handle_order", [{"args": []}], min_coverage=value
         )
+
+
+REFERENCE_2 = str(
+    (MUTANTS_DIR.parent / "architectural_mutants_2" / "reference").resolve()
+)
+
+
+def test_forbid_runtime_imports_is_verified_with_the_libraries_it_forbids() -> None:
+    from pythonarchtesting.mcp_server.authoring import verify_marker
+
+    result = verify_marker(
+        REFERENCE, "forbid_runtime_imports", dynamic=True, sandbox="limits"
+    )
+
+    assert result["scope"]["operators"] == ["add_library"]
+    assert result["scope"]["libraries"] == ["pickle", "sqlite3"]
+    assert result["scope"]["files"] == ["service.py"]
+    assert result["killed"] == result["total"] == 2
+    assert result["accepted"] is True
+
+
+def test_module_interface_is_verified_by_reaching_past_it_from_other_modules() -> None:
+    from pythonarchtesting.mcp_server.authoring import verify_marker
+
+    result = verify_marker(
+        REFERENCE, "module_interface", dynamic=True, sandbox="limits", detail="all"
+    )
+
+    assert result["scope"]["operators"] == ["use_private_name"]
+    assert result["scope"]["files"] == ["models.py"]
+    assert result["total"] >= 1
+    assert all(m["file"] != "models.py" for m in result["mutants"])
+    assert all("helper of models" in m["description"] for m in result["mutants"])
+    assert result["survived"] == 0, result["mutants"]
+    assert result["reference_passes"] is True
+
+
+def test_implements_protocol_is_verified_by_breaking_the_port() -> None:
+    from pythonarchtesting.mcp_server.authoring import verify_marker
+
+    result = verify_marker(REFERENCE_2, "implements_protocol", detail="all")
+
+    assert result["scope"]["operators"] == ["break_port"]
+    assert result["reference_passes"] is True
+    killed = {m["description"] for m in result["mutants"] if m["outcome"] == "killed"}
+    assert "adapters_memory: FixedClock.today is renamed" in killed
+    assert (
+        "adapters_memory: InMemoryLoanStore.find takes a new required parameter"
+        in killed
+    )
+
+
+def test_forbid_imports_mutates_only_what_each_file_forbids() -> None:
+    from pythonarchtesting.mcp_server.authoring import verify_marker
+
+    result = verify_marker(REFERENCE, "forbid_imports", detail="all")
+
+    forbidden = {
+        "controller.py": {"repository"},
+        "service.py": {"repository", "pricing", "events", "sqlite3", "pickle"},
+    }
+    for mutant in result["mutants"]:
+        assert mutant["description"].split()[2] in forbidden[mutant["file"]]
+    assert result["scope"]["libraries"] == ["pickle", "sqlite3"]
+    # Reachable mode does not see an import inside a function: it survives.
+    survivors = [
+        m["description"] for m in result["mutants"] if m["outcome"] == "survived"
+    ]
+    assert survivors == ["controller imports repository lazily"]

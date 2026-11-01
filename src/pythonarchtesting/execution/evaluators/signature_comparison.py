@@ -354,15 +354,22 @@ def compatible_compare(
                     f"expected {comparison.expected}, found {comparison.found}"
                 )
 
+    expected_names = {str(param.get("name")) for param in expected}
+    extra = [param for param in found if str(param.get("name")) not in expected_names]
     if not allow_extra_params:
-        expected_names = {str(param.get("name")) for param in expected}
-        extra = sorted(
-            str(param.get("name"))
-            for param in found
-            if str(param.get("name")) not in expected_names
-        )
         if extra:
-            errors.append(f"extra parameters not allowed: {', '.join(extra)}")
+            names = sorted(str(param.get("name")) for param in extra)
+            errors.append(f"extra parameters not allowed: {', '.join(names)}")
+    else:
+        # An extra parameter is compatible only if callers may leave it out.
+        required = sorted(
+            str(param.get("name")) for param in extra if param.get("required")
+        )
+        if required:
+            errors.append(
+                f"extra required parameter(s) {', '.join(required)}: "
+                "callers of the reference's signature do not pass them"
+            )
 
     return errors
 

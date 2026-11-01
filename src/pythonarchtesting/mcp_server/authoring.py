@@ -229,6 +229,10 @@ _OPERATORS_BY_MARKER: dict[str, tuple[str, ...]] = {
     "forbid_runtime_instantiation": ("rebuild_injected",),
     "require_runtime_delegation": ("drop_call", "rebuild_injected"),
     "require_runtime_calls": ("drop_call",),
+    "forbid_runtime_imports": ("add_library",),
+    "module_interface": ("use_private_name",),
+    "implements_protocol": ("break_port",),
+    "implements_runtime_protocol": ("break_port",),
     "enforce_reference_calls": ("drop_call", "rebuild_injected"),
 }
 _DETAILS = ("problems", "all")
@@ -237,11 +241,16 @@ _RUNTIME_ONLY = "<runtime only>"
 
 def _scope(
     source_path: Path, rule: str, config: Optional[str]
-) -> tuple[set[str], Optional[set[str]]]:
-    """The markers ``rule`` names in the reference, and the files they are about.
+) -> tuple[set[str], Optional[set[str]], dict[str, list[str]]]:
+    """The markers ``rule`` names in the reference, the files they are about,
+    and the modules and libraries they forbid, per file (empty when ``rule``
+    names other markers too).
 
     ``None`` for files: a marker on the root package states something of the
-    whole project, so every file is fair game.
+    whole project, so every file is fair game. The forbidden names are those
+    of ``forbid_imports`` / ``forbid_runtime_imports``: the libraries among
+    them are what ``add_library`` imports, and an import mutant of a name no
+    marker of its file forbids is no violation of these markers.
     """
     from pythonarchtesting.runner.source_prep import prepare_source
 
@@ -261,10 +270,29 @@ def _scope(
             "or a rule id prefix"
         )
     markers = {str(r.rule_id).split("/")[1] for r in matching}
+    libraries: dict[str, list[str]] = {}
+    for r in matching:
+        if str(r.rule_id).split("/")[1] not in _FORBIDDING:
+            continue
+        holder = state.source_by_id.get(r.selector.source_entity_id)
+        if holder is None:
+            continue
+        forbidden = {str(name) for name in r.params.get("forbidden") or []}
+        key = str(holder.filepath_rel)
+        libraries[key] = sorted(set(libraries.get(key, [])) | forbidden)
     if all(r.evidence_type == "runtime" for r in matching):
         markers.add(_RUNTIME_ONLY)
+    # A marker with a static part is about the entity it is declared on; its
+    # runtime part may be anchored elsewhere (the entry it runs).
+    static_markers = {
+        str(r.rule_id).split("/")[1] for r in matching if r.evidence_type != "runtime"
+    }
     files: Optional[set[str]] = set()
     for r in matching:
+        if r.evidence_type == "runtime" and str(r.rule_id).split("/")[1] in (
+            static_markers
+        ):
+            continue
         entity = state.source_by_id.get(r.selector.source_entity_id)
         if entity is None:
             continue
@@ -273,7 +301,22 @@ def _scope(
             break
         assert files is not None  # nosec B101 - narrowed above
         files.add(str(entity.filepath_rel))
-    return markers, files
+    if not markers - {_RUNTIME_ONLY} <= set(_FORBIDDING):
+        libraries = {}
+    return markers, files, libraries
+
+
+_FORBIDDING = ("forbid_imports", "forbid_runtime_imports")
+
+
+def _own_modules(source_path: Path) -> set[str]:
+    """Top-level module and package names of the project at ``source_path``."""
+    return {
+        path.stem if path.is_file() else path.name
+        for path in source_path.iterdir()
+        if (path.suffix == ".py" and path.stem != "__init__")
+        or (path.is_dir() and (path / "__init__.py").is_file())
+    }
 
 
 def verify_marker(
@@ -322,9 +365,19 @@ def verify_marker(
         raise ToolInputError("max_mutants must be a whole number in [1, 200]")
     if detail not in _DETAILS:
         raise ToolInputError(f"detail must be one of {', '.join(_DETAILS)}: {detail}")
-    markers, marker_files = _scope(source_path, rule, config)
+    markers, marker_files, forbidden_by_file = _scope(source_path, rule, config)
+    own_modules = _own_modules(source_path)
+    forbidden_libraries = sorted(
+        {
+            name
+            for names in forbidden_by_file.values()
+            for name in names
+            if name.split(".")[0] not in own_modules
+        }
+    )
     runtime_only = _RUNTIME_ONLY in markers
     markers.discard(_RUNTIME_ONLY)
+    chosen_by_marker = operators is None
     if operators is None:
         operators = sorted(
             {op for marker in markers for op in _OPERATORS_BY_MARKER.get(marker, ())}
@@ -339,11 +392,12 @@ def verify_marker(
             f"{', '.join(sorted(markers))} is checked only at run time: "
             "call verify_marker with dynamic=True"
         )
+    chosen_libraries = tuple(libraries or forbidden_libraries or DEFAULT_LIBRARIES)
     try:
         mutants = generate_mutants(
             source_path,
             operators,
-            libraries=tuple(libraries or DEFAULT_LIBRARIES),
+            libraries=chosen_libraries,
         )
     except ValueError as exc:
         raise ToolInputError(str(exc)) from exc
@@ -354,7 +408,21 @@ def verify_marker(
     else:
         wanted = marker_files
     if wanted is not None:
-        mutants = [mutant for mutant in mutants if mutant.file in wanted]
+        # A mutant counts for the files whose markers it is about (another
+        # module reaching past a module's interface counts for that module).
+        mutants = [mutant for mutant in mutants if mutant.subject in wanted]
+    if chosen_by_marker and not libraries and forbidden_by_file:
+        # An import mutant only of what a marker of that file forbids
+        # (operators and libraries given explicitly are taken as asked).
+        mutants = [
+            mutant
+            for mutant in mutants
+            if not mutant.imported
+            or any(
+                mutant.imported == name or mutant.imported.startswith(f"{name}.")
+                for name in forbidden_by_file.get(mutant.file, [])
+            )
+        ]
     if not mutants:
         raise ToolInputError(
             "no mutants: the operators found nothing to change in the files given"
@@ -378,6 +446,8 @@ def verify_marker(
             copy = workdir / mutant.id / source_path.name
             shutil.copytree(source_path, copy, ignore=ignore)
             (copy / mutant.file).write_text(mutant.source, encoding="utf-8")
+            for other, text in mutant.also:
+                (copy / other).write_text(text, encoding="utf-8")
             paths[mutant.id] = copy
         try:
             _, states = run_projects(
@@ -441,6 +511,15 @@ def verify_marker(
             "markers": sorted(markers),
             "operators": sorted(set(operators)),
             "files": sorted(wanted) if wanted is not None else "all",
+            **(
+                {
+                    "libraries": sorted(
+                        {m.imported for m in mutants if m.operator == "add_library"}
+                    )
+                }
+                if "add_library" in operators
+                else {}
+            ),
         },
         "by_operator": _by_operator(reported),
         "mutants": (

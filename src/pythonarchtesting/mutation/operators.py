@@ -15,7 +15,12 @@ mutants of ``example/architectural_mutants``:
   injected one's class instead of keeping the one it was given (broken
   dependency injection);
 - ``drop_call``: a method no longer calls a collaborator it holds
-  (``self.repo.save(...)``), a skipped step.
+  (``self.repo.save(...)``), a skipped step;
+- ``use_private_name``: another module gets a private helper
+  (``_archtest_private``), and a module imports and calls it, past that
+  module's interface (two files change);
+- ``break_port``: a public method of a class takes a new required parameter,
+  or is renamed, so the class no longer satisfies a port it implements.
 
 A mutant is a whole new text of one file; nothing is written here.
 """
@@ -39,19 +44,42 @@ OPERATORS = (
     "add_library",
     "rebuild_injected",
     "drop_call",
+    "use_private_name",
+    "break_port",
 )
 DEFAULT_LIBRARIES = ("pickle",)
 
 
 @dataclass(frozen=True)
 class Mutant:
-    """One seeded violation: ``file`` (relative) gets the text ``source``."""
+    """One seeded violation: ``file`` (relative) gets the text ``source``.
+
+    ``subject`` is the file whose markers the violation is about: ``file``
+    itself, except for ``use_private_name``, which changes a module that
+    reaches past another module's interface. ``also`` holds other files the
+    mutant changes, as ``(file, source)``.
+    """
 
     id: str
     operator: str
     file: str
     description: str
     source: str
+    subject: str = ""
+    also: tuple[tuple[str, str], ...] = ()
+    imported: str = ""  # what an import operator imports: a module or a library
+
+
+@dataclass(frozen=True)
+class _Change:
+    """What an operator makes: the text of ``file`` and how to describe it."""
+
+    file: str
+    description: str
+    source: str
+    subject: str = ""  # default: ``file``
+    also: tuple[tuple[str, str], ...] = ()
+    imported: str = ""
 
 
 @dataclass(frozen=True)
@@ -187,7 +215,7 @@ def _function_insert(
     return first.lineno - 1, first.col_offset
 
 
-def _add_import(modules: list[_Module], lazy: bool) -> Iterator[tuple[str, str, str]]:
+def _add_import(modules: list[_Module], lazy: bool) -> Iterator[_Change]:
     names = {module.name for module in modules}
     for importer in modules:
         imported = _imports(importer, names)
@@ -202,17 +230,23 @@ def _add_import(modules: list[_Module], lazy: bool) -> Iterator[tuple[str, str, 
             if lazy and function is not None:
                 at, indent = _function_insert(function)
                 source = _insert(importer.text, at, " " * indent + line)
-                yield importer.file, f"{who} imports {target} lazily", source
+                yield _Change(
+                    importer.file,
+                    f"{who} imports {target} lazily",
+                    source,
+                    imported=target,
+                )
             else:
                 at = _header_end(importer.tree)
-                yield importer.file, f"{who} imports {target}", _insert(
-                    importer.text, at, line
+                yield _Change(
+                    importer.file,
+                    f"{who} imports {target}",
+                    _insert(importer.text, at, line),
+                    imported=target,
                 )
 
 
-def _add_library(
-    modules: list[_Module], libraries: Sequence[str]
-) -> Iterator[tuple[str, str, str]]:
+def _add_library(modules: list[_Module], libraries: Sequence[str]) -> Iterator[_Change]:
     for module in modules:
         if not module.name:
             continue
@@ -229,7 +263,12 @@ def _add_library(
             if library in used:
                 continue
             source = _insert(module.text, _header_end(module.tree), f"import {library}")
-            yield module.file, f"{module.name} imports {library}", source
+            yield _Change(
+                module.file,
+                f"{module.name} imports {library}",
+                source,
+                imported=library,
+            )
 
 
 def _methods(
@@ -256,7 +295,7 @@ def _replace_span(text: str, node: ast.AST, new: str) -> str:
     return "".join(lines)
 
 
-def _rebuild_injected(modules: list[_Module]) -> Iterator[tuple[str, str, str]]:
+def _rebuild_injected(modules: list[_Module]) -> Iterator[_Change]:
     for module in modules:
         for name, method in _methods(module.tree):
             if method.name != "__init__":
@@ -282,7 +321,7 @@ def _rebuild_injected(modules: list[_Module]) -> Iterator[tuple[str, str, str]]:
                     continue
                 param = node.value.id
                 source = _replace_span(module.text, node.value, f"type({param})()")
-                yield (
+                yield _Change(
                     module.file,
                     f"{module.name}: {name} builds its own {param} (line {node.lineno})",
                     source,
@@ -304,7 +343,7 @@ def _collaborator_call(node: ast.stmt, self_name: Optional[str]) -> Optional[str
     return None
 
 
-def _drop_call(modules: list[_Module]) -> Iterator[tuple[str, str, str]]:
+def _drop_call(modules: list[_Module]) -> Iterator[_Change]:
     for module in modules:
         for name, method in _methods(module.tree):
             self_name = _self_name(method)
@@ -317,11 +356,109 @@ def _drop_call(modules: list[_Module]) -> Iterator[tuple[str, str, str]]:
                 lines = module.text.splitlines(keepends=True)
                 first, last = node.lineno - 1, int(node.end_lineno or node.lineno)
                 lines[first:last] = [" " * node.col_offset + "pass\n"]
-                yield (
+                yield _Change(
                     module.file,
                     f"{module.name}: {name} no longer calls {call} (line {node.lineno})",
                     "".join(lines),
                 )
+
+
+PRIVATE_HELPER = "_archtest_private"
+
+
+def _use_private_name(
+    modules: list[_Module],
+) -> Iterator[_Change]:
+    for owner in modules:
+        helper = (
+            owner.text.rstrip("\n")
+            + f"\n\n\ndef {PRIVATE_HELPER}():\n    return None\n"
+        )
+        for importer in modules:
+            if importer.name == owner.name:
+                continue
+            line = f"from {_relative(importer, owner.name)} import {PRIVATE_HELPER}"
+            source = _insert(importer.text, _header_end(importer.tree), line)
+            function = _first_function(ast.parse(source), source)
+            if function is not None:
+                # Called where the module's code runs, so a run sees it too.
+                at, indent = _function_insert(function)
+                source = _insert(source, at, " " * indent + f"{PRIVATE_HELPER}()")
+            who = importer.name or "__init__"
+            yield _Change(
+                importer.file,
+                f"{who} calls a private helper of {owner.name or '__init__'}",
+                source,
+                subject=owner.file,
+                also=((owner.file, helper),),
+            )
+
+
+def _relative(importer: _Module, target: str) -> str:
+    """``target`` spelled relatively from ``importer`` (``.models``, ``..pkg.x``)."""
+    depth = len(importer.name.split(".")) if importer.name else 0
+    if not importer.is_package:
+        depth -= 1
+    return "." * (depth + 1) + target
+
+
+def _public_methods(
+    tree: ast.Module, text: str
+) -> Iterator[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]]:
+    """Public methods of top-level classes whose body starts on its own line."""
+    for name, method in _methods(tree):
+        if method.name.startswith("_"):
+            continue
+        if method.body[0].lineno <= method.lineno or not _alone(text, method.body[0]):
+            continue
+        yield name, method
+
+
+def _header(method: ast.FunctionDef | ast.AsyncFunctionDef, indent: int) -> str:
+    """The ``def`` line(s) of ``method`` as Python writes them, without decorators."""
+    bare = ast.FunctionDef(
+        name=method.name,
+        args=method.args,
+        body=[ast.Pass()],
+        decorator_list=[],
+        returns=method.returns,
+        type_comment=None,
+    )
+    if hasattr(method, "type_params"):
+        setattr(bare, "type_params", getattr(method, "type_params"))
+    node: ast.FunctionDef | ast.AsyncFunctionDef = bare
+    if isinstance(method, ast.AsyncFunctionDef):
+        node = ast.AsyncFunctionDef(**{f: getattr(bare, f) for f in bare._fields})
+    ast.fix_missing_locations(node)
+    lines = ast.unparse(node).splitlines()[:-1]  # drop the "pass"
+    return "".join(" " * indent + line + "\n" for line in lines)
+
+
+def _break_port(modules: list[_Module]) -> Iterator[_Change]:
+    import copy
+
+    for module in modules:
+        for name, method in _public_methods(module.tree, module.text):
+            lines = module.text.splitlines(keepends=True)
+            first, body = method.lineno - 1, method.body[0].lineno - 1
+            indent = method.col_offset
+            args = copy.deepcopy(method.args)
+            required = len(args.args) - len(args.defaults)
+            args.args.insert(required, ast.arg(arg="extra"))
+            changed = copy.copy(method)
+            changed.args = args
+            yield _Change(
+                module.file,
+                f"{module.name}: {name} takes a new required parameter",
+                "".join(lines[:first] + [_header(changed, indent)] + lines[body:]),
+            )
+            renamed = copy.copy(method)
+            renamed.name = f"{method.name}_renamed"
+            yield _Change(
+                module.file,
+                f"{module.name}: {name} is renamed",
+                "".join(lines[:first] + [_header(renamed, indent)] + lines[body:]),
+            )
 
 
 def generate_mutants(
@@ -355,20 +492,28 @@ def generate_mutants(
             found = _add_library(modules, libraries)
         elif operator == "rebuild_injected":
             found = _rebuild_injected(modules)
-        else:
+        elif operator == "drop_call":
             found = _drop_call(modules)
-        for file, description, source in found:
+        elif operator == "use_private_name":
+            found = _use_private_name(modules)
+        else:
+            found = _break_port(modules)
+        for change in found:
             try:
-                ast.parse(source)
+                for text in (change.source, *(text for _, text in change.also)):
+                    ast.parse(text)
             except SyntaxError:
                 continue  # an operator never hands out code that does not parse
             produced.append(
                 Mutant(
                     id=f"{operator}-{len(produced) + 1:03d}",
                     operator=operator,
-                    file=file,
-                    description=description,
-                    source=source,
+                    file=change.file,
+                    description=change.description,
+                    source=change.source,
+                    subject=change.subject or change.file,
+                    also=change.also,
+                    imported=change.imported,
                 )
             )
     return produced[:limit] if limit is not None else produced

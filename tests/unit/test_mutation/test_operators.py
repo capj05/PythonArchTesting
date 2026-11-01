@@ -15,7 +15,18 @@ _FILES = {
         '"""Models."""\n\nfrom __future__ import annotations\n\n\n'
         "class Order:\n    pass\n"
     ),
-    "repository.py": "class Repo:\n    def save(self, order):\n        return order\n",
+    "repository.py": (
+        "class Repo:\n"
+        "    def save(self, order, *, flush=False):\n"
+        "        return order\n\n"
+        "    def find(self, key, default=None):\n"
+        "        return default\n\n"
+        "    def _cache(self):\n"
+        "        return {}\n\n\n"
+        "def _check(order):\n"
+        "    return order\n\n\n"
+        "_LIMIT = 3\n"
+    ),
     "service.py": (
         "from .models import Order\n\n\n"
         "class Service:\n"
@@ -57,6 +68,8 @@ def test_operators_are_named() -> None:
         "add_library",
         "rebuild_injected",
         "drop_call",
+        "use_private_name",
+        "break_port",
     )
 
 
@@ -195,3 +208,47 @@ def test_one_line_functions_and_compound_statements_yield_only_valid_mutants(
         m for m in mutants if m.file == "models.py" and m.operator == "lazy_import"
     )
     assert "def one(): return 1\n" in models.source
+
+
+def test_use_private_name_adds_a_private_helper_and_calls_it_elsewhere(
+    root: Path,
+) -> None:
+    mutants = {
+        (m.file, m.subject): m
+        for m in _by(root, "use_private_name")
+        if m.file == "service.py"
+    }
+
+    mutant = mutants[("service.py", "repository.py")]
+    assert mutant.description == "service calls a private helper of repository"
+    assert "from .repository import _archtest_private" in mutant.source
+    # Called first thing in the first function, after its docstring.
+    assert '"""Take the collaborators."""\n        _archtest_private()\n' in (
+        mutant.source
+    )
+    ((file, helper),) = mutant.also
+    assert file == "repository.py"
+    assert "def _archtest_private():" in helper
+    assert helper.startswith(_FILES["repository.py"].rstrip("\n"))
+
+
+def test_use_private_name_never_targets_the_module_itself(root: Path) -> None:
+    assert all(m.file != m.subject for m in _by(root, "use_private_name"))
+
+
+def test_break_port_adds_a_required_parameter_or_renames_a_public_method(
+    root: Path,
+) -> None:
+    mutants = {m.description: m for m in _by(root, "break_port")}
+
+    added = mutants["repository: Repo.find takes a new required parameter"]
+    tree = ast.parse(added.source)
+    find = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "find"
+    )
+    assert [a.arg for a in find.args.args] == ["self", "key", "extra", "default"]
+    assert "        return default\n" in added.source
+    renamed = mutants["repository: Repo.save is renamed"]
+    assert "def save_renamed(self, order, *, flush=False):" in renamed.source
+    assert not any("_cache" in description for description in mutants)
+    assert not any("__init__" in description for description in mutants)

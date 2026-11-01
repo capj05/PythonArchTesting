@@ -46,7 +46,13 @@ class RepositoryAdapter:
 ## What it checks
 
 - Presence of every Protocol method on the matched target class.
-- Parameter compatibility under `signature_mode`.
+- Parameter compatibility under `signature_mode`. Under `"compatible"` the
+  target may add parameters only if callers can leave them out (a default,
+  or `*args` / `**kwargs`); an extra required parameter fails, since a
+  caller of the port does not pass it.
+- Class names in annotations are resolved through imports, relative ones
+  too, and through a package that re-exports the class (`from ..domain import
+  Appointment` where `domain/__init__.py` imports it from `domain/schedule.py`).
 - Method-kind parity (instance / classmethod / staticmethod) when `enforce_method_kind=True`.
 - Return annotation handling per `return_annotation`.
 
