@@ -277,3 +277,30 @@ def test_an_entity_pair_wins_over_the_twin_of_its_module_pair(tmp_path: Path):
     codes = [r["code"] for r in match["reasons"]]
     assert "assisted_mapping" in codes
     assert "assisted_mapping_rejected" not in codes
+
+
+def test_a_targets_own_pairs_add_to_the_common_ones(tmp_path: Path):
+    target = _run(
+        tmp_path,
+        {
+            "pairs": {"controller": "handler"},
+            "targets": {"target": {"pairs": {"models.Order": "models.Order"}}},
+        },
+        _RENAMED,
+    )
+
+    assert _status(target, "DYN011").startswith("OK")
+    match = _match(target, ":controller:handle:function:")
+    assert ":handler:handle:function:" in match["target_entity_id"]
+
+
+def test_a_mapping_for_an_unknown_target_is_an_error(tmp_path: Path, capsys):
+    import pytest
+
+    with pytest.raises(SystemExit):
+        _run(
+            tmp_path,
+            {"targets": {"targte": {"pairs": {"controller": "handler"}}}},
+            _RENAMED,
+        )
+    assert "targte" in capsys.readouterr().err

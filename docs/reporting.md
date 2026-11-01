@@ -150,7 +150,9 @@ reports `required_target_missing`. `--mapping FILE` pairs them explicitly:
 {"pairs": {"controller": "handler", "models.Order": "order.Order"}}
 ```
 
-or per target, `{"targets": {"<target id>": {"pairs": {...}}}}`. Names are
+or per target, `{"targets": {"<target id>": {"pairs": {...}}}}`; a target's
+pairs add to the common `pairs` and win over them, and a target id that names
+no target of the run is an error. Names are
 `module` or `module.Qual.name` (the root package is `__init__`); a pair of
 modules pairs the entities with the same qualified name inside them, except
 those the mapping pairs explicitly (`module.name`), which keep that pair. Every

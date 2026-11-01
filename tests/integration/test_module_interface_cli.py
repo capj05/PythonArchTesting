@@ -249,3 +249,49 @@ def test_a_local_name_shadowing_the_module_is_not_the_module(tmp_path: Path):
         "models._check uses _check, which is not in the interface of models "
         "(helpers.py:23)"
     ]
+
+
+def test_a_packages_own_submodules_are_not_its_users(tmp_path: Path):
+    from tests.integration.test_architecture_model_imports import _write as write
+
+    domain = (
+        "_TABLE = {'a': 1}\n\n\n"
+        "def lookup(key):\n"
+        "    from .schedule import slot\n\n"
+        "    return slot(key)\n"
+    )
+    schedule = "from . import _TABLE\n\n\ndef slot(key):\n    return _TABLE[key]\n"
+    reference = write(
+        tmp_path / "reference",
+        {
+            "__init__.py": "",
+            "domain/__init__.py": "from typing import Annotated\n"
+            "from pythonarchtesting.rules import module_interface\n"
+            "__archtest__: Annotated[None, module_interface('lookup')]\n" + domain,
+            "domain/schedule.py": schedule,
+        },
+    )
+    target = write(
+        tmp_path / "target",
+        {
+            "__init__.py": "",
+            "domain/__init__.py": domain,
+            "domain/schedule.py": schedule,
+            # An outside user reaching past the interface still counts.
+            "service.py": "from .domain import _TABLE\n",
+        },
+    )
+    output = tmp_path / "report.json"
+    main(["--source", str(reference), "--target", str(target), "--format", "json",
+          "--output", str(output)])  # fmt: skip
+    (result,) = [
+        r
+        for t in json.loads(output.read_text(encoding="utf-8"))["targets"]
+        for r in t["results"]
+        if r["rule_id"].startswith("DEP005")
+    ]
+
+    assert result["details"]["violations"] == [
+        "from domain import _TABLE uses _TABLE, which is not in the interface of "
+        "domain (service.py:1)"
+    ]

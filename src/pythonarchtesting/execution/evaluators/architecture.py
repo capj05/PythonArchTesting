@@ -322,7 +322,9 @@ class ArchitectureStaticEvaluator:
         reexports = {
             pair: edge
             for pair, edge in renamed.items()
-            if pair[0] != ROOT and pair[1].startswith(f"{pair[0]}.")
+            if pair[0] != ROOT
+            and pair[1].startswith(f"{pair[0]}.")
+            and not forbidden(pair, exceptions(rule, "forbid"))
         }
         reference_imports = set(_rename(ref_graph, module_name, module_name))
         imports = compare_edges(

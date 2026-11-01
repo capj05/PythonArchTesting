@@ -170,3 +170,23 @@ def test_importing_a_subpackage_whole_stands_for_its_modules(tmp_path: Path) -> 
     imports = result["details"]["architecture"]["imports"]
     assert result["status"] == "OK", imports["divergent"]
     assert "wiring -> api" in imports["convergent"]
+
+
+def test_a_forbidden_subpackage_re_export_is_still_a_divergence(tmp_path: Path) -> None:
+    reference = {
+        "__init__.py": _ENTRY.format(arguments='forbid=["domain -> domain.models"]'),
+        "domain/__init__.py": "",
+        "domain/models.py": _ORDER,
+    }
+    target = {
+        "__init__.py": "",
+        "domain/__init__.py": "from .models import Order\n",
+        "domain/models.py": _ORDER,
+    }
+
+    result = _results(tmp_path, reference, target)["DEP004"]
+
+    assert result["status"] == "FAILED"
+    assert result["details"]["architecture"]["imports"]["divergent"] == [
+        "domain -> domain.models"
+    ]

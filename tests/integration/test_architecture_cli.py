@@ -796,6 +796,9 @@ def test_check_architecture_separates_reference_problems(tmp_path: Path):
     assert result["reference_problems"]
     assert "policy" in result["reference_problems"][0]["summary"]
     assert all("invalid_declaration" not in p["rule"] for p in result["problems"])
+    # Nothing in the target can fix the reference: a clean target passes.
+    assert result["problems"] == []
+    assert result["passed"] is True
 
 
 def test_divergences_are_capped_but_counted(tmp_path: Path):

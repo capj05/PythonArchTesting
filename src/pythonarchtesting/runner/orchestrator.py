@@ -152,6 +152,14 @@ def run_projects(
                     f"mapping ({scope}): the reference has no "
                     f"{', '.join(repr(name) for name in unknown)}"
                 )
+        target_ids = {spec.target_id for spec in projects_cfg.targets}
+        strangers = sorted(set(mappings) - {"*"} - target_ids)
+        if strangers:
+            raise MappingError(
+                "mapping: no target "
+                + ", ".join(repr(name) for name in strangers)
+                + f" (targets: {', '.join(sorted(target_ids))})"
+            )
         run_state = replace(run_state, mappings=dict(mappings))
 
     logger.info(

@@ -284,7 +284,12 @@ def check_architecture(
     (found,) = report["targets"]
     # A marker of the reference that does not compile says nothing about the
     # target: it is the reference to fix, reported apart.
-    broken = [r for r in found["results"] if "invalid_declaration" in str(r["rule_id"])]
+    broken = [
+        r
+        for r in found["results"]
+        if "invalid_declaration" in str(r["rule_id"])
+        or str(r["rule_id"]).startswith("compiler_")
+    ]
     problems = [
         _explain_result(r)
         for r in found["results"]
@@ -300,7 +305,9 @@ def check_architecture(
     )
     skipped = sum(1 for r in found["results"] if r["status"] == "SKIPPED")
     return {
-        "passed": found["exit_code"] == 0,
+        # The exit code counts the reference's broken markers too; nothing in
+        # the target can fix them, so they do not keep it from passing.
+        "passed": not problems if broken else found["exit_code"] == 0,
         # A pass holds only for what ran: a SKIPPED part (a runtime check in
         # static mode) did not look at the target.
         "complete": skipped == 0,

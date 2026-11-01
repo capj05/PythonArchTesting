@@ -372,7 +372,27 @@ def _one_to_one(
             )
             continue
         best = free[0]
-        if best.confidence >= config.threshold:
+        rival = free[1] if len(free) > 1 else None
+        ambiguous: list[dict[str, Any]] = []
+        if (
+            best.confidence >= config.threshold
+            and rival is not None
+            and rival.confidence >= best.confidence - config.delta
+        ):
+            # As in the matching itself: a rival within delta leaves it open.
+            status = MatchStatus.AMBIGUOUS
+            ambiguous.append(
+                {
+                    "code": "ambiguous_competitor_within_delta",
+                    "message": "Competing candidate within delta.",
+                    "evidence": {
+                        "best": best.confidence,
+                        "delta": config.delta,
+                        "competitor": rival.confidence,
+                    },
+                }
+            )
+        elif best.confidence >= config.threshold:
             status = MatchStatus.MATCHED
             taken.add(best.target_id)
         elif best.confidence >= config.min_candidate:
@@ -385,7 +405,7 @@ def _one_to_one(
             target_id=best.target_id if status != MatchStatus.UNMATCHED else None,
             confidence=best.confidence,
             candidates=[best, *(c for c in loser.candidates if c is not best)],
-            reasons=[*loser.reasons, reason],
+            reasons=[*loser.reasons, reason, *ambiguous],
         )
     return [changed.get(match.source_id, match) for match in results]
 

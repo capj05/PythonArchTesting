@@ -92,7 +92,11 @@ def evaluate_target(
         target_index,
         replace(matching_cfg, name_fallback=False),
     )
-    pairs = run_state.mappings.get(spec.target_id, run_state.mappings.get("*"))
+    # A target's own pairs add to the common ones, and win over them.
+    pairs = {
+        **run_state.mappings.get("*", {}),
+        **run_state.mappings.get(spec.target_id, {}),
+    }
     if pairs:
         from pythonarchtesting.matching.assisted import apply_mapping
 

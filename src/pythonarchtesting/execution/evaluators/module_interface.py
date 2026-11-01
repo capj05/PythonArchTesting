@@ -230,8 +230,10 @@ class ModuleInterfaceEvaluator:
         for entity in collect_canonical_module_entities(
             entities=ctx.target_index.all_sorted
         ):
-            if entity.module_path == module:
-                continue
+            if entity.module_path == module or (
+                module and str(entity.module_path).startswith(f"{module}.")
+            ):
+                continue  # the module itself, or a submodule of its package
             for name, line, how in _uses(
                 entity,
                 module,
@@ -313,7 +315,11 @@ class RuntimeModuleInterfaceEvaluator:
                 origin = names.source_module(
                     str(call.get("from")), str(call.get("caller"))
                 )
-                if into != (module or "__init__") or origin == (module or "__init__"):
+                if (
+                    into != (module or "__init__")
+                    or origin == (module or "__init__")
+                    or (module and origin.startswith(f"{module}."))
+                ):
                     continue
                 top = callee.split(".")[0]
                 found = names.source_name(str(call.get("module")), top)
