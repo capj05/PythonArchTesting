@@ -328,11 +328,9 @@ def _rebuild_injected(modules: list[_Module]) -> Iterator[_Change]:
                 )
 
 
-def _collaborator_call(node: ast.stmt, self_name: Optional[str]) -> Optional[str]:
-    """``self.x.m`` when ``node`` is the statement ``self.x.m(...)``."""
-    if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)):
-        return None
-    func = node.value.func
+def _collaborator(call: ast.Call, self_name: Optional[str]) -> Optional[str]:
+    """``self.x.m`` when ``call`` is ``self.x.m(...)``."""
+    func = call.func
     if (
         isinstance(func, ast.Attribute)
         and isinstance(func.value, ast.Attribute)
@@ -343,24 +341,77 @@ def _collaborator_call(node: ast.stmt, self_name: Optional[str]) -> Optional[str
     return None
 
 
+def _collaborator_call(node: ast.stmt, self_name: Optional[str]) -> Optional[str]:
+    """``self.x.m`` when ``node`` is the statement ``self.x.m(...)``."""
+    if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)):
+        return None
+    return _collaborator(node.value, self_name)
+
+
+def _bypass(text: str, call: ast.Call) -> tuple[str, str]:
+    """What a nested collaborator call becomes, and how to say it: its first
+    argument passed through (``apply(total)`` -> ``total``), else ``None``."""
+    first = call.args[0] if call.args else None
+    if first is not None and not isinstance(first, ast.Starred):
+        segment = ast.get_source_segment(text, first)
+        if segment is not None and "\n" not in segment:
+            return segment, "its first argument passed through"
+    return "None", "None instead"
+
+
 def _drop_call(modules: list[_Module]) -> Iterator[_Change]:
     for module in modules:
         for name, method in _methods(module.tree):
             self_name = _self_name(method)
+            found: list[tuple[int, int, _Change]] = []
+            statements: set[int] = set()
             for node in ast.walk(method):
                 if not isinstance(node, ast.stmt):
                     continue
                 call = _collaborator_call(node, self_name)
-                if call is None or not _alone(module.text, node):
+                if call is None:
+                    continue
+                statements.add(id(node.value))  # type: ignore[attr-defined]
+                if not _alone(module.text, node):
                     continue  # sharing its line, it cannot be cut out cleanly
                 lines = module.text.splitlines(keepends=True)
                 first, last = node.lineno - 1, int(node.end_lineno or node.lineno)
                 lines[first:last] = [" " * node.col_offset + "pass\n"]
-                yield _Change(
-                    module.file,
-                    f"{module.name}: {name} no longer calls {call} (line {node.lineno})",
-                    "".join(lines),
+                found.append(
+                    (
+                        node.lineno,
+                        node.col_offset,
+                        _Change(
+                            module.file,
+                            f"{module.name}: {name} no longer calls {call} "
+                            f"(line {node.lineno})",
+                            "".join(lines),
+                        ),
+                    )
                 )
+            # A call whose result is used (``x = self.d.apply(x)``): the
+            # collaborator is bypassed, its argument taken as the result.
+            for node in ast.walk(method):
+                if not isinstance(node, ast.Call) or id(node) in statements:
+                    continue
+                call = _collaborator(node, self_name)
+                if call is None or node.lineno != node.end_lineno:
+                    continue
+                replacement, how = _bypass(module.text, node)
+                found.append(
+                    (
+                        node.lineno,
+                        node.col_offset,
+                        _Change(
+                            module.file,
+                            f"{module.name}: {name} no longer calls {call} "
+                            f"(line {node.lineno}, {how})",
+                            _replace_span(module.text, node, replacement),
+                        ),
+                    )
+                )
+            for _, _, change in sorted(found, key=lambda item: item[:2]):
+                yield change
 
 
 PRIVATE_HELPER = "_archtest_private"

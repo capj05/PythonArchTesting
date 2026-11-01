@@ -252,3 +252,35 @@ def test_break_port_adds_a_required_parameter_or_renames_a_public_method(
     assert "def save_renamed(self, order, *, flush=False):" in renamed.source
     assert not any("_cache" in description for description in mutants)
     assert not any("__init__" in description for description in mutants)
+
+
+def test_drop_call_bypasses_a_collaborator_call_inside_an_expression(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "__init__.py": "",
+            "service.py": (
+                "class Service:\n"
+                "    def __init__(self, discount, clock):\n"
+                "        self._discount = discount\n"
+                "        self._clock = clock\n\n"
+                "    def place(self, order):\n"
+                "        order.total = self._discount.apply(order.total)\n"
+                "        return order.stamp(self._clock.now())\n"
+            ),
+        },
+    )
+
+    mutants = _by(root, "drop_call")
+
+    assert [m.description for m in mutants] == [
+        "service: Service.place no longer calls self._discount.apply "
+        "(line 7, its first argument passed through)",
+        "service: Service.place no longer calls self._clock.now (line 8, None instead)",
+    ]
+    assert "        order.total = order.total\n" in mutants[0].source
+    assert "        return order.stamp(None)\n" in mutants[1].source
+    for mutant in mutants:
+        ast.parse(mutant.source)
