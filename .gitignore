@@ -10,6 +10,13 @@ example/*
 !example/project_1/
 !example/rule_showcase/
 !example/architectural_mutants/
+!example/architectural_mutants_2/
+!example/llm_solutions/
+!example/llm_judge/
+!example/llm_authoring/
+!example/matching_weights/
+example/llm_solutions/generated/
+example/llm_judge/program*/
 example/project_1/reports/
 example/rule_showcase/*/reports/
 example/checkout_assignment/reports/report.json
