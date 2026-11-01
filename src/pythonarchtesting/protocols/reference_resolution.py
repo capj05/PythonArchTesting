@@ -107,6 +107,29 @@ def import_aliases_for_entity(
     return active_lookup.import_aliases(entity.module_path)
 
 
+def _through_reexports(
+    normalized: str, lookup: ProtocolEntityLookup, hops: int = 3
+) -> tuple[Entity, ...]:
+    """The class ``pkg.Name`` stands for when ``pkg`` only imports ``Name``.
+
+    ``from ..domain import Appointment`` names the class ``domain/__init__.py``
+    re-exports from ``domain/schedule.py``; follow such imports a few hops.
+    """
+    current = normalized
+    for _ in range(hops):
+        module, _, name = current.rpartition(".")
+        if not module:
+            return ()
+        following = lookup.import_aliases(module).get(name)
+        if not following or following == current:
+            return ()
+        matches = lookup.class_matches_by_fqn(following)
+        if matches:
+            return matches
+        current = following
+    return ()
+
+
 def resolve_reference(
     reference: str,
     *,
@@ -129,6 +152,8 @@ def resolve_reference(
         return ReferenceResolution(raw=raw, normalized=None, entity=None, reason=reason)
 
     matches = active_lookup.class_matches_by_fqn(normalized)
+    if not matches:
+        matches = _through_reexports(normalized, active_lookup)
     if len(matches) != 1:
         return ReferenceResolution(
             raw=raw,

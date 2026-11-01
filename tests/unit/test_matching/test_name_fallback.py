@@ -389,3 +389,113 @@ def test_inside_a_paired_class_the_name_beats_a_weak_guess(tmp_path: Path):
 
     assert found["memory:Store.add"][1] == "persistence:Store.add"
     assert found["memory:Store.find"][1] == "persistence:Store.find"
+
+
+# A reference bus (program 3) and a student's (E2): in a subpackage the
+# target's subscribe scores as well for the reference's unsubscribe as for
+# its subscribe.
+_BUS = (
+    '"""A synchronous event bus: every subscriber of an event\'s name, in order."""\n'
+    "\n"
+    "from __future__ import annotations\n"
+    "\n"
+    "from typing import Any, Callable\n"
+    "\n"
+    "Handler = Callable[[Any], None]\n"
+    "\n"
+    "\n"
+    "class EventBus:\n"
+    "    def __init__(self) -> None:\n"
+    "        self._handlers: dict[str, list[Handler]] = {}\n"
+    "\n"
+    "    def subscribe(self, name: str, handler: Handler) -> None:\n"
+    "        self._handlers.setdefault(name, []).append(handler)\n"
+    "\n"
+    "    def unsubscribe(self, name: str, handler: Handler) -> None:\n"
+    "        self._handlers.get(name, []).remove(handler)\n"
+    "\n"
+    "    def publish(self, event: Any) -> None:\n"
+    "        for handler in list(self._handlers.get(event.name, [])):\n"
+    "            handler(event)\n"
+)
+_BUS_TARGET = (
+    '"""A small synchronous publish/subscribe bus keyed by event name."""\n'
+    "\n"
+    "from typing import Callable, Dict, List\n"
+    "\n"
+    "\n"
+    "class EventBus:\n"
+    "    def __init__(self):\n"
+    "        self._handlers: Dict[str, List[Callable]] = {}\n"
+    "\n"
+    "    def subscribe(self, name: str, handler: Callable) -> None:\n"
+    "        self._handlers.setdefault(name, []).append(handler)\n"
+    "\n"
+    "    def unsubscribe(self, name: str, handler: Callable) -> None:\n"
+    "        handlers = self._handlers.get(name, [])\n"
+    "        if handler in handlers:\n"
+    "            handlers.remove(handler)\n"
+    "\n"
+    "    def publish(self, event) -> None:\n"
+    "        for handler in list(self._handlers.get(event.name, ())):\n"
+    "            handler(event)\n"
+)
+
+
+def test_two_reference_entities_never_share_a_matched_target(tmp_path: Path):
+    found = _match(
+        tmp_path,
+        {
+            "__init__.py": "",
+            "application/__init__.py": "",
+            "application/event_bus.py": _BUS_TARGET,
+        },
+        reference={
+            "__init__.py": "",
+            "application/__init__.py": "",
+            "application/bus.py": _BUS,
+        },
+    )
+
+    matched = [
+        target
+        for status, target, _ in found.values()
+        if status == MatchStatus.MATCHED and target is not None
+    ]
+    assert len(matched) == len(set(matched))
+    assert found["application.bus:EventBus.subscribe"][1] == (
+        "application.event_bus:EventBus.subscribe"
+    )
+    assert found["application.bus:EventBus.unsubscribe"][1] == (
+        "application.event_bus:EventBus.unsubscribe"
+    )
+
+
+def test_a_dataclass_is_paired_although_its_init_is_generated(tmp_path: Path):
+    reference = {
+        "__init__.py": "",
+        "patients.py": (
+            "class Patient:\n"
+            "    def __init__(self, patient_id, name):\n"
+            "        self.patient_id = patient_id\n"
+            "        self.name = name\n\n"
+            "    def greeting(self):\n"
+            "        return 'Dear ' + self.name\n"
+        ),
+    }
+    target = {
+        "__init__.py": "",
+        "person.py": (
+            "from dataclasses import dataclass\n\n\n"
+            "@dataclass\n"
+            "class Patient:\n"
+            "    patient_id: str\n"
+            "    name: str\n\n"
+            "    def greeting(self):\n"
+            "        return f'Dear {self.name}'\n"
+        ),
+    }
+
+    found = _match(tmp_path, target, reference=reference)
+
+    assert found["patients:Patient"][:2] == (MatchStatus.MATCHED, "person:Patient")

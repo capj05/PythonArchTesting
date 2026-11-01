@@ -287,7 +287,10 @@ def layer_violations(
                 previous[successor] = node
                 place = _placement(successor, layers)
                 if place is not None and place[1] == start_place[1]:
-                    queue.append(successor)  # inside the start's own layer module
+                    if chains:
+                        # Inside the start's own layer; without chains only
+                        # direct edges count, each judged from its own origin.
+                        queue.append(successor)
                     continue
                 if place is None:
                     if chains:

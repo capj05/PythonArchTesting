@@ -137,10 +137,14 @@ class NameTranslation:
         return sorted(names)
 
     def _new_name(self, name: str, source: Any, target: Any) -> str:
-        head, _, rest = name.partition(".")
+        parts = name.split(".")
         entity = None
-        if rest:
-            entity = self._by_source.get((head, rest))
+        # ``pkg.mod.Class`` or ``mod.Outer.Inner``: the longest module that has
+        # the rest as a paired entity.
+        for cut in range(len(parts) - 1, 0, -1):
+            entity = self._by_source.get((".".join(parts[:cut]), ".".join(parts[cut:])))
+            if entity is not None:
+                break
         if entity is None:
             entity = self._by_source.get((source.module_path, name))
         if entity is None:

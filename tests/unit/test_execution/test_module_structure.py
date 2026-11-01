@@ -215,3 +215,21 @@ def test_renaming_merges_modules_and_drops_loops() -> None:
     renamed = rename_edges(edges, lambda module: names.get(module, module))
 
     assert renamed == {("repository", "models"): 1}
+
+
+def test_without_chains_only_direct_edges_are_judged_inside_a_package_layer() -> None:
+    # booking calls the bus, the bus calls reminders (all one layer), and
+    # reminders calls the notifier: only reminders made a call upwards.
+    layers = parse_layers(["adapters", "application"])
+    edges = {
+        ("application.booking", "application.bus"),
+        ("application.bus", "application.reminders"),
+        ("application.reminders", "adapters.notifier"),
+    }
+
+    found = layer_violations(edges, layers, chains=False)
+
+    assert [item.path for item in found] == [
+        ("application.reminders", "adapters.notifier")
+    ]
+    assert all((item.path[0], item.path[-1]) in edges for item in found)

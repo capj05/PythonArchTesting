@@ -1982,8 +1982,41 @@ def _import_target(request: dict[str, Any]) -> tuple[Any, str | None]:
     sys.path.insert(0, os.path.dirname(root) if package else root)
     module_path = request["module_path"]
     if package:
+        if request.get("mode") == "imports" and module_path:
+            module = _import_without_parents(root, package, module_path)
+            if module is not None:
+                return module, package
         module_path = f"{package}.{module_path}" if module_path else package
     return importlib.import_module(module_path), package
+
+
+def _import_without_parents(root: str, package: str, module_path: str) -> Any:
+    """The target module, its enclosing packages' ``__init__.py`` not run.
+
+    A package that re-exports its application (``from .wiring import serve``)
+    imports every adapter as soon as any submodule is loaded; those imports
+    are the package's, not the module's. The enclosing packages are stand-ins
+    with the right ``__path__``; what the module imports itself, including
+    other packages of the project, loads as usual. A module that needs its
+    package's own names cannot load so; ``None`` then, and the caller
+    imports it the ordinary way.
+    """
+    parts = [package, *module_path.split(".")[:-1]]
+    for depth in range(1, len(parts) + 1):
+        name = ".".join(parts[:depth])
+        if name in sys.modules:
+            continue
+        stand_in = types.ModuleType(name)
+        stand_in.__path__ = [os.path.join(root, *parts[1:depth])]
+        stand_in.__package__ = name
+        sys.modules[name] = stand_in
+    try:
+        return importlib.import_module(f"{package}.{module_path}")
+    except Exception:  # noqa: BLE001 - any failure: fall back to a plain import
+        for name in list(sys.modules):
+            if name == package or name.startswith(f"{package}."):
+                del sys.modules[name]
+        return None
 
 
 def main() -> int:

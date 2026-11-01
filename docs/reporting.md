@@ -119,8 +119,9 @@ applied:
   usable candidate is paired with the only top-level target entity of its
   kind and name, when the reference has no other entity of that name. A
   function must accept the reference's positional arguments; a class must
-  have every method the reference's class defines, and none of them may be
-  paired with another class's methods already;
+  have every ordinary method the reference's class defines (special methods,
+  such as a dataclass's generated `__init__`, are not required), and none of
+  them may be paired with another class's methods already;
 - `member_of_paired_class`: a method the scores did not match is paired with
   the method of the same name and a compatible signature of the target class
   its class was paired with. Inside a paired class the name outweighs a weak

@@ -10,7 +10,8 @@ entities (measured in ``example/matching_weights``):
    usable candidate is paired with the only top-level target entity of its
    kind and name, when the reference has no other entity of that name. A
    function must accept the reference's positional arguments; a class must
-   have every method the reference's class defines, and none of those may
+   have every ordinary method the reference's class defines (special methods
+   such as a dataclass's generated ``__init__`` are not required), and none of those may
    already be paired with another class's methods. Never a module (a renamed
    module needs an assisted mapping) and never a method (the only method of
    a name may be a base class's);
@@ -96,6 +97,10 @@ def _open_for(match: MatchResult, target: Entity) -> bool:
     return match.candidates[0].target_id == target.canonical_id
 
 
+def _dunder(name: str) -> bool:
+    return name.startswith("__") and name.endswith("__")
+
+
 def _top_level(entity: Entity) -> bool:
     return "." not in entity.qualname
 
@@ -144,7 +149,13 @@ def pair_by_name(
         return claim is None or claim[1] == match.source_id
 
     def class_fits(source: Entity, target: Entity) -> bool:
-        wanted = _methods(source_index, source.module_path, source.qualname)
+        # Special methods may be generated (a dataclass's __init__, __eq__),
+        # so only the ordinary ones are required.
+        wanted = [
+            m
+            for m in _methods(source_index, source.module_path, source.qualname)
+            if not _dunder(m.qualname.rpartition(".")[2])
+        ]
         offered = {
             e.qualname.rpartition(".")[2]
             for e in _methods(target_index, target.module_path, target.qualname)

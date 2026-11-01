@@ -309,3 +309,17 @@ def test_a_low_confidence_match_on_a_target_matched_elsewhere_is_ignored() -> No
 
     assert names.source_module("app", "Svc.run") == "service"
     assert names.source_name("app", "Svc.run") == ("service", "Svc.run")
+
+
+def test_a_new_object_of_a_class_in_a_renamed_submodule_is_translated() -> None:
+    names = NameTranslation.from_context(
+        _context([(("adapters.memory_store", "Store"), ("adapters.memory", "Store"))])
+    )
+    source = _entity("source", "api.handlers", "book", kind="function")
+    target = _entity("target", "api.handlers", "book", kind="function")
+
+    case = names.value(
+        {"$new": "adapters.memory_store.Store", "args": []}, source, target
+    )
+
+    assert case["$new"] == "adapters.memory.Store"
