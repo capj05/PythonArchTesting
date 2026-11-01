@@ -1,0 +1,9 @@
+[
+{"id":"v031","violates":true,"requirements":[4],"reason":"The handler reaches into the service's private _store attribute and queries the store through a helper."},
+{"id":"v032","violates":true,"requirements":[2,6],"reason":"LendingService ignores the injected notifier and creates its own notifier class inside the application, so lending no longer notifies through the injected notifier."},
+{"id":"v033","violates":true,"requirements":[4,7],"reason":"The request handler imports and instantiates an adapter (InMemoryLoanStore) and uses its store, breaking handler isolation and the layer order."},
+{"id":"v034","violates":true,"requirements":[2,6,7],"reason":"The application imports and instantiates the OutboxNotifier adapter instead of using the injected notifier, a reverse dependency on an adapter."},
+{"id":"v035","violates":true,"requirements":[5],"reason":"The store's add directly sets loan.returned = False, mutating the loan's closed state outside Loan.close."},
+{"id":"v036","violates":true,"requirements":[3],"reason":"OutboxNotifier.send swaps the parameter order to (text, recipient), so it no longer satisfies the Notifier port."},
+{"id":"v037","violates":false,"requirements":[],"reason":"A helper module for response building is used only by the handler and adds no forbidden dependency."}
+]

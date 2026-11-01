@@ -1,0 +1,10 @@
+[
+  {"id": "w025", "violates": true, "requirements": [6], "reason": "The service never publishes the order_placed event on the bus, so observers are not notified as the assignment describes."},
+  {"id": "w026", "violates": false, "requirements": [], "reason": "The singleton is enforced in __init__ and instance(), and the handler, service and bus follow the requirements."},
+  {"id": "w027", "violates": true, "requirements": [3], "reason": "The service sets order.status = 'placed' directly instead of calling the order's mark_placed() method."},
+  {"id": "w028", "violates": true, "requirements": [1], "reason": "The handler constructs OrderRepository() and calls get() on it, so it reaches storage directly."},
+  {"id": "w029", "violates": false, "requirements": [], "reason": "The _check_price helper validates prices without changing the layering, injection or singleton."},
+  {"id": "w030", "violates": true, "requirements": [3], "reason": "The service bypasses Order.add() by extending order.items directly, so the order changes outside its own methods."},
+  {"id": "w031", "violates": false, "requirements": [], "reason": "The package is split into modules with injected collaborators, the handler uses only the service, and there is no import cycle."},
+  {"id": "w032", "violates": false, "requirements": [], "reason": "The layers share one module, but the handler never touches the repository and the service neither imports nor creates it."}
+]

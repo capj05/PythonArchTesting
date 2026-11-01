@@ -1,0 +1,10 @@
+[
+  {"id": "w033", "violates": false, "requirements": [], "reason": "Domain has no project imports, the application uses only the ports, adapters import only the domain, handlers talk to the service only, and build is the only place that wires concrete adapters."},
+  {"id": "w034", "violates": false, "requirements": [], "reason": "The application uses only the injected ports via a private helper, adapters satisfy their ports, and handlers call only the service, so every graded requirement holds."},
+  {"id": "w035", "violates": true, "requirements": [2, 6], "reason": "LendingService.__init__ imports and instantiates the concrete OutboxNotifier and ignores the injected notifier, so the application creates an adapter class and bypasses the injected port."},
+  {"id": "w036", "violates": false, "requirements": [], "reason": "The application imports a new pure helper module (policy.py) that has no project imports and is used the same way as any helper, while the ports and adapters remain correctly separated."},
+  {"id": "w037", "violates": true, "requirements": [2, 6], "reason": "application.py defines a concrete _LogNotifier adapter class and LendingService instantiates it instead of using the injected notifier, so the application creates an adapter and does not notify through the injected port."},
+  {"id": "w038", "violates": true, "requirements": [4], "reason": "lend_book reaches into the service's private store attribute (service._store.find) to read the due day, which is the store access the requirement forbids even through the service's attributes."},
+  {"id": "w039", "violates": false, "requirements": [], "reason": "Turning Loan into a dataclass keeps the domain free of project imports, and the rest of the structure matches the required layering."},
+  {"id": "w040", "violates": false, "requirements": [], "reason": "The handlers import a new response helper (responses.py) that has no project imports and does not touch the adapters or the store, so the layering is unchanged."}
+]

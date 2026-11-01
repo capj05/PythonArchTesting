@@ -1,0 +1,12 @@
+[
+  {"id": "v011", "violates": true, "requirements": [4], "reason": "The handler reads service._clock and service._period and recomputes the due day itself, reaching into the application's attributes instead of using only its public lend call."},
+  {"id": "v012", "violates": false, "requirements": [], "reason": "A private helper _complete(*fields) in the handler is a local restructuring that still only talks to the application through service.lend."},
+  {"id": "v013", "violates": true, "requirements": [2], "reason": "LendingService.lend imports the adapter class FixedClock from adapters_memory and replaces the injected clock with it, so the application creates an adapter."},
+  {"id": "v014", "violates": false, "requirements": [], "reason": "Renaming adapters_memory.py to storage.py and updating the wiring import keeps the same layering and port satisfaction with no cycle introduced."},
+  {"id": "v015", "violates": true, "requirements": [6], "reason": "LendingService.lend no longer sends the member a notification, so lending does not notify through the injected notifier."},
+  {"id": "v016", "violates": true, "requirements": [2], "reason": "The application imports InMemoryLoanStore from adapters_memory and instantiates it as a fallback store, so it creates an adapter class."},
+  {"id": "v017", "violates": false, "requirements": [], "reason": "Notification is now skipped when re-lending a previously returned book, which is a functional defect, but it still goes through the injected notifier and does not change the architecture."},
+  {"id": "v018", "violates": false, "requirements": [], "reason": "Extracting _due_day, renaming locals and using keyword arguments for Loan are restructuring that keeps the ports-only application and the notifier path intact."},
+  {"id": "v019", "violates": true, "requirements": [4], "reason": "The request handler imports the domain Loan and creates and closes one directly, so it talks to the domain rather than to the application only, bypassing the service."},
+  {"id": "v020", "violates": true, "requirements": [5], "reason": "give_back sets loan.returned = True directly instead of closing the loan through Loan.close."}
+]

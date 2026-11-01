@@ -1,0 +1,59 @@
+[
+ {
+  "id": "w049",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the intended architecture."
+ },
+ {
+  "id": "w050",
+  "violates": true,
+  "requirements": [
+   5
+  ],
+  "reason": "The service computes the percent discount itself via getattr on the strategy instead of calling discount.apply."
+ },
+ {
+  "id": "w051",
+  "violates": true,
+  "requirements": [
+   2
+  ],
+  "reason": "The service imports OrderRepository and creates its own repository, ignoring the injected one."
+ },
+ {
+  "id": "w052",
+  "violates": false,
+  "requirements": [],
+  "reason": "Handler wrapped in a static method of a controller class; layering is unchanged."
+ },
+ {
+  "id": "w053",
+  "violates": true,
+  "requirements": [
+   2,
+   5
+  ],
+  "reason": "The service imports PercentDiscount inside place and overrides the injected discount with PercentDiscount(10)."
+ },
+ {
+  "id": "w054",
+  "violates": true,
+  "requirements": [
+   6
+  ],
+  "reason": "EventBus.publish notifies only the first listener instead of every subscriber."
+ },
+ {
+  "id": "w055",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the intended architecture."
+ },
+ {
+  "id": "w056",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the intended architecture."
+ }
+]

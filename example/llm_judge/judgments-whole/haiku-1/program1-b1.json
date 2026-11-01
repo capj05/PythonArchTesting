@@ -1,0 +1,10 @@
+[
+  {"id": "w001", "violates": true, "requirements": [3], "reason": "The service sets order.total directly (order.total = self._discount.apply(...)) instead of changing the order through apply_total."},
+  {"id": "w002", "violates": false, "requirements": [], "reason": "The EventBus keeps listeners in a dict keyed by id(listener); the layering and injection are unchanged, and only duplicate subscriptions collapse, which is an idiom difference rather than an architectural breach."},
+  {"id": "w003", "violates": true, "requirements": [4], "reason": "The service imports pickle and calls pickle.dumps, which is serialisation technology in the service."},
+  {"id": "w004", "violates": false, "requirements": [], "reason": "The repository's save uses dict.update instead of item assignment; storage remains in the repository and the service's structure is unchanged."},
+  {"id": "w005", "violates": false, "requirements": [], "reason": "PercentDiscount delegates its arithmetic to a private helper method, which is still the injected strategy computing the discount."},
+  {"id": "w006", "violates": true, "requirements": [8], "reason": "A dependency cycle is introduced: events.py imports pricing, and pricing.py imports EventBus from events."},
+  {"id": "w007", "violates": false, "requirements": [], "reason": "The service omits the repository save, which is a functional defect; the layering, injection and order-method usage are still intact, so no graded architecture requirement is breached."},
+  {"id": "w008", "violates": true, "requirements": [2], "reason": "The service ignores the injected bus and creates its own via type(bus)(), violating the rule that it uses exactly the collaborators it was given and never creates them."}
+]

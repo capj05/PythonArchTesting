@@ -1,0 +1,12 @@
+[
+{"id":"v021","violates":true,"requirements":[7,8],"reason":"ports imports application (even under TYPE_CHECKING), a lower layer depending on a higher one and creating a ports<->application cycle."},
+{"id":"v022","violates":false,"requirements":[],"reason":"policy.py is a pure helper with no project imports used by the application; architecture is unchanged."},
+{"id":"v023","violates":false,"requirements":[],"reason":"Only an idiomatic rewrite of the validation condition."},
+{"id":"v024","violates":true,"requirements":[3],"reason":"OutboxNotifier renames send to notify, so it no longer satisfies the Notifier port."},
+{"id":"v025","violates":false,"requirements":[],"reason":"Adapters merged into one module that still depends only on the domain; wiring updated and layers intact."},
+{"id":"v026","violates":true,"requirements":[4],"reason":"The handler reaches the store through service._store."},
+{"id":"v027","violates":true,"requirements":[3],"reason":"InMemoryLoanStore.find now requires an extra member argument, so it no longer satisfies the LoanStore port."},
+{"id":"v028","violates":true,"requirements":[4],"reason":"The handler calls service._store.find, touching the store via the service's attribute."},
+{"id":"v029","violates":false,"requirements":[],"reason":"Only local variable refactors with identical behavior and dependencies."},
+{"id":"v030","violates":true,"requirements":[5],"reason":"The loan is closed by setting returned directly instead of Loan.close."}
+]

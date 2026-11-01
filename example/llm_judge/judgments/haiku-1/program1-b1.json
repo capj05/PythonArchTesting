@@ -1,0 +1,12 @@
+[
+  {"id": "v001", "violates": true, "requirements": [7], "reason": "AppConfig.instance() now returns a fresh cls() on every call, so the configuration is no longer a singleton."},
+  {"id": "v002", "violates": false, "requirements": [], "reason": "A private _is_empty helper in the controller still only uses the service, so the layering is unchanged."},
+  {"id": "v003", "violates": false, "requirements": [], "reason": "The _store helper in the service still reaches the injected repository through the constructor-provided attribute, so the architecture is preserved."},
+  {"id": "v004", "violates": true, "requirements": [6], "reason": "EventBus.publish no longer calls the subscribed listeners and instead records last_event, breaking the observer behaviour."},
+  {"id": "v005", "violates": false, "requirements": [], "reason": "Wrapping handle_order in a static method on OrderController is a restructuring that keeps the handler using only the service."},
+  {"id": "v006", "violates": false, "requirements": [], "reason": "Adding __new__ to AppConfig keeps a single shared instance, so cls() still returns the singleton and requirement 7 holds."},
+  {"id": "v007", "violates": true, "requirements": [4], "reason": "The service imports importlib and calls pickle.dumps, which introduces serialisation technology into the service layer."},
+  {"id": "v008", "violates": true, "requirements": [1], "reason": "The handler imports OrderRepository, reaches into service._repository, and calls repo.get, so it reaches storage through the service's attributes."},
+  {"id": "v009", "violates": true, "requirements": [2, 5], "reason": "OrderService.place imports and creates PercentDiscount itself and overwrites self._discount, so it no longer uses only its injected discount strategy."},
+  {"id": "v010", "violates": true, "requirements": [5], "reason": "The service computes the discount inline with getattr on the percent attribute instead of calling the injected strategy's apply method."}
+]

@@ -1,0 +1,10 @@
+[
+  {"id": "w017", "violates": true, "requirements": [3], "reason": "InMemoryLoanStore.find takes an extra required member argument, so it does not satisfy the LoanStore.find(book_id) port, and the application calls it with a dummy empty member."},
+  {"id": "w018", "violates": true, "requirements": [2, 7], "reason": "application.py imports InMemoryLoanStore from the adapters module and instantiates it as a fallback, so the application depends on an adapter."},
+  {"id": "w019", "violates": true, "requirements": [1, 6, 7], "reason": "domain.py imports OutboxNotifier from the adapter layer and Loan.close sends a notification through a module-level global, so the domain depends on an adapter and notifies outside the injected notifier."},
+  {"id": "w020", "violates": false, "requirements": [], "reason": "The application uses only the ports, the handlers use only the service, adapters satisfy their ports, and loans are closed only through Loan.close."},
+  {"id": "w021", "violates": false, "requirements": [], "reason": "The handlers and adapter modules are independent of each other, the application uses only the ports, and the module imports form a layered graph without cycles."},
+  {"id": "w022", "violates": false, "requirements": [], "reason": "The application uses only the ports, the adapters satisfy their ports, the handlers use only the service, and the layer order holds."},
+  {"id": "w023", "violates": false, "requirements": [], "reason": "The application uses only the ports and the store's find filtering returned loans does not break any layering or port requirement."},
+  {"id": "w024", "violates": false, "requirements": [], "reason": "The extra factory helpers live in the composition root, which may know the concrete adapters, and the application and handlers keep their dependencies."}
+]

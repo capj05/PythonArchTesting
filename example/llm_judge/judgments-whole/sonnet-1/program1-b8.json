@@ -1,0 +1,56 @@
+[
+ {
+  "id": "w057",
+  "violates": true,
+  "requirements": [
+   2
+  ],
+  "reason": "The service imports and creates an EventBus when no bus is injected."
+ },
+ {
+  "id": "w058",
+  "violates": false,
+  "requirements": [],
+  "reason": "Validation helper used by the handler does not touch storage."
+ },
+ {
+  "id": "w059",
+  "violates": true,
+  "requirements": [
+   8
+  ],
+  "reason": "models imports service while service imports models, creating a dependency cycle."
+ },
+ {
+  "id": "w060",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the intended architecture."
+ },
+ {
+  "id": "w061",
+  "violates": true,
+  "requirements": [
+   1
+  ],
+  "reason": "The handler imports the repository and reaches it through service._repository."
+ },
+ {
+  "id": "w062",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the intended architecture."
+ },
+ {
+  "id": "w063",
+  "violates": false,
+  "requirements": [],
+  "reason": "Repository lives in storage.py; layering and injection are unchanged."
+ },
+ {
+  "id": "w064",
+  "violates": false,
+  "requirements": [],
+  "reason": "Async variant keeps the same layering and injection."
+ }
+]

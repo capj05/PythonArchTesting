@@ -1,0 +1,10 @@
+[
+  {"id": "w025", "violates": true, "requirements": [2, 7], "reason": "application.lend imports FixedClock from the adapters module and replaces the injected clock with it."},
+  {"id": "w026", "violates": false, "requirements": [], "reason": "The handlers use only the service through a private helper, and the application, ports and adapters keep their dependencies."},
+  {"id": "w027", "violates": false, "requirements": [], "reason": "The handlers use only the service, the application uses only the ports, and the adapters satisfy their ports."},
+  {"id": "w028", "violates": false, "requirements": [], "reason": "The store's add resets the loan's returned flag directly, which is not a close, and all dependencies still point in the layered direction."},
+  {"id": "w029", "violates": false, "requirements": [], "reason": "The application uses only the ports, the handlers use only the service, the adapters satisfy their ports, and loans are closed only through Loan.close."},
+  {"id": "w030", "violates": true, "requirements": [7, 8], "reason": "ports.py imports the application module under TYPE_CHECKING, so the lower ports layer depends on the higher application layer and the module graph has a cycle."},
+  {"id": "w031", "violates": true, "requirements": [3], "reason": "OutboxNotifier.send is declared as send(text, recipient), so the positional call from the application stores the text and member swapped and the adapter does not satisfy the Notifier port."},
+  {"id": "w032", "violates": true, "requirements": [6], "reason": "LendingService.lend no longer notifies the member through the injected notifier."}
+]

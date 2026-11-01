@@ -1,0 +1,11 @@
+[
+  {"id": "w041", "violates": true, "requirements": [3], "reason": "OutboxNotifier renames the port method to notify instead of send, so the adapter does not satisfy the Notifier port and the application calls a method the port does not declare."},
+  {"id": "w042", "violates": true, "requirements": [5], "reason": "give_back sets loan.returned = True directly instead of closing the loan through Loan.close."},
+  {"id": "w043", "violates": false, "requirements": [], "reason": "All three adapters sit in one adapters.py module, which is a different structure that still keeps the ports, the application and the composition root correctly separated."},
+  {"id": "w044", "violates": true, "requirements": [4], "reason": "lend_book passes service._store to a lookup helper (find_loan), so the request handler reaches the store through the service's attribute, which the requirement forbids."},
+  {"id": "w045", "violates": false, "requirements": [], "reason": "The only differences are a local variable in find and a status variable in return_book, and the layering and port usage remain correct."},
+  {"id": "w046", "violates": false, "requirements": [], "reason": "The adapters subclass the ports, the handlers and the application depend only on ports and the service, the layers are ordered as required, and no modules form a cycle."},
+  {"id": "w047", "violates": false, "requirements": [], "reason": "Adapters implement the ports, handlers talk only to the service, composition wires the concrete adapters, and the module dependencies form no cycle."},
+  {"id": "w048", "violates": false, "requirements": [], "reason": "A private _notify helper in the application forwards to the injected notifier, which is a helper used the same way and does not violate any graded requirement."},
+  {"id": "w049", "violates": true, "requirements": [2], "reason": "LendingService replaces the injected store with a new instance of its class (type(store)()), so it does not work with what it was given and the lend check runs against an empty store."}
+]

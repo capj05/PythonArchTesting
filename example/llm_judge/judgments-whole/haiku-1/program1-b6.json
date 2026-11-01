@@ -1,0 +1,10 @@
+[
+  {"id": "w041", "violates": true, "requirements": [5], "reason": "The service hard-codes a 10 percent discount with round(order.total * 0.9, 2) instead of calling the injected discount strategy, violating requirement 5."},
+  {"id": "w042", "violates": true, "requirements": [6], "reason": "EventBus.publish only stores last_event and never calls the subscribed listeners, so the observer behaviour required by requirement 6 is broken."},
+  {"id": "w043", "violates": false, "requirements": [], "reason": "The static _build helper only creates and fills the Order from the service, and the order still changes only through its methods, so no requirement is broken."},
+  {"id": "w044", "violates": true, "requirements": [1], "reason": "On the empty-order branch the controller calls service._repository.get(...), so the handler reaches the repository through the service's attribute, which requirement 1 forbids."},
+  {"id": "w045", "violates": true, "requirements": [6], "reason": "EventBus.unsubscribe is a no-op (_ = listener), so unsubscribed listeners keep receiving events, which breaks requirement 6."},
+  {"id": "w046", "violates": false, "requirements": [], "reason": "The handler, service and repository keep the intended dependencies, the discount is injected, and the observer bus works as described, so no requirement is broken."},
+  {"id": "w047", "violates": false, "requirements": [], "reason": "The modules keep the layering (handler and service use only injected collaborators), the config singleton and bus behave as required, and there is no module import cycle."},
+  {"id": "w048", "violates": false, "requirements": [], "reason": "The code matches the reference architecture in every module, with the handler using only the service and the service using only injected collaborators."}
+]

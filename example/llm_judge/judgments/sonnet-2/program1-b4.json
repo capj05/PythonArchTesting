@@ -1,0 +1,12 @@
+[
+{"id":"v031","violates":true,"requirements":[3],"reason":"The service mutates order.items directly (sort) instead of through an Order method."},
+{"id":"v032","violates":true,"requirements":[2],"reason":"The service imports OrderRepository and creates one as a fallback instead of using only the injected repository."},
+{"id":"v033","violates":false,"requirements":[],"reason":"A private helper inside PercentDiscount keeps the same behaviour and structure."},
+{"id":"v034","violates":false,"requirements":[],"reason":"The singleton accessor is restructured with an early return and is still a singleton."},
+{"id":"v035","violates":false,"requirements":[],"reason":"An equivalent emptiness check; the handler still only delegates to the service."},
+{"id":"v036","violates":true,"requirements":[1],"reason":"The handler no longer delegates to the order service and computes the total itself, bypassing the service layer."},
+{"id":"v037","violates":true,"requirements":[1],"reason":"The handler reaches the repository through the service's private _repository attribute."},
+{"id":"v038","violates":false,"requirements":[],"reason":"Only passes the argument by keyword; the injected strategy is still used."},
+{"id":"v039","violates":true,"requirements":[3],"reason":"The service extends order.items directly instead of using Order.add, mutating the order outside its own methods."},
+{"id":"v040","violates":true,"requirements":[6],"reason":"publish notifies only the first listener, breaking the observer contract."}
+]

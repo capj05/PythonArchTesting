@@ -1,0 +1,56 @@
+[
+ {
+  "id": "w017",
+  "violates": true,
+  "requirements": [
+   2
+  ],
+  "reason": "The service imports OrderRepository and creates one when none is injected."
+ },
+ {
+  "id": "w018",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the graded architecture."
+ },
+ {
+  "id": "w019",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the graded architecture."
+ },
+ {
+  "id": "w020",
+  "violates": true,
+  "requirements": [
+   7
+  ],
+  "reason": "AppConfig.instance() returns a new instance on every call, so it is not a singleton."
+ },
+ {
+  "id": "w021",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the graded architecture."
+ },
+ {
+  "id": "w022",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the graded architecture."
+ },
+ {
+  "id": "w023",
+  "violates": true,
+  "requirements": [
+   4
+  ],
+  "reason": "The service obtains sqlite3 via importlib and opens a database connection."
+ },
+ {
+  "id": "w024",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the graded architecture."
+ }
+]

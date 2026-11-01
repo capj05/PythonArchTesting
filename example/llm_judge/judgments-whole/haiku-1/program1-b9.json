@@ -1,0 +1,4 @@
+[
+  {"id": "w065", "violates": false, "requirements": [], "reason": "The __new__-based singleton still yields one shared AppConfig, and the handler and service use only injected collaborators."},
+  {"id": "w066", "violates": true, "requirements": [1], "reason": "The handler calls audit.record, a helper module that creates its own OrderRepository and writes to it, so the handler reaches storage through a helper and storage is used outside the service."}
+]

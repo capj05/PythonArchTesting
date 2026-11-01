@@ -1,0 +1,10 @@
+[
+  {"id": "w009", "violates": false, "requirements": [], "reason": "Ports, adapters, application, handlers and composition root keep the required dependencies, and the store replaces earlier loans correctly."},
+  {"id": "w010", "violates": false, "requirements": [], "reason": "Adapters satisfy their ports, the application uses only ports, and the handlers talk to the service only."},
+  {"id": "w011", "violates": true, "requirements": [1, 8], "reason": "Loan.close imports the application module, which imports domain, so the domain depends on the application and the two form a cycle."},
+  {"id": "w012", "violates": true, "requirements": [5], "reason": "LendingService.give_back sets loan.returned directly instead of closing the loan through Loan.close."},
+  {"id": "w013", "violates": false, "requirements": [], "reason": "The adapters live in a differently named module (storage.py) but still satisfy the ports and are wired only in the composition root."},
+  {"id": "w014", "violates": true, "requirements": [4], "reason": "lend_book reads service._clock and service._period to compute the due day, reaching into the service's attributes."},
+  {"id": "w015", "violates": true, "requirements": [2, 4], "reason": "api.py imports and instantiates InMemoryLoanStore, so the request handler talks to an adapter directly."},
+  {"id": "w016", "violates": true, "requirements": [4], "reason": "lend_book constructs and closes a Loan domain object, so the handler talks to the domain rather than only to the application."}
+]

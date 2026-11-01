@@ -1,0 +1,10 @@
+[
+  {"id": "w057", "violates": true, "requirements": [2], "reason": "The service constructs an EventBus when none is injected, so it creates a collaborator instead of only using the injected one."},
+  {"id": "w058", "violates": false, "requirements": [], "reason": "The handler delegates validation to a pure helper module that never touches storage; the layering is intact."},
+  {"id": "w059", "violates": true, "requirements": [8], "reason": "models.py imports service and service.py imports models, creating a dependency cycle."},
+  {"id": "w060", "violates": false, "requirements": [], "reason": "The empty-price check is rewritten equivalently; there is no layering or injection change."},
+  {"id": "w061", "violates": true, "requirements": [1], "reason": "handle_order reaches into service._repository and calls the repository directly, bypassing the service."},
+  {"id": "w062", "violates": false, "requirements": [], "reason": "The AppConfig singleton is lazily created with the same single instance; no architectural breach."},
+  {"id": "w063", "violates": false, "requirements": [], "reason": "The repository lives in storage.py instead of repository.py; the module name differs but layers and injection are unchanged."},
+  {"id": "w064", "violates": false, "requirements": [], "reason": "The handler and service are async, an idiom change that keeps the same layers and injection, with the handler still touching no storage."}
+]

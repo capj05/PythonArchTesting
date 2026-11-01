@@ -1,0 +1,61 @@
+[
+ {
+  "id": "w009",
+  "violates": false,
+  "requirements": [],
+  "reason": "Architecture is kept; only style and handler details differ."
+ },
+ {
+  "id": "w010",
+  "violates": false,
+  "requirements": [],
+  "reason": "The list-based store satisfies the port, and layering is intact."
+ },
+ {
+  "id": "w011",
+  "violates": true,
+  "requirements": [
+   1,
+   7,
+   8
+  ],
+  "reason": "Loan.close imports the application module, which makes the domain depend upward and creates a domain-application cycle."
+ },
+ {
+  "id": "w012",
+  "violates": true,
+  "requirements": [
+   5
+  ],
+  "reason": "give_back sets loan.returned = True directly instead of calling Loan.close."
+ },
+ {
+  "id": "w013",
+  "violates": false,
+  "requirements": [],
+  "reason": "Adapters are in a differently named module but are used as in the reference."
+ },
+ {
+  "id": "w014",
+  "violates": true,
+  "requirements": [
+   4
+  ],
+  "reason": "The lend_book handler reads service._clock and service._period to compute the due day."
+ },
+ {
+  "id": "w015",
+  "violates": true,
+  "requirements": [
+   4,
+   7
+  ],
+  "reason": "The api module imports InMemoryLoanStore and the return_book handler calls it, so a handler depends on an adapter."
+ },
+ {
+  "id": "w016",
+  "violates": false,
+  "requirements": [],
+  "reason": "The handler's stray Loan.close() call on a throwaway loan is odd, but it uses only the domain, not an adapter or the store."
+ }
+]

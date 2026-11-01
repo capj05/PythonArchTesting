@@ -1,0 +1,12 @@
+[
+{"id":"v021","violates":true,"requirements":[2],"reason":"The service imports and creates its own OrderRepository, ignoring the injected repository."},
+{"id":"v022","violates":false,"requirements":[],"reason":"A validation helper in models used by the service keeps the architecture intact."},
+{"id":"v023","violates":true,"requirements":[4],"reason":"The service uses pickle to serialise the order."},
+{"id":"v024","violates":true,"requirements":[6],"reason":"unsubscribe is a no-op, so the observer contract is broken."},
+{"id":"v025","violates":true,"requirements":[2],"reason":"The service imports EventBus and creates one as a fallback instead of using only the injected bus."},
+{"id":"v026","violates":false,"requirements":[],"reason":"Making handler and service async changes no layering, injection or other graded rule."},
+{"id":"v027","violates":true,"requirements":[4],"reason":"The service imports sqlite3 (via importlib) and opens a connection."},
+{"id":"v028","violates":false,"requirements":[],"reason":"The controller uses a harmless response helper module with no cycle or layer breach."},
+{"id":"v029","violates":true,"requirements":[2],"reason":"The service creates a fresh bus via type(bus)() instead of using the injected one."},
+{"id":"v030","violates":true,"requirements":[8],"reason":"events imports pricing and pricing imports events, forming a dependency cycle."}
+]

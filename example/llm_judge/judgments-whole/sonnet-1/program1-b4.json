@@ -1,0 +1,58 @@
+[
+ {
+  "id": "w025",
+  "violates": true,
+  "requirements": [
+   6
+  ],
+  "reason": "The service never publishes the order_placed event on the bus."
+ },
+ {
+  "id": "w026",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the graded architecture."
+ },
+ {
+  "id": "w027",
+  "violates": true,
+  "requirements": [
+   3
+  ],
+  "reason": "The service sets order.status directly instead of calling mark_placed()."
+ },
+ {
+  "id": "w028",
+  "violates": true,
+  "requirements": [
+   1
+  ],
+  "reason": "The handler imports and instantiates OrderRepository and queries it."
+ },
+ {
+  "id": "w029",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the graded architecture."
+ },
+ {
+  "id": "w030",
+  "violates": true,
+  "requirements": [
+   3
+  ],
+  "reason": "The service mutates order.items directly via extend instead of Order.add."
+ },
+ {
+  "id": "w031",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the graded architecture."
+ },
+ {
+  "id": "w032",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the graded architecture."
+ }
+]

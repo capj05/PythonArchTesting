@@ -1,0 +1,730 @@
+{
+ "program1/v001": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M19",
+  "kind": "mutant",
+  "operator": "O6 broken pattern",
+  "description": "instance() builds a new object on every call"
+ },
+ "program1/v002": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "E102",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "controller extracts the emptiness check into a private helper"
+ },
+ "program1/v003": {
+  "program": "program1",
+  "set": "hand",
+  "id": "E02",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "service stores the order through a private helper method"
+ },
+ "program1/v004": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M18",
+  "kind": "mutant",
+  "operator": "O6 broken pattern",
+  "description": "publish() only records the event and notifies nobody"
+ },
+ "program1/v005": {
+  "program": "program1",
+  "set": "hand",
+  "id": "E10",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "controller function becomes a staticmethod of a class"
+ },
+ "program1/v006": {
+  "program": "program1",
+  "set": "hand",
+  "id": "E05",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "singleton cached in __new__"
+ },
+ "program1/v007": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M12",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "service loads pickle through importlib.import_module"
+ },
+ "program1/v008": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M101",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "controller imports the repository and double-checks the stored order through the service's private repository"
+ },
+ "program1/v009": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M07",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "place() imports a strategy lazily and replaces the injected one"
+ },
+ "program1/v010": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M111",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "service reads the strategy's percent attribute and computes the discount itself"
+ },
+ "program1/v011": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "E108",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "repository stores rows via dict.update and a local variable"
+ },
+ "program1/v012": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M20",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "controller reads storage through a new helper module"
+ },
+ "program1/v013": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M14",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "service hard-codes the discount instead of the strategy"
+ },
+ "program1/v014": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M110",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "service hardcodes a 10 % discount instead of asking the injected strategy"
+ },
+ "program1/v015": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M13",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "service opens sqlite3 through __import__"
+ },
+ "program1/v016": {
+  "program": "program1",
+  "set": "hand",
+  "id": "E08",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "controller, service and repository in one module"
+ },
+ "program1/v017": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M21",
+  "kind": "mutant",
+  "operator": "O7 dependency cycle",
+  "description": "the order takes its status from a function of the service"
+ },
+ "program1/v018": {
+  "program": "program1",
+  "set": "hand",
+  "id": "E04",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "event bus keeps listeners in a dict keyed by id"
+ },
+ "program1/v019": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M11",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "service imports pickle and serialises the order"
+ },
+ "program1/v020": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "E104",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "request validation moved to a new helper module imported by the controller"
+ },
+ "program1/v021": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M05",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "service imports and builds its own repository"
+ },
+ "program1/v022": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M22",
+  "kind": "mutant",
+  "operator": "O8 module interface",
+  "description": "service calls a private helper of the models module"
+ },
+ "program1/v023": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M109",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "service serialises the order with pickle fetched through __import__"
+ },
+ "program1/v024": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M17",
+  "kind": "mutant",
+  "operator": "O6 broken pattern",
+  "description": "unsubscribe() does nothing"
+ },
+ "program1/v025": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M104",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "service lazily imports the event bus and builds its own when none is given"
+ },
+ "program1/v026": {
+  "program": "program1",
+  "set": "hand",
+  "id": "E09",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "service and controller are async"
+ },
+ "program1/v027": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M108",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "service opens an in-memory sqlite connection via importlib"
+ },
+ "program1/v028": {
+  "program": "program1",
+  "set": "hand",
+  "id": "E06",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "controller builds its response in a new helper module"
+ },
+ "program1/v029": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M06",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "service builds a fresh bus of the injected bus's class"
+ },
+ "program1/v030": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M114",
+  "kind": "mutant",
+  "operator": "O7 dependency cycle",
+  "description": "pricing and events import each other at module level"
+ },
+ "program1/v031": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M106",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "service sorts the order's item list in place after filling it"
+ },
+ "program1/v032": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M103",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "service falls back to a self-constructed repository when none is given"
+ },
+ "program1/v033": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "E107",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "PercentDiscount factor factored into a helper method"
+ },
+ "program1/v034": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "E106",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "singleton accessor rewritten with an early return"
+ },
+ "program1/v035": {
+  "program": "program1",
+  "set": "hand",
+  "id": "E01",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "controller validates the request differently"
+ },
+ "program1/v036": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M04",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "controller computes the total itself and skips the service"
+ },
+ "program1/v037": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M01",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "controller reads storage through the service's repository"
+ },
+ "program1/v038": {
+  "program": "program1",
+  "set": "hand",
+  "id": "E03",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "strategy called with a keyword argument"
+ },
+ "program1/v039": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M10",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "service fills order.items in place, without an assignment"
+ },
+ "program1/v040": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M112",
+  "kind": "mutant",
+  "operator": "O6 broken pattern",
+  "description": "publish notifies only the first listener"
+ },
+ "program1/v041": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M113",
+  "kind": "mutant",
+  "operator": "O6 broken pattern",
+  "description": "AppConfig.instance returns a fresh object on every call"
+ },
+ "program1/v042": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M02",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "controller imports the repository and queries it"
+ },
+ "program1/v043": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "E105",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "publish iterates over a tuple snapshot instead of a list copy"
+ },
+ "program1/v044": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M03",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "controller reads storage, but only on the empty-order path"
+ },
+ "program1/v045": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M105",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "service assigns the order status directly instead of calling mark_placed"
+ },
+ "program1/v046": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "E103",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "service builds the order in a private helper method"
+ },
+ "program1/v047": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M15",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "service never saves the order"
+ },
+ "program1/v048": {
+  "program": "program1",
+  "set": "hand",
+  "id": "E07",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "repository module renamed to storage"
+ },
+ "program1/v049": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M107",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "service snapshots the order with pickle before saving"
+ },
+ "program1/v050": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "E101",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "rename locals in service.place"
+ },
+ "program1/v051": {
+  "program": "program1",
+  "set": "held-out",
+  "id": "M102",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "controller records an audit entry via a helper module that itself talks to the repository (indirect storage access)"
+ },
+ "program1/v052": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M09",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "service sets order.status instead of calling mark_placed"
+ },
+ "program1/v053": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M08",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "service assigns order.total instead of calling apply_total"
+ },
+ "program1/v054": {
+  "program": "program1",
+  "set": "hand",
+  "id": "M16",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "service never publishes the event"
+ },
+ "program2/v001": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "E104",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "Loan.is_overdue and close rewritten with equivalent idioms"
+ },
+ "program2/v002": {
+  "program": "program2",
+  "set": "hand",
+  "id": "E06",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "the loan is a dataclass"
+ },
+ "program2/v003": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M112",
+  "kind": "mutant",
+  "operator": "O10 dependent domain",
+  "description": "domain keeps an audit outbox using the notify adapter"
+ },
+ "program2/v004": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M07",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "service builds a fresh store of the injected store's class"
+ },
+ "program2/v005": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M13",
+  "kind": "mutant",
+  "operator": "O7 dependency cycle",
+  "description": "the loan takes its closed state from a function of the service"
+ },
+ "program2/v006": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "E105",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "wiring split into small builder functions with keyword arguments"
+ },
+ "program2/v007": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M12",
+  "kind": "mutant",
+  "operator": "O10 dependent domain",
+  "description": "close() tells the member through the notifier adapter"
+ },
+ "program2/v008": {
+  "program": "program2",
+  "set": "hand",
+  "id": "E05",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "service notifies through a private helper method"
+ },
+ "program2/v009": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M09",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "lend() never notifies the member"
+ },
+ "program2/v010": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M111",
+  "kind": "mutant",
+  "operator": "O9 broken port",
+  "description": "store find takes an int key and returns a list instead of Loan | None"
+ },
+ "program2/v011": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M102",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "api computes the due day from the service's clock attribute instead of using the returned value"
+ },
+ "program2/v012": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "E101",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "api validation moved to a private helper with renamed locals"
+ },
+ "program2/v013": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M06",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "lend() imports a clock lazily and replaces the injected one"
+ },
+ "program2/v014": {
+  "program": "program2",
+  "set": "hand",
+  "id": "E02",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "store adapter module renamed to storage"
+ },
+ "program2/v015": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M107",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "lend never notifies the member"
+ },
+ "program2/v016": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M104",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "application builds a default in-memory store itself instead of using the injected one"
+ },
+ "program2/v017": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M108",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "the notification is sent only for first-time loans, re-lending is silent"
+ },
+ "program2/v018": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "E102",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "application uses keyword arguments, renamed locals and a helper method"
+ },
+ "program2/v019": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M04",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "handler builds a loan itself on the early-exit path"
+ },
+ "program2/v020": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M105",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "application closes the loan by assigning its state instead of calling Loan.close"
+ },
+ "program2/v021": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M109",
+  "kind": "mutant",
+  "operator": "O7 dependency cycle",
+  "description": "ports imports application (type-checking only) while application imports ports"
+ },
+ "program2/v022": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "E103",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "due-day computation moved to a dependency-free helper module"
+ },
+ "program2/v023": {
+  "program": "program2",
+  "set": "hand",
+  "id": "E01",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "handler validates the request differently"
+ },
+ "program2/v024": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M10",
+  "kind": "mutant",
+  "operator": "O9 broken port",
+  "description": "the notifier's send() is renamed to notify()"
+ },
+ "program2/v025": {
+  "program": "program2",
+  "set": "hand",
+  "id": "E03",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "both driven adapters in one module"
+ },
+ "program2/v026": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M101",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "api reads the loan straight from the service's private store"
+ },
+ "program2/v027": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M11",
+  "kind": "mutant",
+  "operator": "O9 broken port",
+  "description": "the store's find() requires a second argument"
+ },
+ "program2/v028": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M01",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "handler reads the store through the service's attribute"
+ },
+ "program2/v029": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "E106",
+  "kind": "equivalent",
+  "operator": "-",
+  "description": "store uses dict.get/setdefault idioms and a helper; api return_book uses a local"
+ },
+ "program2/v030": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M08",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "give_back() sets loan.returned instead of calling close()"
+ },
+ "program2/v031": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M03",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "handler reads the store through a new helper module"
+ },
+ "program2/v032": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M103",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "application falls back to its own private notifier when none is given and ignores the injected one"
+ },
+ "program2/v033": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M02",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "handler imports the store adapter and queries a new one"
+ },
+ "program2/v034": {
+  "program": "program2",
+  "set": "hand",
+  "id": "M05",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "service imports the notifier adapter and builds its own"
+ },
+ "program2/v035": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M106",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "the store resets the returned flag of a loan when it is stored"
+ },
+ "program2/v036": {
+  "program": "program2",
+  "set": "held-out",
+  "id": "M110",
+  "kind": "mutant",
+  "operator": "O9 broken port",
+  "description": "notifier send renames the parameters and swaps their order"
+ },
+ "program2/v037": {
+  "program": "program2",
+  "set": "hand",
+  "id": "E04",
+  "kind": "equivalent",
+  "operator": "equivalent",
+  "description": "handler builds its response in a new helper module"
+ }
+}

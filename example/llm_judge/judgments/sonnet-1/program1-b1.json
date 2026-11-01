@@ -1,0 +1,12 @@
+[
+{"id":"v001","violates":true,"requirements":[7],"reason":"instance() creates a new AppConfig each call, so the config is no longer a singleton."},
+{"id":"v002","violates":false,"requirements":[],"reason":"A private helper in the handler only restructures the empty check; layering is unchanged."},
+{"id":"v003","violates":false,"requirements":[],"reason":"A private method wraps the injected repository's save; the service still uses only the injected collaborator."},
+{"id":"v004","violates":true,"requirements":[6],"reason":"publish no longer calls the subscribed listeners, so the observer behaviour is broken."},
+{"id":"v005","violates":false,"requirements":[],"reason":"The handler is wrapped in a class with a static method but still only uses service.place; no graded requirement is affected."},
+{"id":"v006","violates":false,"requirements":[],"reason":"The singleton is implemented via __new__ and instance() returns that same shared instance."},
+{"id":"v007","violates":true,"requirements":[4],"reason":"The service uses pickle (via importlib) for serialisation."},
+{"id":"v008","violates":true,"requirements":[1],"reason":"The handler imports the repository and reaches it through service._repository."},
+{"id":"v009","violates":true,"requirements":[2,5],"reason":"The service imports PercentDiscount and creates its own discount, overriding the injected strategy."},
+{"id":"v010","violates":true,"requirements":[5],"reason":"The discount is computed inline from the strategy's percent attribute instead of calling the injected strategy's apply."}
+]

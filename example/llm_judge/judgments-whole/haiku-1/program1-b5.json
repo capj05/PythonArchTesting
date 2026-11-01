@@ -1,0 +1,10 @@
+[
+  {"id": "w033", "violates": true, "requirements": [1], "reason": "The controller calls service._repository.get(...), so the request handler reaches the repository through the service's attribute, which requirement 1 forbids."},
+  {"id": "w034", "violates": true, "requirements": [4], "reason": "The service pickles the order via __import__(\"pickle\").dumps into self._blob, which is persistence/serialisation technology in the service, forbidden by requirement 4."},
+  {"id": "w035", "violates": false, "requirements": [], "reason": "The service delegates saving to a private _store helper that still uses only the injected repository, which the requirements allow."},
+  {"id": "w036", "violates": false, "requirements": [], "reason": "The subscribe dedup and unsubscribe guard keep the observer contract (listeners are added, removed and called on publish), and every layer keeps its intended dependencies."},
+  {"id": "w037", "violates": true, "requirements": [4], "reason": "The service imports pickle and round-trips the order through pickle.loads(pickle.dumps(order)), which is serialisation technology in the service forbidden by requirement 4."},
+  {"id": "w038", "violates": false, "requirements": [], "reason": "The controller's _is_empty helper only inspects the request and the service is the only path to storage, so the layering holds."},
+  {"id": "w039", "violates": true, "requirements": [3], "reason": "The service calls order.items.sort() directly, changing the order's state from outside its own methods, which requirement 3 forbids."},
+  {"id": "w040", "violates": false, "requirements": [], "reason": "The same subscribe dedup and unsubscribe guard as w036 keep the observer behaviour and the layering intact."}
+]

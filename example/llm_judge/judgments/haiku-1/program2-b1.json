@@ -1,0 +1,12 @@
+[
+  {"id": "v001", "violates": false, "requirements": [], "reason": "The is_overdue rewrite keeps the same logic and touches no dependency or layer."},
+  {"id": "v002", "violates": false, "requirements": [], "reason": "Turning Loan into a dataclass keeps it dependency-free and changes no layer or port."},
+  {"id": "v003", "violates": true, "requirements": [1, 7], "reason": "The domain module imports the OutboxNotifier adapter and creates a module-level instance, so the domain depends on an adapter, inverting the layer order."},
+  {"id": "v004", "violates": true, "requirements": [2], "reason": "The application builds a new store with type(store)() instead of working with the injected store, which creates an adapter class instance and discards the store it was given."},
+  {"id": "v005", "violates": true, "requirements": [1, 7, 8], "reason": "Loan.close lazily imports the application module, which imports the domain, so the domain depends on the application and a dependency cycle is introduced."},
+  {"id": "v006", "violates": false, "requirements": [], "reason": "The new _store and _notifier helpers stay inside the composition root, which remains the only place that builds adapters."},
+  {"id": "v007", "violates": true, "requirements": [1, 7], "reason": "Loan.close imports and instantiates the OutboxNotifier adapter, so the domain depends on an adapter, violating the domain-independence and layer-order rules."},
+  {"id": "v008", "violates": false, "requirements": [], "reason": "The _notify helper still sends through the injected notifier, so only the structure changes."},
+  {"id": "v009", "violates": true, "requirements": [6], "reason": "The lend method no longer notifies the member at all, so lending does not notify through the injected notifier as required (an omission, not a layering issue)."},
+  {"id": "v010", "violates": true, "requirements": [3], "reason": "InMemoryLoanStore.find now takes an int key and returns a list, so it no longer satisfies the LoanStore port's find(book_id: str) -> Loan | None."}
+]
