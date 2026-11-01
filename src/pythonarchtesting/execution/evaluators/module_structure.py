@@ -48,7 +48,13 @@ def _import_graph(rule: Rule, ctx: EvalContext) -> dict[Edge, NormalizedImportEd
     modules = collect_canonical_module_entities(entities=ctx.target_index.all_sorted)
     internal = frozenset(entity.module_path for entity in modules)
     edges = collect_normalized_import_edges_for_modules(
-        entities=modules, scope_modules=internal
+        entities=modules,
+        scope_modules=internal,
+        # Absolute imports through the project's own name, or the reference's.
+        packages=(
+            getattr(ctx, "target_package", None),
+            getattr(ctx, "source_package", None),
+        ),
     )
     return import_module_edges(
         edges,

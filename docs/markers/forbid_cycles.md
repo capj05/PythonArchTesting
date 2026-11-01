@@ -57,6 +57,12 @@ __archtest__: Annotated[None, forbid_cycles()]
   that calls back into its subscriber forms a cycle of calls by design. A
   module the reference does not have counts as part of the modules that call
   it.
+- Imports are the same however they are spelled: relative (`from .repository
+  import X`), absolute through the target's own directory name
+  (`from target.repository import X`), or absolute through the reference's
+  package name (a submission that imports itself as the reference does). A
+  target directory named like a real library would hide that library's
+  imports; name submission directories so they cannot clash.
 
 ## What it does not check
 

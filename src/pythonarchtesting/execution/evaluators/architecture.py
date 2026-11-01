@@ -11,8 +11,7 @@ listed in ``details.undecided`` for a person to judge.
 
 from __future__ import annotations
 
-from dataclasses import replace
-from typing import Any, Callable, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Mapping
 
 from pythonarchtesting.architecture.compare import (
     EdgeDiff,
@@ -30,10 +29,12 @@ from pythonarchtesting.dynamic.translation import NameTranslation
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.execution.import_edges import (
     NormalizedImportEdge,
-    ParsedImportReference,
+    Packages,
     collect_canonical_module_entities,
     collect_import_references_from_node,
+    is_own_import,
     normalize_import_reference,
+    without_package,
 )
 from pythonarchtesting.execution.module_structure import (
     Edge,
@@ -58,39 +59,6 @@ def exceptions(rule: Rule, name: str) -> list[Edge]:
     return [parse_edge(item) for item in rule.params.get(name) or []]
 
 
-Packages = Union[str, Tuple[Optional[str], ...], None]
-
-
-def _names(package: Packages) -> tuple[str, ...]:
-    """The names the project is imported under (``None`` and empty left out)."""
-    found = (package,) if isinstance(package, str) or package is None else package
-    return tuple(name for name in found if name)
-
-
-def _own_import(ref: ParsedImportReference, package: Packages) -> bool:
-    """Whether ``ref`` imports from the project itself, relatively or by its name."""
-    if ref.kind == "importfrom" and ref.module.startswith("."):
-        return True
-    return any(
-        ref.module == name or ref.module.startswith(f"{name}.")
-        for name in _names(package)
-    )
-
-
-def _without_package(
-    ref: ParsedImportReference, package: Packages
-) -> ParsedImportReference:
-    """``from pkg.models import X`` as ``from models import X``: names inside the project."""
-    if ref.module.startswith("."):
-        return ref
-    for name in _names(package):
-        if ref.module.startswith(f"{name}."):
-            return replace(ref, module=ref.module[len(name) + 1 :])
-        if ref.module == name:
-            return replace(ref, module="")
-    return ref
-
-
 def _import_edges(
     entities: list[Entity], ignore_type_checking: bool, package: Packages = None
 ) -> tuple[
@@ -112,8 +80,8 @@ def _import_edges(
             filepath_rel=entity.filepath_rel,
         )
         for ref in refs:
-            own = _own_import(ref, package)
-            edges = normalize_import_reference(_without_package(ref, package))
+            own = is_own_import(ref, package)
+            edges = normalize_import_reference(without_package(ref, package))
             raw.extend(edges)
             if own or (ignore_type_checking and ref.in_type_checking):
                 continue

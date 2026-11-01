@@ -125,6 +125,47 @@ _VARIANTS: dict[str, tuple[dict[str, str], tuple[str, str, str, str]]] = {
         },
         ("OK", "OK", "FAILED", "FAILED"),
     ),
+    # The same violations through absolute imports of the target's own package
+    # (its directory is named after the variant): the same verdicts.
+    "absolute_upward": (
+        {"repository.py": "from absolute_upward import controller\n" + _REPOSITORY},
+        ("FAILED", "OK", "OK", "OK"),
+    ),
+    "absolute_submodule": (
+        {
+            "repository.py": "from absolute_submodule.controller import handle\n"
+            + _REPOSITORY
+        },
+        ("FAILED", "OK", "OK", "OK"),
+    ),
+    "absolute_cycle": (
+        {
+            "models.py": _MODELS
+            + "\n    def describe(self):\n"
+            + "        from absolute_cycle import service\n\n"
+            + "        return service.__name__\n",
+        },
+        ("FAILED", "FAILED", "OK", "OK"),
+    ),
+}
+
+# A submission importing itself under the reference's package name
+# ("reference"); it cannot run under its own directory name, so only the
+# static verdicts are compared.
+_UNDER_REFERENCE_NAME: dict[str, tuple[dict[str, str], tuple[str, str]]] = {
+    "reference_name_upward": (
+        {"repository.py": "from reference import controller\n" + _REPOSITORY},
+        ("FAILED", "OK"),
+    ),
+    "reference_name_cycle": (
+        {
+            "models.py": _MODELS
+            + "\n    def describe(self):\n"
+            + "        import reference.service\n\n"
+            + "        return reference.service.__name__\n",
+        },
+        ("FAILED", "FAILED"),
+    ),
 }
 
 
@@ -157,7 +198,7 @@ def _results(report: dict[str, Any]) -> dict[str, str]:
 
 def _run(tmp_path: Path, variant: str, dynamic: bool = True) -> dict[str, Any]:
     reference = _write(tmp_path / "reference", {"__init__.py": _MARKERS, **_SOLUTION})
-    changes, _ = _VARIANTS[variant]
+    changes = {**_VARIANTS, **_UNDER_REFERENCE_NAME}[variant][0]
     target = _write(tmp_path / variant, {"__init__.py": "", **{**_SOLUTION, **changes}})
     output = tmp_path / "report.json"
     arguments = [
@@ -216,3 +257,15 @@ def test_a_static_violation_names_the_chain_and_the_line(tmp_path: Path):
     (cycle,) = result["details"]["cycles"]
     assert cycle["path"] == ["models", "service", "models"]
     assert [step["lineno"] for step in cycle["steps"]] == [7, 2]
+
+
+@pytest.mark.parametrize("variant", sorted(_UNDER_REFERENCE_NAME))
+def test_imports_under_the_reference_package_name_are_judged(
+    tmp_path: Path, variant: str
+):
+    statuses = _results(_run(tmp_path, variant, dynamic=False))
+
+    assert (
+        statuses["DEP002/enforce_layers"],
+        statuses["DEP003/forbid_cycles"],
+    ) == _UNDER_REFERENCE_NAME[variant][1]

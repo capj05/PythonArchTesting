@@ -346,6 +346,14 @@ def _collect_ignored_filepaths(
     }
 
 
+def _packages(ctx: EvalContext) -> tuple[str | None, ...]:
+    """The names the target may import itself under: its own and the reference's."""
+    return (
+        getattr(ctx, "target_package", None),
+        getattr(ctx, "source_package", None),
+    )
+
+
 def _evaluate_direct_mode(
     *,
     rule: Rule,
@@ -364,6 +372,7 @@ def _evaluate_direct_mode(
         entities=ctx.target_index.all_sorted,
         scope_modules=scope.scope_modules,
         ignore_globs=ignore_globs,
+        packages=_packages(ctx),
     )
 
     occurrences: list[Dict[str, Any]] = []
@@ -428,6 +437,7 @@ def _evaluate_reachable_mode(
     imported_edges = collect_normalized_import_edges_for_modules(
         entities=canonical_module_entities,
         scope_modules=all_modules,
+        packages=_packages(ctx),
     )
     base_graph = build_module_dependency_graph(
         internal_modules=internal_modules,
