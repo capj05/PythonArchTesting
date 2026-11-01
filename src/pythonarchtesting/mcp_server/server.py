@@ -199,7 +199,8 @@ async def verify_marker(
 ) -> dict[str, Any]:
     """Check a marker of the reference at ``source`` (absolute) against seeded
     violations. Named operators (add_import, lazy_import, add_library,
-    dynamic_import, rebuild_injected, drop_call, use_private_name, break_port)
+    dynamic_import, rebuild_injected, drop_call, use_private_name, break_port,
+    foreign_write)
     mutate copies of the reference; ``rule`` (marker name
     or rule id prefix) must fail on each mutant (killed) and pass on the reference.
     Without operators/files, only the operators the marker can see and the files it is

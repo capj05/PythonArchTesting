@@ -234,6 +234,7 @@ _OPERATORS_BY_MARKER: dict[str, tuple[str, ...]] = {
     "require_runtime_calls": ("drop_call",),
     "forbid_runtime_imports": ("add_library", "dynamic_import"),
     "module_interface": ("use_private_name",),
+    "forbid_foreign_writes": ("foreign_write",),
     "implements_protocol": ("break_port",),
     "implements_runtime_protocol": ("break_port",),
     "enforce_reference_calls": ("drop_call", "rebuild_injected"),
@@ -363,12 +364,24 @@ def _scope(
         files.add(str(entity.filepath_rel))
     if not markers - {_RUNTIME_ONLY} <= set(_FORBIDDING):
         libraries = {}
-    delegations = (
+    aims = (
         _delegations(source_path, state, matching)
         if markers - {_RUNTIME_ONLY} == {"require_runtime_delegation"}
         else set()
     )
-    return markers, files, libraries, delegations
+    if markers - {_RUNTIME_ONLY} == {"forbid_foreign_writes"}:
+        # Writes are watched only in the methods (or classes) the marker is
+        # on: a method without it may write as it likes.
+        aims = {
+            ("", str(entity.qualname), "")
+            for r in matching
+            if (entity := state.source_by_id.get(r.selector.source_entity_id))
+            is not None
+        }
+    # ``aims``: what the mutants must be about — ``(class, constructor
+    # parameter, member)`` for a delegation marker, ``("", qualname, "")``
+    # of the marked entities for forbid_foreign_writes; empty: no narrowing.
+    return markers, files, libraries, aims
 
 
 _FORBIDDING = ("forbid_imports", "forbid_runtime_imports")
@@ -430,9 +443,7 @@ def verify_marker(
         raise ToolInputError("max_mutants must be a whole number in [1, 200]")
     if detail not in _DETAILS:
         raise ToolInputError(f"detail must be one of {', '.join(_DETAILS)}: {detail}")
-    markers, marker_files, forbidden_by_file, delegations = _scope(
-        source_path, rule, config
-    )
+    markers, marker_files, forbidden_by_file, aims = _scope(source_path, rule, config)
     own_modules = _own_modules(source_path)
     forbidden_libraries = sorted(
         {
@@ -490,7 +501,16 @@ def verify_marker(
                 for name in forbidden_by_file.get(mutant.file, [])
             )
         ]
-    if chosen_by_marker and delegations:
+    if chosen_by_marker and aims and markers == {"forbid_foreign_writes"}:
+        mutants = [
+            mutant
+            for mutant in mutants
+            if any(
+                mutant.function == where or mutant.function.startswith(f"{where}.")
+                for _, where, _ in aims
+            )
+        ]
+    elif chosen_by_marker and aims:
         # A delegation marker is about one collaborator: cutting out calls to
         # the others is no violation of it.
         mutants = [
@@ -500,7 +520,7 @@ def verify_marker(
                 mutant.owner == owner
                 and mutant.collaborator == parameter
                 and (not member or mutant.member == member)
-                for owner, parameter, member in delegations
+                for owner, parameter, member in aims
             )
         ]
     if not mutants:

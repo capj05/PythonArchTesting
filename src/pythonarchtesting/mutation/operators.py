@@ -47,6 +47,7 @@ OPERATORS = (
     "drop_call",
     "use_private_name",
     "break_port",
+    "foreign_write",
 )
 DEFAULT_LIBRARIES = ("pickle",)
 
@@ -76,6 +77,7 @@ class Mutant:
     collaborator: str = ""
     member: str = ""
     line: int = 0
+    function: str = ""  # ``Class.method`` the change is in, when one method
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,7 @@ class _Change:
     collaborator: str = ""
     member: str = ""
     line: int = 0
+    function: str = ""
 
 
 @dataclass(frozen=True)
@@ -600,6 +603,90 @@ def _break_port(modules: list[_Module]) -> Iterator[_Change]:
             )
 
 
+_SIMPLE = (ast.Expr, ast.Assign, ast.AugAssign, ast.AnnAssign)
+
+
+def _module_names(tree: ast.Module) -> set[str]:
+    """Names bound at module level: imports, classes, functions, globals."""
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names |= {(a.asname or a.name).split(".")[0] for a in node.names}
+        elif isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+    return names
+
+
+def _foreign_write(modules: list[_Module]) -> Iterator[_Change]:
+    """``x.a = x.a`` right after a method first reads ``x.a`` of an object it
+    did not get as ``self``: the value stays, but another object's attribute
+    is assigned from outside its class."""
+    for module in modules:
+        skip = _module_names(module.tree)
+        for name, method in _methods(module.tree):
+            self_name = _self_name(method)
+            seen: set[str] = set()
+            statements = sorted(
+                (node for node in ast.walk(method) if isinstance(node, _SIMPLE)),
+                key=lambda node: (node.lineno, node.col_offset),
+            )
+            for statement in statements:
+                if statement.lineno == method.lineno or not _alone(
+                    module.text, statement
+                ):
+                    continue  # a one-line method, or a statement sharing its line
+                reads = sorted(
+                    (
+                        node
+                        for node in _outside_scopes(statement)
+                        if isinstance(node, ast.Attribute)
+                        and isinstance(node.ctx, ast.Load)
+                        and isinstance(node.value, ast.Name)
+                        and node.value.id not in {self_name, *skip}
+                        and node.value.id not in seen
+                    ),
+                    key=lambda node: (node.lineno, node.col_offset),
+                )
+                if not reads:
+                    continue
+                read = reads[0]
+                target = f"{read.value.id}.{read.attr}"  # type: ignore[attr-defined]
+                seen.add(read.value.id)  # type: ignore[attr-defined]
+                line = int(statement.end_lineno or statement.lineno)
+                source = _insert(
+                    module.text,
+                    line,
+                    " " * statement.col_offset + f"{target} = {target}",
+                )
+                yield _Change(
+                    module.file,
+                    f"{module.name}: {name} writes {target} (line {line + 1})",
+                    source,
+                    owner=name.split(".")[0],
+                    line=line + 1,
+                    function=name,
+                )
+
+
+_SCOPES = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, ast.Lambda)
+
+
+def _outside_scopes(node: ast.AST) -> Iterator[ast.AST]:
+    """``ast.walk`` that does not enter comprehensions and lambdas: their
+    variables do not exist after the statement."""
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        yield current
+        stack.extend(
+            child
+            for child in ast.iter_child_nodes(current)
+            if not isinstance(child, _SCOPES)
+        )
+
+
 def generate_mutants(
     root: Path,
     operators: Optional[Iterable[str]] = None,
@@ -637,8 +724,10 @@ def generate_mutants(
             found = _drop_call(modules)
         elif operator == "use_private_name":
             found = _use_private_name(modules)
-        else:
+        elif operator == "break_port":
             found = _break_port(modules)
+        else:
+            found = _foreign_write(modules)
         for change in found:
             try:
                 for text in (change.source, *(text for _, text in change.also)):
@@ -659,6 +748,7 @@ def generate_mutants(
                     collaborator=change.collaborator,
                     member=change.member,
                     line=change.line,
+                    function=change.function,
                 )
             )
     return produced[:limit] if limit is not None else produced

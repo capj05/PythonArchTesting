@@ -392,3 +392,40 @@ def test_lines_the_cases_never_run_are_reported_as_case_gaps(tmp_path: Path) -> 
         ("controller.py", "10")
     ]
     assert any("check_cases" in hint for hint in result["hints"])
+
+
+def test_forbid_foreign_writes_is_verified_by_writing_to_a_collaborator() -> None:
+    from pythonarchtesting.mcp_server.authoring import verify_marker
+
+    result = verify_marker(
+        REFERENCE,
+        "forbid_foreign_writes",
+        dynamic=True,
+        sandbox="limits",
+        detail="all",
+    )
+
+    assert result["scope"]["operators"] == ["foreign_write"]
+    assert result["scope"]["files"] == ["service.py"]
+    assert result["reference_passes"] is True
+    assert result["total"] >= 1
+    assert result["survived"] == 0, result["mutants"]
+
+
+def test_forbid_foreign_writes_is_verified_only_in_the_methods_it_is_on() -> None:
+    from pythonarchtesting.mcp_server.authoring import verify_marker
+
+    result = verify_marker(
+        REFERENCE_2,
+        "forbid_foreign_writes",
+        dynamic=True,
+        sandbox="limits",
+        detail="all",
+    )
+
+    # The marker is on LendingService.give_back; lend() writes no foreign
+    # object the marker would watch.
+    assert [m["description"].split(" writes ")[0] for m in result["mutants"]] == [
+        "application: LendingService.give_back"
+    ]
+    assert result["accepted"] is True

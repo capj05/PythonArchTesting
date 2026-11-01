@@ -71,6 +71,7 @@ def test_operators_are_named() -> None:
         "drop_call",
         "use_private_name",
         "break_port",
+        "foreign_write",
     )
 
 
@@ -318,3 +319,39 @@ def test_injection_mutants_name_the_collaborator_and_the_member(root: Path) -> N
         ("Service", "bus", "publish"),
     ]
     assert [m.line for m in dropped] == [12, 13]
+
+
+def test_foreign_write_assigns_an_attribute_it_reads_of_another_object(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "__init__.py": "",
+            "service.py": (
+                "class Service:\n"
+                "    def place(self, order, prices):\n"
+                "        self.count = 1\n"
+                "        for price in prices:\n"
+                "            order.add(price)\n"
+                "        total = order.total\n"
+                "        names = {o.key for o in order.lines}\n"
+                "        return total, names\n\n"
+                "    def peek(self, order): return order.total\n"
+            ),
+        },
+    )
+
+    mutants = _by(root, "foreign_write")
+
+    # Each object read through a name other than self, once per method, right
+    # after the first statement of its own that reads it; a one-line method
+    # has no room for it, and a comprehension's variable does not outlive it.
+    assert [(m.description, m.line) for m in mutants] == [
+        ("service: Service.place writes order.add (line 6)", 6),
+    ]
+    assert (
+        "            order.add(price)\n            order.add = order.add\n"
+        in mutants[0].source
+    )
+    ast.parse(mutants[0].source)
