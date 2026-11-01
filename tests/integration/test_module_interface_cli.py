@@ -221,3 +221,31 @@ def test_a_private_name_through_a_module_imported_from_the_package_fails(
 
     assert result["status"] == "FAILED"
     assert "models._check" in result["details"]["summary"]
+
+
+_SHADOWED = (
+    "from . import models\n\n\n"
+    "class Registry:\n"
+    "    _check = 1\n\n\n"
+    "def lookup(models):\n"
+    "    # the parameter, not the module\n"
+    "    return models._check\n\n\n"
+    "def local():\n"
+    "    models = Registry()\n"
+    "    return models._check\n\n\n"
+    "def comprehension(items):\n"
+    "    return [models._check for models in items]\n\n\n"
+    "def module_use(order_id):\n"
+    "    return models._check(order_id)\n"
+)
+
+
+def test_a_local_name_shadowing_the_module_is_not_the_module(tmp_path: Path):
+    result = _run(tmp_path, "module_interface()", {"helpers.py": _SHADOWED})["DEP005"]
+
+    assert result["status"] == "FAILED"
+    # Only module_use() reaches the module; the others use a local name.
+    assert result["details"]["violations"] == [
+        "models._check uses _check, which is not in the interface of models "
+        "(helpers.py:23)"
+    ]

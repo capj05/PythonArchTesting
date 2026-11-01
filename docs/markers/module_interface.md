@@ -87,8 +87,8 @@ __archtest__: Annotated[
   about the module's names, not a class's members.
 - Imports one level deeper than the module (`from pkg.module.sub import _x`
   against an interface of `pkg.module`).
-- A local variable that shadows a name bound to the module is taken for the
-  module.
+- A name a nested function declares `global` or `nonlocal` after an
+  enclosing function bound it locally: it still counts as that local.
 
 ## See also
 

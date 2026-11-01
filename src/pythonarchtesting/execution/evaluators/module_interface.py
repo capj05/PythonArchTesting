@@ -145,12 +145,70 @@ def _uses(
                     spellings.add(tuple(alias.name.split(".")))
     if not spellings:
         return
+    shadowed = _shadowed_names(tree, {spelling[0] for spelling in spellings})
     for node in ast.walk(tree):
         if not isinstance(node, ast.Attribute) or node.lineno in hidden:
             continue
         chain = _chain(node.value)
-        if chain is not None and tuple(chain) in spellings:
+        if chain is not None and tuple(chain) in spellings and id(node) not in shadowed:
             yield node.attr, node.lineno, f"{'.'.join(chain)}.{node.attr}"
+
+
+_FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+_COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+
+def _bound_here(scope: ast.AST, names: set[str]) -> set[str]:
+    """Which of ``names`` ``scope`` (a function or a comprehension) binds
+    itself, so that they are its local names there; an import binds the
+    module again and is not a shadow."""
+    bound: set[str] = set()
+    declared: set[str] = set()
+    if isinstance(scope, _FUNCTIONS):
+        arguments = scope.args
+        bound |= {
+            a.arg for a in arguments.posonlyargs + arguments.args + arguments.kwonlyargs
+        }
+        bound |= {a.arg for a in (arguments.vararg, arguments.kwarg) if a}
+        body: list[ast.AST] = (
+            list(scope.body) if isinstance(scope.body, list) else [scope.body]
+        )
+    else:
+        body = [g.target for g in scope.generators]  # type: ignore[attr-defined]
+    stack = list(body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            declared |= set(node.names)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            bound.add(node.id)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            bound.add(node.name)
+        if isinstance(node, (*_FUNCTIONS, *_COMPREHENSIONS, ast.ClassDef)):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bound.add(node.name)
+            continue  # its own scope
+        stack.extend(ast.iter_child_nodes(node))
+    return (bound - declared) & names
+
+
+def _shadowed_names(tree: ast.AST, names: set[str]) -> set[int]:
+    """``id`` of each attribute access whose base name is, where it stands,
+    a local name of an enclosing function or comprehension, not the module."""
+    found: set[int] = set()
+
+    def visit(node: ast.AST, local: frozenset[str]) -> None:
+        if isinstance(node, (*_FUNCTIONS, *_COMPREHENSIONS)):
+            local = local | _bound_here(node, names)
+        if isinstance(node, ast.Attribute):
+            chain = _chain(node.value)
+            if chain is not None and chain[0] in local:
+                found.add(id(node))
+        for child in ast.iter_child_nodes(node):
+            visit(child, local)
+
+    visit(tree, frozenset())
+    return found
 
 
 class ModuleInterfaceEvaluator:
