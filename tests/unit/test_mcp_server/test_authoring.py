@@ -265,11 +265,19 @@ def test_forbid_runtime_imports_is_verified_with_the_libraries_it_forbids() -> N
         REFERENCE, "forbid_runtime_imports", dynamic=True, sandbox="limits"
     )
 
-    assert result["scope"]["operators"] == ["add_library"]
+    assert result["scope"]["operators"] == ["add_library", "dynamic_import"]
     assert result["scope"]["libraries"] == ["pickle", "sqlite3"]
     assert result["scope"]["files"] == ["service.py"]
-    assert result["killed"] == result["total"] == 2
-    assert result["accepted"] is True
+    # A module-level import of each library is killed; one by a computed name
+    # inside a function is not what this marker sees, and the hint says so.
+    assert result["total"] == 4
+    assert {
+        m["operator"] for m in result["mutants"] if m["outcome"] == "killed"
+    } == set()  # killed ones are not listed by default
+    assert result["killed"] == 2
+    assert {m["operator"] for m in result["mutants"]} == {"dynamic_import"}
+    assert result["accepted"] is False
+    assert any("forbid_runtime_calls" in hint for hint in result["hints"])
 
 
 def test_module_interface_is_verified_by_reaching_past_it_from_other_modules() -> None:
@@ -319,4 +327,68 @@ def test_forbid_imports_mutates_only_what_each_file_forbids() -> None:
     survivors = [
         m["description"] for m in result["mutants"] if m["outcome"] == "survived"
     ]
-    assert survivors == ["controller imports repository lazily"]
+    # Nor does any static rule see an import by a computed name: the
+    # survivors say a runtime marker is needed for them.
+    assert survivors == [
+        "controller imports repository lazily",
+        "service imports pickle by a computed name in OrderService.__init__",
+        "service imports sqlite3 by a computed name in OrderService.__init__",
+    ]
+
+
+def test_a_delegation_marker_is_verified_on_its_own_collaborator() -> None:
+    from pythonarchtesting.mcp_server.authoring import verify_marker
+
+    result = verify_marker(
+        REFERENCE,
+        "require_runtime_delegation",
+        dynamic=True,
+        sandbox="limits",
+        detail="all",
+    )
+
+    # The spy "discount" is the constructor's second argument: only its
+    # apply() is cut out (a spy cannot be rebuilt from its class, so
+    # rebuild_injected would not run).
+    assert result["scope"]["operators"] == ["drop_call"]
+    assert [m["description"] for m in result["mutants"]] == [
+        "service: OrderService.place no longer calls self._discount.apply "
+        "(line 104, its first argument passed through)",
+    ]
+    assert result["accepted"] is True
+
+
+def test_lines_the_cases_never_run_are_reported_as_case_gaps(tmp_path: Path) -> None:
+    import shutil
+
+    from pythonarchtesting.mcp_server.authoring import verify_marker
+
+    project = tmp_path / "shop"
+    shutil.copytree(MUTANTS_DIR / "solution", project)
+    # One case, with prices: the empty-order branch of handle_order never runs.
+    (project / "__init__.py").write_text(
+        "from typing import Annotated\n"
+        "from pythonarchtesting.rules import forbid_cycles\n"
+        "__archtest__: Annotated[None, forbid_cycles(\n"
+        '    entry="controller.handle_order",\n'
+        '    cases=[{"args": [{"id": "A1", "prices": [10.0]},\n'
+        '        {"$new": "service.OrderService", "args": [\n'
+        '            {"$new": "repository.OrderRepository"},\n'
+        '            {"$new": "pricing.PercentDiscount", "args": [10]},\n'
+        '            {"$new": "events.EventBus"}]}]}],\n'
+        ")]\n",
+        encoding="utf-8",
+    )
+
+    result = verify_marker(
+        str(project),
+        "forbid_cycles",
+        files=["models.py"],
+        dynamic=True,
+        sandbox="limits",
+    )
+
+    assert [(g["file"], g["lines"]) for g in result["case_gaps"]] == [
+        ("controller.py", "10")
+    ]
+    assert any("check_cases" in hint for hint in result["hints"])

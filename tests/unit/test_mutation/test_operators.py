@@ -66,6 +66,7 @@ def test_operators_are_named() -> None:
         "add_import",
         "lazy_import",
         "add_library",
+        "dynamic_import",
         "rebuild_injected",
         "drop_call",
         "use_private_name",
@@ -284,3 +285,36 @@ def test_drop_call_bypasses_a_collaborator_call_inside_an_expression(
     assert "        return order.stamp(None)\n" in mutants[1].source
     for mutant in mutants:
         ast.parse(mutant.source)
+
+
+def test_dynamic_import_imports_a_library_by_a_computed_name(root: Path) -> None:
+    mutants = _by(root, "dynamic_import")
+
+    service = next(m for m in mutants if m.file == "service.py")
+    assert service.imported == "pickle"
+    assert service.description == (
+        "service imports pickle by a computed name in Service.__init__"
+    )
+    # Inside the first function, after its docstring: run whenever it runs,
+    # and no import statement a static rule could see.
+    assert (
+        '        """Take the collaborators."""\n        __import__("pickle")\n'
+        in service.source
+    )
+    assert "import pickle" not in service.source
+    assert {m.file for m in mutants} == {"repository.py", "service.py", "sub/deep.py"}
+
+
+def test_injection_mutants_name_the_collaborator_and_the_member(root: Path) -> None:
+    rebuilt = _by(root, "rebuild_injected")
+    dropped = _by(root, "drop_call")
+
+    assert [(m.owner, m.collaborator, m.member) for m in rebuilt] == [
+        ("Service", "repo", ""),
+        ("Service", "bus", ""),
+    ]
+    assert [(m.owner, m.collaborator, m.member) for m in dropped] == [
+        ("Service", "repo", "save"),
+        ("Service", "bus", "publish"),
+    ]
+    assert [m.line for m in dropped] == [12, 13]

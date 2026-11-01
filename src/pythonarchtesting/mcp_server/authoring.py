@@ -216,20 +216,23 @@ def _sample(mutants: list[Any], limit: int) -> list[Any]:
 # The operators that seed a violation each marker can see; a marker missing
 # here has none, so its operators must be given.
 _OPERATORS_BY_MARKER: dict[str, tuple[str, ...]] = {
-    "forbid_imports": ("add_import", "lazy_import", "add_library"),
+    "forbid_imports": ("add_import", "lazy_import", "add_library", "dynamic_import"),
     "enforce_layers": ("add_import", "lazy_import"),
     "forbid_cycles": ("add_import", "lazy_import"),
     "architecture_entry": (
         "add_import",
         "lazy_import",
         "add_library",
+        "dynamic_import",
         "rebuild_injected",
         "drop_call",
     ),
     "forbid_runtime_instantiation": ("rebuild_injected",),
-    "require_runtime_delegation": ("drop_call", "rebuild_injected"),
+    # A delegation marker injects a spy, which cannot be rebuilt from its
+    # class: only its calls are cut out.
+    "require_runtime_delegation": ("drop_call",),
     "require_runtime_calls": ("drop_call",),
-    "forbid_runtime_imports": ("add_library",),
+    "forbid_runtime_imports": ("add_library", "dynamic_import"),
     "module_interface": ("use_private_name",),
     "implements_protocol": ("break_port",),
     "implements_runtime_protocol": ("break_port",),
@@ -239,9 +242,66 @@ _DETAILS = ("problems", "all")
 _RUNTIME_ONLY = "<runtime only>"
 
 
+def _spied_parameter(source_path: Path, entity: Any, params: dict[str, Any]) -> str:
+    """The constructor parameter of ``entity``'s class that receives the
+    delegation marker's spy, or the spy's name when it cannot be told."""
+    import ast
+
+    spy = str(params.get("spy") or "")
+    init = params.get("init") or {}
+    owner = str(entity.qualname).split(".")[0]
+    try:
+        tree = ast.parse(
+            (source_path / str(entity.filepath_rel)).read_text(encoding="utf-8")
+        )
+    except (OSError, SyntaxError, ValueError):
+        return spy
+    for key, value in (init.get("kwargs") or {}).items():
+        if value == {"$spy": spy}:
+            return str(key)
+    position = next(
+        (i for i, value in enumerate(init.get("args") or []) if value == {"$spy": spy}),
+        None,
+    )
+    if position is None:
+        return spy
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == owner:
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and item.name == "__init__":
+                    names = [a.arg for a in item.args.posonlyargs + item.args.args][1:]
+                    if position < len(names):
+                        return names[position]
+    return spy
+
+
+def _delegations(
+    source_path: Path, state: Any, matching: list[Any]
+) -> set[tuple[str, str, str]]:
+    """``(class, constructor parameter, member)`` each delegation marker among
+    ``matching`` requires a call to (member ``""``: any)."""
+    found: set[tuple[str, str, str]] = set()
+    for r in matching:
+        if str(r.rule_id).split("/")[1] != "require_runtime_delegation":
+            continue
+        entity = state.source_by_id.get(r.selector.source_entity_id)
+        if entity is None or entity.kind != "method":
+            continue
+        found.add(
+            (
+                str(entity.qualname).split(".")[0],
+                _spied_parameter(source_path, entity, dict(r.params)),
+                str(r.params.get("member") or ""),
+            )
+        )
+    return found
+
+
 def _scope(
     source_path: Path, rule: str, config: Optional[str]
-) -> tuple[set[str], Optional[set[str]], dict[str, list[str]]]:
+) -> tuple[
+    set[str], Optional[set[str]], dict[str, list[str]], set[tuple[str, str, str]]
+]:
     """The markers ``rule`` names in the reference, the files they are about,
     and the modules and libraries they forbid, per file (empty when ``rule``
     names other markers too).
@@ -303,7 +363,12 @@ def _scope(
         files.add(str(entity.filepath_rel))
     if not markers - {_RUNTIME_ONLY} <= set(_FORBIDDING):
         libraries = {}
-    return markers, files, libraries
+    delegations = (
+        _delegations(source_path, state, matching)
+        if markers - {_RUNTIME_ONLY} == {"require_runtime_delegation"}
+        else set()
+    )
+    return markers, files, libraries, delegations
 
 
 _FORBIDDING = ("forbid_imports", "forbid_runtime_imports")
@@ -365,7 +430,9 @@ def verify_marker(
         raise ToolInputError("max_mutants must be a whole number in [1, 200]")
     if detail not in _DETAILS:
         raise ToolInputError(f"detail must be one of {', '.join(_DETAILS)}: {detail}")
-    markers, marker_files, forbidden_by_file = _scope(source_path, rule, config)
+    markers, marker_files, forbidden_by_file, delegations = _scope(
+        source_path, rule, config
+    )
     own_modules = _own_modules(source_path)
     forbidden_libraries = sorted(
         {
@@ -423,6 +490,19 @@ def verify_marker(
                 for name in forbidden_by_file.get(mutant.file, [])
             )
         ]
+    if chosen_by_marker and delegations:
+        # A delegation marker is about one collaborator: cutting out calls to
+        # the others is no violation of it.
+        mutants = [
+            mutant
+            for mutant in mutants
+            if any(
+                mutant.owner == owner
+                and mutant.collaborator == parameter
+                and (not member or mutant.member == member)
+                for owner, parameter, member in delegations
+            )
+        ]
     if not mutants:
         raise ToolInputError(
             "no mutants: the operators found nothing to change in the files given"
@@ -471,21 +551,29 @@ def verify_marker(
                 "or a rule id prefix"
             )
         base_outcome, base_failing, base_why = _judge(base_results, rule)
+        gaps = _case_gaps(base_results, rule)
         reported = []
         for mutant in mutants:
             state = by_path[paths[mutant.id].resolve()]
             outcome, failing, why = _judge(list(state.rule_results), rule)
-            reported.append(
-                {
-                    "id": mutant.id,
-                    "operator": mutant.operator,
-                    "file": mutant.file,
-                    "description": mutant.description,
-                    "outcome": outcome,
-                    "failing": failing,
-                    "why": why,
-                }
-            )
+            entry: dict[str, Any] = {
+                "id": mutant.id,
+                "operator": mutant.operator,
+                "file": mutant.file,
+                "description": mutant.description,
+                "outcome": outcome,
+                "failing": failing,
+                "why": why,
+            }
+            if outcome == "survived" and any(
+                mutant.line in gap["lines"] and mutant.file == gap["file"]
+                for gap in gaps
+            ):
+                entry["unexercised"] = True
+                entry["why"] = [
+                    f"no case of the marker runs line {mutant.line} of {mutant.file}"
+                ]
+            reported.append(entry)
     counts = {
         key: sum(1 for m in reported if m["outcome"] == key)
         for key in ("killed", "survived", "not_run")
@@ -514,20 +602,70 @@ def verify_marker(
             **(
                 {
                     "libraries": sorted(
-                        {m.imported for m in mutants if m.operator == "add_library"}
+                        {
+                            m.imported
+                            for m in mutants
+                            if m.operator in ("add_library", "dynamic_import")
+                        }
                     )
                 }
-                if "add_library" in operators
+                if {"add_library", "dynamic_import"} & set(operators)
                 else {}
             ),
         },
         "by_operator": _by_operator(reported),
+        "hints": _hints(reported, gaps),
+        "case_gaps": [
+            {"rule": gap["rule"], "file": gap["file"], "lines": _ranges(gap["lines"])}
+            for gap in gaps
+        ],
         "mutants": (
             reported
             if detail == "all"
             else [m for m in reported if m["outcome"] != "killed"]
         ),
     }
+
+
+def _case_gaps(results: list[Any], rule: str) -> list[dict[str, Any]]:
+    """Lines of each runtime part's code that no case of the marker ran on the
+    reference: a violation there cannot be seen."""
+    gaps = []
+    for result in results:
+        if not _rule_matches(str(result.rule_id), rule):
+            continue
+        coverage = (result.details or {}).get("coverage") or {}
+        lines = list(coverage.get("unexercised_lines") or [])
+        if lines and coverage.get("file"):
+            gaps.append(
+                {"rule": str(result.rule_id), "file": coverage["file"], "lines": lines}
+            )
+    return gaps
+
+
+def _ranges(lines: list[int]) -> str:
+    from pythonarchtesting.execution.evaluators.runtime_structure import _line_ranges
+
+    return _line_ranges(lines)
+
+
+def _hints(reported: list[dict[str, Any]], gaps: list[dict[str, Any]]) -> list[str]:
+    """What the survivors call for, beyond the marker's own arguments."""
+    hints = []
+    survived = {m["operator"] for m in reported if m["outcome"] == "survived"}
+    if "dynamic_import" in survived:
+        hints.append(
+            "an import by a computed name inside a function survives: no static "
+            "rule sees it and forbid_runtime_imports sees only what importing the "
+            "module runs; forbid the library's use with forbid_runtime_calls on "
+            "the functions that could load it"
+        )
+    if gaps:
+        hints.append(
+            "the marker's cases leave lines unrun (case_gaps): a violation there "
+            "goes unseen; add cases for them and check them with check_cases"
+        )
+    return hints
 
 
 def _by_operator(reported: list[dict[str, Any]]) -> dict[str, dict[str, int]]:

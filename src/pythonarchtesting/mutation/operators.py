@@ -30,7 +30,7 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Sequence
+from typing import Any, Iterable, Iterator, Optional, Sequence
 
 from pythonarchtesting.execution.import_edges import (
     collect_import_references_from_node,
@@ -42,6 +42,7 @@ OPERATORS = (
     "add_import",
     "lazy_import",
     "add_library",
+    "dynamic_import",
     "rebuild_injected",
     "drop_call",
     "use_private_name",
@@ -68,6 +69,13 @@ class Mutant:
     subject: str = ""
     also: tuple[tuple[str, str], ...] = ()
     imported: str = ""  # what an import operator imports: a module or a library
+    # Injection operators: the class, the constructor parameter the
+    # collaborator comes in through and, for ``drop_call``, the method no
+    # longer called; ``line`` is the changed line, when there is one.
+    owner: str = ""
+    collaborator: str = ""
+    member: str = ""
+    line: int = 0
 
 
 @dataclass(frozen=True)
@@ -80,6 +88,10 @@ class _Change:
     subject: str = ""  # default: ``file``
     also: tuple[tuple[str, str], ...] = ()
     imported: str = ""
+    owner: str = ""
+    collaborator: str = ""
+    member: str = ""
+    line: int = 0
 
 
 @dataclass(frozen=True)
@@ -271,6 +283,38 @@ def _add_library(modules: list[_Module], libraries: Sequence[str]) -> Iterator[_
             )
 
 
+def _dynamic_import(
+    modules: list[_Module], libraries: Sequence[str]
+) -> Iterator[_Change]:
+    """``__import__("<library>")`` at the top of a module's first function: an
+    import no static rule sees, run whenever that function runs."""
+    for module in modules:
+        if not module.name:
+            continue
+        function = _first_function(module.tree, module.text)
+        if function is None:
+            continue
+        at, indent = _function_insert(function)
+        where = _qualname(module.tree, function)
+        for library in libraries:
+            yield _Change(
+                module.file,
+                f"{module.name} imports {library} by a computed name in {where}",
+                _insert(module.text, at, " " * indent + f'__import__("{library}")'),
+                imported=library,
+                line=at + 1,
+            )
+
+
+def _qualname(
+    tree: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef
+) -> str:
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and function in node.body:
+            return f"{node.name}.{function.name}"
+    return function.name
+
+
 def _methods(
     tree: ast.Module,
 ) -> Iterator[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]]:
@@ -325,6 +369,9 @@ def _rebuild_injected(modules: list[_Module]) -> Iterator[_Change]:
                     module.file,
                     f"{module.name}: {name} builds its own {param} (line {node.lineno})",
                     source,
+                    owner=name.split(".")[0],
+                    collaborator=param,
+                    line=node.lineno,
                 )
 
 
@@ -359,10 +406,49 @@ def _bypass(text: str, call: ast.Call) -> tuple[str, str]:
     return "None", "None instead"
 
 
+def _injected(module: _Module) -> dict[tuple[str, str], str]:
+    """``(class, attribute) -> constructor parameter`` for ``self.a = p``."""
+    found: dict[tuple[str, str], str] = {}
+    for name, method in _methods(module.tree):
+        if method.name != "__init__":
+            continue
+        self_name = _self_name(method)
+        for node in ast.walk(method):
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Attribute)
+                and isinstance(node.targets[0].value, ast.Name)
+                and node.targets[0].value.id == self_name
+                and isinstance(node.value, ast.Name)
+            ):
+                found[(name.split(".")[0], node.targets[0].attr)] = node.value.id
+    return found
+
+
 def _drop_call(modules: list[_Module]) -> Iterator[_Change]:
     for module in modules:
+        injected = _injected(module)
         for name, method in _methods(module.tree):
             self_name = _self_name(method)
+            owner = name.split(".")[0]
+
+            def about(call: ast.Call) -> dict[str, Any]:
+                func = call.func
+                assert isinstance(
+                    func, ast.Attribute
+                )  # nosec B101 - a collaborator call
+                assert isinstance(func.value, ast.Attribute)  # nosec B101
+                attribute = func.value.attr
+                return {
+                    "owner": owner,
+                    "collaborator": injected.get(
+                        (owner, attribute), attribute.lstrip("_")
+                    ),
+                    "member": func.attr,
+                    "line": call.lineno,
+                }
+
             found: list[tuple[int, int, _Change]] = []
             statements: set[int] = set()
             for node in ast.walk(method):
@@ -386,6 +472,7 @@ def _drop_call(modules: list[_Module]) -> Iterator[_Change]:
                             f"{module.name}: {name} no longer calls {call} "
                             f"(line {node.lineno})",
                             "".join(lines),
+                            **about(node.value),  # type: ignore[attr-defined]
                         ),
                     )
                 )
@@ -407,6 +494,7 @@ def _drop_call(modules: list[_Module]) -> Iterator[_Change]:
                             f"{module.name}: {name} no longer calls {call} "
                             f"(line {node.lineno}, {how})",
                             _replace_span(module.text, node, replacement),
+                            **about(node),
                         ),
                     )
                 )
@@ -541,6 +629,8 @@ def generate_mutants(
             found = _add_import(modules, lazy=True)
         elif operator == "add_library":
             found = _add_library(modules, libraries)
+        elif operator == "dynamic_import":
+            found = _dynamic_import(modules, libraries)
         elif operator == "rebuild_injected":
             found = _rebuild_injected(modules)
         elif operator == "drop_call":
@@ -565,6 +655,10 @@ def generate_mutants(
                     subject=change.subject or change.file,
                     also=change.also,
                     imported=change.imported,
+                    owner=change.owner,
+                    collaborator=change.collaborator,
+                    member=change.member,
+                    line=change.line,
                 )
             )
     return produced[:limit] if limit is not None else produced

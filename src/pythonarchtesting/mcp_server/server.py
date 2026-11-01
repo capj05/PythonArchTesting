@@ -199,13 +199,16 @@ async def verify_marker(
 ) -> dict[str, Any]:
     """Check a marker of the reference at ``source`` (absolute) against seeded
     violations. Named operators (add_import, lazy_import, add_library,
-    rebuild_injected, drop_call) mutate copies of the reference; ``rule`` (marker name
+    dynamic_import, rebuild_injected, drop_call, use_private_name, break_port)
+    mutate copies of the reference; ``rule`` (marker name
     or rule id prefix) must fail on each mutant (killed) and pass on the reference.
     Without operators/files, only the operators the marker can see and the files it is
     declared on are used (``scope`` says which); only the rules named are evaluated.
     ``by_operator`` counts the outcomes; ``mutants`` lists survivors and mutants that
     did not run (``detail="all"``: every mutant). A survivor is a gap in the marker or
-    a change the architecture allows. Runtime markers need dynamic=True."""
+    a change the architecture allows; ``hints`` says what survivors call for and
+    ``case_gaps`` the lines no case of the marker ran. Runtime markers need
+    dynamic=True."""
 
     def run() -> dict[str, Any]:
         return authoring.verify_marker(
