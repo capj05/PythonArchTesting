@@ -165,11 +165,15 @@ def compare_edges(
     known: set[str],
     allow: Collection[Edge] = (),
     forbid: Collection[Edge] = (),
+    permitted: Collection[Edge] = (),
 ) -> EdgeDiff:
     """Compare the target's module edges with the reference's under ``policy``.
 
     ``target`` is named by the reference's modules already; ``known`` are the
     reference's modules, so any other module is one the target added.
+    ``permitted`` are further edges of the reference that the target may have
+    but need not (at run time: the reference's imports its cases never
+    exercised); they are convergent, never absent.
     """
     if policy not in POLICIES:
         raise ValueError(f"unknown policy {policy!r}; expected one of {POLICIES}")
@@ -184,14 +188,15 @@ def compare_edges(
     divergent: list[Edge] = []
     allowed: list[Edge] = []
     allow_set, forbid_set = set(allow), set(forbid)
+    accepted = expected | set(permitted)
     for pair in edges:
         if _covered(pair, forbid_set):
             divergent.append(pair)
         elif _covered(pair, allow_set):
             allowed.append(pair)
-        elif pair in expected:
+        elif pair in accepted:
             convergent.append(pair)
-        elif policy == "layered" and pair[0] not in _reachable(pair[1], expected):
+        elif policy == "layered" and pair[0] not in _reachable(pair[1], accepted):
             undecided.append(pair)
         else:
             divergent.append(pair)

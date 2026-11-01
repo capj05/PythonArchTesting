@@ -18,6 +18,24 @@ __archtest__: Annotated[
     architecture_entry(
         entry="wiring.serve",
         require_all=True,
+        # Serialising a record is no architectural choice: a store may use
+        # json although the reference does not (added after T5, see README).
+        # The list replaces the default one, which is repeated here.
+        ignore_external=[
+            "__future__",
+            "typing",
+            "typing_extensions",
+            "abc",
+            "dataclasses",
+            "enum",
+            "functools",
+            "itertools",
+            "collections",
+            "contextlib",
+            "types",
+            "operator",
+            "json",
+        ],
         cases=[
             {
                 "args": [

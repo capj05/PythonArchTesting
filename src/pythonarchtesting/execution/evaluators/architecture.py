@@ -11,6 +11,7 @@ listed in ``details.undecided`` for a person to judge.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any, Callable, Mapping
 
 from pythonarchtesting.architecture.compare import (
@@ -94,9 +95,71 @@ def _import_edges(
                 if library:
                     libraries.setdefault((edge.importer_module, library), edge)
     graph = import_module_edges(
-        raw, internal, ignore_type_checking=ignore_type_checking
+        _through_packages(raw, modules, internal),
+        internal,
+        ignore_type_checking=ignore_type_checking,
     )
     return graph, libraries, set(internal)
+
+
+def _through_subpackages(reference: set[Edge], known: set[str]) -> set[Edge]:
+    """``a -> pkg`` for every reference edge ``a -> pkg.module`` into a
+    subpackage: importing the package whole (``from . import api``, then
+    ``api.book()``) stands for importing the modules it re-exports."""
+    packages = {
+        module
+        for module in known
+        if module != ROOT and any(other.startswith(f"{module}.") for other in known)
+    }
+    return {
+        (origin, package)
+        for origin, end in reference
+        for package in packages
+        if end.startswith(f"{package}.") and origin != package
+    }
+
+
+def _through_packages(
+    edges: list[NormalizedImportEdge], modules: list[Entity], internal: frozenset[str]
+) -> list[NormalizedImportEdge]:
+    """``from .pkg import Name`` as an import of the module ``pkg`` takes
+    ``Name`` from, when ``pkg/__init__.py`` only re-exports it (a few hops)."""
+    packages = {
+        entity.module_path
+        for entity in modules
+        if str(entity.filepath_rel).endswith("__init__.py")
+    }
+    exported: dict[str, str] = {}
+    for edge in edges:
+        package = edge.importer_module
+        if package not in packages or module_of(edge.imported_module, internal) in (
+            None,
+            package,
+        ):
+            continue  # not a package, or not a name from another own module
+        name = edge.imported_module.rpartition(".")[2]
+        exported.setdefault(
+            f"{package}.{name}" if package else name, edge.imported_module
+        )
+    resolved = []
+    for edge in edges:
+        imported = edge.imported_module
+        for _ in range(3):
+            following = exported.get(imported)
+            if (
+                following is None
+                or following == imported
+                or edge.importer_module in packages
+                and edge.importer_module == module_of(imported, internal)
+            ):
+                break
+            imported = following
+        resolved.append(
+            edge
+            if imported == edge.imported_module
+            else dataclasses.replace(edge, imported_module=imported)
+        )
+    return resolved
 
 
 def _rename(
@@ -253,14 +316,28 @@ class ArchitectureStaticEvaluator:
         policy = str(rule.params.get("policy", "allow_new_modules"))
         renamed = _rename(target_graph, translate, translate)
         located = renamed if policy == "strict" else fold_new_modules(renamed, known)[0]
+        # A subpackage's __init__ importing its own submodules re-exports
+        # them: organisation inside a layer. The root package's re-exports
+        # stay divergences (the owner's decision in F2).
+        reexports = {
+            pair: edge
+            for pair, edge in renamed.items()
+            if pair[0] != ROOT and pair[1].startswith(f"{pair[0]}.")
+        }
+        reference_imports = set(_rename(ref_graph, module_name, module_name))
         imports = compare_edges(
-            set(_rename(ref_graph, module_name, module_name)),
-            renamed,
+            reference_imports,
+            {pair: edge for pair, edge in renamed.items() if pair not in reexports},
             policy=policy,
             known=known,
             allow=exceptions(rule, "allow"),
             forbid=exceptions(rule, "forbid"),
+            permitted=_through_subpackages(reference_imports, known),
         )
+        if reexports:
+            imports = dataclasses.replace(
+                imports, allowed=sorted(set(imports.allowed) | set(reexports))
+            )
         libraries_target = _rename(target_libraries, translate, str)
         if policy != "strict":
             # A library a new helper module imports counts for its users.
@@ -451,11 +528,15 @@ class ArchitectureRuntimeEvaluator:
             ref_libraries |= {package for _, package in used}
             named, _ = _instances(case, None)
             ref_instances.update(named)
-        _, static_libraries, _ = _import_edges(
+        static_graph, static_libraries, _ = _import_edges(
             list(ctx.source_by_id.values()),
             bool(rule.params.get("ignore_type_checking", True)),
             ctx.source_package,
         )
+        # A call along an import the reference has is allowed even when the
+        # reference's cases never made it: the import says the dependency is
+        # intended, the cases only did not reach it.
+        static_imports = set(_rename(static_graph, module_name, module_name))
         ref_libraries |= {package for _, package in static_libraries}
 
         calls: dict[Edge, Any] = {}
@@ -493,6 +574,7 @@ class ArchitectureRuntimeEvaluator:
             known=known,
             allow=allow,
             forbid=forbid,
+            permitted=static_imports,
         )
         instance_diff = compare_instances(
             set(ref_instances),

@@ -101,18 +101,30 @@ marked: the policy leaves it open on purpose. The JSON report is unchanged; all 
 `details.architecture`.
 
 - **Static (`DEP004`)**, on every import statement of the target:
-  - `imports`: module-to-module imports;
+  - `imports`: module-to-module imports. `from .pkg import Name` depends on
+    the module `pkg/__init__.py` takes `Name` from, not on the package. A
+    subpackage's `__init__.py` importing its own submodules (a re-export)
+    is organisation inside a layer and is listed as allowed; the root
+    package's `__init__.py` importing a module stays a divergence: the root
+    is the assignment's public face. Importing a subpackage whole (`from . import api`, then
+    `api.book()`) converges when the reference imports one of its modules
+    from the same module.
   - `external`: the libraries imported. A library the reference imports
     anywhere may be imported by any module; moving `json` from one module to
     another is not a change of technology. Under `allow_new_modules` and
     `layered` a library a new helper module imports counts for the modules
     using it, so `forbid=["controller -> sqlite3"]` also catches `sqlite3`
-    moved into a helper the controller imports.
+    moved into a helper the controller imports. A library the reference
+    never uses diverges, harmless or not: list the ones a solution may
+    bring in (`json` for a store that serialises) in `ignore_external`,
+    together with the default ones it replaces.
   - An absolute import through the target's directory name or the
     reference's package name is an import inside the project, not a library.
 - **Runtime (`DYN011`)**, with `entry`, `cases` and `--dynamic`, across all
   cases at once:
-  - `calls`: the calls between modules;
+  - `calls`: the calls between modules. A call along an import the
+    reference has converges even when the reference's cases never make it:
+    the import says the dependency is intended. It never counts as absent.
   - `instances`: which module creates objects of which class (a service that
     builds its own repository instead of taking it as an argument);
   - `external`: the libraries called, including through `importlib`.

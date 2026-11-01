@@ -23,7 +23,7 @@ Unchanged solution: static failures none, runtime failures none, import-linter f
 | M13 | O6 broken pattern | unsubscribing leaves the handler on the bus | no | yes | no | no | enforce_runtime_observer | - |
 | M14 | O7 dependency cycle | an appointment publishes its own cancellation on a bus | yes | yes | yes | yes | enforce_layers, forbid_cycles, forbid_imports | - |
 | M15 | O10 dependent domain | the cancellation policies read the clock port themselves | yes | no | yes | yes | enforce_layers, forbid_imports | forbid_runtime_calls: lines [32] of api/handlers.py not run; forbid_runtime_instantiation: lines [46] of application/reminders.py not run; forbid_runtime_instantiation: lines [48] of application/booking.py not run; require_runtime_calls: lines [21, 22] of api/handlers.py not run; require_runtime_calls: lines [32] of api/handlers.py not run; require_runtime_delegation: lines [46] of application/reminders.py not run |
-| M16 | O8 module interface | the SQLite store validates hours with the schedule's private helper | yes | no | no | yes | module_interface | forbid_runtime_calls: lines [32] of api/handlers.py not run; forbid_runtime_instantiation: lines [46] of application/reminders.py not run; forbid_runtime_instantiation: lines [48] of application/booking.py not run; require_runtime_calls: lines [21, 22] of api/handlers.py not run; require_runtime_calls: lines [32] of api/handlers.py not run; require_runtime_delegation: lines [46] of application/reminders.py not run |
+| M16 | O8 module interface | the SQLite store validates hours with the schedule's private helper | yes | no | no | no | module_interface | forbid_runtime_calls: lines [32] of api/handlers.py not run; forbid_runtime_instantiation: lines [46] of application/reminders.py not run; forbid_runtime_instantiation: lines [48] of application/booking.py not run; require_runtime_calls: lines [21, 22] of api/handlers.py not run; require_runtime_calls: lines [32] of api/handlers.py not run; require_runtime_delegation: lines [46] of application/reminders.py not run |
 | M17 | O9 broken port | the patient store's get is called find | yes | yes | no | yes | implements_protocol, implements_runtime_protocol, require_runtime_delegation | - |
 | M18 | O9 broken port | the notifier's send requires a priority | yes | yes | no | yes | implements_protocol, implements_runtime_protocol | - |
 | M19 | O1 layer bypass | the booking module keeps a debug helper that imports the SQLite adapter through the package name | yes | no | no | yes | enforce_layers, forbid_imports | forbid_runtime_calls: lines [32] of api/handlers.py not run; forbid_runtime_instantiation: lines [46] of application/reminders.py not run; forbid_runtime_instantiation: lines [48] of application/booking.py not run; require_runtime_calls: lines [21, 22] of api/handlers.py not run; require_runtime_calls: lines [32] of api/handlers.py not run; require_runtime_delegation: lines [46] of application/reminders.py not run |
@@ -41,9 +41,9 @@ Unchanged solution: static failures none, runtime failures none, import-linter f
 | O6 broken pattern | 1 | 0 | 1 | 1 | 0 | 1 | 0 | 0 |
 | O7 dependency cycle | 1 | 1 | 1 | 1 | 0 | 0 | 1 | 1 |
 | O10 dependent domain | 1 | 1 | 0 | 1 | 1 | 0 | 1 | 1 |
-| O8 module interface | 1 | 1 | 0 | 1 | 1 | 0 | 0 | 1 |
+| O8 module interface | 1 | 1 | 0 | 1 | 1 | 0 | 0 | 0 |
 | O9 broken port | 2 | 2 | 2 | 2 | 0 | 0 | 0 | 2 |
-| **all** | 19 | 10 | 16 | 19 | 3 | 9 | 5 | 14 |
+| **all** | 19 | 10 | 16 | 19 | 3 | 9 | 5 | 13 |
 
 ## Equivalent rewrites (false positives)
 

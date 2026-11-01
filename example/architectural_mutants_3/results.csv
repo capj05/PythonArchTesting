@@ -62,7 +62,7 @@ M15,mutant,O10 dependent domain,model,1,1,architecture_entry (static),architectu
 M16,mutant,O8 module interface,static,1,1,module_interface,module_interface,,
 M16,mutant,O8 module interface,runtime,0,0,,,,
 M16,mutant,O8 module interface,import-linter,0,0,,,,
-M16,mutant,O8 module interface,model,1,1,architecture_entry (runtime),architecture_entry (runtime),,
+M16,mutant,O8 module interface,model,0,0,,,,
 M17,mutant,O9 broken port,static,1,1,implements_protocol,implements_protocol,,
 M17,mutant,O9 broken port,runtime,1,1,implements_runtime_protocol;require_runtime_delegation,implements_runtime_protocol;require_runtime_delegation,,
 M17,mutant,O9 broken port,import-linter,0,0,,,,
