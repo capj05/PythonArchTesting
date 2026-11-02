@@ -1,0 +1,12 @@
+[
+{"id":"v041","violates":true,"requirements":[7],"reason":"instance() returns a new AppConfig each call, so the configuration is no longer a singleton."},
+{"id":"v042","violates":true,"requirements":[1],"reason":"The handler imports and instantiates OrderRepository, reaching storage directly."},
+{"id":"v043","violates":false,"requirements":[],"reason":"Iterating over a tuple copy instead of a list copy keeps the observer behaviour identical."},
+{"id":"v044","violates":true,"requirements":[1],"reason":"The handler reaches the repository through service._repository."},
+{"id":"v045","violates":true,"requirements":[3],"reason":"The service sets order.status directly instead of using the order's mark_placed method."},
+{"id":"v046","violates":false,"requirements":[],"reason":"A static helper builds the order; layering, injection and order methods are unchanged."},
+{"id":"v047","violates":true,"requirements":[1],"reason":"The service no longer saves to the repository, so it no longer uses storage and nothing persists the order."},
+{"id":"v048","violates":false,"requirements":[],"reason":"Moving the repository class to storage.py creates no cycle and does not change the architecture."},
+{"id":"v049","violates":true,"requirements":[4],"reason":"The service imports and uses pickle for serialisation."},
+{"id":"v050","violates":false,"requirements":[],"reason":"Only local variables are renamed; the architecture is unchanged."}
+]

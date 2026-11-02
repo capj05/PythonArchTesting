@@ -1,0 +1,12 @@
+[
+  {"id": "v021", "violates": true, "requirements": [2], "reason": "OrderService now imports OrderRepository and creates its own instance instead of using the repository injected through its constructor."},
+  {"id": "v022", "violates": false, "requirements": [], "reason": "The added _check_price helper is a pre-check in the handler-side call path that still changes the order only through Order.add, so no requirement is broken."},
+  {"id": "v023", "violates": true, "requirements": [4], "reason": "OrderService serialises the order with pickle (via __import__), which is the forbidden serialisation technology in the service."},
+  {"id": "v024", "violates": true, "requirements": [6], "reason": "EventBus.unsubscribe no longer removes the listener, so unsubscribing does not behave as described."},
+  {"id": "v025", "violates": true, "requirements": [2], "reason": "OrderService imports EventBus and creates a default bus when none is injected, instead of using only the injected collaborators."},
+  {"id": "v026", "violates": false, "requirements": [], "reason": "Making handle_order and place async changes call semantics but not layering, injection, the order, the bus, the discount, or module dependencies."},
+  {"id": "v027", "violates": false, "requirements": [], "reason": "The handler still uses only the service, and moving the response dict into a responses helper module is an allowed restructuring with no cycle."},
+  {"id": "v028", "violates": true, "requirements": [2], "reason": "OrderService replaces the injected bus with a new instance of type(bus)(), so it does not use exactly the bus it was given."},
+  {"id": "v029", "violates": true, "requirements": [8], "reason": "events.py imports pricing and pricing.py imports events.EventBus, creating a module dependency cycle."},
+  {"id": "v030", "violates": true, "requirements": [4], "reason": "OrderService opens a sqlite3 connection in its constructor, which is persistence technology inside the service."}
+]

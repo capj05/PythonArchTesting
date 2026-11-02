@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from pythonarchtesting.config.accessors import get_float, get_int
+from pythonarchtesting.config.accessors import get_bool, get_float, get_int
 
 
 class MatchStatus(str, Enum):
@@ -41,6 +41,8 @@ class MatchingConfig:
     max_fuzzy_candidates: int
     max_stage2_candidates: int = 0
     max_stage3_candidates: int = 0
+    # Pair by name what the scores leave unpaired (``matching.fallback``).
+    name_fallback: bool = True
 
     @classmethod
     def from_config(cls, config: Any | None = None) -> "MatchingConfig":
@@ -61,6 +63,7 @@ class MatchingConfig:
             max_stage3_candidates=get_int(
                 config, "matching", "max_stage3_candidates", 0
             ),
+            name_fallback=get_bool(config, "matching", "name_fallback", True),
         )
 
 

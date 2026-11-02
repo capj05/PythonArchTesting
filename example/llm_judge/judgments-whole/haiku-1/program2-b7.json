@@ -1,0 +1,3 @@
+[
+  {"id": "w049", "violates": true, "requirements": [2], "reason": "LendingService replaces the injected store with a new instance of its class (type(store)()), so it does not work with what it was given and the lend check runs against an empty store."}
+]

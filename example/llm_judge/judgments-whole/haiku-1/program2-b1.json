@@ -1,0 +1,10 @@
+[
+  {"id": "w001", "violates": false, "requirements": [], "reason": "Lending notifies through the injected notifier and keeps all layers separated, though it notifies only on the first lend of a book (a behavior deviation, not an architecture one)."},
+  {"id": "w002", "violates": false, "requirements": [], "reason": "Layers, ports, adapters, handlers and composition root all follow the required dependency rules."},
+  {"id": "w003", "violates": false, "requirements": [], "reason": "Different module names and helpers, but the domain, application, ports, adapters, handlers and composition root keep the required dependencies."},
+  {"id": "w004", "violates": false, "requirements": [], "reason": "The package __init__ re-exports every module as a facade, which is an idiom and creates no real cycle among the layer modules."},
+  {"id": "w005", "violates": true, "requirements": [6], "reason": "LendingService.lend never notifies the member, so lending does not notify through the injected notifier."},
+  {"id": "w006", "violates": true, "requirements": [4], "reason": "lend_book reaches into the service's private store via service._store.find, bypassing the application."},
+  {"id": "w007", "violates": true, "requirements": [3], "reason": "InMemoryLoanStore.find takes an int key and returns a list, so the adapter does not satisfy the LoanStore port."},
+  {"id": "w008", "violates": true, "requirements": [1, 6], "reason": "Loan.close imports and instantiates the OutboxNotifier adapter, so the domain depends on an adapter and sends notifications outside the injected notifier."}
+]

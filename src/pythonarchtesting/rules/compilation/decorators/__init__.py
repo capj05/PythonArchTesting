@@ -1,6 +1,7 @@
 """Canonical decorator compilers for entity-scoped rules."""
 
 from .api_signature import compile_required_entity_signature, compile_required_method
+from .architecture import compile_architecture_entry
 from .attributes import compile_required_attribute
 from .constructors import compile_required_constructor
 from .enum_type import compile_is_enum
@@ -10,6 +11,8 @@ from .import_policy import compile_forbid_imports
 from .member_absence import compile_does_not_have
 from .member_set import compile_require_member_set
 from .method_set import compile_require_method_set
+from .module_interface import compile_module_interface
+from .module_structure import compile_enforce_layers, compile_forbid_cycles
 from .nominal_type import (
     compile_exact_type,
     compile_inherits_directly_from,
@@ -45,6 +48,10 @@ from .runtime_structure import (
 )
 
 __all__ = [
+    "compile_enforce_layers",
+    "compile_forbid_cycles",
+    "compile_architecture_entry",
+    "compile_module_interface",
     "compile_does_not_have",
     "compile_forbid_foreign_writes",
     "compile_forbid_runtime_calls",

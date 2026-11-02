@@ -1,0 +1,10 @@
+[
+ {
+  "id": "w049",
+  "violates": true,
+  "requirements": [
+   2
+  ],
+  "reason": "LendingService builds its store with type(store)(), creating an adapter instance instead of using the injected one."
+ }
+]

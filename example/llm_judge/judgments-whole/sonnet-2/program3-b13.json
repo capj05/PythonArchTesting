@@ -1,0 +1,7 @@
+[
+{"id":"w061","violates":true,"requirements":[4],"reason":"application/booking.py imports sqlite3 and opens a connection in book(), so sqlite3 is used outside the SQLite adapter."},
+{"id":"w062","violates":true,"requirements":[5],"reason":"OutboxNotifier.send requires an extra priority parameter, so the adapter does not satisfy the Notifier port (send(address, subject, body))."},
+{"id":"w063","violates":true,"requirements":[3],"reason":"api/handlers.py imports the domain Slot and constructs it directly instead of talking to the application only."},
+{"id":"w064","violates":false,"requirements":[],"reason":"Only the bus internals were changed to a defaultdict; the layering and all other requirements are intact."},
+{"id":"w065","violates":false,"requirements":[],"reason":"Only run_for was refactored locally; the architecture matches the intended layered design."}
+]

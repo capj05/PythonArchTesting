@@ -109,6 +109,11 @@ or by code that one called, is not the target's doing.
   unless `transitive=True`.
 - Objects created through `cls.__new__` without `__init__`, or by `copy`/`pickle`.
 - What the code computes. Results are never compared.
+- A collaborator rebuilt from the injected one's class (`self._bus =
+  type(bus)()`) when `init` injects a `$spy`: the spy's class cannot be built
+  that way, the case does not run and nothing is judged. Inject real objects
+  with `$new`, and put the spies of a delegation marker in that marker's own
+  `init`.
 
 ## Security
 

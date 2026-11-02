@@ -1,0 +1,7 @@
+[
+{"id":"w021","violates":false,"requirements":[],"reason":"Layers, injection, bus, policy use and appointment state changes all follow the intended architecture."},
+{"id":"w022","violates":true,"requirements":[3],"reason":"api/lookup.py reaches into service._appointments.on_day, so a handler touches the store through an object reachable from the service."},
+{"id":"w023","violates":true,"requirements":[11],"reason":"BookingService.cancel sets appointment.status and appointment.fee directly instead of calling appointment.cancel(fee)."},
+{"id":"w024","violates":false,"requirements":[],"reason":"Only splits Slot into domain/slots.py re-exported via schedule; layering and all other requirements are kept."},
+{"id":"w025","violates":false,"requirements":[],"reason":"Different idioms (package-level re-exports, ports as one module, Appointment.restore) but layers, dependencies, injection and state encapsulation are all respected."}
+]

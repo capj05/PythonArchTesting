@@ -136,3 +136,24 @@ def test_run_projects_one_target_uses_ordinary_target_id(tmp_path) -> None:
     # target_id should be the directory name, not "root" or "__single__"
     assert target_states[0].target_id == target_dir.name
     assert target_states[0].target_id not in ("root", "__single__")
+
+
+def test_run_projects_can_evaluate_only_some_rules(tmp_path):
+    from pathlib import Path
+
+    from pythonarchtesting.runner import run_projects
+
+    reference = (
+        Path(__file__).parents[2] / "example" / "architectural_mutants" / "reference"
+    )
+    solution = reference.parent / "solution"
+
+    _, states = run_projects(
+        source_path=str(reference),
+        targets=[str(solution)],
+        rule_filter=lambda rule: rule.rule_id.startswith("DEP001"),
+    )
+
+    (state,) = states
+    assert state.rule_results
+    assert {r.rule_id.split("/")[0] for r in state.rule_results} == {"DEP001"}

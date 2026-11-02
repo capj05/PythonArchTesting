@@ -22,6 +22,20 @@ def count_runtime_rules_skipped(target_states: Sequence[TargetRunState]) -> int:
     )
 
 
+def count_results_undecided(target_states: Sequence[TargetRunState]) -> int:
+    """How many results passed with architecture changes nothing decided.
+
+    ``details.undecided`` lists them: a person has to judge whether each is
+    acceptable, so such a pass is not a clean one.
+    """
+    return sum(
+        1
+        for state in target_states
+        for result in state.rule_results
+        if result.status == "OK" and (result.details or {}).get("undecided")
+    )
+
+
 def count_runtime_results_unverified(target_states: Sequence[TargetRunState]) -> int:
     """How many runtime results passed although something was left unchecked.
 

@@ -24,7 +24,7 @@ _None — the marker takes only optional arguments._
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `signature_mode` | `str` | `"compatible"` | Signature matching mode for the constructor: `"compatible"`, `"exact"`, or `"any"`. |
+| `signature_mode` | `str` | `"compatible"` | Signature matching mode for the constructor: `"compatible"`, `"exact"`, or `"any"`. Under `"compatible"` the target may add parameters only with a default: a call written for the reference's constructor must still work. |
 | `constructor_kind` | `str` | `"auto"` | Constructor preference: `"auto"` (prefer `__init__`, fall back to `__new__`), `"__init__"`, or `"__new__"`. |
 | `allow_inherited` | `bool` | `True` | Accept a constructor inherited from a base class as a satisfying candidate. |
 | `allow_missing` | `bool` | `False` | Pass when no candidate constructor exists on the target instead of failing. |

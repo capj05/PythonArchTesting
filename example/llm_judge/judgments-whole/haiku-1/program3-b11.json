@@ -1,0 +1,7 @@
+[
+  {"id": "w051", "violates": true, "requirements": [11], "reason": "BookingService.cancel sets appointment.status and appointment.fee directly in application/booking.py instead of calling Appointment.cancel(fee), so the appointment's state changes outside its own methods."},
+  {"id": "w052", "violates": true, "requirements": [7], "reason": "ReminderService._tell appends to the notifier's sent list via getattr instead of calling the injected notifier's send method, bypassing the port."},
+  {"id": "w053", "violates": true, "requirements": [1, 12], "reason": "domain/policies.py imports Clock from ports, so the domain layer depends on the ports layer above it."},
+  {"id": "w054", "violates": true, "requirements": [4], "reason": "adapters/memory_store.py imports pickle and pickles the store contents, a serialisation library used outside the SQLite adapter."},
+  {"id": "w055", "violates": false, "requirements": [], "reason": "Patient becomes a validated dataclass, but every layer keeps the correct dependency direction, the adapters are built only in wiring, and appointment state still changes only through its methods."}
+]

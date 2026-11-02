@@ -1,0 +1,7 @@
+[
+  {"id": "w011", "violates": true, "requirements": [2, 6, 12], "reason": "application/booking.py imports InMemoryAppointmentStore from adapters and builds it in BookingService.__init__, ignoring the injected appointment store."},
+  {"id": "w012", "violates": true, "requirements": [7], "reason": "ReminderService._tell only writes to the logging module and never calls the injected notifier, so no patient e-mail is sent."},
+  {"id": "w013", "violates": true, "requirements": [1, 12], "reason": "domain/patients.py imports the ports.clock Clock protocol and adds a registered_at method that uses it, so the domain depends on a higher layer."},
+  {"id": "w014", "violates": false, "requirements": [], "reason": "The request helpers are defined inside api/handlers.py instead of a serializers module, but handlers still reach only the application layer and wiring is the only place adapters are built."},
+  {"id": "w015", "violates": true, "requirements": [10], "reason": "adapters/sqlite_store.py imports the private _check_hour helper from domain.schedule, which is outside the four names other modules may use (Slot, Appointment, free_slots, WORKING_HOURS)."}
+]

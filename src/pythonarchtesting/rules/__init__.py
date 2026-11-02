@@ -33,12 +33,15 @@ class _LazyMarkerFactory:
 
 def _get_core_decorators() -> dict[str, Any]:
     from pythonarchtesting.rules.declaration.core import (
+        architecture_entry,
         does_not_have,
         enforce_flow,
+        enforce_layers,
         enforce_reference_calls,
         enforce_runtime_observer,
         exact_type,
         flow,
+        forbid_cycles,
         forbid_foreign_writes,
         forbid_imports,
         forbid_runtime_calls,
@@ -60,6 +63,7 @@ def _get_core_decorators() -> dict[str, Any]:
         is_runtime_abstract_class,
         is_runtime_concrete_class,
         is_runtime_singleton,
+        module_interface,
         not_subclass_of,
         require_member_set,
         require_method_set,
@@ -84,6 +88,10 @@ def _get_core_decorators() -> dict[str, Any]:
         "required_attribute": required_attribute,
         "does_not_have": does_not_have,
         "forbid_imports": forbid_imports,
+        "enforce_layers": enforce_layers,
+        "forbid_cycles": forbid_cycles,
+        "architecture_entry": architecture_entry,
+        "module_interface": module_interface,
         "implements_protocol": implements_protocol,
         "subclass_of": subclass_of,
         "exact_type": exact_type,
@@ -128,6 +136,10 @@ required_constructor = _LazyMarkerFactory("required_constructor", _get_core_deco
 required_attribute = _LazyMarkerFactory("required_attribute", _get_core_decorators)
 does_not_have = _LazyMarkerFactory("does_not_have", _get_core_decorators)
 forbid_imports = _LazyMarkerFactory("forbid_imports", _get_core_decorators)
+enforce_layers = _LazyMarkerFactory("enforce_layers", _get_core_decorators)
+forbid_cycles = _LazyMarkerFactory("forbid_cycles", _get_core_decorators)
+architecture_entry = _LazyMarkerFactory("architecture_entry", _get_core_decorators)
+module_interface = _LazyMarkerFactory("module_interface", _get_core_decorators)
 implements_protocol = _LazyMarkerFactory("implements_protocol", _get_core_decorators)
 subclass_of = _LazyMarkerFactory("subclass_of", _get_core_decorators)
 exact_type = _LazyMarkerFactory("exact_type", _get_core_decorators)
@@ -197,6 +209,10 @@ __all__ = [
     "required_attribute",
     "does_not_have",
     "forbid_imports",
+    "enforce_layers",
+    "forbid_cycles",
+    "architecture_entry",
+    "module_interface",
     "implements_protocol",
     "subclass_of",
     "exact_type",

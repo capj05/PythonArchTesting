@@ -1,0 +1,61 @@
+[
+ {
+  "id": "w41",
+  "violates": true,
+  "requirements": [
+   2,
+   5
+  ],
+  "reason": "The service hardcodes a 10% discount instead of using the injected strategy."
+ },
+ {
+  "id": "w42",
+  "violates": true,
+  "requirements": [
+   6
+  ],
+  "reason": "EventBus.publish only records last_event and never calls the listeners."
+ },
+ {
+  "id": "w43",
+  "violates": false,
+  "requirements": [],
+  "reason": "A static builder helper in the service; all collaborators are still injected."
+ },
+ {
+  "id": "w44",
+  "violates": true,
+  "requirements": [
+   1
+  ],
+  "reason": "The handler reaches service._repository.get."
+ },
+ {
+  "id": "w45",
+  "violates": true,
+  "requirements": [
+   6
+  ],
+  "reason": "EventBus.unsubscribe is a no-op and never removes the listener."
+ },
+ {
+  "id": "w46",
+  "violates": false,
+  "requirements": [],
+  "reason": "Different module names and idioms but the same layering, injection and observer."
+ },
+ {
+  "id": "w47",
+  "violates": false,
+  "requirements": [],
+  "reason": "A __new__-based singleton and name-mangled attributes keep the architecture; no cycles."
+ },
+ {
+  "id": "w48",
+  "violates": true,
+  "requirements": [
+   7
+  ],
+  "reason": "AppConfig.instance() returns a new instance every call, so it is not a singleton."
+ }
+]

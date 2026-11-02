@@ -1,0 +1,7 @@
+[
+{"id":"w016","violates":false,"requirements":[],"reason":"Layers, injection, bus, notifier and policy usage all match; the extra free_hours helper stays inside application."},
+{"id":"w017","violates":false,"requirements":[],"reason":"Uses read-only properties and helpers in application; dependencies respect the layer order and wiring is the only place adapters are built."},
+{"id":"w018","violates":true,"requirements":[1,12],"reason":"domain/schedule.py Appointment.cancel imports application.bus.EventBus, so domain depends on the application layer."},
+{"id":"w019","violates":false,"requirements":[],"reason":"Only difference is a dataclass Patient; all dependency, injection and layering rules are kept."},
+{"id":"w020","violates":true,"requirements":[10],"reason":"adapters/sqlite_store.py imports BOOKED, CANCELLED and ATTENDED from domain.schedule, beyond the allowed Slot, Appointment, free_slots and WORKING_HOURS."}
+]

@@ -1,0 +1,58 @@
+[
+ {
+  "id": "w017",
+  "violates": true,
+  "requirements": [
+   3
+  ],
+  "reason": "InMemoryLoanStore.find takes an extra member parameter, so the adapter does not satisfy the LoanStore port, and the service calls find(book_id, '')."
+ },
+ {
+  "id": "w018",
+  "violates": true,
+  "requirements": [
+   2,
+   7
+  ],
+  "reason": "application.py imports InMemoryLoanStore and instantiates it as a fallback, so the application uses an adapter."
+ },
+ {
+  "id": "w019",
+  "violates": true,
+  "requirements": [
+   1,
+   7
+  ],
+  "reason": "domain.py imports adapters_notify.OutboxNotifier and Loan.close sends through it, so the domain depends on an adapter."
+ },
+ {
+  "id": "w020",
+  "violates": false,
+  "requirements": [],
+  "reason": "Architecture matches the reference; only idiom differences."
+ },
+ {
+  "id": "w021",
+  "violates": false,
+  "requirements": [],
+  "reason": "Different module names but same layering; handlers use only LendingService, application uses ports only, no cycles."
+ },
+ {
+  "id": "w022",
+  "violates": false,
+  "requirements": [],
+  "reason": "Same as reference apart from an equivalent is_overdue."
+ },
+ {
+  "id": "w023",
+  "violates": false,
+  "requirements": [],
+  "reason": "Equivalent structure; handler catching ValueError and store filtering returned loans do not break layering."
+ },
+ {
+  "id": "w024",
+  "violates": false,
+  "requirements": [],
+  "reason": "Private helper factories in the composition root only; layering intact."
+ }
+]

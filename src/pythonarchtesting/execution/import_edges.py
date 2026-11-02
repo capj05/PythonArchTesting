@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
-from typing import Collection, Iterable, Literal, Sequence
+from dataclasses import dataclass, replace
+from typing import Collection, Iterable, Literal, Optional, Sequence, Tuple, Union
 
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.execution.glob_match import path_matches_any_glob
@@ -203,12 +203,52 @@ def normalize_import_reference(
     return edges
 
 
+Packages = Union[str, Tuple[Optional[str], ...], None]
+
+
+def package_names(package: Packages) -> tuple[str, ...]:
+    """The names the project is imported under (``None`` and empty left out).
+
+    A submission may import itself under its directory's name or under the
+    reference's package name; callers pass both.
+    """
+    found = (package,) if isinstance(package, str) or package is None else package
+    return tuple(name for name in found if name)
+
+
+def is_own_import(ref: ParsedImportReference, package: Packages) -> bool:
+    """Whether ``ref`` imports from the project itself, relatively or by its name."""
+    if ref.kind == "importfrom" and ref.module.startswith("."):
+        return True
+    return any(
+        ref.module == name or ref.module.startswith(f"{name}.")
+        for name in package_names(package)
+    )
+
+
+def without_package(
+    ref: ParsedImportReference, package: Packages
+) -> ParsedImportReference:
+    """``from pkg.models import X`` as ``from models import X``: names inside the project."""
+    if ref.module.startswith("."):
+        return ref
+    for name in package_names(package):
+        if ref.module.startswith(f"{name}."):
+            return replace(ref, module=ref.module[len(name) + 1 :])
+        if ref.module == name:
+            return replace(ref, module="")
+    return ref
+
+
 def collect_normalized_import_edges_from_node(
     *,
     node: ast.AST,
     importer_module: str,
     filepath_rel: str,
+    packages: Packages = None,
 ) -> list[NormalizedImportEdge]:
+    """The node's imports as edges; absolute imports through ``packages`` are
+    named inside the project (``pkg.models`` -> ``models``, ``pkg`` -> ``""``)."""
     refs = collect_import_references_from_node(
         node=node,
         importer_module=importer_module,
@@ -216,7 +256,7 @@ def collect_normalized_import_edges_from_node(
     )
     edges: list[NormalizedImportEdge] = []
     for ref in refs:
-        edges.extend(normalize_import_reference(ref))
+        edges.extend(normalize_import_reference(without_package(ref, packages)))
     return edges
 
 
@@ -225,6 +265,7 @@ def collect_normalized_import_edges_for_modules(
     entities: Iterable[Entity],
     scope_modules: set[str] | frozenset[str],
     ignore_globs: Sequence[str] | None = None,
+    packages: Packages = None,
 ) -> list[NormalizedImportEdge]:
     module_entities = collect_canonical_module_entities(
         entities=entities,
@@ -239,6 +280,7 @@ def collect_normalized_import_edges_for_modules(
                 node=node,
                 importer_module=entity.module_path,
                 filepath_rel=entity.filepath_rel,
+                packages=packages,
             )
         )
     return sorted(

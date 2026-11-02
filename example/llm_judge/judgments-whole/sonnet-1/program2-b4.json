@@ -1,0 +1,62 @@
+[
+ {
+  "id": "w025",
+  "violates": true,
+  "requirements": [
+   2,
+   7
+  ],
+  "reason": "LendingService.lend imports FixedClock from adapters_memory and creates one, so the application uses an adapter."
+ },
+ {
+  "id": "w026",
+  "violates": false,
+  "requirements": [],
+  "reason": "A private helper inside api.py is harmless; layering intact."
+ },
+ {
+  "id": "w027",
+  "violates": false,
+  "requirements": [],
+  "reason": "Equivalent to the reference; only the validation idiom differs."
+ },
+ {
+  "id": "w028",
+  "violates": true,
+  "requirements": [
+   5
+  ],
+  "reason": "InMemoryLoanStore.add writes loan.returned = False directly, so the adapter manipulates loan state outside Loan's methods."
+ },
+ {
+  "id": "w029",
+  "violates": false,
+  "requirements": [],
+  "reason": "Equivalent to the reference; only idiom differences."
+ },
+ {
+  "id": "w030",
+  "violates": true,
+  "requirements": [
+   7,
+   8
+  ],
+  "reason": "ports.py imports application under TYPE_CHECKING, a upward dependency that forms a ports/application cycle."
+ },
+ {
+  "id": "w031",
+  "violates": true,
+  "requirements": [
+   3
+  ],
+  "reason": "OutboxNotifier.send takes (text, recipient) instead of (member, text), so the adapter does not satisfy the Notifier port."
+ },
+ {
+  "id": "w032",
+  "violates": true,
+  "requirements": [
+   6
+  ],
+  "reason": "LendingService.lend never calls the injected notifier, so lending does not notify."
+ }
+]

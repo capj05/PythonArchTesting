@@ -1,0 +1,7 @@
+[
+{"id":"w041","violates":true,"requirements":[9],"reason":"domain/schedule.py imports policies at the bottom while policies imports schedule, creating a dependency cycle."},
+{"id":"w042","violates":false,"requirements":[],"reason":"Only moves OutboxNotifier into a helper module re-exported by email_notifier; layering and all rules are kept."},
+{"id":"w043","violates":true,"requirements":[4],"reason":"application/booking.py imports sqlite3 and writes a log table, outside the SQLite adapter."},
+{"id":"w044","violates":true,"requirements":[4],"reason":"application/booking.py imports pickle (via importlib) outside the SQLite adapter."},
+{"id":"w045","violates":true,"requirements":[10],"reason":"adapters/sqlite_store.py imports the ATTENDED, BOOKED and CANCELLED constants from domain.schedule, beyond Slot, Appointment, free_slots and WORKING_HOURS."}
+]

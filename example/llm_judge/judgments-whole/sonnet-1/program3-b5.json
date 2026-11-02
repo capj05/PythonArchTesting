@@ -1,0 +1,7 @@
+[
+{"id":"w021","violates":false,"requirements":[],"reason":"Layers, injection, bus, policy and appointment state changes all follow the intended architecture."},
+{"id":"w022","violates":true,"requirements":[3],"reason":"api/lookup.py reaches into the service's private _appointments store, and book calls it, so the handler talks to the store through an object reachable from the service."},
+{"id":"w023","violates":true,"requirements":[11],"reason":"BookingService.cancel sets appointment.status and appointment.fee directly instead of calling Appointment.cancel."},
+{"id":"w024","violates":false,"requirements":[],"reason":"Splitting Slot and WORKING_HOURS into domain/slots.py re-exported via schedule keeps the architecture intact."},
+{"id":"w025","violates":false,"requirements":[],"reason":"Different idioms (package-level re-exports, Appointment.restore, service.describe) but layering, injection, sqlite isolation and encapsulation are preserved."}
+]

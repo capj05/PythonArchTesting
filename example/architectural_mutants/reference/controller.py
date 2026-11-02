@@ -3,7 +3,8 @@
 Intent I1 (layering): the controller talks to the service only, never to
 storage. Statically, it must not import the repository; at run time, it must
 call into the service, must not call into the repository, and its whole call
-tree must use exactly the module-to-module calls of this reference.
+tree must use exactly the module-to-module calls of this reference. A module
+of the target's own (a helper) counts as part of the modules that call it.
 
 The second case, an empty order, drives the early return. Without it no case
 runs that line, and a layer bypass placed there (mutant M03) passes; the
@@ -83,6 +84,7 @@ def handle_order(request: dict[str, Any], service: Any) -> dict[str, Any]:
         ),
         enforce_reference_calls(
             require_all=True,
+            allow_new_modules=True,
             cases=[
                 {
                     "args": [

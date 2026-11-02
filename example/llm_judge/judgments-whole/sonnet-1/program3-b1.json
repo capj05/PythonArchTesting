@@ -1,0 +1,7 @@
+[
+{"id": "w001", "violates": false, "requirements": [], "reason": "Layers, dependencies, injection and encapsulation all hold; helper modules (errors, views) are used within the allowed layers."},
+{"id": "w002", "violates": false, "requirements": [], "reason": "Structurally the same as the reference solution; only a module is renamed."},
+{"id": "w003", "violates": false, "requirements": [], "reason": "The booked handler sends no e-mail, which is a behavioural gap, but no architecture requirement is broken."},
+{"id": "w004", "violates": false, "requirements": [], "reason": "Uses package-level imports and an application view helper, but keeps the layer order, injection, and encapsulation intact."},
+{"id": "w005", "violates": true, "requirements": [10], "reason": "adapters/sqlite_store.py imports the ATTENDED and CANCELLED constants from domain.schedule (and calls slot.key()), going beyond Slot, Appointment, free_slots and WORKING_HOURS."}
+]

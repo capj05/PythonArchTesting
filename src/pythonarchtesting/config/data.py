@@ -135,6 +135,7 @@ class MatchingConfig:
     max_fuzzy_candidates: int = 5
     max_stage2_candidates: int = 0
     max_stage3_candidates: int = 0
+    name_fallback: bool = True
     include_nested_functions: bool = False
 
 

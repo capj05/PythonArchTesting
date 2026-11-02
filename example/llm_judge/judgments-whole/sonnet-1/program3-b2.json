@@ -1,0 +1,7 @@
+[
+{"id": "w006", "violates": false, "requirements": [], "reason": "Layers, injection, encapsulation and port conformance all hold; the sqlite adapter uses only Slot and Appointment and the handlers use only the service."},
+{"id": "w007", "violates": false, "requirements": [], "reason": "A different structure (package-level imports, plain-data view methods on the service, ports in __init__) that keeps every graded dependency and layer rule."},
+{"id": "w008", "violates": true, "requirements": [5], "reason": "InMemoryPatientStore exposes find() instead of get(), so it does not satisfy the PatientStore port that the application calls."},
+{"id": "w009", "violates": true, "requirements": [11], "reason": "BookingService.move assigns appointment.slot = slot directly instead of calling Appointment.move_to, changing state outside the entity's own methods."},
+{"id": "w010", "violates": true, "requirements": [6], "reason": "adapters/memory_store.py imports and instantiates OutboxNotifier inside InMemoryAppointmentStore, so an adapter is built outside wiring.py."}
+]

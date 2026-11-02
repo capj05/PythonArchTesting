@@ -1,0 +1,6 @@
+[
+{"id": "v051", "violates": true, "requirements": [1], "reason": "The handler now imports an audit module that builds an OrderRepository and writes into its private _rows, so the presentation layer reaches storage directly."},
+{"id": "v052", "violates": true, "requirements": [3], "reason": "The service sets order.status = \"placed\" directly instead of calling mark_placed()."},
+{"id": "v053", "violates": true, "requirements": [3], "reason": "The service assigns order.total directly instead of calling apply_total()."},
+{"id": "v054", "violates": true, "requirements": [6], "reason": "The service no longer publishes the order_placed event on the bus, so the observer mechanism is never notified."}
+]

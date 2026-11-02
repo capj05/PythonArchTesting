@@ -1,0 +1,12 @@
+[
+  {"id": "v021", "violates": true, "requirements": [7, 8], "reason": "ports.py imports application under TYPE_CHECKING, so the lower ports layer depends on the higher application layer and application and ports form an import cycle."},
+  {"id": "v022", "violates": false, "requirements": [], "reason": "application uses a new pure helper module policy.py with no project imports, which keeps the same ports-only structure and creates no cycle or layer reversal."},
+  {"id": "v023", "violates": false, "requirements": [], "reason": "replacing all(...) for the empty-field check in the request handler is a restructuring of the same logic that keeps it talking to the application only."},
+  {"id": "v024", "violates": true, "requirements": [3], "reason": "OutboxNotifier renames send to notify, so the adapter no longer satisfies the Notifier port (send), and the application now calls a method the port does not declare."},
+  {"id": "v025", "violates": false, "requirements": [], "reason": "merging the memory store, clock and notifier adapters into one adapters.py keeps each adapter satisfying its port and the adapters independent of each other and of the application."},
+  {"id": "v026", "violates": true, "requirements": [4], "reason": "lend_book reaches into the store through service._store.find, so the request handler talks to the store via a service attribute instead of the application only."},
+  {"id": "v027", "violates": true, "requirements": [3], "reason": "InMemoryLoanStore.find now requires an extra member parameter, so the adapter no_longer satisfies the LoanStore.find(book_id) port, and the application calls it with a dummy empty string."},
+  {"id": "v028", "violates": true, "requirements": [4], "reason": "lend_book makes a call to service._store.find, so the request handler reaches the store through a service attribute, even though the result is discarded."},
+  {"id": "v029", "violates": false, "requirements": [], "reason": "introducing a found local in find and renaming locals in return_book change only idiom, not the architecture."},
+  {"id": "v030", "violates": true, "requirements": [5], "reason": "give_back sets loan.returned = True directly instead of closing the loan through Loan.close."}
+]

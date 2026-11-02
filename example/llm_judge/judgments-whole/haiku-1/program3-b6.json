@@ -1,0 +1,7 @@
+[
+  {"id": "w026", "violates": false, "requirements": [], "reason": "The handlers use only the booking service and the layers keep their dependency order, with fees from the injected policy and events sent through the bus."},
+  {"id": "w027", "violates": true, "requirements": [3], "reason": "api/handlers.py imports domain.schedule.Slot and constructs a Slot directly to validate input, so the handlers reach the domain without going through the application."},
+  {"id": "w028", "violates": true, "requirements": [2, 7], "reason": "ReminderService.run_for imports adapters.email_notifier.OutboxNotifier and replaces the injected notifier with a new one, so the application depends on an adapter and reminders bypass the injected notifier."},
+  {"id": "w029", "violates": true, "requirements": [3], "reason": "The book handler calls service._appointments.on_day(day), reaching the appointment store through an object reachable from the service."},
+  {"id": "w030", "violates": true, "requirements": [8], "reason": "BookingService.cancel builds its own LateCancellationFee(24, 30) instead of using the injected policy, so the fee does not come from the injected policy."}
+]

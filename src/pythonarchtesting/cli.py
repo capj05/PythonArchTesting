@@ -10,10 +10,10 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pythonarchtesting.config import Config, load_config, resolve_projects_config
-from pythonarchtesting.exceptions import ConfigurationError
+from pythonarchtesting.exceptions import ConfigurationError, MappingError
 from pythonarchtesting.infrastructure.logging import configure_logging
 from pythonarchtesting.report.lazy import (
     generate_run_report,
@@ -115,6 +115,34 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--architecture",
+        action="store_true",
+        help=(
+            "Compare the target with the module dependencies of the reference "
+            "even where the reference declares no architecture_entry; only "
+            "the static comparison, as no entry function is known"
+        ),
+    )
+    parser.add_argument(
+        "--write-model",
+        metavar="FILE",
+        help=(
+            "Write the reference's architecture model (modules, imports, "
+            "libraries, the architecture_entry declaration; with --dynamic also "
+            "what the declared cases do) as JSON to FILE and stop; needs only "
+            "--source"
+        ),
+    )
+    parser.add_argument(
+        "--mapping",
+        help=(
+            "JSON file pairing reference entities with target entities the "
+            'matching could not pair: {"pairs": {"controller": "handler"}}, '
+            'or per target {"targets": {"<id>": {"pairs": ...}}}; every '
+            "pair is checked, and automatic matches are never overridden"
+        ),
+    )
+    parser.add_argument(
         "--sandbox",
         default="limits",
         choices=["none", "limits", "bwrap"],
@@ -136,6 +164,21 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     return parser
+
+
+def _load_mapping(
+    parser: Any, path: Optional[str]
+) -> Optional[Dict[str, Dict[str, str]]]:
+    """The assisted pairing in ``--mapping``, or ``None`` without one."""
+    if not path:
+        return None
+    from pythonarchtesting.matching.assisted import load_mapping
+
+    try:
+        return load_mapping(Path(path))
+    except (OSError, ValueError) as exc:
+        parser.error(f"--mapping {path}: {exc}")
+    return None
 
 
 def _sandbox_policy(
@@ -191,6 +234,38 @@ def _run_declaration_validation(
     return int(exit_code)
 
 
+def _write_model(
+    config: Config, args: argparse.Namespace, source_path: str, sandbox: Any
+) -> int:
+    from pythonarchtesting.architecture.model import describe
+    from pythonarchtesting.runner.source_prep import prepare_source
+
+    source = Path(source_path).expanduser().resolve()
+    state = prepare_source(
+        config=config,
+        source_path=source,
+        reference_modules=_parse_csv(args.reference_modules) or None,
+    )
+    model = describe(
+        state,
+        mode="full" if args.dynamic else "static",
+        source_root=source,
+        sandbox=sandbox,
+    )
+    _write_report(args.write_model, json.dumps(model, indent=2, sort_keys=True))
+    print(f"Model written to {args.write_model}")
+    for problem in model["declaration"].get("problems") or []:
+        print(
+            f"warning: the architecture_entry declaration does not compile: {problem}",
+            file=sys.stderr,
+        )
+    runtime = model.get("runtime") or {}
+    if runtime.get("status") not in (None, "completed"):
+        why = runtime.get("reason") or runtime.get("error") or runtime.get("status")
+        print(f"warning: the reference's cases did not run: {why}", file=sys.stderr)
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run the CLI, turning expected failures into a one-line message.
 
@@ -233,6 +308,38 @@ def _run(argv: Optional[List[str]] = None) -> int:
     reference_modules = _parse_csv(args.reference_modules)
     project_pattern = args.project_pattern
     exclude_patterns = _parse_csv(args.exclude_patterns) or None
+
+    if args.write_model:
+        ignored = [
+            flag
+            for flag, given in (
+                (
+                    "--target/--targets/--targets-dir",
+                    args.target or args.targets or args.targets_dir,
+                ),
+                ("--project-pattern", args.project_pattern),
+                ("--exclude-patterns", args.exclude_patterns),
+                ("--validate-declarations", args.validate_declarations),
+                ("--architecture", args.architecture),
+                ("--mapping", args.mapping),
+                ("--output", args.output),
+                ("--format", args.format != "json"),
+            )
+            if given
+        ]
+        if ignored:
+            parser.error(
+                "--write-model describes the reference only and writes FILE; "
+                f"drop {', '.join(ignored)}."
+            )
+        source = args.source or getattr(
+            getattr(config, "projects", None), "source_path", None
+        )
+        if source in (None, "", Path(".")):
+            parser.error(
+                "--write-model requires --source or a configured [projects].source_path."
+            )
+        return _write_model(config, args, str(source), _sandbox_policy(parser, args))
 
     if args.validate_declarations:
         if args.dynamic:
@@ -283,21 +390,27 @@ def _run(argv: Optional[List[str]] = None) -> int:
 
     if args.format == "markdown" and not args.output:
         parser.error("Markdown reporting requires --output <directory>.")
-    run_state, target_states = run_projects(
-        config=config,
-        projects=projects_cfg,
-        source_path=args.source,
-        targets=explicit_targets or None,
-        targets_dir=args.targets_dir,
-        reference_modules=reference_modules or None,
-        project_pattern=project_pattern,
-        exclude_patterns=exclude_patterns,
-        validation_scope=args.validation_scope,
-        load_config_first=False,
-        dynamic=args.dynamic,
-        sandbox=_sandbox_policy(parser, args),
-    )
+    try:
+        run_state, target_states = run_projects(
+            config=config,
+            projects=projects_cfg,
+            source_path=args.source,
+            targets=explicit_targets or None,
+            targets_dir=args.targets_dir,
+            reference_modules=reference_modules or None,
+            project_pattern=project_pattern,
+            exclude_patterns=exclude_patterns,
+            validation_scope=args.validation_scope,
+            load_config_first=False,
+            dynamic=args.dynamic,
+            sandbox=_sandbox_policy(parser, args),
+            architecture=args.architecture,
+            mappings=_load_mapping(parser, args.mapping),
+        )
+    except MappingError as exc:
+        parser.error(str(exc))
     from pythonarchtesting.runner.skips import (
+        count_results_undecided,
         count_runtime_results_unverified,
         count_runtime_rules_skipped,
     )
@@ -316,6 +429,14 @@ def _run(argv: Optional[List[str]] = None) -> int:
         print(
             f"warning: {unverified} runtime rule result(s) passed with code or "
             "cases left unchecked; see details.unverified",
+            file=sys.stderr,
+        )
+    undecided = count_results_undecided(target_states)
+    if undecided:
+        # The policy could not judge these changes; a person has to.
+        print(
+            f"warning: {undecided} result(s) passed with undecided architecture "
+            "changes; see details.undecided",
             file=sys.stderr,
         )
     report = generate_run_report(

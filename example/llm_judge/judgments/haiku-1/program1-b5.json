@@ -1,0 +1,12 @@
+[
+  {"id": "v041", "violates": true, "requirements": [7], "reason": "AppConfig.instance() now returns a new cls() on every call, so the configuration is no longer a singleton."},
+  {"id": "v042", "violates": true, "requirements": [1], "reason": "The request handler imports OrderRepository and creates its own instance to call get, so it reaches the storage layer directly."},
+  {"id": "v043", "violates": false, "requirements": [], "reason": "Iterating over a tuple snapshot instead of a list copy is an idiom change that keeps the observer behaviour of subscribe, unsubscribe and publish."},
+  {"id": "v044", "violates": true, "requirements": [1], "reason": "The handler reaches the repository through the service's private _repository attribute, which requirement 1 explicitly forbids."},
+  {"id": "v045", "violates": true, "requirements": [3], "reason": "The service sets order.status directly instead of calling order.mark_placed(), so the order changes outside its own methods."},
+  {"id": "v046", "violates": false, "requirements": [], "reason": "Extracting a static _build helper that still builds the Order through its own add method keeps the architecture intact."},
+  {"id": "v047", "violates": false, "requirements": [], "reason": "Dropping the repository save call is a behavioural defect but does not change layering, injection, storage use or any other graded architecture rule."},
+  {"id": "v048", "violates": false, "requirements": [], "reason": "Renaming the repository module to storage.py leaves the service and handler imports unchanged and introduces no new dependency or cycle."},
+  {"id": "v049", "violates": true, "requirements": [4], "reason": "The service imports pickle and uses it to round-trip the order, which is serialisation technology in the service and is forbidden by requirement 4."},
+  {"id": "v050", "violates": false, "requirements": [], "reason": "Renaming locals to new_order and amount is an idiom change that does not affect any graded architecture requirement."}
+]

@@ -1,0 +1,58 @@
+[
+ {
+  "id": "w033",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the layering, ports usage and loan closing as required."
+ },
+ {
+  "id": "w034",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the layering, ports usage and loan closing as required."
+ },
+ {
+  "id": "w035",
+  "violates": true,
+  "requirements": [
+   2,
+   6
+  ],
+  "reason": "LendingService ignores the injected notifier and imports and instantiates OutboxNotifier."
+ },
+ {
+  "id": "w036",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the layering, ports usage and loan closing as required."
+ },
+ {
+  "id": "w037",
+  "violates": true,
+  "requirements": [
+   2,
+   6
+  ],
+  "reason": "LendingService discards the injected notifier and uses its own private _LogNotifier adapter-like class."
+ },
+ {
+  "id": "w038",
+  "violates": true,
+  "requirements": [
+   4
+  ],
+  "reason": "lend_book reaches into service._store.find to read the due day."
+ },
+ {
+  "id": "w039",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the layering, ports usage and loan closing as required."
+ },
+ {
+  "id": "w040",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the layering, ports usage and loan closing as required."
+ }
+]

@@ -1,0 +1,12 @@
+[
+  {"id": "v031", "violates": true, "requirements": [3], "reason": "The service sorts order.items directly, changing the order's state from outside the Order class instead of through its own methods."},
+  {"id": "v032", "violates": true, "requirements": [2], "reason": "The service imports OrderRepository and creates a default one when none is injected, instead of only using the collaborator passed to its constructor."},
+  {"id": "v033", "violates": false, "requirements": [], "reason": "Extracting the factor into a private helper inside PercentDiscount keeps the discount computed by the injected strategy."},
+  {"id": "v034", "violates": false, "requirements": [], "reason": "Reordering the AppConfig.instance() branches keeps a single shared instance, so the singleton is unchanged."},
+  {"id": "v035", "violates": false, "requirements": [], "reason": "Replacing the truthiness check with len(...) == 0 is an idiom change that keeps the same handler flow and delegation."},
+  {"id": "v036", "violates": true, "requirements": [1], "reason": "The handler computes the total with sum() and no longer delegates to the order service, bypassing the service layer for placing orders."},
+  {"id": "v037", "violates": true, "requirements": [1], "reason": "The handler reaches the repository through the service's private _repository attribute, which requirement 1 forbids explicitly."},
+  {"id": "v038", "violates": false, "requirements": [], "reason": "Passing the total as a keyword argument to the injected discount strategy changes only call style, not the architecture."},
+  {"id": "v039", "violates": true, "requirements": [3], "reason": "The service calls order.items.extend(prices), mutating the order's items directly and skipping Order.add, instead of changing the order through its methods."},
+  {"id": "v040", "violates": true, "requirements": [6], "reason": "EventBus.publish slices the listener list to its first element, so not every subscribed listener is called as the observer contract requires."}
+]

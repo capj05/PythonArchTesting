@@ -1,0 +1,12 @@
+[
+{"id":"v001","violates":true,"requirements":[7],"reason":"instance() returns a new AppConfig each call, so the config is no longer a singleton."},
+{"id":"v002","violates":false,"requirements":[],"reason":"A private helper in the handler keeps the layering unchanged."},
+{"id":"v003","violates":false,"requirements":[],"reason":"A private method still saves through the injected repository."},
+{"id":"v004","violates":true,"requirements":[6],"reason":"publish no longer calls the subscribed listeners, breaking the observer behaviour."},
+{"id":"v005","violates":false,"requirements":[],"reason":"Wrapping the handler in a static method does not change the layering or dependencies."},
+{"id":"v006","violates":false,"requirements":[],"reason":"__new__ still yields one shared instance, so AppConfig remains a singleton."},
+{"id":"v007","violates":true,"requirements":[4],"reason":"The service uses pickle (via importlib) as a serialisation technology."},
+{"id":"v008","violates":true,"requirements":[1],"reason":"The handler imports the repository and reaches it through service._repository."},
+{"id":"v009","violates":true,"requirements":[2,5],"reason":"The service imports PercentDiscount and replaces the injected discount, ignoring the injected strategy."},
+{"id":"v010","violates":true,"requirements":[5],"reason":"The service computes the discount inline from a percent attribute instead of calling the injected strategy's apply."}
+]

@@ -1,0 +1,7 @@
+[
+  {"id": "w046", "violates": false, "requirements": [], "reason": "Layers, injection, bus use, adapter ports and SQL/json confinement to the SQLite adapter all hold, with no cycles and state changed only through Appointment methods."},
+  {"id": "w047", "violates": false, "requirements": [], "reason": "The submission keeps the layer order, confines sqlite3 to its adapter, injects the policy and notifier, and imports from schedule only through permitted names."},
+  {"id": "w048", "violates": false, "requirements": [], "reason": "Handlers reach only the service, adapters are built in wiring, sqlite3 stays in its adapter, and no dependency cycle or layer reversal appears."},
+  {"id": "w049", "violates": true, "requirements": [10], "reason": "application/booking.py imports the private helper _check_hour from domain.schedule, which is not one of the four names other modules may use from the schedule."},
+  {"id": "w050", "violates": true, "requirements": [2], "reason": "application/booking.py imports reference.adapters.sqlite_store inside _debug_store, so the application layer depends on an adapter."}
+]

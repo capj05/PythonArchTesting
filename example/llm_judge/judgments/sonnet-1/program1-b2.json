@@ -1,0 +1,12 @@
+[
+{"id":"v011","violates":false,"requirements":[],"reason":"Equivalent idiom for storing the order; layering and behavior unchanged."},
+{"id":"v012","violates":true,"requirements":[1],"reason":"The handler reaches the repository through service._repository via a helper."},
+{"id":"v013","violates":true,"requirements":[5],"reason":"The service hardcodes a 10% discount instead of using the injected strategy."},
+{"id":"v014","violates":true,"requirements":[5],"reason":"The service hardcodes a 10% discount instead of using the injected strategy."},
+{"id":"v015","violates":true,"requirements":[4],"reason":"The service uses sqlite3 via __import__, a persistence technology."},
+{"id":"v016","violates":true,"requirements":[1],"reason":"Controller, service and storage are collapsed into one module, removing the layer separation."},
+{"id":"v017","violates":true,"requirements":[8],"reason":"models imports service while service imports models, creating a dependency cycle."},
+{"id":"v018","violates":true,"requirements":[6],"reason":"Keying listeners by id() breaks observer semantics (duplicate subscriptions collapse, unsubscribe of bound methods fails)."},
+{"id":"v019","violates":true,"requirements":[4],"reason":"The service imports and uses pickle, a serialisation technology."},
+{"id":"v020","violates":false,"requirements":[],"reason":"Validation helper module used by the handler only; no layering or cycle issues."}
+]

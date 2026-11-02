@@ -1,0 +1,60 @@
+[
+ {
+  "id": "w001",
+  "violates": true,
+  "requirements": [
+   3
+  ],
+  "reason": "The service assigns order.total directly instead of calling apply_total."
+ },
+ {
+  "id": "w002",
+  "violates": false,
+  "requirements": [],
+  "reason": "Bus keyed by id(listener) still subscribes, unsubscribes and publishes as an observer."
+ },
+ {
+  "id": "w003",
+  "violates": true,
+  "requirements": [
+   4
+  ],
+  "reason": "The service imports pickle and calls pickle.dumps."
+ },
+ {
+  "id": "w004",
+  "violates": false,
+  "requirements": [],
+  "reason": "Repository save uses dict.update, which is an equivalent idiom; architecture intact."
+ },
+ {
+  "id": "w005",
+  "violates": false,
+  "requirements": [],
+  "reason": "A private helper in PercentDiscount keeps the strategy intact."
+ },
+ {
+  "id": "w006",
+  "violates": true,
+  "requirements": [
+   8
+  ],
+  "reason": "events imports pricing and pricing imports events, forming a dependency cycle."
+ },
+ {
+  "id": "w007",
+  "violates": true,
+  "requirements": [
+   1
+  ],
+  "reason": "The service never saves to the injected repository, so no layer uses storage."
+ },
+ {
+  "id": "w008",
+  "violates": true,
+  "requirements": [
+   2
+  ],
+  "reason": "The service ignores the injected bus and creates its own with type(bus)()."
+ }
+]

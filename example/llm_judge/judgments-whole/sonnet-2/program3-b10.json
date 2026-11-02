@@ -1,0 +1,7 @@
+[
+{"id":"w046","violates":false,"requirements":[],"reason":"Layers, imports, injected policy, bus use and encapsulated appointment state all respect the requirements despite different names and package-level imports."},
+{"id":"w047","violates":false,"requirements":[],"reason":"Different module split, but handlers use the application only, sqlite is confined to its adapter, adapters are built only in wiring, and no cycles or layer inversions appear."},
+{"id":"w048","violates":false,"requirements":[],"reason":"Keeps the reference structure (free_hours helper lives in the service, handlers touch only application), with no layering, import or encapsulation violations."},
+{"id":"w049","violates":true,"requirements":[10],"reason":"application/booking.py imports the private _check_hour from domain.schedule, beyond Slot, Appointment, free_slots and WORKING_HOURS."},
+{"id":"w050","violates":true,"requirements":[2,12],"reason":"application/booking.py has _debug_store importing reference.adapters.sqlite_store, so the application layer depends on an adapter."}
+]

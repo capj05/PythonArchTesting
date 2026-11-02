@@ -1,0 +1,12 @@
+[
+{"id":"v011","violates":true,"requirements":[4],"reason":"The handler reads the service's private _clock and _period attributes."},
+{"id":"v012","violates":false,"requirements":[],"reason":"Local helper refactor in api.py; still only calls the service."},
+{"id":"v013","violates":true,"requirements":[2,7],"reason":"The application imports and instantiates the FixedClock adapter, a reverse dependency."},
+{"id":"v014","violates":false,"requirements":[],"reason":"Adapter module renamed and wiring updated; layering is unchanged."},
+{"id":"v015","violates":true,"requirements":[6],"reason":"Lending no longer notifies through the notifier."},
+{"id":"v016","violates":true,"requirements":[2,7],"reason":"The application imports and creates InMemoryLoanStore, an adapter."},
+{"id":"v017","violates":false,"requirements":[],"reason":"Notification still goes through the injected notifier; only a conditional was added, which is behavioral not architectural."},
+{"id":"v018","violates":false,"requirements":[],"reason":"Private helper and renamed locals only; ports and notifier used as before."},
+{"id":"v019","violates":true,"requirements":[4],"reason":"The request handler imports and uses the domain Loan instead of talking to the application only."},
+{"id":"v020","violates":true,"requirements":[5],"reason":"The loan is closed by setting returned directly instead of Loan.close."}
+]

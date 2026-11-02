@@ -39,6 +39,11 @@ dependencies = [
 mcp = [
     "mcp>=2.3,<3",
 ]
+# The baseline of the architectural-mutant evaluation
+# (example/architectural_mutants/baselines/importlinter.py).
+eval = [
+    "import-linter>=2.15,<3",
+]
 dev = [
     "mcp>=2.3,<3",
     "pytest>=7.4.0,<10",

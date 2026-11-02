@@ -1,0 +1,7 @@
+[
+{"id": "w046", "violates": false, "requirements": [], "reason": "Layered packages with the correct dependency directions, sqlite3 only in the SQLite adapter, adapters built only in wiring, and appointment state changed only by its own methods."},
+{"id": "w047", "violates": false, "requirements": [], "reason": "Different module layout, but dependencies run downward, only the SQLite adapter uses sqlite3, the policy is injected, and handlers use the application only."},
+{"id": "w048", "violates": false, "requirements": [], "reason": "Same layered structure as the reference with private appointment state; imports, injection and adapter placement all conform."},
+{"id": "w049", "violates": true, "requirements": [10], "reason": "application/booking.py imports the private _check_hour from domain.schedule instead of using only Slot, Appointment, free_slots and WORKING_HOURS."},
+{"id": "w050", "violates": true, "requirements": [2, 12], "reason": "application/booking.py has a helper that imports SqliteAppointmentStore from the adapters package, so the application layer depends on adapters."}
+]

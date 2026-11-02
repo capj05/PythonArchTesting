@@ -1,0 +1,331 @@
+[
+ {
+  "id": "M101",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "controller imports the repository and double-checks the stored order through the service's private repository",
+  "patches": [
+   [
+    "controller.py",
+    "from typing import Any\n",
+    "from typing import Any\n\nfrom .repository import OrderRepository\n"
+   ],
+   [
+    "controller.py",
+    "    return {\"status\": \"ok\", \"total\": total}\n",
+    "    repo = service._repository\n    if isinstance(repo, OrderRepository) and repo.get(request[\"id\"]) is None:\n        return {\"status\": \"error\", \"reason\": \"not stored\"}\n    return {\"status\": \"ok\", \"total\": total}\n"
+   ]
+  ]
+ },
+ {
+  "id": "M102",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "controller records an audit entry via a helper module that itself talks to the repository (indirect storage access)",
+  "patches": [
+   [
+    "controller.py",
+    "from typing import Any\n",
+    "from typing import Any\n\nfrom . import audit\n"
+   ],
+   [
+    "controller.py",
+    "    return {\"status\": \"ok\", \"total\": total}\n",
+    "    audit.record(request[\"id\"], total)\n    return {\"status\": \"ok\", \"total\": total}\n"
+   ]
+  ],
+  "new_files": {
+   "audit.py": "\"\"\"Audit trail of handled orders.\"\"\"\n\nfrom __future__ import annotations\n\nfrom .repository import OrderRepository\n\n_store = OrderRepository()\n\n\ndef record(order_id: str, total: float) -> None:\n    _store._rows[order_id] = total\n"
+  }
+ },
+ {
+  "id": "M103",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "service falls back to a self-constructed repository when none is given",
+  "patches": [
+   [
+    "service.py",
+    "from .models import Order\n",
+    "from .models import Order\nfrom .repository import OrderRepository\n"
+   ],
+   [
+    "service.py",
+    "        self._repository = repository\n",
+    "        self._repository = repository if repository is not None else OrderRepository()\n"
+   ]
+  ]
+ },
+ {
+  "id": "M104",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "service lazily imports the event bus and builds its own when none is given",
+  "patches": [
+   [
+    "service.py",
+    "        self._bus = bus\n",
+    "        from .events import EventBus\n\n        self._bus = bus if bus is not None else EventBus()\n"
+   ]
+  ]
+ },
+ {
+  "id": "M105",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "service assigns the order status directly instead of calling mark_placed",
+  "patches": [
+   [
+    "service.py",
+    "        order.mark_placed()\n",
+    "        order.status = \"placed\"\n"
+   ]
+  ]
+ },
+ {
+  "id": "M106",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "service sorts the order's item list in place after filling it",
+  "patches": [
+   [
+    "service.py",
+    "        order.apply_total(",
+    "        order.items.sort()\n        order.apply_total("
+   ]
+  ]
+ },
+ {
+  "id": "M107",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "service snapshots the order with pickle before saving",
+  "patches": [
+   [
+    "service.py",
+    "from typing import Any\n",
+    "import pickle\nfrom typing import Any\n"
+   ],
+   [
+    "service.py",
+    "        self._repository.save(order)\n",
+    "        order = pickle.loads(pickle.dumps(order))\n        self._repository.save(order)\n"
+   ]
+  ]
+ },
+ {
+  "id": "M108",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "service opens an in-memory sqlite connection via importlib",
+  "patches": [
+   [
+    "service.py",
+    "from typing import Any\n",
+    "import importlib\nfrom typing import Any\n"
+   ],
+   [
+    "service.py",
+    "        self._bus = bus\n",
+    "        self._bus = bus\n        self._db = importlib.import_module(\"sqlite3\").connect(\":memory:\")\n"
+   ]
+  ]
+ },
+ {
+  "id": "M109",
+  "kind": "mutant",
+  "operator": "O4 forbidden technology",
+  "description": "service serialises the order with pickle fetched through __import__",
+  "patches": [
+   [
+    "service.py",
+    "        self._repository.save(order)\n",
+    "        self._blob = __import__(\"pickle\").dumps(order)\n        self._repository.save(order)\n"
+   ]
+  ]
+ },
+ {
+  "id": "M110",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "service hardcodes a 10 % discount instead of asking the injected strategy",
+  "patches": [
+   [
+    "service.py",
+    "order.apply_total(self._discount.apply(order.total))",
+    "order.apply_total(round(order.total * 0.9, 2))"
+   ]
+  ]
+ },
+ {
+  "id": "M111",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "service reads the strategy's percent attribute and computes the discount itself",
+  "patches": [
+   [
+    "service.py",
+    "order.apply_total(self._discount.apply(order.total))",
+    "percent = getattr(self._discount, \"percent\", 0)\n        order.apply_total(round(order.total * (1 - percent / 100), 2))"
+   ]
+  ]
+ },
+ {
+  "id": "M112",
+  "kind": "mutant",
+  "operator": "O6 broken pattern",
+  "description": "publish notifies only the first listener",
+  "patches": [
+   [
+    "events.py",
+    "for listener in list(self._listeners):",
+    "for listener in list(self._listeners)[:1]:"
+   ]
+  ]
+ },
+ {
+  "id": "M113",
+  "kind": "mutant",
+  "operator": "O6 broken pattern",
+  "description": "AppConfig.instance returns a fresh object on every call",
+  "patches": [
+   [
+    "config.py",
+    "        if cls._instance is None:\n            cls._instance = cls()\n        return cls._instance\n",
+    "        return cls()\n"
+   ]
+  ]
+ },
+ {
+  "id": "M114",
+  "kind": "mutant",
+  "operator": "O7 dependency cycle",
+  "description": "pricing and events import each other at module level",
+  "patches": [
+   [
+    "pricing.py",
+    "from __future__ import annotations\n",
+    "from __future__ import annotations\n\nfrom .events import EventBus\n"
+   ],
+   [
+    "events.py",
+    "from typing import Any, Callable\n",
+    "from typing import Any, Callable\n\nfrom . import pricing\n"
+   ]
+  ]
+ },
+ {
+  "id": "E101",
+  "kind": "equivalent",
+  "description": "rename locals in service.place",
+  "patches": [
+   [
+    "service.py",
+    "        order = Order(order_id)\n        for price in prices:\n            order.add(price)\n        order.apply_total(self._discount.apply(order.total))\n        order.mark_placed()\n        self._repository.save(order)\n        self._bus.publish(\"order_placed\", order.order_id)\n        return order.total",
+    "        new_order = Order(order_id)\n        for amount in prices:\n            new_order.add(amount)\n        new_order.apply_total(self._discount.apply(new_order.total))\n        new_order.mark_placed()\n        self._repository.save(new_order)\n        self._bus.publish(\"order_placed\", new_order.order_id)\n        return new_order.total"
+   ]
+  ]
+ },
+ {
+  "id": "E102",
+  "kind": "equivalent",
+  "description": "controller extracts the emptiness check into a private helper",
+  "patches": [
+   [
+    "controller.py",
+    "def handle_order(",
+    "def _is_empty(request: dict[str, Any]) -> bool:\n    return not request.get(\"prices\")\n\n\ndef handle_order("
+   ],
+   [
+    "controller.py",
+    "    if not request.get(\"prices\"):",
+    "    if _is_empty(request):"
+   ]
+  ]
+ },
+ {
+  "id": "E103",
+  "kind": "equivalent",
+  "description": "service builds the order in a private helper method",
+  "patches": [
+   [
+    "service.py",
+    "        order = Order(order_id)\n        for price in prices:\n            order.add(price)\n        order.apply_total",
+    "        order = self._build(order_id, prices)\n        order.apply_total"
+   ],
+   [
+    "service.py",
+    "    def place(",
+    "    @staticmethod\n    def _build(order_id: str, prices: list[float]) -> Order:\n        order = Order(order_id)\n        for price in prices:\n            order.add(price)\n        return order\n\n    def place("
+   ]
+  ]
+ },
+ {
+  "id": "E104",
+  "kind": "equivalent",
+  "description": "request validation moved to a new helper module imported by the controller",
+  "patches": [
+   [
+    "controller.py",
+    "from typing import Any\n",
+    "from typing import Any\n\nfrom .validation import has_prices\n"
+   ],
+   [
+    "controller.py",
+    "    if not request.get(\"prices\"):",
+    "    if not has_prices(request):"
+   ]
+  ],
+  "new_files": {
+   "validation.py": "\"\"\"Request validation helpers.\"\"\"\n\nfrom __future__ import annotations\n\nfrom typing import Any\n\n\ndef has_prices(request: dict[str, Any]) -> bool:\n    return bool(request.get(\"prices\"))\n"
+  }
+ },
+ {
+  "id": "E105",
+  "kind": "equivalent",
+  "description": "publish iterates over a tuple snapshot instead of a list copy",
+  "patches": [
+   [
+    "events.py",
+    "for listener in list(self._listeners):",
+    "for listener in tuple(self._listeners):"
+   ]
+  ]
+ },
+ {
+  "id": "E106",
+  "kind": "equivalent",
+  "description": "singleton accessor rewritten with an early return",
+  "patches": [
+   [
+    "config.py",
+    "        if cls._instance is None:\n            cls._instance = cls()\n        return cls._instance\n",
+    "        if cls._instance is not None:\n            return cls._instance\n        cls._instance = cls()\n        return cls._instance\n"
+   ]
+  ]
+ },
+ {
+  "id": "E107",
+  "kind": "equivalent",
+  "description": "PercentDiscount factor factored into a helper method",
+  "patches": [
+   [
+    "pricing.py",
+    "        return round(total * (1 - self.percent / 100), 2)\n",
+    "        return round(total * self._factor(), 2)\n\n    def _factor(self) -> float:\n        return 1 - self.percent / 100\n"
+   ]
+  ]
+ },
+ {
+  "id": "E108",
+  "kind": "equivalent",
+  "description": "repository stores rows via dict.update and a local variable",
+  "patches": [
+   [
+    "repository.py",
+    "        self._rows[order.order_id] = order\n",
+    "        key = order.order_id\n        self._rows.update({key: order})\n"
+   ]
+  ]
+ }
+]

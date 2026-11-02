@@ -1,0 +1,12 @@
+[
+{"id":"v011","violates":false,"requirements":[],"reason":"Repository save is only restructured with an equivalent dict update."},
+{"id":"v012","violates":true,"requirements":[1],"reason":"The handler reaches the repository through service._repository via a helper."},
+{"id":"v013","violates":true,"requirements":[5],"reason":"The service hardcodes a 10% discount instead of using the injected strategy."},
+{"id":"v014","violates":true,"requirements":[5],"reason":"The service hardcodes a 10% discount instead of using the injected strategy."},
+{"id":"v015","violates":true,"requirements":[4],"reason":"The service uses sqlite3 via __import__, introducing persistence technology."},
+{"id":"v016","violates":true,"requirements":[1],"reason":"Controller, service and repository are collapsed into one module, erasing the layer separation."},
+{"id":"v017","violates":true,"requirements":[8],"reason":"models imports service while service imports models, creating a dependency cycle."},
+{"id":"v018","violates":true,"requirements":[6],"reason":"Keying listeners by id() breaks observer semantics (bound-method unsubscribe fails, duplicate subscriptions collapse)."},
+{"id":"v019","violates":true,"requirements":[4],"reason":"The service imports and uses pickle."},
+{"id":"v020","violates":false,"requirements":[],"reason":"A validation helper module used by the handler keeps layers, with no cycle."}
+]

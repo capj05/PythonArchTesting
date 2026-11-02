@@ -67,9 +67,19 @@ class NameTranslation:
         usable = (MatchStatus.MATCHED, MatchStatus.LOW_CONFIDENCE)
         source_by_id = getattr(ctx, "source_by_id", None) or {}
         target_by_id = getattr(ctx, "target_by_id", None) or {}
+        matches = getattr(ctx, "matches", None) or {}
+        # A target a match took is not a low-confidence guess's to name.
+        taken = {
+            getattr(match, "target_id", None)
+            for match in matches.values()
+            if getattr(match, "status", None) == MatchStatus.MATCHED
+        }
         pairs = []
-        for source_id, match in (getattr(ctx, "matches", None) or {}).items():
-            if getattr(match, "status", None) not in usable:
+        for source_id, match in matches.items():
+            status = getattr(match, "status", None)
+            if status not in usable:
+                continue
+            if status != MatchStatus.MATCHED and match.target_id in taken:
                 continue
             source = source_by_id.get(source_id)
             target = target_by_id.get(getattr(match, "target_id", None))
@@ -93,6 +103,20 @@ class NameTranslation:
             return found
         return self._to_source.get(module, module)
 
+    def target_name(self, module: str, qualname: str) -> tuple[str, str] | None:
+        """The target ``(module, qualname)`` the reference's entity was matched to."""
+        target = self._by_source.get((module, qualname))
+        if target is None:
+            return None
+        return str(target.module_path), str(target.qualname)
+
+    def source_name(self, module: str, qualname: str) -> tuple[str, str] | None:
+        """The reference ``(module, qualname)`` the target's entity was matched to."""
+        source = self._by_target.get((module, qualname))
+        if source is None:
+            return None
+        return str(source.module_path), str(source.qualname)
+
     def entity_module(self, module: str, qualname: str) -> str | None:
         """The reference module of the nearest matched entity enclosing the code."""
         parts = str(qualname).split(".")
@@ -113,10 +137,14 @@ class NameTranslation:
         return sorted(names)
 
     def _new_name(self, name: str, source: Any, target: Any) -> str:
-        head, _, rest = name.partition(".")
+        parts = name.split(".")
         entity = None
-        if rest:
-            entity = self._by_source.get((head, rest))
+        # ``pkg.mod.Class`` or ``mod.Outer.Inner``: the longest module that has
+        # the rest as a paired entity.
+        for cut in range(len(parts) - 1, 0, -1):
+            entity = self._by_source.get((".".join(parts[:cut]), ".".join(parts[cut:])))
+            if entity is not None:
+                break
         if entity is None:
             entity = self._by_source.get((source.module_path, name))
         if entity is None:

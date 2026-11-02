@@ -73,6 +73,8 @@ Common fields:
 - `min_candidate`
 - `top_n`
 - `max_fuzzy_candidates`
+- `name_fallback` (default `true`): pair by name what the scores leave
+  unpaired, see [reporting.md](reporting.md#pairing-by-name)
 
 Most users should keep the defaults unless matching is too strict or too loose
 for their project layout.

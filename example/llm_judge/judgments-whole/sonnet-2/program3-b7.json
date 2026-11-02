@@ -1,0 +1,7 @@
+[
+{"id":"w031","violates":true,"requirements":[3],"reason":"The api cancel handler calls serializers.find, which reads service._appointments.get, reaching the store through an object reachable from the service instead of using only the application's methods."},
+{"id":"w032","violates":true,"requirements":[8],"reason":"BookingService ignores the injected policy and hard-codes LateCancellationFee(hours=24, amount=30) for every fee."},
+{"id":"w033","violates":false,"requirements":[],"reason":"Same layered structure as the reference; the extra _reminder helper keeps all dependencies and layer rules intact."},
+{"id":"w034","violates":false,"requirements":[],"reason":"The architecture matches the reference; the missing EventBus.unsubscribe is a functional gap, not a violation of the graded architecture requirements."}
+,{"id":"w035","violates":false,"requirements":[],"reason":"Adapters explicitly subclass the port protocols (a downward dependency adapters to ports) and all other layer rules hold."}
+]

@@ -35,6 +35,9 @@ class RunState:
     # Outcomes of running the reference in dynamic checks; the reference does
     # the same for every target, so the targets of a run share them.
     reference_runs: Dict[str, Any] = field(default_factory=dict)
+    # Assisted pairing (matching.assisted): {target id or "*": {reference
+    # name: target name}}, applied after the automatic matching.
+    mappings: Dict[str, Dict[str, str]] = field(default_factory=dict)
 
 
 @dataclass

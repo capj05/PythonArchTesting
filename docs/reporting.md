@@ -107,6 +107,70 @@ Common matching states:
 Matching data is most useful when a result says a required target is missing or
 when a failure looks surprising.
 
+### Pairing by name
+
+A submission that names its modules differently and rewrites the bodies
+loses most of the score, so an entity can stay unpaired although the target
+has an obvious counterpart. With `[matching] name_fallback = true` (the
+default) two rules then pair it, after an assisted mapping (below) has been
+applied:
+
+- `unique_name`: a top-level class or function the scores left without a
+  usable candidate is paired with the only top-level target entity of its
+  kind and name, when the reference has no other entity of that name. A
+  function must accept the reference's positional arguments; a class must
+  have every ordinary method the reference's class defines (special methods,
+  such as a dataclass's generated `__init__`, are not required), and none of
+  them may be paired with another class's methods already;
+- `member_of_paired_class`: a method the scores did not match is paired with
+  the method of the same name and a compatible signature of the target class
+  its class was paired with. Inside a paired class the name outweighs a weak
+  guess of the scores (`low_confidence`, `ambiguous`).
+
+Modules and methods are never paired by name alone (a renamed module needs a
+mapping for the markers declared on it; the only method of a name may be a
+base class's). Otherwise the scores keep the last word: a match is never
+replaced or taken, an entity whose weak best candidate is another target
+keeps it, and a target two unmatched entities score best for goes to the
+higher score. A pair made by name lists its target first among the
+candidates with the score the matching gave it (0 when none) and the rule
+among its reasons; `propose_mapping` lists these pairs as
+`paired_by_name`, and a mapping for one of them replaces it. Measured on the
+project's example targets whose correct pairing is known, the rules made no
+wrong pair; none of those targets is adversarial
+([matching_weights](../example/matching_weights/README.md)).
+
+### Assisted pairing
+
+A submission organised differently from the reference (other module names,
+rewritten bodies) can leave entities unpaired, and every rule on them then
+reports `required_target_missing`. `--mapping FILE` pairs them explicitly:
+
+```json
+{"pairs": {"controller": "handler", "models.Order": "order.Order"}}
+```
+
+or per target, `{"targets": {"<target id>": {"pairs": {...}}}}`; a target's
+pairs add to the common `pairs` and win over them, and a target id that names
+no target of the run is an error. Names are
+`module` or `module.Qual.name` (the root package is `__init__`); a pair of
+modules pairs the entities with the same qualified name inside them, except
+those the mapping pairs explicitly (`module.name`), which keep that pair. Every
+pair is checked before it is used: both entities must exist and be of the same
+kind, a function of the target must accept the reference's positional
+arguments, and an entity the matching paired on its own keeps its pair. An
+applied pair carries the reason `assisted_mapping` in the match, a refused one
+`assisted_mapping_rejected` with why. The MCP tool `propose_mapping` lists the
+unpaired entities of one target with their best candidates, as material for a
+proposal ([mcp.md](mcp.md)).
+
+The signature check counts positional parameters and required keyword-only
+ones; it does not know decorators, so a reference method paired with a
+target `@staticmethod` of the same arity is refused (the reference's
+`self` is counted on one side only). A dotted name that means two entities
+(a submodule `a/b.py` and a class `b` in `a/__init__.py`, or a property
+with a setter) is refused as ambiguous; pair the module instead.
+
 ## Result Rows
 
 For each result row, focus on:
@@ -162,3 +226,9 @@ At `verbose` and `debug` the run-level `report.md` also includes status,
 severity, and category counts plus the top-N rules and source files by
 violation count, derived from the same aggregates that appear in the JSON
 `summary.results` block.
+
+With `architecture_entry` results, target pages at `verbose` and `debug`
+have an **Architecture** section (counts, edges, dependency matrices,
+informative module metrics, static vs runtime), and `report.md` ranks the
+edges several targets share (**Architecture Across Targets**); see
+[architecture_entry](markers/architecture_entry.md#what-it-checks).

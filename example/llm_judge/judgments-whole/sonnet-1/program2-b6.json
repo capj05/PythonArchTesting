@@ -1,0 +1,56 @@
+[
+ {
+  "id": "w041",
+  "violates": true,
+  "requirements": [
+   3
+  ],
+  "reason": "OutboxNotifier exposes notify instead of the port's send, so it does not satisfy Notifier."
+ },
+ {
+  "id": "w042",
+  "violates": true,
+  "requirements": [
+   5
+  ],
+  "reason": "give_back sets loan.returned = True directly instead of calling Loan.close."
+ },
+ {
+  "id": "w043",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the layering, ports usage and loan closing as required."
+ },
+ {
+  "id": "w044",
+  "violates": true,
+  "requirements": [
+   4
+  ],
+  "reason": "lend_book accesses service._store and passes it to a lookup helper."
+ },
+ {
+  "id": "w045",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the layering, ports usage and loan closing as required."
+ },
+ {
+  "id": "w046",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the layering, ports usage and loan closing as required."
+ },
+ {
+  "id": "w047",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the layering, ports usage and loan closing as required."
+ },
+ {
+  "id": "w048",
+  "violates": false,
+  "requirements": [],
+  "reason": "Keeps the layering, ports usage and loan closing as required."
+ }
+]

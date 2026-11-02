@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, List, Tuple
 
 from pythonarchtesting.config import Config
@@ -19,6 +20,9 @@ from pythonarchtesting.rules.compilation.declarations import (
 from pythonarchtesting.rules.compilation.decorators.api_signature import (
     compile_required_entity_signature,
     compile_required_method,
+)
+from pythonarchtesting.rules.compilation.decorators.architecture import (
+    compile_architecture_entry,
 )
 from pythonarchtesting.rules.compilation.decorators.attributes import (
     compile_required_attribute,
@@ -42,6 +46,13 @@ from pythonarchtesting.rules.compilation.decorators.member_set import (
 )
 from pythonarchtesting.rules.compilation.decorators.method_set import (
     compile_require_method_set,
+)
+from pythonarchtesting.rules.compilation.decorators.module_interface import (
+    compile_module_interface,
+)
+from pythonarchtesting.rules.compilation.decorators.module_structure import (
+    compile_enforce_layers,
+    compile_forbid_cycles,
 )
 from pythonarchtesting.rules.compilation.decorators.nominal_type import (
     compile_exact_type,
@@ -79,6 +90,8 @@ from pythonarchtesting.rules.compilation.decorators.runtime_structure import (
     compile_require_runtime_members,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _invalid_declaration_evidence(
     source_entity: Entity,
@@ -111,8 +124,15 @@ def _invalid_declaration_evidence(
 def compile_rules(
     source_entities: List[Entity],
     cfg: Config,
+    *,
+    architecture: bool = False,
 ) -> Tuple[List[Any], List[Any], List[Any]]:
-    """Compile entity-scoped rules from annotation declarations."""
+    """Compile entity-scoped rules from annotation declarations.
+
+    With ``architecture``, a reference that declares no ``architecture_entry``
+    gets one on its root module, without arguments: the static comparison
+    with the reference's imports.
+    """
     declaration_compilers: dict[str, Any] = {
         "required_entity_signature": compile_required_entity_signature,
         "required_method": compile_required_method,
@@ -124,6 +144,10 @@ def compile_rules(
         "does_not_have": compile_does_not_have,
         "enforce_flow": compile_enforce_flow,
         "forbid_imports": compile_forbid_imports,
+        "enforce_layers": compile_enforce_layers,
+        "forbid_cycles": compile_forbid_cycles,
+        "architecture_entry": compile_architecture_entry,
+        "module_interface": compile_module_interface,
         "implements_protocol": compile_implements_protocol,
         "subclass_of": compile_subclass_of,
         "exact_type": compile_exact_type,
@@ -187,6 +211,10 @@ def compile_rules(
                 "not_subclass_of",
                 "inherits_directly_from",
                 "required_constructor",
+                "enforce_layers",
+                "forbid_cycles",
+                "architecture_entry",
+                "module_interface",
             }:
                 compiler_kwargs["source_entities"] = source_entities
             compiled_rules, evidence_items, results = compiler(
@@ -199,11 +227,44 @@ def compile_rules(
             compiler_evidence.extend(evidence_items)
             compiler_results.extend(results)
 
+    if architecture:
+        rules.extend(_implicit_architecture(source_entities, cfg))
+
     rules = sorted(rules, key=lambda r: (r.rule_id, r.selector.source_entity_id))
     compiler_results = sorted(
         compiler_results, key=lambda r: (r.rule_id, r.source_entity_id)
     )
     return rules, compiler_evidence, compiler_results
+
+
+def _implicit_architecture(source_entities: List[Entity], cfg: Config) -> List[Any]:
+    declared = any(
+        declaration.kind == "architecture_entry"
+        for entity in source_entities
+        for declaration in normalize_declaration_entries(entity)
+    )
+    root = next(
+        (
+            entity
+            for entity in source_entities
+            if entity.kind == "module" and not entity.module_path
+        ),
+        None,
+    )
+    if declared:
+        return []
+    if root is None:
+        logger.warning(
+            "--architecture: the reference has no root __init__.py to compare from"
+        )
+        return []
+    rules, _, _ = compile_architecture_entry(
+        root,
+        DeclarationEntry(kind="architecture_entry"),
+        cfg,
+        source_entities=source_entities,
+    )
+    return rules
 
 
 __all__ = ["compile_rules"]

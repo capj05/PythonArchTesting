@@ -1,0 +1,7 @@
+[
+{"id":"w011","violates":true,"requirements":[2,6,12],"reason":"BookingService (application) imports adapters.memory_store and builds its own InMemoryAppointmentStore instead of using the injected store."},
+{"id":"w012","violates":true,"requirements":[7],"reason":"ReminderService._tell only logs and never sends through the injected notifier."},
+{"id":"w013","violates":true,"requirements":[1,12],"reason":"domain/patients.py imports ports.clock, so domain depends on a higher layer."},
+{"id":"w014","violates":false,"requirements":[],"reason":"Helpers are merged into handlers.py but the layering, injection and rules are all kept."},
+{"id":"w015","violates":true,"requirements":[10],"reason":"sqlite_store imports and calls the private domain.schedule._check_hour, outside Slot, Appointment, free_slots and WORKING_HOURS."}
+]

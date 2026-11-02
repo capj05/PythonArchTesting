@@ -1,0 +1,12 @@
+[
+  {"id": "v011", "violates": false, "requirements": [], "reason": "Rewriting the dict assignment as an update() call keeps the repository used only by the service, so no requirement is affected."},
+  {"id": "v012", "violates": true, "requirements": [1], "reason": "The handler calls find_order(service._repository, ...), reaching the repository through the service's attribute and a helper, which req 1 forbids."},
+  {"id": "v013", "violates": true, "requirements": [5], "reason": "The service computes the discount inline as round(total * 0.9, 2) instead of calling the injected discount strategy."},
+  {"id": "v014", "violates": true, "requirements": [5], "reason": "Identical to v013: the service hardcodes the 10 percent discount instead of using the injected strategy."},
+  {"id": "v015", "violates": true, "requirements": [4], "reason": "The service opens a sqlite3 connection via __import__, introducing persistence technology into the service layer."},
+  {"id": "v016", "violates": true, "requirements": [1], "reason": "Handler, service and storage are merged into one app.py module and the layer modules are deleted, so the presentation, service and storage layers are no longer separated."},
+  {"id": "v017", "violates": true, "requirements": [8], "reason": "models.py imports service and service imports models, creating a dependency cycle between modules."},
+  {"id": "v018", "violates": true, "requirements": [6], "reason": "Keying listeners by id() in a dict makes a duplicate subscription notify once instead of twice, changing the observer's subscribe and publish behaviour."},
+  {"id": "v019", "violates": true, "requirements": [4], "reason": "The service imports pickle and calls pickle.dumps, adding a serialisation technology to the service, which req 4 forbids."},
+  {"id": "v020", "violates": false, "requirements": [], "reason": "Moving the empty-price check into a validation helper module is a restructuring that keeps the handler using only the service."}
+]

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
+from pythonarchtesting.architecture.compare import fold_new_modules
+from pythonarchtesting.core.models import EvalContext, Rule, RuleResult, RuleStatus
 from pythonarchtesting.dynamic.translation import NameTranslation
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
@@ -463,31 +464,94 @@ def _edges(
     return edges
 
 
-def _fold_new_modules(
-    edges: dict[tuple[str, str], dict[str, Any]], known: set[str]
-) -> dict[tuple[str, str], dict[str, Any]]:
-    """``edges`` with every module outside ``known`` folded into its callers.
+def run_edges(
+    rule: Rule,
+    source: Entity,
+    target: Entity,
+    ctx: EvalContext,
+    details: dict[str, Any],
+    observe: dict[str, Any] | None = None,
+) -> RuleStatus | tuple[list[dict[str, Any]], list[dict[str, Any]], NameTranslation]:
+    """Run the cases on the reference, then on the target, recording edges.
 
-    A module the reference does not have (a helper of the target's own) is
-    treated as part of each module that calls it: its calls become theirs, and
-    the calls into it disappear. A chain of new modules folds step by step.
+    Every call between two project modules is recorded (``{"calls":
+    "edges"}``, or what ``observe`` asks for). Returns the reference's cases,
+    the target's cases and the name translation, or the status the rule ends
+    with when either side could not run, with ``details`` saying why.
     """
-    for _ in range(len(edges) + 1):
-        new = sorted({module for pair in edges for module in pair} - known)
-        if not new:
-            break
-        module = new[0]
-        callers = {origin for origin, callee in edges if callee == module}
-        callers.discard(module)
-        folded: dict[tuple[str, str], dict[str, Any]] = {}
-        for (origin, callee), call in edges.items():
-            if callee == module:
-                continue
-            for start in callers if origin == module else (origin,):
-                if start != callee:
-                    folded.setdefault((start, callee), call)
-        edges = folded
-    return edges
+    cases: list[dict[str, Any]] = list(rule.params.get("cases") or [])
+    timeout_s = float(rule.params.get("timeout_s", 5.0))
+    if ctx.target_root is None or ctx.source_root is None:
+        details["reason"] = "dynamic_checks_disabled"
+        details["summary"] = "dynamic checks are off; run with --dynamic"
+        return "SKIPPED"
+
+    if target.kind not in _SUPPORTED_TARGET_KINDS or target.kind != source.kind:
+        details["reason"] = "target_kind_mismatch"
+        details["summary"] = f"expected a {source.kind}, matched a {target.kind}"
+        return "FAILED"
+
+    from pythonarchtesting.dynamic.runner import run_cases, run_reference_cases
+
+    reference = run_reference_cases(
+        getattr(ctx, "reference_runs", None),
+        target_root=ctx.source_root,
+        module_path=source.module_path,
+        qualname=source.qualname,
+        kind=source.kind,
+        cases=cases,
+        init=rule.params.get("init"),
+        timeout_s=timeout_s,
+        sandbox=ctx.sandbox,
+        observe=observe or {"calls": "edges"},
+    )
+    details["reference_status"] = reference.status
+    broken = [case for case in reference.cases if case.get("status") == "error"]
+    if reference.status != "completed" or broken:
+        details["reason"] = "reference_failed"
+        if reference.status != "completed":
+            cause = f"{reference.status}: {reference.error or 'no detail'}"
+        else:
+            first = broken[0]
+            cause = (
+                f"case {first.get('index')}: "
+                f"{(first.get('failures') or ['no detail'])[0]}"
+            )
+        details["summary"] = f"the reference itself did not run: {cause}"
+        if reference.stderr:
+            details["reference_stderr_tail"] = reference.stderr
+        return "ERROR"
+
+    names = NameTranslation.from_context(ctx)
+    outcome = run_cases(
+        target_root=ctx.target_root,
+        module_path=target.module_path,
+        qualname=target.qualname,
+        kind=target.kind,
+        cases=names.cases(cases, source, target),
+        init=names.value(rule.params.get("init"), source, target),
+        timeout_s=timeout_s,
+        sandbox=ctx.sandbox,
+        observe=observe or {"calls": "edges"},
+    )
+    details["probe_status"] = outcome.status
+    details["cases"] = outcome.cases
+    if outcome.stderr:
+        details["stderr_tail"] = outcome.stderr
+    if outcome.status != "completed":
+        details["reason"] = f"probe_{outcome.status}"
+        details["summary"] = f"{outcome.status}: {outcome.error or 'no detail'}"
+        return "FAILED"
+    broken = [case for case in outcome.cases if case.get("status") == "error"]
+    if broken:
+        first = broken[0]
+        details["reason"] = "case_setup_failed"
+        details["summary"] = (
+            f"case {first.get('index')} could not run: "
+            f"{(first.get('failures') or ['no detail'])[0]}"
+        )
+        return "FAILED"
+    return list(reference.cases), list(outcome.cases), names
 
 
 class RuntimeReferenceCallsEvaluator:
@@ -507,7 +571,6 @@ class RuntimeReferenceCallsEvaluator:
         ctx: EvalContext,
     ) -> RuleResult:
         cases: list[dict[str, Any]] = list(rule.params.get("cases") or [])
-        timeout_s = float(rule.params.get("timeout_s", 5.0))
         require_all = bool(rule.params.get("require_all"))
         allow_new = bool(rule.params.get("allow_new_modules"))
         details: dict[str, Any] = {
@@ -520,80 +583,14 @@ class RuntimeReferenceCallsEvaluator:
         def result(status: Any) -> RuleResult:
             return _build_rule_result(rule, source, target, match, status, details, ())
 
-        if ctx.target_root is None or ctx.source_root is None:
-            details["reason"] = "dynamic_checks_disabled"
-            details["summary"] = "dynamic checks are off; run with --dynamic"
-            return result("SKIPPED")
-
-        if target.kind not in _SUPPORTED_TARGET_KINDS or target.kind != source.kind:
-            details["reason"] = "target_kind_mismatch"
-            details["summary"] = f"expected a {source.kind}, matched a {target.kind}"
-            return result("FAILED")
-
-        from pythonarchtesting.dynamic.runner import run_cases, run_reference_cases
-
-        reference = run_reference_cases(
-            getattr(ctx, "reference_runs", None),
-            target_root=ctx.source_root,
-            module_path=source.module_path,
-            qualname=source.qualname,
-            kind=source.kind,
-            cases=cases,
-            init=rule.params.get("init"),
-            timeout_s=timeout_s,
-            sandbox=ctx.sandbox,
-            observe={"calls": "edges"},
-        )
-        details["reference_status"] = reference.status
-        broken = [case for case in reference.cases if case.get("status") == "error"]
-        if reference.status != "completed" or broken:
-            details["reason"] = "reference_failed"
-            if reference.status != "completed":
-                cause = f"{reference.status}: {reference.error or 'no detail'}"
-            else:
-                first = broken[0]
-                cause = (
-                    f"case {first.get('index')}: "
-                    f"{(first.get('failures') or ['no detail'])[0]}"
-                )
-            details["summary"] = f"the reference itself did not run: {cause}"
-            if reference.stderr:
-                details["reference_stderr_tail"] = reference.stderr
-            return result("ERROR")
-        expected = [_edges(case) for case in reference.cases]
+        observed = run_edges(rule, source, target, ctx, details)
+        if isinstance(observed, str):
+            return result(observed)
+        reference_cases, target_cases, names = observed
+        expected = [_edges(case) for case in reference_cases]
         details["reference_edges"] = [
             sorted(f"{a} -> {b}" for a, b in edges) for edges in expected
         ]
-
-        names = NameTranslation.from_context(ctx)
-        outcome = run_cases(
-            target_root=ctx.target_root,
-            module_path=target.module_path,
-            qualname=target.qualname,
-            kind=target.kind,
-            cases=names.cases(cases, source, target),
-            init=names.value(rule.params.get("init"), source, target),
-            timeout_s=timeout_s,
-            sandbox=ctx.sandbox,
-            observe={"calls": "edges"},
-        )
-        details["probe_status"] = outcome.status
-        details["cases"] = outcome.cases
-        if outcome.stderr:
-            details["stderr_tail"] = outcome.stderr
-        if outcome.status != "completed":
-            details["reason"] = f"probe_{outcome.status}"
-            details["summary"] = f"{outcome.status}: {outcome.error or 'no detail'}"
-            return result("FAILED")
-        broken = [case for case in outcome.cases if case.get("status") == "error"]
-        if broken:
-            first = broken[0]
-            details["reason"] = "case_setup_failed"
-            details["summary"] = (
-                f"case {first.get('index')} could not run: "
-                f"{(first.get('failures') or ['no detail'])[0]}"
-            )
-            return result("FAILED")
 
         # Reflexion-model terms: a divergence is a call the reference does not
         # make, an absence a call of the reference the target does not make.
@@ -605,11 +602,11 @@ class RuntimeReferenceCallsEvaluator:
             if allow_new
             else set()
         )
-        for case, allowed in zip(outcome.cases, expected):
+        for case, allowed in zip(target_cases, expected):
             index = case.get("index")
             actual = _edges(case, names)
             if allow_new:
-                actual = _fold_new_modules(actual, known)
+                actual = fold_new_modules(actual, known)[0]
             for (origin, module), call in actual.items():
                 if (origin, module) not in allowed:
                     divergences.append(
@@ -626,7 +623,7 @@ class RuntimeReferenceCallsEvaluator:
                     )
         details["divergences"] = divergences
         details["absences"] = absences
-        coverage = _coverage(outcome.cases)
+        coverage = _coverage(target_cases)
         if coverage is not None:
             details["coverage"] = coverage
         violations = divergences + (absences if require_all else [])

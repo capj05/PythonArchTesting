@@ -1,0 +1,4 @@
+[
+{"id":"w066","violates":false,"requirements":[],"reason":"Different module names and idioms (package re-exports, dataclasses, subclassing the port protocols) but dependencies, injection, policy use and layer order are all respected."},
+{"id":"w067","violates":true,"requirements":[10],"reason":"adapters/sqlite_store.py imports the BOOKED constant (and uses Appointment.restore) from domain.schedule, going beyond Slot, Appointment, free_slots and WORKING_HOURS."}
+]

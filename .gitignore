@@ -10,6 +10,17 @@ example/*
 !example/project_1/
 !example/rule_showcase/
 !example/architectural_mutants/
+!example/architectural_mutants_2/
+!example/architectural_mutants_3/
+!example/llm_solutions/
+!example/llm_judge/
+!example/llm_authoring/
+!example/matching_weights/
+!example/sonarqube/
+example/llm_solutions/generated/
+example/llm_judge/program*/
+# SonarQube run state: credentials, scanned copies, raw issues (T6)
+example/sonarqube/.state/
 example/project_1/reports/
 example/rule_showcase/*/reports/
 example/checkout_assignment/reports/report.json

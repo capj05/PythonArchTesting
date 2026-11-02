@@ -437,6 +437,195 @@ def forbid_imports(
     )
 
 
+def enforce_layers(
+    *layers: str,
+    closed: list[str] | None = None,
+    ignore_type_checking: bool = True,
+    entry: str | None = None,
+    cases: list[dict[str, Any]] | None = None,
+    init: dict[str, Any] | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a layered architecture of the whole project for the rule engine.
+
+    ``layers`` name the project's modules from the highest layer to the
+    lowest, in import-linter's notation: ``"a | b"`` are independent siblings,
+    ``"a : b"`` siblings that may use each other. A higher layer may use a
+    lower one, never the reverse. ``closed`` names layers no higher layer may
+    bypass: whatever lies below a closed layer is reached through it.
+
+    The static check reads every import statement of the target. With
+    ``entry`` (a reference function, ``"controller.handle_order"``) and
+    ``cases``, the same order is also checked on the calls between modules
+    while the entry runs, which only happens with ``--dynamic``.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "layers": list(layers),
+            "closed": list(closed) if closed else None,
+            "ignore_type_checking": ignore_type_checking,
+            "entry": entry,
+            "cases": list(cases) if cases is not None else None,
+            "init": dict(init) if init is not None else None,
+            "timeout_s": timeout_s,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "enforce_layers",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def forbid_cycles(
+    *,
+    ignore_type_checking: bool = True,
+    entry: str | None = None,
+    cases: list[dict[str, Any]] | None = None,
+    init: dict[str, Any] | None = None,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture an acyclic module graph of the whole project for the rule engine.
+
+    The static check reads every import statement of the target and reports
+    each group of modules that depend on each other in a cycle. With
+    ``entry`` and ``cases`` the calls between modules while the entry runs
+    are checked too, with ``--dynamic``: a cycle of calls the reference does
+    not have is a violation.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "ignore_type_checking": ignore_type_checking,
+            "entry": entry,
+            "cases": list(cases) if cases is not None else None,
+            "init": dict(init) if init is not None else None,
+            "timeout_s": timeout_s,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "forbid_cycles",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def architecture_entry(
+    *,
+    entry: str | None = None,
+    cases: list[dict[str, Any]] | None = None,
+    init: dict[str, Any] | None = None,
+    policy: str = "allow_new_modules",
+    allow: list[str] | None = None,
+    forbid: list[str] | None = None,
+    ignore_external: list[str] | None = None,
+    require_all: bool = False,
+    ignore_type_checking: bool = True,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture the reference as the model of the project's architecture.
+
+    The target is compared with the module dependencies of the reference: the
+    imports between modules and the libraries imported, and, with ``entry``
+    (a reference function, ``"controller.handle_order"``) and ``cases``, the
+    calls between modules, the objects each module creates and the libraries
+    called while the entry runs (``--dynamic`` only). A dependency the
+    reference does not have is a violation.
+
+    ``policy`` says how strictly: ``"allow_new_modules"`` (default) treats a
+    module the reference lacks as part of the modules that use it;
+    ``"strict"`` does not; ``"layered"`` flags only a dependency against the
+    reference's direction. ``allow`` and ``forbid`` take exceptions as
+    ``"module -> module"`` (or ``"module -> package"``). A change the policy
+    cannot decide passes and is listed for review. With ``require_all`` a
+    call between modules the reference makes at run time and the target
+    does not is a violation too (a step the target skips).
+
+    Declared once, on the project's root module (``__init__.py``). This
+    helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "entry": entry,
+            "cases": list(cases) if cases is not None else None,
+            "init": dict(init) if init is not None else None,
+            "policy": policy,
+            "allow": list(allow) if allow is not None else None,
+            "forbid": list(forbid) if forbid is not None else None,
+            "ignore_external": (
+                list(ignore_external) if ignore_external is not None else None
+            ),
+            "require_all": require_all,
+            "ignore_type_checking": ignore_type_checking,
+            "timeout_s": timeout_s,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "architecture_entry",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
+def module_interface(
+    *names: str,
+    entry: str | None = None,
+    cases: list[dict[str, Any]] | None = None,
+    init: dict[str, Any] | None = None,
+    ignore_type_checking: bool = True,
+    timeout_s: float = 5.0,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture the public interface of the declaring module for the rule engine.
+
+    Other modules may use only the ``names`` of this module (its public
+    names, those without a leading underscore, when none are given). The
+    static check reads every ``from module import name`` and every
+    ``module.name`` of the target's other modules; with ``entry`` and
+    ``cases`` (``--dynamic``) the calls other modules make into this one are
+    checked too.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "names": list(names),
+            "entry": entry,
+            "cases": list(cases) if cases is not None else None,
+            "init": dict(init) if init is not None else None,
+            "ignore_type_checking": ignore_type_checking,
+            "timeout_s": timeout_s,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "module_interface",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
 def implements_protocol(
     protocol: Any,
     *,

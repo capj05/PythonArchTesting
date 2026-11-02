@@ -292,3 +292,34 @@ def test_the_members_a_pattern_rule_calls_take_the_targets_names() -> None:
         singleton = {"construct": False, "singleton": {"access": access}}
         assert names.observation(singleton, config)["singleton"] == {"access": expected}
     assert names.observation({"calls": True}, bus) == {"calls": True}
+
+
+def test_a_low_confidence_match_on_a_target_matched_elsewhere_is_ignored() -> None:
+    # The pairing by name gave Svc.run to service; legacy's weak guess for the
+    # same target must not name it.
+    ctx = _context(
+        [
+            (("service", "Svc.run"), ("app", "Svc.run")),
+            (("legacy", "Old.run"), ("app", "Svc.run")),
+        ]
+    )
+    ctx.matches["source:legacy:Old.run"].status = MatchStatus.LOW_CONFIDENCE
+
+    names = NameTranslation.from_context(ctx)
+
+    assert names.source_module("app", "Svc.run") == "service"
+    assert names.source_name("app", "Svc.run") == ("service", "Svc.run")
+
+
+def test_a_new_object_of_a_class_in_a_renamed_submodule_is_translated() -> None:
+    names = NameTranslation.from_context(
+        _context([(("adapters.memory_store", "Store"), ("adapters.memory", "Store"))])
+    )
+    source = _entity("source", "api.handlers", "book", kind="function")
+    target = _entity("target", "api.handlers", "book", kind="function")
+
+    case = names.value(
+        {"$new": "adapters.memory_store.Store", "args": []}, source, target
+    )
+
+    assert case["$new"] == "adapters.memory.Store"

@@ -335,3 +335,63 @@ class SqlRepository:
 
     assert errors == []
     assert [result.status for result in results] == ["OK"]
+
+
+_PORT = """
+from typing import Annotated
+from typing import Protocol
+from pythonarchtesting.rules import implements_protocol
+
+class Repository(Protocol):
+    def get(self, item_id: str) -> str:
+        ...
+
+
+class SqlRepository:
+    __archtest__: Annotated[None, implements_protocol("source_module.Repository")]
+"""
+
+
+def _evaluate_port(target: str) -> list[str]:
+    results, errors, _ = evaluate_single_rule(
+        source_text=_PORT,
+        target_text=target,
+        source_kind="class",
+        source_name="SqlRepository",
+        target_kind="class",
+        target_name="SqlRepository",
+        rule_id="PRO001/implements_protocol/v1",
+    )
+    assert errors == []
+    return [result.status for result in results]
+
+
+def test_pro001_evaluation_fails_for_an_extra_required_parameter() -> None:
+    # The port's callers pass item_id only: get() can no longer be called so.
+    target = """
+class SqlRepository:
+    def get(self, item_id: str, extra) -> str:
+        return item_id
+"""
+
+    assert _evaluate_port(target) == ["FAILED"]
+
+
+def test_pro001_evaluation_accepts_an_extra_optional_parameter() -> None:
+    target = """
+class SqlRepository:
+    def get(self, item_id: str, extra=None, *, flag=False) -> str:
+        return item_id
+"""
+
+    assert _evaluate_port(target) == ["OK"]
+
+
+def test_pro001_evaluation_fails_for_an_extra_required_keyword_only_parameter() -> None:
+    target = """
+class SqlRepository:
+    def get(self, item_id: str, *, extra) -> str:
+        return item_id
+"""
+
+    assert _evaluate_port(target) == ["FAILED"]

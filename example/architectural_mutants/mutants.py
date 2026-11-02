@@ -1,7 +1,9 @@
 """Catalogue of seeded architectural violations (and equivalent rewrites).
 
 Each mutant changes the correct solution in ``solution/`` by exact text
-replacement and breaks exactly one architectural intent of ``reference/``.
+replacement (``patches``), and where needed by adding (``new_files``),
+renaming (``renames``) or removing (``removed_files``) modules, and breaks
+exactly one architectural intent of ``reference/``.
 ``detected_by`` names the markers that state that intent: a mutant counts as
 caught only when one of them fails with a violation, not when an unrelated
 rule fails or the code merely crashes.
@@ -20,7 +22,41 @@ _APPLY = "        order.apply_total(self._discount.apply(order.total))\n"
 _MODELS_IMPORT = "from .models import Order\n"
 _TYPING_IMPORT = "from typing import Any\n"
 
+_ONE_FILE = (
+    '"""Controller, service and storage in one module."""\n\n'
+    "from __future__ import annotations\n\n"
+    "from typing import Any\n\n"
+    "from .models import Order\n\n\n"
+    "def handle_order(request: dict[str, Any], service: Any) -> dict[str, Any]:\n"
+    '    if not request.get("prices"):\n'
+    '        return {"status": "error", "reason": "empty order"}\n'
+    '    total = service.place(request["id"], request["prices"])\n'
+    '    return {"status": "ok", "total": total}\n\n\n'
+    "class OrderService:\n"
+    "    def __init__(self, repository: Any, discount: Any, bus: Any) -> None:\n"
+    "        self._repository = repository\n"
+    "        self._discount = discount\n"
+    "        self._bus = bus\n\n"
+    "    def place(self, order_id: str, prices: list[float]) -> float:\n"
+    "        order = Order(order_id)\n"
+    "        for price in prices:\n"
+    "            order.add(price)\n"
+    "        order.apply_total(self._discount.apply(order.total))\n"
+    "        order.mark_placed()\n"
+    "        self._repository.save(order)\n"
+    '        self._bus.publish("order_placed", order.order_id)\n'
+    "        return order.total\n\n\n"
+    "class OrderRepository:\n"
+    "    def __init__(self) -> None:\n"
+    "        self._rows: dict[str, Any] = {}\n\n"
+    "    def save(self, order: Any) -> None:\n"
+    "        self._rows[order.order_id] = order\n\n"
+    "    def get(self, order_id: str) -> Any:\n"
+    "        return self._rows.get(order_id)\n"
+)
+
 _LAYERING = [
+    "enforce_layers",
     "forbid_imports",
     "forbid_runtime_calls",
     "require_runtime_calls",
@@ -292,6 +328,92 @@ MUTANTS: list[dict[str, Any]] = [
         ],
         "detected_by": ["is_runtime_singleton"],
     },
+    # O1 layer bypass through a module of the target's own (intent I1): the
+    # helper module is new, so ``allow_new_modules`` folds it into the
+    # controller, and the call into storage stays a divergence.
+    {
+        "id": "M20",
+        "operator": "O1 layer bypass",
+        "description": "controller reads storage through a new helper module",
+        "patches": [
+            (
+                "controller.py",
+                _TYPING_IMPORT,
+                _TYPING_IMPORT + "\nfrom .lookup import find_order\n",
+            ),
+            (
+                "controller.py",
+                _PLACE,
+                _PLACE + '    find_order(service._repository, request["id"])\n',
+            ),
+        ],
+        "new_files": {
+            "lookup.py": (
+                '"""Lookup helpers."""\n\n'
+                "from __future__ import annotations\n\n"
+                "from typing import Any\n\n\n"
+                "def find_order(repository: Any, order_id: str) -> Any:\n"
+                "    return repository.get(order_id)\n"
+            )
+        },
+        "detected_by": _LAYERING,
+    },
+    # O7 dependency cycle (intent I8, `forbid_cycles`): models imports the
+    # service, which imports models, and the order calls back into it.
+    {
+        "id": "M21",
+        "operator": "O7 dependency cycle",
+        "description": "the order takes its status from a function of the service",
+        "patches": [
+            (
+                "models.py",
+                "from __future__ import annotations\n",
+                "from __future__ import annotations\n\nfrom . import service\n",
+            ),
+            (
+                "models.py",
+                '        self.status = "placed"\n',
+                "        self.status = service.placed_status()\n",
+            ),
+            (
+                "service.py",
+                "class OrderService:\n",
+                "def placed_status() -> str:\n"
+                '    return "placed"\n\n\n'
+                "class OrderService:\n",
+            ),
+        ],
+        "detected_by": ["forbid_cycles", "enforce_reference_calls"],
+    },
+    # O8 module interface (intent I9, no marker yet): the service uses a
+    # private helper of the models module.
+    {
+        "id": "M22",
+        "operator": "O8 module interface",
+        "description": "service calls a private helper of the models module",
+        "patches": [
+            (
+                "models.py",
+                "class Order:\n",
+                "def _check_price(price: float) -> float:\n"
+                "    if price < 0:\n"
+                '        raise ValueError("negative price")\n'
+                "    return price\n\n\n"
+                "class Order:\n",
+            ),
+            (
+                "service.py",
+                _MODELS_IMPORT,
+                "from .models import Order, _check_price\n",
+            ),
+            (
+                "service.py",
+                "            order.add(price)\n",
+                "            order.add(_check_price(price))\n",
+            ),
+        ],
+        "detected_by": ["module_interface"],
+    },
 ]
 
 EQUIVALENTS: list[dict[str, Any]] = [
@@ -413,5 +535,64 @@ EQUIVALENTS: list[dict[str, Any]] = [
                 '    return {"status": "ok", "total": total}\n'
             )
         },
+    },
+    {
+        "id": "E07",
+        "operator": "equivalent",
+        "description": "repository module renamed to storage",
+        "renames": {"repository.py": "storage.py"},
+    },
+    {
+        "id": "E08",
+        "operator": "equivalent",
+        "description": "controller, service and repository in one module",
+        "removed_files": ["controller.py", "service.py", "repository.py"],
+        "new_files": {"app.py": _ONE_FILE},
+    },
+    {
+        "id": "E09",
+        "operator": "equivalent",
+        "description": "service and controller are async",
+        "patches": [
+            (
+                "controller.py",
+                "def handle_order(",
+                "async def handle_order(",
+            ),
+            (
+                "controller.py",
+                _PLACE,
+                '    total = await service.place(request["id"], request["prices"])\n',
+            ),
+            (
+                "service.py",
+                "    def place(",
+                "    async def place(",
+            ),
+        ],
+    },
+    {
+        "id": "E10",
+        "operator": "equivalent",
+        "description": "controller function becomes a staticmethod of a class",
+        "patches": [
+            (
+                "controller.py",
+                "def handle_order(request: dict[str, Any], service: Any) -> dict[str, Any]:\n"
+                '    if not request.get("prices"):\n'
+                + _EMPTY
+                + _PLACE
+                + '    return {"status": "ok", "total": total}\n',
+                "class OrderController:\n"
+                "    @staticmethod\n"
+                "    def handle_order(\n"
+                "        request: dict[str, Any], service: Any\n"
+                "    ) -> dict[str, Any]:\n"
+                '        if not request.get("prices"):\n'
+                '            return {"status": "error", "reason": "empty order"}\n'
+                '        total = service.place(request["id"], request["prices"])\n'
+                '        return {"status": "ok", "total": total}\n',
+            )
+        ],
     },
 ]

@@ -58,6 +58,12 @@ __all__ = ["InMemoryOrderRepository"]
 - Reachable imports through transitive imports under `mode="reachable"` (default).
 - Module scope (`scope="module"`) or package scope (`scope="package"` with `package=...`).
 - `TYPE_CHECKING` guarded imports are ignored by default; flip `ignore_type_checking=False` to include them.
+- Imports are the same however they are spelled: relative (`from .repository
+  import X`), absolute through the target's own directory name
+  (`from target.repository import X`), or absolute through the reference's
+  package name (a submission that imports itself as the reference does). A
+  target directory named like a real library would hide that library's
+  imports; name submission directories so they cannot clash.
 
 ## What it does not check
 

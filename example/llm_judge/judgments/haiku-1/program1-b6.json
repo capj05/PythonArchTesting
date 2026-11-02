@@ -1,0 +1,6 @@
+[
+  {"id": "v051", "violates": true, "requirements": [1], "reason": "The controller now calls audit.record, which writes into an OrderRepository instance held by a helper module, so the request handler reaches storage through a helper, which req 1 forbids."},
+  {"id": "v052", "violates": true, "requirements": [3], "reason": "The service sets order.status = \"placed\" directly instead of calling order.mark_placed(), so the order changes outside its own methods."},
+  {"id": "v053", "violates": true, "requirements": [3], "reason": "The service assigns order.total directly instead of calling order.apply_total(), so the order changes outside its own methods."},
+  {"id": "v054", "violates": false, "requirements": [], "reason": "Removing the service's publish call is a functional omission of the order_placed event, but it does not change layering, injection, encapsulation, the strategy use, the bus implementation, the singleton, or module cycles, so no graded architecture requirement is violated."}
+]

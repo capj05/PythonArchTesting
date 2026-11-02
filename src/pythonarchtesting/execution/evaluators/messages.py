@@ -152,4 +152,30 @@ def _build_rule_result(
     )
 
 
-__all__ = ["render_message"]
+MAX_REPORTED = 25
+"""How many violations (and other listed findings) a result keeps in full."""
+
+
+def finish_violations(
+    rule: Rule,
+    source: Entity,
+    target: Entity,
+    match: MatchResult,
+    details: Dict[str, Any],
+    violations: list[str],
+    passed: str,
+) -> RuleResult:
+    """FAILED with the first ``violations`` reported, or OK summarised as ``passed``."""
+    if violations:
+        details["violations"] = violations[:MAX_REPORTED]
+        details["violation_count"] = len(violations)
+        details["reason"] = "violation"
+        more = f" (+{len(violations) - 1} more)" if len(violations) > 1 else ""
+        details["summary"] = violations[0] + more
+        return _build_rule_result(rule, source, target, match, "FAILED", details, ())
+    details["reason"] = "no_violations"
+    details["summary"] = passed
+    return _build_rule_result(rule, source, target, match, "OK", details, ())
+
+
+__all__ = ["MAX_REPORTED", "finish_violations", "render_message"]

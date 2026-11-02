@@ -1,0 +1,58 @@
+[
+ {
+  "id": "w33",
+  "violates": true,
+  "requirements": [
+   1
+  ],
+  "reason": "The handler reaches the repository through service._repository."
+ },
+ {
+  "id": "w34",
+  "violates": true,
+  "requirements": [
+   4
+  ],
+  "reason": "The service pickles the order (pickle.dumps) inside place."
+ },
+ {
+  "id": "w35",
+  "violates": false,
+  "requirements": [],
+  "reason": "A private _store helper still delegates to the injected repository."
+ },
+ {
+  "id": "w36",
+  "violates": false,
+  "requirements": [],
+  "reason": "Same architecture; the bus only deduplicates subscriptions and tolerates unknown unsubscribe."
+ },
+ {
+  "id": "w37",
+  "violates": true,
+  "requirements": [
+   4
+  ],
+  "reason": "The service imports pickle and round-trips the order through it."
+ },
+ {
+  "id": "w38",
+  "violates": false,
+  "requirements": [],
+  "reason": "A helper function in the handler only checks emptiness; layering is intact."
+ },
+ {
+  "id": "w39",
+  "violates": true,
+  "requirements": [
+   3
+  ],
+  "reason": "The service calls order.items.sort(), mutating the order outside its own methods."
+ },
+ {
+  "id": "w40",
+  "violates": false,
+  "requirements": [],
+  "reason": "Same architecture with a defensive handler and an idempotent bus."
+ }
+]

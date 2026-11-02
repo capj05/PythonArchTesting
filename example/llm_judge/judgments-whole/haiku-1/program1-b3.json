@@ -1,0 +1,10 @@
+[
+  {"id": "w017", "violates": true, "requirements": [2], "reason": "The service imports OrderRepository and creates a default one when none is injected, so it does not rely only on its constructor-injected repository."},
+  {"id": "w018", "violates": false, "requirements": [], "reason": "The layers, constructor injection, singleton and bus are intact; the listener de-duplication and sum-based total are alternative idioms that keep the architecture."},
+  {"id": "w019", "violates": false, "requirements": [], "reason": "All graded requirements hold; the discount is still the injected strategy, called with a keyword argument."},
+  {"id": "w020", "violates": true, "requirements": [7], "reason": "AppConfig.instance() returns a new cls() on every call, so the configuration is not a singleton."},
+  {"id": "w021", "violates": false, "requirements": [], "reason": "The percent discount uses an equivalent formula and the layers, injection, bus and singleton all hold."},
+  {"id": "w022", "violates": false, "requirements": [], "reason": "A flat module layout with injected collaborators; the handler uses only the service, and the service neither imports nor creates the repository or bus."},
+  {"id": "w023", "violates": true, "requirements": [4], "reason": "The service imports importlib and opens a sqlite3 connection in its constructor, putting a persistence technology into the service."},
+  {"id": "w024", "violates": false, "requirements": [], "reason": "The singleton is preserved through __new__ and instance(), and the layers and injection are intact."}
+]

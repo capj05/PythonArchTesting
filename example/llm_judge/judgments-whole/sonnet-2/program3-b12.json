@@ -1,0 +1,7 @@
+[
+{"id":"w056","violates":true,"requirements":[5],"reason":"OutboxNotifier.send takes (subject, address, body), so it does not satisfy the Notifier port's send(address, subject, body)."},
+{"id":"w057","violates":false,"requirements":[],"reason":"Layering and boundaries are intact; the no-op unsubscribe is a functional defect, not an architecture violation."},
+{"id":"w058","violates":false,"requirements":[],"reason":"The _announce helper still publishes through the injected bus; the architecture is unchanged."},
+{"id":"w059","violates":false,"requirements":[],"reason":"Restructured modules and service-level summary helpers keep the layer order, injection, bus/notifier use and encapsulated Appointment state."},
+{"id":"w060","violates":false,"requirements":[],"reason":"Only an itertools id counter differs in the in-memory store; the architecture matches the intended one."}
+]

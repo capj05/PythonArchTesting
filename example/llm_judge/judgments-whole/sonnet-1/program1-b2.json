@@ -1,0 +1,62 @@
+[
+ {
+  "id": "w009",
+  "violates": true,
+  "requirements": [
+   4
+  ],
+  "reason": "The service loads pickle through importlib and calls dumps."
+ },
+ {
+  "id": "w010",
+  "violates": true,
+  "requirements": [
+   4
+  ],
+  "reason": "The service uses sqlite3 via __import__ and opens a connection."
+ },
+ {
+  "id": "w011",
+  "violates": true,
+  "requirements": [
+   5
+  ],
+  "reason": "The service hardcodes a 10% discount instead of using the injected strategy."
+ },
+ {
+  "id": "w012",
+  "violates": true,
+  "requirements": [
+   1
+  ],
+  "reason": "The handler reaches service._repository and calls a lookup helper on it."
+ },
+ {
+  "id": "w013",
+  "violates": true,
+  "requirements": [
+   3
+  ],
+  "reason": "The service sets order.status directly instead of calling mark_placed."
+ },
+ {
+  "id": "w014",
+  "violates": false,
+  "requirements": [],
+  "reason": "Only local variables were renamed; architecture intact."
+ },
+ {
+  "id": "w015",
+  "violates": false,
+  "requirements": [],
+  "reason": "A helper module for the response is used by the handler without touching storage."
+ },
+ {
+  "id": "w016",
+  "violates": true,
+  "requirements": [
+   1
+  ],
+  "reason": "The handler computes the total itself and never delegates to the order service."
+ }
+]

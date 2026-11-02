@@ -1,6 +1,36 @@
-"""Domain objects: an order changes only through its own methods."""
+"""Domain objects: an order changes only through its own methods.
+
+I9: other modules use this module only through its public names, checked on
+every import and on the calls made while the controller handles an order.
+"""
 
 from __future__ import annotations
+
+from typing import Annotated
+
+from pythonarchtesting.rules import module_interface
+
+__archtest__: Annotated[
+    None,
+    module_interface(
+        entry="controller.handle_order",
+        cases=[
+            {
+                "args": [
+                    {"id": "A1", "prices": [10.0, 5.5]},
+                    {
+                        "$new": "service.OrderService",
+                        "args": [
+                            {"$new": "repository.OrderRepository"},
+                            {"$new": "pricing.PercentDiscount", "args": [10]},
+                            {"$new": "events.EventBus"},
+                        ],
+                    },
+                ]
+            }
+        ],
+    ),
+]
 
 
 class Order:

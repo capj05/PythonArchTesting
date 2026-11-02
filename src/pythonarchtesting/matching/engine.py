@@ -311,7 +311,103 @@ def run_matching(
         results.append(match)
         by_source[match.source_id] = match
 
+    results = _one_to_one(results, config)
+    by_source = {match.source_id: match for match in results}
+    if config.name_fallback:
+        from .fallback import pair_by_name
+
+        return pair_by_name(results, by_source, source_index, target_index)
     return results, by_source
+
+
+def _rank(match: MatchResult) -> tuple[float, float, str]:
+    """Which of two matches of one target keeps it: the better score, then the
+    closer name, then (for a stable result) the source id."""
+    name = 0.0
+    if match.candidates and match.candidates[0].target_id == match.target_id:
+        name = float(match.candidates[0].breakdown.get("name", 0.0))
+    return (match.confidence, name, match.source_id)
+
+
+def _one_to_one(
+    results: List[MatchResult], config: MatchingConfig
+) -> List[MatchResult]:
+    """No two reference entities matched to one target entity.
+
+    Each entity is scored on its own, so two methods of one class can both
+    pick the same target method (``subscribe`` and ``unsubscribe`` scoring a
+    student's ``subscribe`` alike). The better match keeps it; the other takes
+    its best candidate nobody holds, with the status that candidate's score
+    gives, or is left unmatched.
+    """
+    from dataclasses import replace
+
+    holders: Dict[str, List[MatchResult]] = {}
+    for match in results:
+        if match.status == MatchStatus.MATCHED and match.target_id is not None:
+            holders.setdefault(match.target_id, []).append(match)
+    if all(len(group) == 1 for group in holders.values()):
+        return results
+    taken = {target for target in holders}
+    losers: List[tuple[MatchResult, MatchResult]] = []
+    for group in holders.values():
+        if len(group) > 1:
+            ordered = sorted(group, key=_rank, reverse=True)
+            losers += [(loser, ordered[0]) for loser in ordered[1:]]
+    changed: Dict[str, MatchResult] = {}
+    for loser, winner in sorted(losers, key=lambda pair: _rank(pair[0]), reverse=True):
+        free = [c for c in loser.candidates if c.target_id not in taken]
+        reason = {
+            "code": "target_taken_by_better_match",
+            "message": "Another reference entity matches this target better.",
+            "evidence": {"target_id": loser.target_id, "kept_by": winner.source_id},
+        }
+        if not free:
+            changed[loser.source_id] = replace(
+                loser,
+                status=MatchStatus.UNMATCHED,
+                target_id=None,
+                confidence=0.0,
+                reasons=[*loser.reasons, reason],
+            )
+            continue
+        best = free[0]
+        rival = free[1] if len(free) > 1 else None
+        ambiguous: list[dict[str, Any]] = []
+        if (
+            best.confidence >= config.threshold
+            and rival is not None
+            and rival.confidence >= best.confidence - config.delta
+        ):
+            # As in the matching itself: a rival within delta leaves it open.
+            status = MatchStatus.AMBIGUOUS
+            ambiguous.append(
+                {
+                    "code": "ambiguous_competitor_within_delta",
+                    "message": "Competing candidate within delta.",
+                    "evidence": {
+                        "best": best.confidence,
+                        "delta": config.delta,
+                        "competitor": rival.confidence,
+                    },
+                }
+            )
+        elif best.confidence >= config.threshold:
+            status = MatchStatus.MATCHED
+            taken.add(best.target_id)
+        elif best.confidence >= config.min_candidate:
+            status = MatchStatus.LOW_CONFIDENCE
+        else:
+            status = MatchStatus.UNMATCHED
+        changed[loser.source_id] = replace(
+            loser,
+            status=status,
+            target_id=best.target_id if status != MatchStatus.UNMATCHED else None,
+            confidence=best.confidence,
+            candidates=[best, *(c for c in loser.candidates if c is not best)],
+            reasons=[*loser.reasons, reason, *ambiguous],
+        )
+    return [changed.get(match.source_id, match) for match in results]
 
 
 def match_entities(

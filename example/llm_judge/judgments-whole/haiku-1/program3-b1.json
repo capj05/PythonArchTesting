@@ -1,0 +1,7 @@
+[
+  {"id": "w001", "violates": false, "requirements": [], "reason": "Domain has no I/O, application imports only domain and errors/views, handlers reach only the application layer, sqlite3 is confined to the SQLite adapter, and adapters are built only in wiring."},
+  {"id": "w002", "violates": false, "requirements": [], "reason": "Layering, bus-based events, injected policy and adapter construction in wiring all follow the architecture; only the reminder/adapter names differ from the reference."},
+  {"id": "w003", "violates": false, "requirements": [], "reason": "The layer structure is intact; the reminder's on_booked silently sends nothing, which is a functional gap rather than an architecture violation."},
+  {"id": "w004", "violates": false, "requirements": [], "reason": "Handlers import only application names, sqlite3 is confined to its adapter, schedule is used through Slot/Appointment/free_slots, and the policy is injected and used for every fee."},
+  {"id": "w005", "violates": true, "requirements": [10], "reason": "The SQLite adapter imports the CANCELLED and ATTENDED constants from domain.schedule, which is use of the schedule beyond Slot, Appointment, free_slots and WORKING_HOURS."}
+]

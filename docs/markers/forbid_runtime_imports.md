@@ -19,7 +19,13 @@ It cannot follow `importlib.import_module("sql" + "ite3")` or
 `__import__(name)`, because the module name only exists at runtime. This marker
 imports the target module in a child interpreter and records every import its
 code performs through `import` statements, `__import__`, `importlib.__import__`,
-or `importlib.import_module`.
+or `importlib.import_module`. The module is loaded without running the
+`__init__.py` of the packages around it: a package that re-exports its
+application (`from .wiring import serve`) would otherwise load every adapter
+with any submodule, and those imports are the package's, not the module's.
+What the module imports itself, also through other modules of the project,
+counts. A module that needs names from its own package's `__init__.py` is
+imported the ordinary way instead.
 
 ## Arguments
 

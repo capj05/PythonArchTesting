@@ -1,0 +1,10 @@
+[
+  {"id": "w049", "violates": false, "requirements": [], "reason": "Handler uses only the service and the service uses only its injected collaborators; the subscribe de-duplication keeps the observer contract intact."},
+  {"id": "w050", "violates": true, "requirements": [5], "reason": "The service bypasses the injected discount strategy by reading its percent attribute and computing the discount itself."},
+  {"id": "w051", "violates": true, "requirements": [2], "reason": "The service ignores the injected repository and constructs its own OrderRepository in __init__."},
+  {"id": "w052", "violates": false, "requirements": [], "reason": "The handler is wrapped in a static method on a class but still uses only the service; the architecture is intact."},
+  {"id": "w053", "violates": true, "requirements": [2, 5], "reason": "place() replaces the injected discount with a freshly imported and constructed PercentDiscount(10)."},
+  {"id": "w054", "violates": true, "requirements": [6], "reason": "publish() calls only the first listener (list(...)[:1]), violating the requirement to call every subscribed listener."},
+  {"id": "w055", "violates": false, "requirements": [], "reason": "publish iterates over a tuple copy and still calls every subscribed listener; no architectural breach."},
+  {"id": "w056", "violates": false, "requirements": [], "reason": "The package is split into modules with an acyclic import graph, and the handler and service use only the injected collaborators."}
+]

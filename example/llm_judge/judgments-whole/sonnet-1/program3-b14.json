@@ -1,0 +1,4 @@
+[
+{"id":"w066","violates":false,"requirements":[],"reason":"Layers, injection, facade imports and the encapsulated Appointment keep the architecture; no forbidden dependency was found."},
+{"id":"w067","violates":true,"requirements":[10],"reason":"adapters/sqlite_store.py imports the BOOKED constant and calls Appointment.restore, using the schedule beyond Slot, Appointment, free_slots and WORKING_HOURS."}
+]

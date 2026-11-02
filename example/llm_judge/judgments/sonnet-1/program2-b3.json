@@ -1,0 +1,12 @@
+[
+{"id":"v021","violates":true,"requirements":[7,8],"reason":"ports imports application (under TYPE_CHECKING), a reverse dependency from a lower layer to a higher one that forms a cycle."},
+{"id":"v022","violates":false,"requirements":[],"reason":"A pure helper module with no project imports, used by the application, keeps the layering intact."},
+{"id":"v023","violates":false,"requirements":[],"reason":"Only an idiom change in the validation check; architecture unchanged."},
+{"id":"v024","violates":true,"requirements":[3],"reason":"OutboxNotifier.send was renamed to notify, so the adapter no longer satisfies the Notifier port's send."},
+{"id":"v025","violates":false,"requirements":[],"reason":"Merging the adapters into one module keeps the same layering and the composition root still sits on top."},
+{"id":"v026","violates":true,"requirements":[4],"reason":"The handler reaches into service._store and queries the store directly."},
+{"id":"v027","violates":true,"requirements":[3],"reason":"InMemoryLoanStore.find now requires a member argument, so the adapter no longer matches the LoanStore port's find(book_id)."},
+{"id":"v028","violates":true,"requirements":[4],"reason":"The handler accesses the store through service._store."},
+{"id":"v029","violates":false,"requirements":[],"reason":"Only local variable restructuring; architecture unchanged."},
+{"id":"v030","violates":true,"requirements":[5],"reason":"The loan is closed by setting loan.returned = True directly instead of calling Loan.close."}
+]

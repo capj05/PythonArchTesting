@@ -1,0 +1,7 @@
+[
+  {"id": "w056", "violates": true, "requirements": [5], "reason": "OutboxNotifier.send is declared as send(subject, address, body), swapping the port's address and subject parameters, so the adapter records the wrong values in sent and does not satisfy the Notifier port."},
+  {"id": "w057", "violates": false, "requirements": [], "reason": "The architecture is intact; EventBus.unsubscribe is a no-op that never removes a handler, which is a functional defect but not one of the graded architecture requirements."},
+  {"id": "w058", "violates": false, "requirements": [], "reason": "BookingService.cancel publishes its event through a private _announce helper that still delegates to the injected bus, so events keep going through the bus and the layers are unchanged."},
+  {"id": "w059", "violates": false, "requirements": [], "reason": "Every module keeps the required dependency directions, the policy and notifier are injected, adapters are built only in wiring, and sqlite3 stays in the SQLite adapter, so no graded requirement is broken."},
+  {"id": "w060", "violates": false, "requirements": [], "reason": "The structure matches the intended architecture, with the layers, injection, bus and notifier use all as required, and only the in-memory id generator differs."}
+]

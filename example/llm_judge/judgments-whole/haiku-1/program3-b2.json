@@ -1,0 +1,7 @@
+[
+  {"id": "w006", "violates": false, "requirements": [], "reason": "Layers, port adapters, sqlite confinement, injected policy and bus-based events all follow the architecture; the store has no hidden adapter construction."},
+  {"id": "w007", "violates": false, "requirements": [], "reason": "The api talks only to the application, the schedule is used through its exported names, sqlite3 stays in its adapter, and every adapter is built in wiring."},
+  {"id": "w008", "violates": true, "requirements": [5], "reason": "InMemoryPatientStore offers find() instead of the get() required by the PatientStore port, so this adapter does not satisfy its port."},
+  {"id": "w009", "violates": true, "requirements": [11], "reason": "BookingService.move assigns appointment.slot directly instead of going through the appointment's move_to method."},
+  {"id": "w010", "violates": true, "requirements": [6], "reason": "InMemoryAppointmentStore constructs its own OutboxNotifier adapter inside the adapter layer, not in wiring.py or via injection."}
+]

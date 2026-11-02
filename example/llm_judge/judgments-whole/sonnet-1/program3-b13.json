@@ -1,0 +1,7 @@
+[
+{"id":"w061","violates":true,"requirements":[4],"reason":"application/booking.py imports sqlite3 and opens a connection in book(), so sqlite3 is used outside the SQLite adapter."},
+{"id":"w062","violates":true,"requirements":[5],"reason":"OutboxNotifier.send takes an extra required 'priority' parameter, so the adapter does not satisfy the Notifier port."},
+{"id":"w063","violates":true,"requirements":[3],"reason":"api/handlers.py imports Slot from domain.schedule and constructs it directly, so the handler talks to the domain, not only the application."},
+{"id":"w064","violates":false,"requirements":[],"reason":"Only a defaultdict idiom change in the bus; all layering, injection and encapsulation rules hold."},
+{"id":"w065","violates":false,"requirements":[],"reason":"Only run_for is restructured; the layering, notifier and policy injection are unchanged and correct."}
+]

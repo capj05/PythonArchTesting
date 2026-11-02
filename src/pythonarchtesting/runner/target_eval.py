@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Callable, List, Tuple
 
@@ -84,9 +85,30 @@ def evaluate_target(
     target_by_id = {e.canonical_id: e for e in target_entities}
 
     matching_cfg = MatchingConfig.from_config(config)
+    # Scores first, then the teacher's mapping, then pairing by name: a pair
+    # made by name never stands in the way of an explicit one.
     match_results, match_by_source = run_matching(
-        run_state.source_index, target_index, matching_cfg
+        run_state.source_index,
+        target_index,
+        replace(matching_cfg, name_fallback=False),
     )
+    # A target's own pairs add to the common ones, and win over them.
+    pairs = {
+        **run_state.mappings.get("*", {}),
+        **run_state.mappings.get(spec.target_id, {}),
+    }
+    if pairs:
+        from pythonarchtesting.matching.assisted import apply_mapping
+
+        match_results, match_by_source = apply_mapping(
+            match_results, match_by_source, run_state.source_index, target_index, pairs
+        )
+    if matching_cfg.name_fallback:
+        from pythonarchtesting.matching.fallback import pair_by_name
+
+        match_results, match_by_source = pair_by_name(
+            match_results, match_by_source, run_state.source_index, target_index
+        )
 
     rule_results = list(run_state.compiler_results)
     validation_results.extend(run_state.compiler_validations)
@@ -103,6 +125,8 @@ def evaluate_target(
         source_root=run_state.source_path if run_state.dynamic_enabled else None,
         sandbox=run_state.sandbox,
         reference_runs=run_state.reference_runs,
+        target_package=Path(spec.path).name,
+        source_package=Path(run_state.source_path).name,
     )
     rule_results.extend(eval_rule_results)
     rule_by_id = {rule.rule_id: rule for rule in run_state.rules}

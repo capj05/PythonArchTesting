@@ -96,6 +96,11 @@ class EvalContext:
     target_root: Path | None = None
     # Reference project root for dynamic checks that execute the reference.
     source_root: Path | None = None
+    # Package names the two projects are imported under (their directory
+    # names), static runs included: an absolute import through the project's
+    # own package is an import inside the project.
+    target_package: str | None = None
+    source_package: str | None = None
     # dynamic.sandbox.SandboxPolicy confining every child interpreter.
     sandbox: Any = None
     # Batched dynamic outcomes, keyed by (rule_id, source id, target id).

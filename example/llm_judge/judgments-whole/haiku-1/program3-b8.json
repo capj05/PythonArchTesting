@@ -1,0 +1,7 @@
+[
+  {"id": "w036", "violates": false, "requirements": [], "reason": "EventBus stores (name, handler) pairs instead of a dict, but still publishes in order to handlers for the event name; all layers are unchanged."},
+  {"id": "w037", "violates": true, "requirements": [11], "reason": "BookingService.move writes appointment.history and appointment.slot directly instead of calling Appointment.move_to, bypassing the appointment's own state changes."},
+  {"id": "w038", "violates": false, "requirements": [], "reason": "LateCancellationFee becomes a stdlib dataclass with __post_init__ validation, which is a domain-only change that keeps the injected policy and the layering intact."},
+  {"id": "w039", "violates": false, "requirements": [], "reason": "The cancel handler is wrapped in a local _guarded helper that still calls only the BookingService, so the handler boundary holds."},
+  {"id": "w040", "violates": false, "requirements": [], "reason": "Handlers use only BookingService and ReminderService, adapters are built only in wiring, the policy is injected, sqlite3 stays in its adapter, and the import graph respects the layer order without cycles."}
+]

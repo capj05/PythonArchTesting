@@ -68,11 +68,20 @@ class ProtocolEntityLookup:
                         alias.name if alias.asname else alias.name.split(".", 1)[0]
                     )
                     aliases[local_name] = target_name
-            elif isinstance(stmt, ast.ImportFrom) and stmt.module:
+            elif isinstance(stmt, ast.ImportFrom) and (stmt.module or stmt.level):
+                # A relative import is resolved against this module's package:
+                # ``from .schedule import X`` in ``domain/__init__.py`` is
+                # ``domain.schedule.X``.
+                base = (
+                    _relative_base(module_entity, module_path, stmt)
+                    if stmt.level
+                    else str(stmt.module)
+                )
                 for alias in stmt.names:
                     if alias.name == "*":
                         continue
-                    aliases[alias.asname or alias.name] = f"{stmt.module}.{alias.name}"
+                    target = f"{base}.{alias.name}" if base else alias.name
+                    aliases[alias.asname or alias.name] = target
 
         self._alias_cache[module_path] = aliases
         return aliases
@@ -116,3 +125,19 @@ class ProtocolEntityLookup:
 
 
 __all__ = ["ProtocolEntityLookup"]
+
+
+def _relative_base(
+    module_entity: Entity | None, module_path: str, stmt: ast.ImportFrom
+) -> str:
+    from pythonarchtesting.execution.import_edges import _resolve_relative_module
+
+    filepath = str(getattr(module_entity, "filepath_rel", "") or "")
+    if filepath == "__init__.py":
+        filepath = "/__init__.py"  # the root package is a package too
+    return _resolve_relative_module(
+        importer_module=module_path,
+        filepath_rel=filepath,
+        level=stmt.level,
+        module=stmt.module,
+    )

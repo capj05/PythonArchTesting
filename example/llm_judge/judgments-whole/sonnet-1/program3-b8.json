@@ -1,0 +1,7 @@
+[
+{"id":"w036","violates":false,"requirements":[],"reason":"Only the bus internals differ (a list of pairs), with architecture unchanged."},
+{"id":"w037","violates":true,"requirements":[11],"reason":"BookingService.move mutates appointment.history and appointment.slot directly instead of calling move_to."},
+{"id":"w038","violates":false,"requirements":[],"reason":"Using a stdlib dataclass for LateCancellationFee in the domain is not I/O and keeps the architecture."},
+{"id":"w039","violates":false,"requirements":[],"reason":"A local error-guard helper in the handlers still talks only to the services."},
+{"id":"w040","violates":false,"requirements":[],"reason":"A restructured but layer-correct solution: encapsulated Appointment, injected policy, notifier and clock, sqlite only in its adapter, adapters built only in wiring."}
+]

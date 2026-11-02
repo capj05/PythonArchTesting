@@ -1,0 +1,12 @@
+[
+{"id":"v041","violates":true,"requirements":[7],"reason":"instance() creates a new AppConfig on every call, so the configuration is no longer a singleton."},
+{"id":"v042","violates":true,"requirements":[1],"reason":"The controller imports and instantiates OrderRepository, so the presentation layer reaches storage directly."},
+{"id":"v043","violates":false,"requirements":[],"reason":"Iterating over a tuple copy instead of a list copy keeps the observer behaviour unchanged."},
+{"id":"v044","violates":true,"requirements":[1],"reason":"The handler reaches the repository through the service's private _repository attribute."},
+{"id":"v045","violates":true,"requirements":[3],"reason":"The service sets order.status directly instead of calling mark_placed(), so the order is changed outside its own methods."},
+{"id":"v046","violates":false,"requirements":[],"reason":"A private static helper builds the order and the service still uses only injected collaborators and Order methods."},
+{"id":"v047","violates":true,"requirements":[2],"reason":"The service no longer uses its injected repository (save removed), so it does not use the collaborators it was given and storage is bypassed."},
+{"id":"v048","violates":false,"requirements":[],"reason":"The repository module is only renamed to storage.py; nothing imports it, so the layering and acyclicity are unaffected."},
+{"id":"v049","violates":true,"requirements":[4],"reason":"The service imports and uses pickle for serialisation."},
+{"id":"v050","violates":false,"requirements":[],"reason":"Only local variables are renamed; the architecture is unchanged."}
+]

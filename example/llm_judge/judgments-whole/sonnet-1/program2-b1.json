@@ -1,0 +1,61 @@
+[
+ {
+  "id": "w001",
+  "violates": true,
+  "requirements": [
+   6
+  ],
+  "reason": "lend notifies only when no earlier loan exists, so re-lending a returned book skips the injected notifier."
+ },
+ {
+  "id": "w002",
+  "violates": false,
+  "requirements": [],
+  "reason": "Architecture is kept; the helper method and keyword arguments do not change the layering."
+ },
+ {
+  "id": "w003",
+  "violates": false,
+  "requirements": [],
+  "reason": "Renamed modules keep the layer order, handlers use only the service, and adapters satisfy the ports."
+ },
+ {
+  "id": "w004",
+  "violates": false,
+  "requirements": [],
+  "reason": "Merged adapter modules and untyped code keep all layer and port rules."
+ },
+ {
+  "id": "w005",
+  "violates": true,
+  "requirements": [
+   6
+  ],
+  "reason": "LendingService.lend never calls the notifier."
+ },
+ {
+  "id": "w006",
+  "violates": true,
+  "requirements": [
+   4
+  ],
+  "reason": "The lend_book handler reaches into the service's private _store attribute."
+ },
+ {
+  "id": "w007",
+  "violates": true,
+  "requirements": [
+   3
+  ],
+  "reason": "InMemoryLoanStore.find has a different signature and return type (key: int, list[Loan]) than the LoanStore port."
+ },
+ {
+  "id": "w008",
+  "violates": true,
+  "requirements": [
+   1,
+   7
+  ],
+  "reason": "Loan.close lazily imports and instantiates OutboxNotifier, so the domain depends on an adapter."
+ }
+]

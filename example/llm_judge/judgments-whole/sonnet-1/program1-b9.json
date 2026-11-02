@@ -1,0 +1,16 @@
+[
+ {
+  "id": "w065",
+  "violates": false,
+  "requirements": [],
+  "reason": "Singleton implemented via __new__ with instance() returning the shared object; layers intact."
+ },
+ {
+  "id": "w066",
+  "violates": true,
+  "requirements": [
+   1
+  ],
+  "reason": "The handler calls audit.record, a helper that creates an OrderRepository and writes into its internals, so the presentation layer reaches storage."
+ }
+]

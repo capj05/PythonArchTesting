@@ -1,0 +1,12 @@
+[
+{"id":"v001","violates":false,"requirements":[],"reason":"Equivalent rewrite of is_overdue inside the domain."},
+{"id":"v002","violates":false,"requirements":[],"reason":"Dataclass uses only the standard library; domain stays independent."},
+{"id":"v003","violates":true,"requirements":[1,7],"reason":"Domain imports an adapter module and instantiates OutboxNotifier, depending on a higher layer."},
+{"id":"v004","violates":true,"requirements":[2],"reason":"Application creates a store via type(store)(), instantiating an adapter class instead of using the injected object."},
+{"id":"v005","violates":true,"requirements":[1,7,8],"reason":"Domain imports application, reversing the layer order and creating a domain-application cycle."},
+{"id":"v006","violates":false,"requirements":[],"reason":"Composition root uses private helpers to build the adapters; layering is unchanged."},
+{"id":"v007","violates":true,"requirements":[1,7],"reason":"Domain imports adapters_notify and creates an OutboxNotifier inside Loan.close."},
+{"id":"v008","violates":false,"requirements":[],"reason":"A private helper still sends through the injected notifier."},
+{"id":"v009","violates":true,"requirements":[6],"reason":"lend no longer notifies the member through the injected notifier."},
+{"id":"v010","violates":true,"requirements":[3],"reason":"InMemoryLoanStore.find has a different signature (key: int, returns list) so it no longer satisfies the LoanStore port."}
+]

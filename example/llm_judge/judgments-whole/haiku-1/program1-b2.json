@@ -1,0 +1,10 @@
+[
+  {"id": "w009", "violates": true, "requirements": [4], "reason": "The service calls pickle.dumps through importlib.import_module, which is serialisation technology in the service, disguised by the indirect import."},
+  {"id": "w010", "violates": true, "requirements": [4], "reason": "The service opens an sqlite3 connection via __import__(\"sqlite3\").connect(...), which is persistence technology in the service."},
+  {"id": "w011", "violates": true, "requirements": [5], "reason": "The service hardcodes a 10 percent discount with round(total * 0.9, 2) and never calls the injected discount strategy."},
+  {"id": "w012", "violates": true, "requirements": [1], "reason": "The controller reaches the repository through service._repository via the find_order helper, which the layering rule forbids even through a helper."},
+  {"id": "w013", "violates": true, "requirements": [3], "reason": "The service sets order.status = \"placed\" directly instead of calling order.mark_placed()."},
+  {"id": "w014", "violates": false, "requirements": [], "reason": "Only local variable names are changed; the service still uses the injected collaborators and the order's own methods."},
+  {"id": "w015", "violates": false, "requirements": [], "reason": "The controller delegates response building to a new responses helper module with no import cycle, and the service and the call to the service are unchanged."},
+  {"id": "w016", "violates": true, "requirements": [1], "reason": "The handler computes sum(request[\"prices\"]) itself and never calls the order service, so the placement, discount, storage and event path is bypassed from the presentation layer."}
+]

@@ -131,10 +131,13 @@ def run_evaluation(
     sandbox_memory_mb: int = DEFAULT_SANDBOX_MEMORY_MB,
     config: Optional[str] = None,
     on_progress: Optional[Callable[[int, int, str], None]] = None,
+    architecture: bool = False,
+    mapping: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Evaluate targets against ``source`` and write JSON and Markdown reports."""
     from pythonarchtesting.runner import run_projects
     from pythonarchtesting.runner.skips import (
+        count_results_undecided,
         count_runtime_results_unverified,
         count_runtime_rules_skipped,
     )
@@ -148,6 +151,14 @@ def run_evaluation(
         require_absolute(targets_dir, "targets_dir")
     _check_targets(targets, targets_dir, project_pattern, exclude_patterns)
     policy = _sandbox_policy(dynamic, sandbox, sandbox_memory_mb)
+    mappings = None
+    if mapping is not None:
+        from pythonarchtesting.matching.assisted import mapping_from_data
+
+        try:
+            mappings = mapping_from_data(mapping)
+        except ValueError as exc:
+            raise ToolInputError(f"mapping: {exc}") from exc
     run_dir = output_root / datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%S%fZ")
     try:
         loaded, applied = resolve_config(source_path, config)
@@ -174,6 +185,8 @@ def run_evaluation(
             load_config_first=False,
             dynamic=dynamic,
             sandbox=policy,
+            architecture=architecture,
+            mappings=mappings,
             on_target_done=on_progress,
         )
         report_json = run_dir / "report.json"
@@ -197,6 +210,128 @@ def run_evaluation(
             "runtime_results_unverified": count_runtime_results_unverified(
                 target_states
             ),
+            "results_undecided": count_results_undecided(target_states),
         }
     )
     return result
+
+
+_CHECK_MODES = ("static", "full")
+_CHECK_PROBLEMS_CAP = 20
+
+
+def _mapping_outcome(found: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """The assisted pairs one target applied and refused, with the reasons."""
+    applied: list[dict[str, Any]] = []
+    refused: list[dict[str, Any]] = []
+    for match in found["matching"]["matches"]:
+        for reason in match.get("reasons") or []:
+            evidence = reason.get("evidence") or {}
+            entry = {"pair": evidence.get("pair"), "source": match["source_entity_id"]}
+            if reason.get("code") == "assisted_mapping":
+                applied.append(entry)
+            elif reason.get("code") == "assisted_mapping_rejected":
+                refused.append({**entry, "reason": reason.get("message")})
+    return {"applied": applied, "refused": refused}
+
+
+def check_architecture(
+    source: str,
+    target: str,
+    mode: str = "static",
+    mapping: Optional[dict[str, Any]] = None,
+    sandbox: Optional[str] = None,
+    sandbox_memory_mb: int = DEFAULT_SANDBOX_MEMORY_MB,
+    config: Optional[str] = None,
+) -> dict[str, Any]:
+    """Check one target against the reference, for an agent fixing it in a loop.
+
+    The same evaluation as the CLI, always with the reference as the model
+    of the architecture (``--architecture``), and ``--dynamic`` in ``full``
+    mode. Nothing is written: the verdict, the problems with their structured
+    feedback and the changes nothing decided come back directly.
+    """
+    from pythonarchtesting.matching.assisted import mapping_from_data
+    from pythonarchtesting.mcp_server.reports import _explain_result, _is_problem
+    from pythonarchtesting.runner import run_projects
+
+    if mode not in _CHECK_MODES:
+        raise ToolInputError(f"mode must be one of {', '.join(_CHECK_MODES)}: {mode}")
+    source_path = require_absolute(source, "source")
+    target_path = require_absolute(target, "target")
+    dynamic = mode == "full"
+    policy = _sandbox_policy(dynamic, sandbox, sandbox_memory_mb)
+    try:
+        mappings = mapping_from_data(mapping) if mapping is not None else None
+    except ValueError as exc:
+        raise ToolInputError(f"mapping: {exc}") from exc
+    try:
+        loaded, applied = resolve_config(source_path, config)
+        run_state, target_states = run_projects(
+            config=loaded,
+            source_path=str(source_path),
+            targets=[str(target_path)],
+            load_config_first=False,
+            dynamic=dynamic,
+            sandbox=policy,
+            architecture=True,
+            mappings=mappings,
+        )
+        rendered = generate_run_report(run_state, target_states, "json", loaded, None)
+    except (ConfigurationError, OSError) as exc:
+        raise ToolInputError(str(exc)) from exc
+    report = json.loads(rendered)
+    (found,) = report["targets"]
+    # A marker of the reference that does not compile says nothing about the
+    # target: it is the reference to fix, reported apart.
+    broken = [
+        r
+        for r in found["results"]
+        if "invalid_declaration" in str(r["rule_id"])
+        or str(r["rule_id"]).startswith("compiler_")
+    ]
+    problems = [
+        _explain_result(r)
+        for r in found["results"]
+        if _is_problem(r) and r not in broken
+    ]
+    undecided = sorted(
+        {
+            item
+            for r in found["results"]
+            if r["status"] == "OK"
+            for item in (r.get("details") or {}).get("undecided") or []
+        }
+    )
+    skipped = sum(1 for r in found["results"] if r["status"] == "SKIPPED")
+    return {
+        # The exit code counts the reference's broken markers too; nothing in
+        # the target can fix them, so they do not keep it from passing.
+        "passed": not problems if broken else found["exit_code"] == 0,
+        # A pass holds only for what ran: a SKIPPED part (a runtime check in
+        # static mode) did not look at the target.
+        "complete": skipped == 0,
+        "mode": mode,
+        "config": applied,
+        "reference_problems": [
+            {
+                "rule": r["rule_id"],
+                "summary": str(
+                    (r.get("details") or {}).get("compiler_reason")
+                    or (r.get("details") or {}).get("summary")
+                    or r.get("message")
+                ),
+            }
+            for r in broken
+        ],
+        "problems_total": len(problems),
+        "problems": problems[:_CHECK_PROBLEMS_CAP],
+        "undecided": undecided,
+        "skipped": skipped,
+        "mapping": _mapping_outcome(found) if mappings else None,
+        "unpaired": sum(
+            1
+            for r in found["results"]
+            if (r.get("details") or {}).get("reason") == "required_target_missing"
+        ),
+    }

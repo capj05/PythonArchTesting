@@ -1,0 +1,263 @@
+[
+ {
+  "id": "M101",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "api reads the loan straight from the service's private store",
+  "patches": [
+   [
+    "api.py",
+    "    due = service.lend(request[\"book\"], request[\"member\"])\n    return {\"status\": \"ok\", \"due\": due}\n",
+    "    service.lend(request[\"book\"], request[\"member\"])\n    loan = service._store.find(request[\"book\"])\n    due = loan.due\n    return {\"status\": \"ok\", \"due\": due}\n"
+   ]
+  ]
+ },
+ {
+  "id": "M102",
+  "kind": "mutant",
+  "operator": "O1 layer bypass",
+  "description": "api computes the due day from the service's clock attribute instead of using the returned value",
+  "patches": [
+   [
+    "api.py",
+    "    due = service.lend(request[\"book\"], request[\"member\"])\n    return {\"status\": \"ok\", \"due\": due}\n",
+    "    service.lend(request[\"book\"], request[\"member\"])\n    due = service._clock.today() + service._period\n    return {\"status\": \"ok\", \"due\": due}\n"
+   ]
+  ]
+ },
+ {
+  "id": "M103",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "application falls back to its own private notifier when none is given and ignores the injected one",
+  "patches": [
+   [
+    "application.py",
+    "from .ports import Clock, LoanStore, Notifier\n",
+    "from .ports import Clock, LoanStore, Notifier\n\n\nclass _LogNotifier:\n    def __init__(self) -> None:\n        self.sent: list[tuple[str, str]] = []\n\n    def send(self, member: str, text: str) -> None:\n        self.sent.append((member, text))\n"
+   ],
+   [
+    "application.py",
+    "        self._notifier = notifier\n",
+    "        self._notifier = _LogNotifier()\n"
+   ]
+  ]
+ },
+ {
+  "id": "M104",
+  "kind": "mutant",
+  "operator": "O2 broken injection",
+  "description": "application builds a default in-memory store itself instead of using the injected one",
+  "patches": [
+   [
+    "application.py",
+    "from .domain import Loan\n",
+    "from .adapters_memory import InMemoryLoanStore\nfrom .domain import Loan\n"
+   ],
+   [
+    "application.py",
+    "        self._store = store\n",
+    "        self._store = store if store is not None else InMemoryLoanStore()\n\n        if getattr(store, \"find\", None) is None:\n            self._store = InMemoryLoanStore()\n"
+   ]
+  ]
+ },
+ {
+  "id": "M105",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "application closes the loan by assigning its state instead of calling Loan.close",
+  "patches": [
+   [
+    "application.py",
+    "        loan.close()\n",
+    "        loan.returned = True\n"
+   ]
+  ]
+ },
+ {
+  "id": "M106",
+  "kind": "mutant",
+  "operator": "O3 foreign write",
+  "description": "the store resets the returned flag of a loan when it is stored",
+  "patches": [
+   [
+    "adapters_memory.py",
+    "    def add(self, loan: Loan) -> None:\n        self._loans[loan.book_id] = loan\n",
+    "    def add(self, loan: Loan) -> None:\n        loan.returned = False\n        self._loans[loan.book_id] = loan\n"
+   ]
+  ]
+ },
+ {
+  "id": "M107",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "lend never notifies the member",
+  "patches": [
+   [
+    "application.py",
+    "        self._notifier.send(member, f\"{book_id} is due on day {loan.due}\")\n",
+    ""
+   ]
+  ]
+ },
+ {
+  "id": "M108",
+  "kind": "mutant",
+  "operator": "O5 skipped collaborator",
+  "description": "the notification is sent only for first-time loans, re-lending is silent",
+  "patches": [
+   [
+    "application.py",
+    "        self._notifier.send(member, f\"{book_id} is due on day {loan.due}\")\n",
+    "        if current is None:\n            self._notifier.send(member, f\"{book_id} is due on day {loan.due}\")\n"
+   ]
+  ]
+ },
+ {
+  "id": "M109",
+  "kind": "mutant",
+  "operator": "O7 dependency cycle",
+  "description": "ports imports application (type-checking only) while application imports ports",
+  "patches": [
+   [
+    "ports.py",
+    "from typing import Protocol\n",
+    "from typing import TYPE_CHECKING, Protocol\n"
+   ],
+   [
+    "ports.py",
+    "from .domain import Loan\n",
+    "from .domain import Loan\n\nif TYPE_CHECKING:\n    from . import application\n"
+   ]
+  ]
+ },
+ {
+  "id": "M110",
+  "kind": "mutant",
+  "operator": "O9 broken port",
+  "description": "notifier send renames the parameters and swaps their order",
+  "patches": [
+   [
+    "adapters_notify.py",
+    "    def send(self, member: str, text: str) -> None:\n        self.sent.append((member, text))\n",
+    "    def send(self, text: str, recipient: str) -> None:\n        self.sent.append((recipient, text))\n"
+   ]
+  ]
+ },
+ {
+  "id": "M111",
+  "kind": "mutant",
+  "operator": "O9 broken port",
+  "description": "store find takes an int key and returns a list instead of Loan | None",
+  "patches": [
+   [
+    "adapters_memory.py",
+    "    def find(self, book_id: str) -> Loan | None:\n        return self._loans.get(book_id)\n",
+    "    def find(self, key: int) -> list[Loan] | None:\n        return self._loans.get(key)\n"
+   ]
+  ]
+ },
+ {
+  "id": "M112",
+  "kind": "mutant",
+  "operator": "O10 dependent domain",
+  "description": "domain keeps an audit outbox using the notify adapter",
+  "patches": [
+   [
+    "domain.py",
+    "from __future__ import annotations\n",
+    "from __future__ import annotations\n\nfrom .adapters_notify import OutboxNotifier\n\n_audit = OutboxNotifier()\n"
+   ],
+   [
+    "domain.py",
+    "        self.returned = True\n",
+    "        self.returned = True\n        _audit.send(self.member, f\"{self.book_id} returned\")\n"
+   ]
+  ]
+ },
+ {
+  "id": "E101",
+  "kind": "equivalent",
+  "description": "api validation moved to a private helper with renamed locals",
+  "patches": [
+   [
+    "api.py",
+    "    if not request.get(\"book\") or not request.get(\"member\"):\n        return {\"status\": \"error\", \"reason\": \"book and member are required\"}\n    due = service.lend(request[\"book\"], request[\"member\"])\n    return {\"status\": \"ok\", \"due\": due}\n",
+    "    book, member = request.get(\"book\"), request.get(\"member\")\n    if not _complete(book, member):\n        return {\"status\": \"error\", \"reason\": \"book and member are required\"}\n    return {\"status\": \"ok\", \"due\": service.lend(book, member)}\n\n\ndef _complete(*fields: Any) -> bool:\n    return all(fields)\n"
+   ]
+  ]
+ },
+ {
+  "id": "E102",
+  "kind": "equivalent",
+  "description": "application uses keyword arguments, renamed locals and a helper method",
+  "patches": [
+   [
+    "application.py",
+    "        loan = Loan(book_id, member, self._clock.today() + self._period)\n        self._store.add(loan)\n        self._notifier.send(member, f\"{book_id} is due on day {loan.due}\")\n        return loan.due\n",
+    "        created = Loan(book_id=book_id, member=member, due=self._due_day())\n        self._store.add(created)\n        message = f\"{book_id} is due on day {created.due}\"\n        self._notifier.send(member, message)\n        return created.due\n\n    def _due_day(self) -> int:\n        return self._clock.today() + self._period\n"
+   ]
+  ]
+ },
+ {
+  "id": "E103",
+  "kind": "equivalent",
+  "description": "due-day computation moved to a dependency-free helper module",
+  "patches": [
+   [
+    "application.py",
+    "from .domain import Loan\n",
+    "from .domain import Loan\nfrom .policy import due_day\n"
+   ],
+   [
+    "application.py",
+    "self._clock.today() + self._period)",
+    "due_day(self._clock.today(), self._period))"
+   ]
+  ],
+  "new_files": {
+   "policy.py": "\"\"\"Pure helper: lending period arithmetic, no project imports.\"\"\"\n\nfrom __future__ import annotations\n\n\ndef due_day(today: int, period: int) -> int:\n    return today + period\n"
+  }
+ },
+ {
+  "id": "E104",
+  "kind": "equivalent",
+  "description": "Loan.is_overdue and close rewritten with equivalent idioms",
+  "patches": [
+   [
+    "domain.py",
+    "        return not self.returned and today > self.due\n",
+    "        if self.returned:\n            return False\n        return self.due < today\n"
+   ]
+  ]
+ },
+ {
+  "id": "E105",
+  "kind": "equivalent",
+  "description": "wiring split into small builder functions with keyword arguments",
+  "patches": [
+   [
+    "wiring.py",
+    "def build(day: int = 1) -> LendingService:\n    return LendingService(InMemoryLoanStore(), OutboxNotifier(), FixedClock(day))\n",
+    "def _store() -> InMemoryLoanStore:\n    return InMemoryLoanStore()\n\n\ndef _notifier() -> OutboxNotifier:\n    return OutboxNotifier()\n\n\ndef build(day: int = 1) -> LendingService:\n    return LendingService(\n        store=_store(), notifier=_notifier(), clock=FixedClock(day), period=14\n    )\n"
+   ]
+  ]
+ },
+ {
+  "id": "E106",
+  "kind": "equivalent",
+  "description": "store uses dict.get/setdefault idioms and a helper; api return_book uses a local",
+  "patches": [
+   [
+    "adapters_memory.py",
+    "        return self._loans.get(book_id)\n",
+    "        found = self._loans.get(book_id)\n        return found\n"
+   ],
+   [
+    "api.py",
+    "    returned = service.give_back(request[\"book\"])\n    return {\"status\": \"ok\" if returned else \"not_lent\"}\n",
+    "    was_lent = service.give_back(request[\"book\"])\n    status = \"ok\" if was_lent else \"not_lent\"\n    return {\"status\": status}\n"
+   ]
+  ]
+ }
+]

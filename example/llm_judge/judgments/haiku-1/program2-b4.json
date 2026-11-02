@@ -1,0 +1,9 @@
+[
+  {"id": "v031", "violates": true, "requirements": [4], "reason": "The request handler calls a helper that reaches into the store through the service's private _store attribute, so it talks to the store rather than the application only."},
+  {"id": "v032", "violates": true, "requirements": [2, 6], "reason": "LendingService ignores the injected notifier and creates its own notifier class internally, so lending no longer notifies through the injected notifier."},
+  {"id": "v033", "violates": true, "requirements": [4, 7], "reason": "The request handler imports and instantiates the in-memory adapter InMemoryLoanStore, so handlers depend on adapters and talk to the store directly."},
+  {"id": "v034", "violates": true, "requirements": [2, 6, 7], "reason": "The application imports the OutboxNotifier adapter and creates it in its constructor, replacing the injected notifier and reversing the layer dependency."},
+  {"id": "v035", "violates": false, "requirements": [], "reason": "The memory store resets loan.returned to False on add, which is a state change outside Loan.close but does not close a loan, so no graded requirement is broken."},
+  {"id": "v036", "violates": true, "requirements": [3], "reason": "OutboxNotifier.send now takes (text, recipient), so it no longer satisfies the Notifier port's send(member, text) signature."},
+  {"id": "v037", "violates": false, "requirements": [], "reason": "The handler uses a new response helper module that touches neither the store nor adapters, which is a restructuring that keeps the architecture intact."}
+]
