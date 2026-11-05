@@ -145,7 +145,7 @@ def test_a_call_through_an_injected_object_is_attributed_to_its_module(
     case = outcome.cases[0]
     assert case["status"] == "passed"
     # The package prefix is stripped; constructing the argument is not a call
-    # the target made.
+    # the target made. The file is relative to the target root.
     assert case["calls"] == [
         {
             "from": "shop",
@@ -153,6 +153,7 @@ def test_a_call_through_an_injected_object_is_attributed_to_its_module(
             "callee": "Store.put",
             "caller": "save",
             "line": _line_of("return store.put(key, 1)"),
+            "file": "shop.py",
         }
     ]
 

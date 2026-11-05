@@ -188,5 +188,6 @@ def test_the_probe_reports_the_chain_of_a_transitive_call(tmp_path: Path) -> Non
     assert into_repository, calls
     for call in into_repository:
         assert call["from"] == "helpers"
-        assert call["origin"] == {"from": "controller", "caller": "handle"}
+        assert call["origin"] == {"from": "controller", "caller": "handle", "line": 6}
         assert call["via"] == [{"module": "helpers", "caller": "load"}]
+        assert call["file"] == "helpers.py"

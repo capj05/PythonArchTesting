@@ -178,6 +178,7 @@ def test_the_probe_reports_the_chain_of_a_transitive_instance(tmp_path: Path) ->
     assert by_class["OrderRepository"]["origin"] == {
         "from": "service",
         "caller": "OrderService.place",
+        "line": 10,
     }
     assert by_class["OrderRepository"]["via"] == [
         {"module": "factory", "caller": "make_repository"}

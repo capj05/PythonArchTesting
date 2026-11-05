@@ -14,7 +14,7 @@ from ..common import (
 )
 
 _SUPPORTED_KINDS = frozenset({"function", "method"})
-_RUNTIME_CASE_KEYS = frozenset({"args", "kwargs", "init", "steps"})
+_RUNTIME_CASE_KEYS = frozenset({"args", "kwargs", "init", "steps", "stdin"})
 _STEP_KEYS = frozenset({"call", "args", "kwargs"})
 _SPY_KEYS = frozenset({"$spy", "returns"})
 _MAX_TIMEOUT_S = 60.0
@@ -152,8 +152,9 @@ def runtime_cases_problem(
 ) -> tuple[str, str] | None:
     """Validate ``cases`` and ``timeout_s`` of a marker that runs target code.
 
-    Cases only give call arguments: they drive execution so the structure can
-    be observed, and never state what the call should compute.
+    Cases only give call arguments (and ``stdin``, the text the target reads
+    from the keyboard): they drive execution so the structure can be observed,
+    and never state what the call should compute.
     """
     cases = params.get("cases")
     if not isinstance(cases, list) or not cases:
@@ -181,6 +182,8 @@ def runtime_cases_problem(
             return "cases", f"case {index} 'args' must be a list"
         if not isinstance(case.get("kwargs", {}), dict):
             return "cases", f"case {index} 'kwargs' must be a dict"
+        if not isinstance(case.get("stdin", ""), str):
+            return "cases", f"case {index}: stdin must be a string"
         if "init" in case:
             if kind != "method":
                 return "cases", f"case {index} uses 'init', which only methods support"

@@ -187,8 +187,12 @@ def feedback(result: dict[str, Any]) -> dict[str, Any]:
                 "cycle", " -> ".join(route), route, list(cycle.get("steps") or [])
             )
         )
+    facts = list(details.get("facts") or [])
+    texts = list(details.get("violations") or [])
+    if not issues and facts and len(facts) == len(texts):
+        # Runtime rules (B1 F3): each fact with the violation text it states.
+        issues = [{**fact, "text": str(text)} for fact, text in zip(facts, texts)]
     if not issues:
-        texts = list(details.get("violations") or [])
         if not texts and (details.get("summary") or result.get("message")):
             texts = [details.get("summary") or result.get("message")]
         issues = [{"kind": "violation", "text": str(text)} for text in texts]

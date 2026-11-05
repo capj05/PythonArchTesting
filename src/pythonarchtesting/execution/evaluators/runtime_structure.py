@@ -35,6 +35,28 @@ def _describe_call(call: dict[str, Any]) -> str:
     )
 
 
+def _call_fact(index: Any, call: dict[str, Any]) -> dict[str, Any]:
+    """The structured form of a call ``_describe_call`` puts in words.
+
+    ``caller`` is the target's code the call is charged to; for a detour
+    ``via`` lists the code it went through (outermost first), ``origin_line``
+    is the line of the target's code the detour starts at (``None`` for a
+    direct call), and ``file`` and ``line`` say where the call itself was made.
+    """
+    origin, caller = _started_by(call)
+    via = (call.get("via") or []) if call.get("origin") else []
+    return {
+        "kind": "call",
+        "case": index,
+        "caller": f"{origin}:{caller}",
+        "callee": f"{call.get('module')}:{call.get('callee')}",
+        "file": call.get("file"),
+        "line": call.get("line"),
+        "via": [f"{step.get('module')}:{step.get('caller')}" for step in via],
+        "origin_line": (call.get("origin") or {}).get("line"),
+    }
+
+
 _WRITE_VERBS = {
     "assigned": "sets",
     "mutated": "changes what is held in",
@@ -57,6 +79,20 @@ def _describe_write(write: dict[str, Any]) -> str:
         f"{write.get('writer')} {verb} {write.get('class')}.{write.get('attribute')} "
         f"at {write.get('file')}:{write.get('line')}"
     )
+
+
+def _write_fact(index: Any, write: dict[str, Any]) -> dict[str, Any]:
+    """The structured form of a write ``_describe_write`` puts in words."""
+    return {
+        "kind": "write",
+        "case": index,
+        "change": str(write.get("change", "assigned")),
+        "writer": write.get("writer"),
+        "class": write.get("class"),
+        "attribute": write.get("attribute"),
+        "file": write.get("file"),
+        "line": write.get("line"),
+    }
 
 
 def _line_ranges(lines: list[int]) -> str:
@@ -290,6 +326,7 @@ class _ObservingEvaluator:
             details["coverage"] = coverage
         violations = self._violations(rule, outcome.cases, details)
         if not violations:
+            details.pop("facts", None)
             details["reason"] = "no_violations"
             details["summary"] = (
                 self._passed_summary(rule, len(cases))
@@ -315,7 +352,10 @@ class RuntimeCallsEvaluator(_ObservingEvaluator):
         through = [str(name) for name in rule.params.get("through") or []]
         details["modules"] = modules
         violations: list[str] = []
+        # One fact per violation, in the same order (B1 F3).
+        facts: list[dict[str, Any]] = []
         for case in cases:
+            index = case.get("index")
             calls = [
                 call
                 for call in case.get("calls") or []
@@ -327,17 +367,26 @@ class RuntimeCallsEvaluator(_ObservingEvaluator):
                         raised = case.get("raised")
                         suffix = f"; the call raised {raised}" if raised else ""
                         violations.append(
-                            f"case {case.get('index')}: no direct call into "
+                            f"case {index}: no direct call into "
                             f"{module}{suffix}{_missed_in_case(case)}"
+                        )
+                        facts.append(
+                            {
+                                "kind": "missing_call",
+                                "case": index,
+                                "module": self._names.target_module(module),
+                                "reference_module": module,
+                                "raised": raised or None,
+                            }
                         )
                 continue
             for call in calls:
                 if self._hits(call, allow) or self._passes_through(call, through):
                     continue
                 if self._hits(call, modules):
-                    violations.append(
-                        f"case {case.get('index')}: {_describe_call(call)}"
-                    )
+                    violations.append(f"case {index}: {_describe_call(call)}")
+                    facts.append(_call_fact(index, call))
+        details["facts"] = facts
         return violations
 
     def _layer(self, call: dict[str, Any]) -> str:
@@ -370,12 +419,14 @@ class RuntimeWritesEvaluator(_ObservingEvaluator):
     def _violations(
         self, rule: Rule, cases: list[dict[str, Any]], details: dict[str, Any]
     ) -> list[str]:
-        _ = rule, details
-        return [
-            f"case {case.get('index')}: {_describe_write(write)}"
+        _ = rule
+        found = [
+            (case.get("index"), write)
             for case in cases
             for write in case.get("writes") or []
         ]
+        details["facts"] = [_write_fact(index, write) for index, write in found]
+        return [f"case {index}: {_describe_write(write)}" for index, write in found]
 
     def _passed_summary(self, rule: Rule, case_count: int) -> str:
         _ = rule

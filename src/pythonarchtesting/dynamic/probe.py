@@ -424,6 +424,12 @@ class CallRecorder:
             "caller": caller_name,
             "line": caller.f_lineno,
         }
+        file = (
+            self._project.relpath(caller.f_code.co_filename) if self._project else None
+        )
+        if file is not None:
+            # Where the call was made, relative to the target root.
+            call["file"] = file
         if local:
             call["local"] = True
         if external:
@@ -1009,9 +1015,10 @@ def _origin_chain(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
     """The code of ``origin_module`` up the stack from ``frame``, and the way there.
 
-    Returns the origin (``from``, ``caller``) and the project code ``via``
-    which it reached ``frame``, outermost first, ``frame`` included; ``None``
-    when no code of ``origin_module`` is on the stack.
+    Returns the origin (``from``, ``caller``, and ``line``, the line of that
+    code the way out starts at) and the project code ``via`` which it reached
+    ``frame``, outermost first, ``frame`` included; ``None`` when no code of
+    ``origin_module`` is on the stack.
     """
     via: list[dict[str, Any]] = []
     while frame is not None:
@@ -1026,6 +1033,7 @@ def _origin_chain(
             origin = {
                 "from": _local_module(origin_module, package),
                 "caller": _code_name(frame.f_code),
+                "line": frame.f_lineno,
             }
             return origin, via
         if in_project(frame):
@@ -1678,7 +1686,42 @@ def _run_to_completion(result: Any) -> None:
         result.close()
 
 
+@contextlib.contextmanager
+def _case_stdin(case: dict[str, Any]) -> Iterator[None]:
+    """Give the target the case's ``stdin`` text as its keyboard while it runs.
+
+    ``input()`` and ``sys.stdin`` read that text; what the case leaves unread
+    is dropped, and reading past its end raises ``EOFError``. The original
+    ``sys.stdin`` comes back afterwards, so the text never reaches another
+    case. A case without ``stdin`` keeps the probe's own, already exhausted,
+    stdin.
+    """
+    if "stdin" not in case:
+        yield
+        return
+    original = sys.stdin
+    sys.stdin = io.StringIO(str(case["stdin"]))
+    try:
+        yield
+    finally:
+        sys.stdin = original
+
+
 def _run_case(
+    index: int,
+    case: dict[str, Any],
+    request: dict[str, Any],
+    module: Any,
+    package: str | None,
+    writes: WriteRecorder | None = None,
+    instances: InstanceRecorder | None = None,
+) -> dict[str, Any]:
+    """Run one case with its ``stdin``; see :func:`_observe_case`."""
+    with _case_stdin(case):
+        return _observe_case(index, case, request, module, package, writes, instances)
+
+
+def _observe_case(
     index: int,
     case: dict[str, Any],
     request: dict[str, Any],
@@ -1794,7 +1837,8 @@ def _run_case(
     elif observe.get("calls") == "transitive":
         calls = CallRecorder(module.__name__, package, project, transitive=True)
     elif observe.get("calls"):
-        calls = CallRecorder(module.__name__, package)
+        # The project only names the file of each call here.
+        calls = CallRecorder(module.__name__, package, project)
     tracing = bool(capture or flow_calls)
     if tracing and project is None:
         project = _Project(os.path.dirname(str(module.__file__)), package)
@@ -1930,6 +1974,8 @@ def _run_job(
     cases: list[dict[str, Any]] = []
     captured = _Captured()
     timed_out = False
+    # A late interrupt can land before a case puts its stdin back.
+    stdin = sys.stdin
     with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
         # The re-firing timer can interrupt anywhere until the deadline context
         # has disarmed it, including inside the inner handler; the outer
@@ -1956,6 +2002,7 @@ def _run_job(
                 timed_out = timed_out or deadline["fired"]
         except JobTimeout:
             timed_out = True
+    sys.stdin = stdin
     result: dict[str, Any] = {
         "status": "timeout" if timed_out else "completed",
         "cases": cases,

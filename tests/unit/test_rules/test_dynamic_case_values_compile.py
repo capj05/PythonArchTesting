@@ -139,3 +139,16 @@ def test_a_malformed_spy_is_rejected(cases: str, reason: str) -> None:
     assert problem is not None
     assert problem[0] == "cases"
     assert reason in problem[1]
+
+
+def test_case_stdin_accepts_string() -> None:
+    rules = _on_function('[{"args": [], "stdin": "1\\n"}]')
+
+    assert _problem(rules) is None
+    assert rules[0].params["cases"][0]["stdin"] == "1\n"
+
+
+def test_case_stdin_rejects_non_string() -> None:
+    problem = _problem(_on_function('[{"args": [], "stdin": 5}]'))
+
+    assert problem == ("cases", "case 0: stdin must be a string")

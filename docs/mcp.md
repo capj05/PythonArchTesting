@@ -106,7 +106,10 @@ LLM).
   place in the target; `reference_module` and `reference_line` say where the
   reference makes the call; for `enforce_layers` each path with
   its `kind` (`upward`, `sibling`, `skip`), `path` of modules and the first
-  import's `file` and `line`; for `forbid_cycles` each cycle; for other rules
-  their violations, or the summary;
+  import's `file` and `line`; for `forbid_cycles` each cycle; for
+  `forbid_runtime_calls`, `require_runtime_calls` and `forbid_foreign_writes`
+  each fact of `details.facts` (see [reporting.md](reporting.md#runtime-facts))
+  with `text`, the violation it states; for other rules their violations, or
+  the summary;
 - `undecided`, when the result lists changes nothing decided.
 

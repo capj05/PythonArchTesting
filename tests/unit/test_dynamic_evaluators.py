@@ -600,3 +600,208 @@ def test_reference_calls_fail_when_the_target_probe_does_not_complete(
     assert result.status == "FAILED"
     assert result.details["reason"] == "probe_timeout"
     assert result.details["stderr_tail"] == "tail"
+
+
+# Structured facts (B1 F3): one fact per violation, in the same order.
+
+
+def test_forbid_runtime_calls_facts_match_violations() -> None:
+    direct = {
+        **_call("repository", "Repo.get", 7),
+        "from": "controller",
+        "file": "controller.py",
+    }
+    detour = {
+        "from": "helpers",
+        "module": "repository",
+        "callee": "Repo.save",
+        "caller": "store",
+        "line": 5,
+        "file": "helpers.py",
+        "origin": {"from": "controller", "caller": "handle", "line": 4},
+        "via": [
+            {"module": "service", "caller": "Service.run"},
+            {"module": "helpers", "caller": "store"},
+        ],
+    }
+    result = _evaluate(
+        'forbid_runtime_calls("repository", transitive=True, cases=[{}])',
+        _cases({"calls": [direct, detour]}),
+    )
+
+    assert result.status == "FAILED"
+    assert len(result.details["facts"]) == len(result.details["violations"]) == 2
+    assert result.details["facts"] == [
+        {
+            "kind": "call",
+            "case": 0,
+            "caller": "controller:handle",
+            "callee": "repository:Repo.get",
+            "file": "controller.py",
+            "line": 7,
+            "via": [],
+            "origin_line": None,
+        },
+        {
+            "kind": "call",
+            "case": 0,
+            "caller": "controller:handle",
+            "callee": "repository:Repo.save",
+            "file": "helpers.py",
+            "line": 5,
+            "via": ["service:Service.run", "helpers:store"],
+            "origin_line": 4,
+        },
+    ]
+
+
+def test_require_runtime_calls_missing_call_fact() -> None:
+    result = _evaluate(
+        _REQUIRE,
+        _cases(
+            {"calls": [_call("service")]},
+            {"calls": [], "raised": "KeyError: 'id'"},
+        ),
+    )
+
+    assert result.details["facts"] == [
+        {
+            "kind": "missing_call",
+            "case": 0,
+            "module": "audit",
+            "reference_module": "audit",
+            "raised": None,
+        },
+        {
+            "kind": "missing_call",
+            "case": 1,
+            "module": "audit",
+            "reference_module": "audit",
+            "raised": "KeyError: 'id'",
+        },
+        {
+            "kind": "missing_call",
+            "case": 1,
+            "module": "service",
+            "reference_module": "service",
+            "raised": "KeyError: 'id'",
+        },
+    ]
+    assert len(result.details["facts"]) == len(result.details["violations"])
+
+
+def test_a_missing_call_fact_names_the_targets_module() -> None:
+    rule, entity = _rule_and_entity(_REQUIRE)
+    # The target renamed the reference's module ``audit`` to ``logbook``.
+    source = SimpleNamespace(
+        canonical_id="source:audit:record", module_path="audit", qualname="record"
+    )
+    target = SimpleNamespace(
+        canonical_id="target:logbook:record", module_path="logbook", qualname="record"
+    )
+    ctx = SimpleNamespace(
+        target_root=Path("."),
+        dynamic_cache={cache_key(rule, entity): _cases({"calls": [_call("service")]})},
+        sandbox=None,
+        source_by_id={source.canonical_id: source},
+        target_by_id={target.canonical_id: target},
+        matches={
+            source.canonical_id: SimpleNamespace(
+                status=MatchStatus.MATCHED, target_id=target.canonical_id
+            )
+        },
+    )
+    match = SimpleNamespace(status=MatchStatus.MATCHED, confidence=1.0)
+
+    result = RuntimeCallsEvaluator().evaluate(rule, entity, entity, match, ctx)
+
+    assert result.details["facts"] == [
+        {
+            "kind": "missing_call",
+            "case": 0,
+            "module": "logbook",
+            "reference_module": "audit",
+            "raised": None,
+        }
+    ]
+    assert result.details["violations"][0].startswith(
+        "case 0: no direct call into audit"
+    )
+
+
+def _write(change: str, attribute: str, line: int) -> dict:
+    return {
+        "class": "Inventory",
+        "attribute": attribute,
+        "writer": "shop:sell",
+        "file": "shop.py",
+        "line": line,
+        "change": change,
+    }
+
+
+def test_foreign_writes_facts() -> None:
+    result = _evaluate(
+        "forbid_foreign_writes(cases=[{}])",
+        _cases(
+            {"writes": [_write("assigned", "_stock", 10), _write("mutated", "log", 11)]}
+        ),
+    )
+
+    assert result.details["violations"] == [
+        "case 0: shop:sell sets Inventory._stock at shop.py:10",
+        "case 0: shop:sell changes what is held in Inventory.log at shop.py:11",
+    ]
+    assert result.details["facts"] == [
+        {
+            "kind": "write",
+            "case": 0,
+            "change": "assigned",
+            "writer": "shop:sell",
+            "class": "Inventory",
+            "attribute": "_stock",
+            "file": "shop.py",
+            "line": 10,
+        },
+        {
+            "kind": "write",
+            "case": 0,
+            "change": "mutated",
+            "writer": "shop:sell",
+            "class": "Inventory",
+            "attribute": "log",
+            "file": "shop.py",
+            "line": 11,
+        },
+    ]
+
+
+def test_facts_aligned_with_violations_across_cases() -> None:
+    result = _evaluate(
+        _FORBID,
+        _cases(
+            {
+                "calls": [
+                    _call("service"),
+                    _call("repository", "Repo.get", 7),
+                    _call("repository.cache"),
+                    _call("repository", "Repo.put", 8),
+                ]
+            },
+            {"calls": [_call("repository.sql")]},
+        ),
+    )
+
+    violations, facts = result.details["violations"], result.details["facts"]
+    assert len(violations) == len(facts) == 3
+    assert "(+2 more)" in result.message
+    for text, fact in zip(violations, facts):
+        assert text.startswith(f"case {fact['case']}: ")
+        assert f"{fact['callee']} (line {fact['line']})" in text
+
+
+def test_a_passing_rule_has_no_facts() -> None:
+    result = _evaluate(_FORBID, _cases({"calls": []}, {"calls": []}))
+
+    assert result.status == "OK"
+    assert "facts" not in result.details
