@@ -1,0 +1,108 @@
+# Catalogue entry; see ../io_separation/principle.toml for the format notes.
+
+id = "encapsulation"
+name = "Zapouzdření"
+level = "basic"
+
+summary = """
+Objekt si svůj stav (atributy) spravuje sám. Ostatní kód ho mění jen voláním jeho
+metod a čte ho jen přes jeho veřejné metody nebo vlastnosti; na atributy začínající
+podtržítkem zvenku nesahá.
+"""
+
+why = """
+Pravidla, která stav objektu chrání (např. „na skladě nesmí být záporné množství“),
+pak leží na jednom místě, v metodách třídy. Kód, který atributy mění zvenku, tato
+pravidla obchází a každá změna vnitřního uložení dat ho rozbije.
+"""
+
+[roles]
+owner = "třída, které stav patří (zde `Inventory`)"
+client = "funkce, které s objektem pracují (zde funkce v `shop`)"
+
+[[checks]]
+role = "client"
+marker = "forbid_foreign_writes"
+cases = "u každé klientské funkce objekt se stavem, na kterém funkce opravdu něco změní; u prodeje i případ, kdy zboží nestačí"
+
+[[errors]]
+id = "bypass_method"
+title = "změna stavu obchází metodu třídy"
+example = "err_sell_bypasses_remove"
+detected_by = "forbid_foreign_writes"
+what = "Funkce `{function}` ({file}:{line}) mění stav objektu zvenku: na řádku {fact_line} souboru `{fact_file}` zasahuje do atributu `{class}.{attribute}` ({change})."
+why = """
+Třída má pro tuto změnu metodu, která hlídá pravidla (dost zboží, záznam do historie).
+Přímý zápis do atributu tato pravidla obejde, takže stav může přestat dávat smysl.
+"""
+fix = "Zavolej metodu objektu (zde `inventory.remove(item, quantity)`) místo zápisu do atributu."
+
+[[errors]]
+id = "mutate_container"
+title = "úprava seznamu nebo slovníku, který patří objektu"
+example = "err_restock_writes_log"
+detected_by = "forbid_foreign_writes"
+what = "Funkce `{function}` ({file}:{line}) mění obsah atributu cizího objektu: na řádku {fact_line} souboru `{fact_file}` zasahuje do atributu `{class}.{attribute}` ({change})."
+why = """
+I `append` do seznamu objektu je změna jeho stavu. O tom, co se do historie zapisuje,
+má rozhodovat objekt sám; jinak vzniknou záznamy, které neodpovídají žádné operaci.
+"""
+fix = "Nech zápis na metodě třídy, případně přidej metodu, která ho udělá."
+
+[[errors]]
+id = "replace_attribute"
+title = "přepsání atributu cizího objektu"
+example = "err_clear_out_replaces_stock"
+detected_by = "forbid_foreign_writes"
+what = "Funkce `{function}` ({file}:{line}) přepisuje atribut cizího objektu: na řádku {fact_line} souboru `{fact_file}` zasahuje do atributu `{class}.{attribute}` ({change})."
+why = """
+Funkce nahradí vnitřní data objektu vlastní verzí. Objekt o změně neví, a jakmile
+třída změní způsob uložení dat, funkce přestane fungovat.
+"""
+fix = "Použij metody objektu (`quantity`, `remove`) a vnitřní atribut nech na pokoji."
+
+[[errors]]
+id = "read_private"
+title = "čtení soukromého atributu zvenku"
+example = "err_report_reads_private"
+gap = "G2"
+why = """
+Atribut s podtržítkem je vnitřní věc třídy. Kód, který ho čte zvenku, závisí na tom,
+jak třída data ukládá, a rozbije se při každé změně uvnitř třídy.
+"""
+fix = "Čti stav přes veřejné metody nebo vlastnosti (`items()`, `quantity(...)`)."
+
+[[neutral]]
+id = "model_solution"
+title = "modelové řešení bez markerů (kontrola, že reference projde i jako odevzdání)"
+example = "ok_basic"
+
+[[neutral]]
+id = "property"
+title = "vlastnost (`@property`) navíc, kterou klient čte"
+example = "ok_property"
+
+[[neutral]]
+id = "extra_method"
+title = "metoda třídy navíc, kterou klient volá"
+example = "ok_extra_method"
+
+[[neutral]]
+id = "wrong_math"
+title = "chyba ve výpočtu součtu v reportu"
+example = "ok_wrong_math"
+
+[[neutral]]
+id = "style_noise"
+title = "špatný styl: jednopísmenná jména, bez typů a dokumentace"
+example = "ok_style_noise"
+
+[[gaps]]
+id = "G2"
+title = "čtení soukromých atributů zvenku se nekontroluje"
+detail = """
+`forbid_foreign_writes` sleduje jen zápisy a změny. Žádný marker nehlásí `obj._x`
+mimo třídu objektu (`module_interface` hlídá soukromá jména modulů, ne atributů).
+Návrh: statická kontrola přístupu k `_atributům` přes jiný objekt než `self`/`cls`,
+mimo tělo vlastní třídy.
+"""
