@@ -1,0 +1,6 @@
+[
+{"id": "w006", "violates": false, "reason": "Pravidla jsou jen v Inventory a shop.py používá výhradně veřejné metody add, remove, quantity a items.", "explanation": ""},
+{"id": "w022", "violates": true, "reason": "restock v shop.py sám kontroluje pravidlo kladného množství, které patří výhradně do Inventory.", "explanation": "Funkce restock v shop.py duplikuje pravidlo skladu (množství musí být kladné), místo aby ho nechala vynutit třídu Inventory. Pravidla tak neleží na jednom místě a kdyby se pravidlo v Inventory změnilo, shop.py by s ním přestal být v souladu. Zapouzdření má zajistit, že o platnosti stavu rozhoduje jen sám objekt."},
+{"id": "w024", "violates": false, "reason": "Pravidla kontroluje jen Inventory a restock při chybě vrací změny zpět přes veřejné remove().", "explanation": ""},
+{"id": "w030", "violates": true, "reason": "restock v shop.py sám kontroluje, zda jsou množství kladná, a tím duplikuje pravidlo skladu mimo Inventory.", "explanation": "Funkce restock v shop.py předem ověřuje, že množství v dodávce je kladné, což je pravidlo skladu, které má ležet jen uvnitř třídy Inventory. Pravidlo je tak rozdělené na dvě místa a změna v Inventory by vyžadovala úpravu i v shop.py. Tím se porušuje myšlenka, že objekt své podmínky vynucuje sám."}
+]

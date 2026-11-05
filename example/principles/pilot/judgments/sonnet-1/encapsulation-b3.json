@@ -1,0 +1,6 @@
+[
+{"id":"w002","violates":false,"reason":"shop.py pracuje se skladem jen přes veřejné metody a pravidla jsou v Inventory.","explanation":""},
+{"id":"w011","violates":true,"reason":"restock v shop.py přímo zapisuje do inventory._stock.","explanation":"Funkce restock sahá na soukromý atribut _stock a obchází metodu add, takže pravidla skladu jsou duplikována mimo třídu Inventory. Změna vnitřního uložení by rozbila shop.py a pravidla lze obejít."},
+{"id":"w012","violates":true,"reason":"clear_out v shop.py maže přímo z inventory._stock.","explanation":"Funkce clear_out používá soukromý atribut _stock místo veřejné metody remove. Tím obchází pravidla skladu a závisí na vnitřním uložení, které by se nemělo dát zvenku měnit."},
+{"id":"w015","violates":true,"reason":"report v shop.py čte inventory._stock místo items().","explanation":"Funkce report sahá na soukromý atribut _stock, ačkoli existuje veřejná metoda items(). Shop tak závisí na vnitřním uložení a změna reprezentace dat v Inventory by ho rozbila."}
+]

@@ -1,0 +1,3 @@
+[{"id":"w001","violates":false,"reason":"All input()/print() is in main; grades.py only parses, computes and returns strings.","explanation":""},
+{"id":"w029","violates":false,"reason":"grades.py functions take parameters and return values or raise ValueError; I/O is only in main.","explanation":""},
+{"id":"w032","violates":false,"reason":"Logic in grades.py is free of input/print; I/O is confined to main (the average bug is unrelated to the principle).","explanation":""}]

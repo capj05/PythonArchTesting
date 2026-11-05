@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w001",
+    "violates": false,
+    "reason": "Stav je v privátním atributu _stock, shop.py pracuje se skladem jen přes add, remove, quantity a items, a items vrací kopii.",
+    "explanation": ""
+  },
+  {
+    "id": "w032",
+    "violates": false,
+    "reason": "Stav je v privátním atributu _stock, shop.py používá jen veřejné metody v, add, remove, quantity a items; pravidla kladnosti jsou ve třídě Inventory.",
+    "explanation": ""
+  },
+  {
+    "id": "w034",
+    "violates": false,
+    "reason": "Pravidla skladu jsou ve třídě Inventory, shop.py používá jen veřejné metody add, remove, quantity, items a is_empty, a konstruktor i items pracují s kopiemi.",
+    "explanation": ""
+  },
+  {
+    "id": "w035",
+    "violates": true,
+    "reason": "Funkce report v shop.py čte přímo privátní atribut inventory._stock místo veřejné metody items().",
+    "explanation": "Funkce report v modulu shop.py přistupuje k vnitřnímu slovníku skladu přes atribut inventory._stock, který začíná podtržítkem. Zadání přitom výslovně říká, že shop.py smí se skladem pracovat jen přes veřejné metody add, remove, quantity a items, a na atributy s podtržítkem zvenku nesahá. Tím se shop.py váže na vnitřní uložení třídy Inventory: změna uložení dat (např. jiná struktura nebo přejmenování atributu) by rozbila report, ačkoli by se mělo změnit jen Inventory. Správně mělo být použito inventory.items(), které vrací kopii a je pro tento účel určeno."
+  }
+]

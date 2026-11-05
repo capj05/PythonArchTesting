@@ -1,0 +1,6 @@
+[
+{"id":"w007","violates":true,"reason":"report() in shop.py reads the private inventory._stock directly.","explanation":"Funkce report v shop.py sahá na soukromý atribut _stock třídy Inventory místo veřejné metody items(). Shop tak závisí na vnitřním uložení dat a změna reprezentace v Inventory by report rozbila; zapouzdření je porušeno."},
+{"id":"w008","violates":false,"reason":"shop.py uses only public methods (add, remove, quantity, items, is_empty) and never touches _stock.","explanation":""},
+{"id":"w010","violates":true,"reason":"clear_out() in shop.py does `del inventory._stock[item]`, bypassing remove() and reaching into private state.","explanation":"Funkce clear_out maže přímo ze soukromého slovníku _stock, místo aby zavolala veřejné remove(). Obchází tak pravidla skladu a závisí na vnitřním uložení; změna reprezentace v Inventory by shop.py rozbila."},
+{"id":"w026","violates":false,"reason":"All rules live in Inventory and shop.py works only through public methods.","explanation":""}
+]

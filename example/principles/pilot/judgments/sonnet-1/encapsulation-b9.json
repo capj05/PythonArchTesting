@@ -1,0 +1,6 @@
+[
+{"id":"w001","violates":false,"reason":"Stav je privátní a shop.py používá jen veřejné metody; předkontrola kladnosti v restock jen opakuje pravidlo, nic neobchází.","explanation":""},
+{"id":"w032","violates":false,"reason":"Stav je v _stock, shop.py pracuje výhradně přes remove, add, quantity a items.","explanation":""},
+{"id":"w034","violates":false,"reason":"Pravidla leží v Inventory, shop.py používá jen veřejné metody včetně is_empty.","explanation":""},
+{"id":"w035","violates":true,"reason":"report() v shop.py čte přímo privátní atribut inventory._stock.","explanation":"Funkce report sahá zvenku na atribut začínající podtržítkem místo volání veřejné metody items(). Shop tak závisí na vnitřním uložení dat v Inventory a změna reprezentace (např. jiná struktura než slovník) by report rozbila. Zapouzdření má právě takovou závislost vyloučit."}
+]

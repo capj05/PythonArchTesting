@@ -1,0 +1,6 @@
+[
+{"id":"w010","violates":false,"reason":"All input and output is in main; grades.py functions take parameters and return values.","explanation":""},
+{"id":"w013","violates":false,"reason":"grades.py is pure logic, input() and print() are only in main.","explanation":""},
+{"id":"w018","violates":true,"reason":"parse_grades ignores its text parameter and reads from the keyboard via input() itself, while main passes an empty string.","explanation":"Funkce parse_grades v grades.py si sama čte vstup z klávesnice pomocí input() a přepisuje tak svůj parametr text; main jí předává jen prázdný řetězec. Logika je tak svázaná s klávesnicí, nelze ji použít na jiném textu (web, jiný program) ani otestovat bez simulace vstupu, což je přesně to, čemu má oddělení logiky od vstupu a výstupu zabránit."},
+{"id":"w024","violates":false,"reason":"Logic functions only take parameters and return results; input and print are confined to main.","explanation":""}
+]

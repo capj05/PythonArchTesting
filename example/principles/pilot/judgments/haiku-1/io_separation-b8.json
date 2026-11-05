@@ -1,0 +1,20 @@
+[
+  {
+    "id": "w001",
+    "violates": false,
+    "reason": "Modul grades.py neobsahuje žádné input ani print; parsování, průměr i sestavení souhrnu jsou čisté funkce a čtení i výpis zůstávají v app.py.",
+    "explanation": ""
+  },
+  {
+    "id": "w029",
+    "violates": false,
+    "reason": "Modul grades.py neobsahuje žádné input ani print; čtení řádku a výpis jsou v main() v app.py, logika dostává data jako parametry.",
+    "explanation": ""
+  },
+  {
+    "id": "w032",
+    "violates": false,
+    "reason": "Modul grades.py neobsahuje žádné input ani print; I/O je výhradně v main() v app.py, funkce v grades.py pracují jen s parametry a návratovými hodnotami (chyba v average() nesouvisí s tímto principem).",
+    "explanation": ""
+  }
+]

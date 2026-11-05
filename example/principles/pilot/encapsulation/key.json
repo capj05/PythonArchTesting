@@ -1,0 +1,278 @@
+{
+ "w001": {
+  "path": "solutions/skeleton/sonnet-2/solution",
+  "kind": "solution",
+  "id": "skeleton/sonnet-2",
+  "carrier": null,
+  "sha256": "7237fe25ebf40fb73a0edd461cb8253c01798cd450be31c65fce496c0ff52f7a"
+ },
+ "w002": {
+  "path": "solutions/text/haiku-1/solution",
+  "kind": "solution",
+  "id": "text/haiku-1",
+  "carrier": null,
+  "sha256": "b89baf4629854dbf6f0a0c6e05c943efead545595c147d4d4e917332cd17aa61"
+ },
+ "w003": {
+  "path": "solutions/text/opus-1/solution",
+  "kind": "solution",
+  "id": "text/opus-1",
+  "carrier": null,
+  "sha256": "0a4f82267ecc49df00b2ddfaf48c7f437c3a269642b324713ac51e567961431a"
+ },
+ "w004": {
+  "path": "injected/neutral/style_noise-skeleton_sonnet-1/solution",
+  "kind": "neutral",
+  "id": "style_noise",
+  "carrier": "skeleton/sonnet-1",
+  "injector": "sonnet",
+  "sha256": "9eefe1a7e7783d76cf120501e25ab88ed5b8f8b010ef5f0c91c1712ae538eb27"
+ },
+ "w005": {
+  "path": "injected/neutral/style_noise-skeleton_opus-1/solution",
+  "kind": "neutral",
+  "id": "style_noise",
+  "carrier": "skeleton/opus-1",
+  "injector": "sonnet",
+  "sha256": "bf0ed3462882bb2068f293257388a0d6d07ee98fa81a89f814bf5af8256e269d"
+ },
+ "w006": {
+  "path": "solutions/skeleton/opus-2/solution",
+  "kind": "solution",
+  "id": "skeleton/opus-2",
+  "carrier": null,
+  "sha256": "003b31fa6b7b71d3b198ff6932dd451014d01ae05392c99e81dee28972715511"
+ },
+ "w007": {
+  "path": "injected/err/read_private-skeleton_opus-1/solution",
+  "kind": "err",
+  "id": "read_private",
+  "carrier": "skeleton/opus-1",
+  "injector": "sonnet",
+  "sha256": "636b13905e0f66a4a71eaebd060cb0644e246f9a20c8de0a5287ed260237d62f"
+ },
+ "w008": {
+  "path": "injected/neutral/extra_method-skeleton_sonnet-1/solution",
+  "kind": "neutral",
+  "id": "extra_method",
+  "carrier": "skeleton/sonnet-1",
+  "injector": "sonnet",
+  "sha256": "550c4b6570f8a2441852a1ede643d7aebd119342f49587edb529148ed9a1e03e"
+ },
+ "w009": {
+  "path": "solutions/skeleton/haiku-1/solution",
+  "kind": "solution",
+  "id": "skeleton/haiku-1",
+  "carrier": null,
+  "sha256": "d9a38f132a0d21ed86524a96457ae2c9a01a5dd71e9137c46c72f11a644454fe"
+ },
+ "w010": {
+  "path": "injected/err/mutate_container-skeleton_haiku-1/solution",
+  "kind": "err",
+  "id": "mutate_container",
+  "carrier": "skeleton/haiku-1",
+  "injector": "sonnet",
+  "sha256": "72bc50f7c9af08cd8defa640799ef000552ec9845ea300b37eb70e64083e79de"
+ },
+ "w011": {
+  "path": "injected/err/mutate_container-skeleton_sonnet-1/solution",
+  "kind": "err",
+  "id": "mutate_container",
+  "carrier": "skeleton/sonnet-1",
+  "injector": "sonnet",
+  "sha256": "66ff4b52cc8fc7b754de879b44e65043a7da29855071fc97d08f4b29056c97e7"
+ },
+ "w012": {
+  "path": "injected/err/mutate_container-skeleton_opus-1/solution",
+  "kind": "err",
+  "id": "mutate_container",
+  "carrier": "skeleton/opus-1",
+  "injector": "sonnet",
+  "sha256": "7137c7d3846315fc313475694fe68167d46753bc2a8a6c38fd77095d76686f82"
+ },
+ "w013": {
+  "path": "injected/err/replace_attribute-skeleton_opus-1/solution",
+  "kind": "err",
+  "id": "replace_attribute",
+  "carrier": "skeleton/opus-1",
+  "injector": "sonnet",
+  "sha256": "75288782d76be3c726b85bde08addfc6a9738315fc7adef8b6dc1520efce908f"
+ },
+ "w014": {
+  "path": "injected/neutral/input_handling-skeleton_opus-1/solution",
+  "kind": "neutral",
+  "id": "input_handling",
+  "carrier": "skeleton/opus-1",
+  "injector": "sonnet",
+  "sha256": "768cbb1214f15e14d82531c979076d16b90eea99a082b579c83cfa8a4e82d75b"
+ },
+ "w015": {
+  "path": "injected/err/read_private-skeleton_haiku-1/solution",
+  "kind": "err",
+  "id": "read_private",
+  "carrier": "skeleton/haiku-1",
+  "injector": "sonnet",
+  "sha256": "b1b5c0591fb75f05aeb014bc2e6549808162e99509fe1ef519f2f3787f855d11"
+ },
+ "w016": {
+  "path": "injected/err/bypass_method-skeleton_opus-1/solution",
+  "kind": "err",
+  "id": "bypass_method",
+  "carrier": "skeleton/opus-1",
+  "injector": "sonnet",
+  "sha256": "e3bc8b193708611b55ceadfffdc71946479ea0b8752b64050169669aaa07cad8"
+ },
+ "w017": {
+  "path": "injected/neutral/input_handling-skeleton_haiku-1/solution",
+  "kind": "neutral",
+  "id": "input_handling",
+  "carrier": "skeleton/haiku-1",
+  "injector": "sonnet",
+  "sha256": "9b1d0948ef6dfe72f55692ab19f9d2e679832630547fec5d03cd510eb37b7dea"
+ },
+ "w018": {
+  "path": "injected/neutral/input_handling-skeleton_sonnet-1/solution",
+  "kind": "neutral",
+  "id": "input_handling",
+  "carrier": "skeleton/sonnet-1",
+  "injector": "sonnet",
+  "sha256": "f4b0a8cf68b981f9ff26a07ff085abd7267af9a9be541499fb1952ad37e8c965"
+ },
+ "w019": {
+  "path": "injected/neutral/extra_method-skeleton_haiku-1/solution",
+  "kind": "neutral",
+  "id": "extra_method",
+  "carrier": "skeleton/haiku-1",
+  "injector": "sonnet",
+  "sha256": "354a3b8c5b62a74e46171d566107e316bbfda05028066d9cb2ab1c39562efcb5"
+ },
+ "w020": {
+  "path": "injected/err/replace_attribute-skeleton_haiku-1/solution",
+  "kind": "err",
+  "id": "replace_attribute",
+  "carrier": "skeleton/haiku-1",
+  "injector": "sonnet",
+  "sha256": "cefae74b73dc6ddb7f3512ccade45fadb47407735964bd22621a5fa4180086f5"
+ },
+ "w021": {
+  "path": "injected/err/replace_attribute-skeleton_sonnet-1/solution",
+  "kind": "err",
+  "id": "replace_attribute",
+  "carrier": "skeleton/sonnet-1",
+  "injector": "sonnet",
+  "sha256": "2941d877a5c000fd8b931c7b5e96e592734736059faf54d0933ef41ab114c9b7"
+ },
+ "w022": {
+  "path": "injected/neutral/wrong_math-skeleton_haiku-1/solution",
+  "kind": "neutral",
+  "id": "wrong_math",
+  "carrier": "skeleton/haiku-1",
+  "injector": "sonnet",
+  "sha256": "84d25f09a2583e2211c14d822d3700dfc9e96916198a39b941c0da2e95e727bc"
+ },
+ "w023": {
+  "path": "solutions/text/sonnet-1/solution",
+  "kind": "solution",
+  "id": "text/sonnet-1",
+  "carrier": null,
+  "sha256": "b3f55a835809d0b8aa33d33992ab198ce0e4b0e48a0bc0d991847b6f004cc420"
+ },
+ "w024": {
+  "path": "solutions/skeleton/opus-1/solution",
+  "kind": "solution",
+  "id": "skeleton/opus-1",
+  "carrier": null,
+  "sha256": "e1832f3be4262344ffc8fb6bdb88ad645b2d66853e625e3f6093bdd24524f4c4"
+ },
+ "w025": {
+  "path": "injected/err/bypass_method-skeleton_sonnet-1/solution",
+  "kind": "err",
+  "id": "bypass_method",
+  "carrier": "skeleton/sonnet-1",
+  "injector": "sonnet",
+  "sha256": "53d8913f368deb5e6b9f1e734622d6b13664d5a97e4924fd83308ddb6b070c48"
+ },
+ "w026": {
+  "path": "solutions/text/opus-2/solution",
+  "kind": "solution",
+  "id": "text/opus-2",
+  "carrier": null,
+  "sha256": "86224d10a3598d8c700a7665b875962e2f337648b721362e70145f24fd0df2ae"
+ },
+ "w027": {
+  "path": "injected/neutral/wrong_math-skeleton_opus-1/solution",
+  "kind": "neutral",
+  "id": "wrong_math",
+  "carrier": "skeleton/opus-1",
+  "injector": "sonnet",
+  "sha256": "933adbea02150140bbf3170129fdf6646d5d5ae71f2e8fff5d81ce862c0a8949"
+ },
+ "w028": {
+  "path": "solutions/skeleton/haiku-2/solution",
+  "kind": "solution",
+  "id": "skeleton/haiku-2",
+  "carrier": null,
+  "sha256": "99563c926771fc47dc43791c6d39e909e7cf164a0df99152d3d0727fc7ba5f2f"
+ },
+ "w029": {
+  "path": "injected/err/bypass_method-skeleton_haiku-1/solution",
+  "kind": "err",
+  "id": "bypass_method",
+  "carrier": "skeleton/haiku-1",
+  "injector": "sonnet",
+  "sha256": "1a9f87eab8a6b79967af9c3d6c45c50e47c1eb316d95b54fa643a5bc4a6cbd65"
+ },
+ "w030": {
+  "path": "solutions/skeleton/sonnet-1/solution",
+  "kind": "solution",
+  "id": "skeleton/sonnet-1",
+  "carrier": null,
+  "sha256": "a60373cb6e991c3c326fbdf81da4d01dc8dfc83cb47534031f22009c60c0049c"
+ },
+ "w031": {
+  "path": "injected/neutral/wrong_math-skeleton_sonnet-1/solution",
+  "kind": "neutral",
+  "id": "wrong_math",
+  "carrier": "skeleton/sonnet-1",
+  "injector": "sonnet",
+  "sha256": "3895b5eae6222a6f4d9aa58a6455395289b8cb10a294c74af7176917b20c4f4d"
+ },
+ "w032": {
+  "path": "injected/neutral/style_noise-skeleton_haiku-1/solution",
+  "kind": "neutral",
+  "id": "style_noise",
+  "carrier": "skeleton/haiku-1",
+  "injector": "sonnet",
+  "sha256": "1f1d581af6c2ba9df94bb2f453108daa27a312f61902dca1ea1d4fc03b014077"
+ },
+ "w033": {
+  "path": "solutions/text/haiku-2/solution",
+  "kind": "solution",
+  "id": "text/haiku-2",
+  "carrier": null,
+  "sha256": "8755ef56a1803731e4f7aa5162a4c36b3a237560eec99ac7310fae4f16eb03b7"
+ },
+ "w034": {
+  "path": "injected/neutral/extra_method-skeleton_opus-1/solution",
+  "kind": "neutral",
+  "id": "extra_method",
+  "carrier": "skeleton/opus-1",
+  "injector": "sonnet",
+  "sha256": "3cbc7139dee2b42b86c799eb58e3a3c394e070673cdb3ec83348249313ac7daa"
+ },
+ "w035": {
+  "path": "injected/err/read_private-skeleton_sonnet-1/solution",
+  "kind": "err",
+  "id": "read_private",
+  "carrier": "skeleton/sonnet-1",
+  "injector": "sonnet",
+  "sha256": "9f590511981b9a97f182a21d62b5a66793efcb156e534abbc663103280b6da4e"
+ },
+ "w036": {
+  "path": "solutions/text/sonnet-2/solution",
+  "kind": "solution",
+  "id": "text/sonnet-2",
+  "carrier": null,
+  "sha256": "d6fa8a27d2d5f023c2e75bcbf0a7737ec7477ec5f2899617f0dc2e6587a5e874"
+ }
+}

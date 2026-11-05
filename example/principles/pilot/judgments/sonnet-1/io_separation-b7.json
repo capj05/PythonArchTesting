@@ -1,0 +1,3 @@
+[{"id":"w003","violates":false,"reason":"All logic returns values or raises; input() and print() are only in main.","explanation":""},
+{"id":"w028","violates":false,"reason":"grades.py is pure; I/O is confined to main.","explanation":""},
+{"id":"w033","violates":false,"reason":"grades.py has no I/O; the wrong average denominator is a different fault.","explanation":""}]

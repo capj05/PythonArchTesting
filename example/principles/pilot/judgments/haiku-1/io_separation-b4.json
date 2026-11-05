@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w010",
+    "violates": false,
+    "reason": "grades.py obsahuje jen zpracování a výpočet, čtení vstupu i výpis jsou v app.py a parse_grades přijímá text jako parametr.",
+    "explanation": ""
+  },
+  {
+    "id": "w013",
+    "violates": false,
+    "reason": "grades.py nečte ani nevypisuje nic, parse_grades, average i format_summary pracují pouze s parametry a návratovými hodnotami.",
+    "explanation": ""
+  },
+  {
+    "id": "w018",
+    "violates": true,
+    "reason": "parse_grades v grades.py volá input() a čte data přímo z klávesnice místo použití parametru text.",
+    "explanation": "Funkce parse_grades v modulu grades.py sama volá input('Zadej známky: ') a čte řádek z klávesnice, takže logika zpracování je spojená se vstupem. Parametr text je hned na začátku přepsán novou hodnotou a volající ho nemůže ovlivnit, takže funkci nelze použít s jiným zdrojem dat (web, soubor, test bez klávesnice) bez interaktivního vstupu. Přesně tohoto oddělení se zadání týká: čtení řádku patří jen do main() v app.py."
+  },
+  {
+    "id": "w024",
+    "violates": false,
+    "reason": "grades.py neprovádí žádný vstup ani výstup, parse_grades dostává text jako parametr a input() i print() jsou jen v app.py.",
+    "explanation": ""
+  }
+]

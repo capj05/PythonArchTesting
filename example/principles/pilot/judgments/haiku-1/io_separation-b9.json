@@ -1,0 +1,5 @@
+[
+  {"id": "w002", "violates": false, "reason": "format_summary vrací řetězec, parse_grades a average jsou čisté funkce a výpis provádí až main.", "explanation": ""},
+  {"id": "w004", "violates": true, "reason": "format_summary v grades.py přímo volá print a vrací None, takže sestavení souhrnu je výstup a nelze ho znovu použít bez konzole.", "explanation": "Funkce format_summary v grades.py místo vrácení řetězce věty volá print() a vrací None. Sestavení souhrnu je tak výstup přímo na konzoli, který patří do main. Modul grades.py nelze použít na webu ani v jiném programu bez toho, aby se text vypsal na standardní výstup, a nelze ho ověřit bez zachycování stdout. Ostatní funkce (parse_grades, average) jsou čisté, porušuje to jen format_summary, a main pak výsledek volá bez použití."},
+  {"id": "w016", "violates": false, "reason": "format_summary vrací řetězec, grades.py neobsahuje žádný vstup ani výstup a main sám čte řádek a vypisuje výsledek nebo chybu.", "explanation": ""}
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w006",
+    "violates": false,
+    "reason": "grades.py contains only pure functions that take data as parameters and return values; input() and print() are confined to app.py.",
+    "explanation": ""
+  },
+  {
+    "id": "w009",
+    "violates": true,
+    "reason": "format_summary in grades.py prints its result instead of returning the summary text, so the logic performs output itself.",
+    "explanation": "Funkce format_summary v grades.py místo vrácení řetězce souhrnu volá print() a vrací None. Výpis je tak součástí logiky, takže tuto funkci nelze znovu použít v jiném programu ani na webu bez toho, aby se výstup vypsal na konzoli, a nelze ji vyzkoušet bez zachycování standardního výstupu. Zadání přitom výslovně chce, aby sestavení věty souhrnu bylo logika, která výsledek vrací; app.py pak navíc zahazuje její návratovou hodnotu (None), takže se výsledek vypíše jen jako vedlejší efekt volání."
+  },
+  {
+    "id": "w012",
+    "violates": false,
+    "reason": "grades.py has pure functions that return values (including the summary string) and do no input or printing; main in app.py does the printing.",
+    "explanation": ""
+  },
+  {
+    "id": "w031",
+    "violates": false,
+    "reason": "grades.py is documented and written as pure logic with no input or output, returning the summary string, while app.py alone reads the keyboard and prints.",
+    "explanation": ""
+  }
+]

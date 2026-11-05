@@ -1,0 +1,5 @@
+[
+{"id":"w002","violates":false,"reason":"Logika v grades.py jen vrací hodnoty a vyvolává výjimky, veškerý input/print je v main.","explanation":""},
+{"id":"w004","violates":true,"reason":"format_summary v grades.py místo vrácení řetězce přímo volá print.","explanation":"Funkce format_summary je logika (sestavení věty souhrnu), ale výsledek vypisuje na výstup místo toho, aby ho vrátila. Nelze ji tak znovu použít (např. na webu) ani otestovat bez zachytávání stdout; výpis patří jen do main."},
+{"id":"w016","violates":false,"reason":"Funkce v grades.py přijímají parametry a vracejí hodnoty, input a print jsou jen v main.","explanation":""}
+]

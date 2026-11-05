@@ -1,0 +1,6 @@
+[
+{"id":"w003","violates":false,"reason":"shop.py pracuje se skladem jen přes add, remove, quantity a items a pravidla jsou uvnitř Inventory.","explanation":""},
+{"id":"w016","violates":true,"reason":"clear_out v shop.py přímo volá inventory._stock.pop(item) a sahá na soukromý atribut.","explanation":"Funkce clear_out obchází veřejné rozhraní a mění soukromý atribut _stock přímo, místo aby zavolala remove. Pravidla skladu tak nejsou jen v Inventory a změna interního uložení by rozbila shop.py."},
+{"id":"w020","violates":true,"reason":"clear_out v shop.py přepisuje soukromý atribut inventory._stock.","explanation":"Funkce clear_out přiřazuje do inventory._stock, tedy sahá do vnitřního stavu skladu mimo třídu, místo aby použila remove. Tím obchází pravidla skladu a váže shop.py na vnitřní uložení dat."},
+{"id":"w025","violates":true,"reason":"clear_out v shop.py maže položku přes del inventory._stock[item], tedy přes soukromý atribut.","explanation":"Funkce clear_out zasahuje přímo do soukromého slovníku _stock místo volání veřejné metody remove. Stav skladu se mění mimo třídu Inventory a vnitřní uložení nelze změnit bez úpravy shop.py."}
+]

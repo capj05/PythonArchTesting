@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w007",
+    "violates": true,
+    "reason": "The report function in shop.py reads the private attribute inventory._stock directly instead of using the public items() method.",
+    "explanation": "Funkce `report` v `shop.py` čte `inventory._stock`, tedy atribut s podtržítkem, který má zůstat soukromý uvnitř `Inventory`. Zadání přitom výslovně říká, že `shop.py` smí se skladem pracovat jen přes veřejné metody `add`, `remove`, `quantity` a `items`. Tím se zapouzdření obchází: vnitřní uložení dat v `Inventory` už nelze změnit, aniž by se musel upravit `shop.py`."
+  },
+  {
+    "id": "w008",
+    "violates": false,
+    "reason": "All shop.py functions use only the public Inventory methods (remove, add, quantity, items, is_empty) and the constructor copies the input dict.",
+    "explanation": ""
+  },
+  {
+    "id": "w010",
+    "violates": true,
+    "reason": "The clear_out function in shop.py deletes the item via del inventory._stock[item], bypassing the public remove method and its rules.",
+    "explanation": "Funkce `clear_out` v `shop.py` maže položku přímo přes `del inventory._stock[item]`, čímž obchází veřejnou metodu `remove` a její kontroly. Pravidla skladu tak nejsou soustředěna na jednom místě uvnitř `Inventory` a změna vnitřní struktury by rozbila `shop.py`. Zadání přitom zakazuje zvenku sahat na atributy začínající podtržítkem."
+  },
+  {
+    "id": "w026",
+    "violates": false,
+    "reason": "shop.py works only through the public Inventory methods (add, remove, quantity, items) and the state stays private in Inventory.",
+    "explanation": ""
+  }
+]
