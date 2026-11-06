@@ -13,22 +13,28 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from pythonarchtesting.mcp_server import authoring, evaluation, markers, reports
+from pythonarchtesting.mcp_server import (
+    authoring,
+    evaluation,
+    markers,
+    principles,
+    reports,
+    tasks,
+)
 from pythonarchtesting.mcp_server.errors import ToolInputError
 
 INSTRUCTIONS = """\
-Authoring and checking architectural markers for PythonArchTesting.
-1. Look up markers with list_markers / describe_marker.
-2. Edit the reference files with your own file tools; this server never edits files.
-3. After every marker change, run validate_declarations.
-4. Verify a marker with verify_marker (seeded violations must fail it, the reference
-   must pass); check runtime cases with check_cases before using them.
-5. Evaluate a batch of submissions with targets_dir.
-6. Read results through summarize_report, then explain_target / explain_rule;
-   unpaired entities: propose_mapping, then run_evaluation(mapping=...).
-7. A rule that fails almost every submission suggests a wrong marker, not wrong students.
-8. All paths must be absolute.
-9. dynamic=True runs student code, under bwrap by default.
+Teaching tasks and architectural markers for PythonArchTesting; this server never
+edits files. 1. Pick the principle: list_principles, describe_principle.
+2. Write task.toml beside the unannotated reference (principle, [roles], [cases]);
+   iterate with prepare_task until accepted. Markers instead: list_markers,
+   describe_marker, validate_declarations, check_cases, verify_marker.
+3. run_evaluation(source=<task dir>, targets_dir=...) runs dynamically; read the
+   class with class_overview, one submission with explain_target(principle=...);
+   not_judged is no pass. Else summarize_report / explain_rule; unpaired:
+   propose_mapping, then mapping=.
+4. A rule that fails almost every submission suggests a wrong task, not wrong students.
+5. All paths must be absolute; dynamic runs code under bwrap by default.
 """
 
 mcp = MCPServer("pythonarchtesting", instructions=INSTRUCTIONS)
@@ -75,6 +81,25 @@ def describe_marker(name: str) -> dict[str, Any]:
 
 
 @mcp.tool(annotations=READONLY)
+def list_principles() -> list[dict[str, Any]]:
+    """List the teaching principles of the catalogue with id, name, level and a
+    one-line summary. Use first, to pick the principle a task practises."""
+    with _tool_errors():
+        return principles.list_principles()
+
+
+@mcp.tool(annotations=READONLY)
+def describe_principle(principle_id: str) -> dict[str, Any]:
+    """Return one principle's catalogue entry: summary and why, the roles of a
+    task's code, the checks (marker per role), the typical errors (title, a
+    ``what`` template, why, fix, the marker that detects it and its fact
+    signature, or the known gap that misses it), the neutral changes that must
+    pass, and the gaps. Texts are English; word them for the reader."""
+    with _tool_errors():
+        return principles.describe_principle(principle_id)
+
+
+@mcp.tool(annotations=READONLY)
 def validate_declarations(
     source: str,
     reference_modules: Optional[list[str]] = None,
@@ -101,12 +126,13 @@ async def run_evaluation(
     exclude_patterns: Optional[list[str]] = None,
     reference_modules: Optional[list[str]] = None,
     validation_scope: str = "all",
-    dynamic: bool = False,
+    dynamic: Optional[bool] = None,
     sandbox: Optional[str] = None,
     sandbox_memory_mb: int = evaluation.DEFAULT_SANDBOX_MEMORY_MB,
     config: Optional[str] = None,
     architecture: bool = False,
     mapping: Optional[dict[str, Any]] = None,
+    principle: Optional[str] = None,
 ) -> dict[str, Any]:
     """Evaluate student projects against the reference at ``source`` and write JSON and
     Markdown reports into a new run directory under ``output_dir`` (all paths absolute).
@@ -117,8 +143,12 @@ async def run_evaluation(
     ``limits`` is weaker; an unavailable sandbox is an error). ``architecture=True``
     compares every target with the reference's module dependencies even without an
     architecture_entry marker. ``mapping`` (from propose_mapping) pairs entities the
-    matching could not; each pair is checked first. Writes only into the run
-    directory."""
+    matching could not; each pair is checked first. ``principle`` (a catalogue id)
+    is checked and echoed, for class_overview; its checks run the code, so it
+    makes ``dynamic`` default to True (``dynamic_forced`` says whether it did),
+    and ``dynamic=False`` with it is an error. ``source`` may be a task directory
+    (``task.toml``, see prepare_task): its principle is then implied and recorded
+    in the report. Writes only into the run directory."""
 
     def on_progress(done: int, total: int, target_id: str) -> None:
         anyio.from_thread.run(
@@ -135,7 +165,7 @@ async def run_evaluation(
             exclude_patterns=exclude_patterns,
             reference_modules=reference_modules,
             validation_scope=validation_scope,
-            dynamic=dynamic,
+            dynamic=run_dynamic,
             sandbox=sandbox,
             sandbox_memory_mb=sandbox_memory_mb,
             config=config,
@@ -144,8 +174,28 @@ async def run_evaluation(
             mapping=mapping,
         )
 
+    run_dynamic = bool(dynamic)
     with _tool_errors():
-        return await anyio.to_thread.run_sync(run)
+        implied = principles.task_principle(source)
+        if implied is not None and principle not in (None, implied):
+            raise ToolInputError(
+                f"principle {principle!r} is not the task's principle {implied!r}"
+            )
+        principle = principle or implied
+        if principle is not None:
+            principles.resolve_principle(principle)
+            if dynamic is False:
+                raise ToolInputError(
+                    f"principle {principle!r} needs a dynamic run: its checks run "
+                    "the code, and without dynamic=True they are SKIPPED and no "
+                    "submission is judged; leave dynamic out or set it to True"
+                )
+            run_dynamic = True
+        result = await anyio.to_thread.run_sync(run)
+    if principle is not None:
+        result["principle"] = principle
+        result["dynamic_forced"] = dynamic is None
+    return result
 
 
 @mcp.tool(annotations=EVALUATE)
@@ -200,7 +250,7 @@ async def verify_marker(
     """Check a marker of the reference at ``source`` (absolute) against seeded
     violations. Named operators (add_import, lazy_import, add_library,
     dynamic_import, rebuild_injected, drop_call, use_private_name, break_port,
-    foreign_write)
+    foreign_write, add_io_call)
     mutate copies of the reference; ``rule`` (marker name
     or rule id prefix) must fail on each mutant (killed) and pass on the reference.
     Without operators/files, only the operators the marker can see and the files it is
@@ -240,7 +290,8 @@ async def check_architecture(
     sandbox_memory_mb: int = evaluation.DEFAULT_SANDBOX_MEMORY_MB,
     config: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Check one project (``target``, absolute) against the reference at ``source``
+    """Advanced: general architecture checking, not needed for a teaching task.
+    Check one project (``target``, absolute) against the reference at ``source``
     and return the verdict directly: ``passed``, the problems with structured
     feedback (edge, file, line, what the reference does) and undecided changes.
     For an agent fixing code in a loop; writes nothing. ``passed`` holds for what ran:
@@ -273,7 +324,8 @@ async def describe_architecture(
     sandbox_memory_mb: int = evaluation.DEFAULT_SANDBOX_MEMORY_MB,
     config: Optional[str] = None,
 ) -> dict[str, Any]:
-    """The architecture model of the reference at ``source`` (absolute): what
+    """Advanced: general architecture checking, not needed for a teaching task.
+    The architecture model of the reference at ``source`` (absolute): what
     architecture_entry compares a target with. Its modules, the imports between
     them with the line of each, the libraries each module imports, and the
     architecture_entry declaration (policy, allow/forbid, ignored libraries).
@@ -297,20 +349,96 @@ async def describe_architecture(
 
 @mcp.tool(annotations=READONLY)
 def summarize_report(
-    report_path: str, offset: int = 0, limit: int = 50
+    report_path: str,
+    offset: int = 0,
+    limit: int = 50,
+    principle: Optional[str] = None,
 ) -> dict[str, Any]:
     """Summarise a saved report.json (absolute path): totals, most-failed rules and a
-    page of targets. Start here when reading results; page with offset/limit."""
+    page of targets. Start here when reading results; page with offset/limit. With
+    ``principle`` (a catalogue id), also ``passed``/``failed``/``not_judged``, the
+    targets per typical error (``by_error``) and per reason not judged
+    (``not_judged_by_reason``), and each target's verdict, error ids and reasons."""
     with _tool_errors():
-        return reports.summarize_report(report_path, offset, limit)
+        return reports.summarize_report(report_path, offset, limit, principle)
+
+
+@mcp.tool(annotations=READONLY)
+def class_overview(
+    report_path: str,
+    principle: Optional[str] = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """The class by the typical errors of ``principle`` (a catalogue id; default: the
+    one a task source recorded) in a saved report.json (absolute path). ``passed`` +
+    ``failed`` + ``not_judged`` = ``submissions``: failed has a violation;
+    not_judged has none, but a check could not run, a file does not parse
+    ("syntax_error") or every check was SKIPPED (a static run) - never count it as a
+    pass. ``by_error``: per error id the count and the submission names (at most 50,
+    ``submissions_total``), with two ids of the tool's own:
+    "missing_required_entity" (a function or class the reference requires has no
+    counterpart: failed; if the submission has it under another name, call
+    propose_mapping and rerun run_evaluation with mapping) and "unclassified"
+    (violations no typical error explains); ``not_judged_by_reason`` likewise per
+    reason; and a page of submissions with verdict, error ids and reasons. A package
+    without __init__.py, or with absolute imports of its own modules ("from
+    inventory import X"), is evaluated as the package it means. Start here for a
+    class; then explain_target(principle=...) for one submission."""
+    with _tool_errors():
+        return reports.class_overview(report_path, principle, offset, limit)
+
+
+@mcp.tool(annotations=EVALUATE)
+async def prepare_task(
+    task_dir: str,
+    min_coverage: float = authoring.DEFAULT_MIN_COVERAGE,
+    max_mutants: int = authoring.DEFAULT_MAX_MUTANTS,
+    sandbox: Optional[str] = None,
+    sandbox_memory_mb: int = evaluation.DEFAULT_SANDBOX_MEMORY_MB,
+    config: Optional[str] = None,
+) -> dict[str, Any]:
+    """Check a task (absolute ``task_dir`` with task.toml and the unannotated
+    reference/). task.toml: ``principle = "<id>"``, ``[roles]`` (role = [
+    "mod.func" | "mod.Class.method" | "mod.Class" | "mod" = its public functions]),
+    ``[cases]`` per entity a check covers ("mod.func" = [{args = [...]}, ...]; keys
+    args, kwargs, init, steps, stdin; an object {"$new" = "mod.Class", args = [...]};
+    the case language of the runtime markers: describe_marker of a check's marker)
+    and optional ``[init]`` per method ("mod.Class.meth" = {args = [...]}). TOML: an
+    inline table stays on one line; quote keys such as "$new". ``problems``: what is
+    wrong in
+    task.toml (an unbound role, an unknown entity, missing cases); nothing runs then.
+    ``checks``: per generated check its role, entity, marker, whether its cases ran
+    and their coverage. ``errors``: per typical error ``killed`` (the error's mutation
+    operator seeded it into copies of the reference and its check failed on every
+    one), ``survived``, ``not_verifiable_by_mutation`` or ``gap``;
+    ``signature_matched`` tells whether a mutant was also classified as that error.
+    ``accepted`` when there are no problems, every check's cases are accepted, the
+    reference passes and every error with an operator is killed. Writes nothing."""
+
+    def run() -> dict[str, Any]:
+        return tasks.prepare_task(
+            task_dir,
+            min_coverage=min_coverage,
+            max_mutants=max_mutants,
+            sandbox=sandbox,
+            sandbox_memory_mb=sandbox_memory_mb,
+            config=config,
+        )
+
+    with _tool_errors():
+        return await anyio.to_thread.run_sync(run)
 
 
 @mcp.tool(annotations=READONLY)
 def propose_mapping(report_path: str, target: str) -> dict[str, Any]:
-    """List the reference entities one target left unpaired (``required_target_missing``
-    results come from them), each with its best candidates in the target. Propose
-    pairs from it, then rerun run_evaluation with mapping={"pairs": {...}}; module
-    pairs ("controller": "handler") pair their entities by name."""
+    """Advanced: the way to handle a renamed required entity (a
+    ``missing_required_entity`` finding whose entity the submission has under
+    another name). List the reference entities one target left unpaired
+    (``required_target_missing`` results come from them), each with its best
+    candidates in the target. Propose pairs from it, then rerun run_evaluation
+    with mapping={"pairs": {...}}; module pairs ("controller": "handler") pair
+    their entities by name."""
     with _tool_errors():
         return reports.propose_mapping(report_path, target)
 
@@ -322,12 +450,24 @@ def explain_target(
     include_passed: bool = False,
     offset: int = 0,
     limit: int = 20,
+    principle: Optional[str] = None,
 ) -> dict[str, Any]:
     """Explain why one target failed: its problem results with evidence. Use after
-    summarize_report to inspect a single submission."""
+    summarize_report to inspect a single submission. With ``principle`` (a catalogue
+    id), return its ``verdict`` and ``findings`` instead: each violation with its
+    typical error (error_id, what) and facts, the errors' title/why/fix once in
+    ``errors``; error_id null = unclassified, unless ``not_judged`` is true (no
+    verdict on the code; ``reason`` says why, ``target`` names the entity;
+    error_id "syntax_error" for a file that does not parse; the violations
+    found in the rest stay). "missing_required_entity" names a reference
+    entity without a counterpart (``facts.entity``, ``facts.file``,
+    ``facts.line``), also a class the cases construct ($new) that is missing;
+    one paired with less than certainty is not judged ("ambiguous_match",
+    "low_confidence_match", ``facts.candidate``).
+    ``include_passed`` then lists the passed checks (``passed``)."""
     with _tool_errors():
         return reports.explain_target(
-            report_path, target, include_passed, offset, limit
+            report_path, target, include_passed, offset, limit, principle
         )
 
 

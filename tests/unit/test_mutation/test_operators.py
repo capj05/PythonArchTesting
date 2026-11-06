@@ -72,6 +72,7 @@ def test_operators_are_named() -> None:
         "use_private_name",
         "break_port",
         "foreign_write",
+        "add_io_call",
     )
 
 
@@ -344,14 +345,140 @@ def test_foreign_write_assigns_an_attribute_it_reads_of_another_object(
 
     mutants = _by(root, "foreign_write")
 
-    # Each object read through a name other than self, once per method, right
-    # after the first statement of its own that reads it; a one-line method
-    # has no room for it, and a comprehension's variable does not outlive it.
+    # Each object read through a name other than self, once per method: a data
+    # attribute it reads (not ``add``, which it calls), written right after
+    # the statement that calls a method of it for its effect, so under the
+    # same condition (inside the loop); a one-line method has no room for it,
+    # and a comprehension's variable does not outlive it.
     assert [(m.description, m.line) for m in mutants] == [
-        ("service: Service.place writes order.add (line 6)", 6),
+        ("service: Service.place writes order.total (line 6)", 6),
     ]
     assert (
-        "            order.add(price)\n            order.add = order.add\n"
+        "            order.add(price)\n            order.total = order.total\n"
         in mutants[0].source
     )
     ast.parse(mutants[0].source)
+
+
+def test_foreign_write_in_a_function_writes_only_to_its_parameters(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "__init__.py": "",
+            "shop.py": (
+                "import os\n\n\n"
+                "def sell(inventory, item):\n"
+                "    path = os.sep\n"
+                "    seen = []\n"
+                "    seen.append(item)\n"
+                "    size = seen.size\n"
+                "    left = inventory.count\n"
+                "    return path, size, left\n"
+            ),
+        },
+    )
+
+    mutants = _by(root, "foreign_write")
+
+    # Not ``os`` (imported) nor ``seen`` (its own list): the parameter. With
+    # no method call on it, the write follows the first statement reading it.
+    assert [(m.description, m.function, m.owner) for m in mutants] == [
+        ("shop: sell writes inventory.count (line 10)", "sell", ""),
+    ]
+    assert "    left = inventory.count\n    inventory.count = inventory.count\n" in (
+        mutants[0].source
+    )
+
+
+def test_foreign_write_prefers_a_private_data_attribute_to_a_method(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "__init__.py": "",
+            "inventory.py": (
+                "class Inventory:\n"
+                "    def __init__(self, stock):\n"
+                "        self._stock = dict(stock)\n"
+                "        self.log = []\n\n"
+                "    def remove(self, item):\n"
+                "        del self._stock[item]\n\n"
+                "    def quantity(self, item):\n"
+                "        return self._stock.get(item, 0)\n"
+            ),
+            "shop.py": (
+                "from .inventory import Inventory\n\n\n"
+                "def sell(inventory: Inventory, item: str) -> None:\n"
+                "    inventory.remove(item)\n\n\n"
+                "def clear_out(inventory: Inventory, item: str) -> int:\n"
+                "    left = inventory.quantity(item)\n"
+                "    if left:\n"
+                "        inventory.remove(item)\n"
+                "    return left\n\n\n"
+                "def tally(stock, item):\n"
+                "    return stock.quantity(item)\n\n\n"
+                "def peek(stock, item):\n"
+                "    left = stock.quantity(item)\n"
+                "    stock.remove(item)\n"
+                "    return left\n"
+            ),
+        },
+    )
+
+    mutants = [m for m in _by(root, "foreign_write") if m.file == "shop.py"]
+
+    # The methods it calls (remove, quantity) are never written. The class the
+    # annotation names has the data attributes _stock and log; the private one
+    # wins. In clear_out the write goes after the call that changes the state,
+    # inside its ``if``. ``tally`` and ``peek`` take an unannotated parameter
+    # and read no data attribute of it: nothing to write, no mutant.
+    assert [m.description for m in mutants] == [
+        "shop: sell writes inventory._stock (line 6)",
+        "shop: clear_out writes inventory._stock (line 12)",
+    ]
+    assert (
+        "        inventory.remove(item)\n        inventory._stock = inventory._stock\n"
+        in mutants[1].source
+    )
+
+
+def test_add_io_call_talks_to_the_user_first_thing(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "__init__.py": "",
+            "grades.py": (
+                "def average(grades):\n"
+                '    """Mean."""\n'
+                "    return sum(grades) / len(grades)\n\n\n"
+                "def one(): return 1\n\n\n"
+                "class Report:\n"
+                "    def show(self):\n"
+                "        return 'x'\n"
+            ),
+        },
+    )
+
+    mutants = _by(root, "add_io_call")
+
+    # Every function and method with a body of its own lines, once per call;
+    # a one-line function has no room for it.
+    assert [(m.function, m.member, m.line) for m in mutants] == [
+        ("average", "print", 3),
+        ("average", "input", 3),
+        ("average", "open", 3),
+        ("Report.show", "print", 11),
+        ("Report.show", "input", 11),
+        ("Report.show", "open", 11),
+    ]
+    assert '    """Mean."""\n    print("archtest")\n    return' in mutants[0].source
+    assert "        input()\n        return 'x'" in mutants[4].source
+    assert (
+        '    try:\n        open("archtest-missing.txt", encoding="utf-8").close()\n'
+        "    except OSError:\n        pass\n    return sum" in mutants[2].source
+    )
+    for mutant in mutants:
+        ast.parse(mutant.source)

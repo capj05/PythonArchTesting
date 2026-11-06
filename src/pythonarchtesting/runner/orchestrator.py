@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import replace
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from pythonarchtesting.config import Config
@@ -19,34 +17,11 @@ from pythonarchtesting.infrastructure.logging import get_logger
 from pythonarchtesting.run_state import RunState, TargetRunState
 from pythonarchtesting.state import ValidationResult, ValidationStatus
 
-from .source_prep import _framework_version, prepare_source
+from .source_prep import prepare_source
 from .target_eval import evaluate_target
 
 # Get logger for this module.
 logger = get_logger(__name__)
-
-
-def _build_empty_run_state(
-    *,
-    config: Config,
-    source_path: Path,
-    validation_scope: str,
-) -> RunState:
-    empty_index = build_entity_index([])
-    return RunState(
-        config=config,
-        source_path=source_path,
-        reference_modules=[],
-        source_entities=[],
-        source_index=empty_index,
-        source_by_id={},
-        rules=[],
-        compiler_results=[],
-        compiler_validations=[],
-        run_generated_at=datetime.now(timezone.utc),
-        framework_version=_framework_version(),
-        validation_scope=validation_scope,
-    )
 
 
 def _evaluate_target_safe(
@@ -110,7 +85,7 @@ def run_projects(
     if load_config_first and config is None:
         from pythonarchtesting.config import load_config
 
-        config = load_config(config_path=custom_config, cli_args={})
+        config = load_config(config_path=custom_config)
 
     if config is None:
         raise ValueError("Config is required for run_projects")

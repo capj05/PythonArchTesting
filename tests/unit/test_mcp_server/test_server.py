@@ -25,10 +25,15 @@ TOOL_NAMES = {
     "propose_mapping",
     "check_architecture",
     "describe_architecture",
+    "list_principles",
+    "describe_principle",
+    "class_overview",
+    "prepare_task",
 }
 # Tools that run reference or target code; every other tool only reads.
 RUNNING = {
     "run_evaluation",
+    "prepare_task",
     "check_cases",
     "verify_marker",
     "check_architecture",

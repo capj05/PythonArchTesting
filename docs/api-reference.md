@@ -12,7 +12,6 @@ Supported symbols under `pythonarchtesting.state`:
 - `ValidationStatus`
 - `ValidationResult`
 - `rule_result_to_validation`
-- `MemoryManager`
 - `ModuleDiscovery`
 
 Supported symbols under `pythonarchtesting.runner`:

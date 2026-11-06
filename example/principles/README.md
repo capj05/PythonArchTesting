@@ -13,27 +13,37 @@ principle? Everything else about the code is deliberately ignored.
 
 ```
 <principle>/
-  principle.toml     catalogue entry: checks, typical errors, neutral changes, gaps
-  reference/         model solution of a small task, with the markers
+  principle.toml     points to the catalogue entry; maps its items to variants
+  task.toml          the task: the entry's roles bound to reference/, the cases
+  reference/         model solution of a small task, without markers
   assignments/
     ok_*/            neutral changes: unrelated to the principle, must PASS
     err_*/           one typical error each: must FAIL (or is a documented gap)
 ```
 
-`principle.toml` is the catalogue entry:
+The catalogue entries ship with the tool, in
+`src/pythonarchtesting/principles/catalog/<id>.toml` (an MCP client reads them
+with `list_principles` and `describe_principle`, see `docs/mcp.md`).
+`<principle>/principle.toml` here names its entry (`id`) and maps each error
+and neutral change to its variant under `assignments/` (`[examples]`).
+`<principle>/task.toml` is the task ([docs/tasks.md](../../docs/tasks.md)): it
+binds each of the entry's generic roles to what plays it in `reference/`
+(`[roles]`) and gives every bound function its cases (`[cases]`); the tool
+compiles the entry's checks from it, so `reference/` carries no markers. An
+entry has:
 
 - `summary` and `why` describe the principle for the assignment text;
 - `[[checks]]` says which marker covers which role and what the cases must
   exercise;
-- `[[errors]]` lists the typical errors. Each has an example variant and either
-  `detected_by` (the marker that must fail) or `gap` (a known miss). Each also
-  has the student explanation: `what` with placeholders filled from the
-  report, plus `why` and `fix`;
+- `[[errors]]` lists the typical errors. Each has either `detected_by` (the
+  marker that must fail), with the `signature` of the failure's first fact, or
+  `gap` (a known miss). Each also has the explanation: `what` with placeholders
+  filled from the report, plus `why` and `fix`;
 - `[[neutral]]` lists the changes that must not count as errors;
 - `[[gaps]]` lists what the tool cannot check yet, and why.
 
-The keys are English. The texts are Czech, because they are written for the
-students of the course.
+Keys and texts are English; the teacher's AI client words them for students in
+any language.
 
 ## Verify
 
@@ -42,12 +52,16 @@ python example/principles/verify.py            # every principle
 python example/principles/verify.py encapsulation
 ```
 
-`verify.py` runs the tool once per principle (`--dynamic --sandbox bwrap`),
-checks every variant against its entry, and composes the student explanation
+`verify.py` runs the tool once per principle with the principle directory, the
+task, as `--source` (`--dynamic --sandbox bwrap`),
+checks every variant against its entry (a detected error must also fail with
+its declared signature, compared on the keys it declares, and be the error
+`choose_error` picks), and composes the explanation
 of each detected error from the entry and the report facts, without any LLM
 (`explain.py`, shared with the pilot's `pilot/run_tool.py`; see
 `pilot/README.md` for the pilot evaluation on agents' solutions). It writes `results.md` and exits 1 when a variant does not behave as
 promised. It needs Python 3.11+ for `tomllib`; the tool itself supports 3.10.
 
-Targets carry no `__archtest__` metadata; the markers live only in
-`reference/`.
+Neither the targets nor `reference/` carry `__archtest__` metadata; what is
+checked is `task.toml`. `prepare_task` (MCP) checks a task before a class is
+graded.

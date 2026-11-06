@@ -20,7 +20,12 @@ mutants of ``example/architectural_mutants``:
   (``_archtest_private``), and a module imports and calls it, past that
   module's interface (two files change);
 - ``break_port``: a public method of a class takes a new required parameter,
-  or is renamed, so the class no longer satisfies a port it implements.
+  or is renamed, so the class no longer satisfies a port it implements;
+- ``foreign_write``: a method or a module-level function assigns a data
+  attribute (preferably a private one) of an object it got from outside
+  (``order._total = order._total``), where it changes that object's state;
+- ``add_io_call``: a function or method talks to the user or a file first
+  thing: ``print(...)``, ``input()`` or ``open(...)`` (the call is ``member``).
 
 A mutant is a whole new text of one file; nothing is written here.
 """
@@ -28,7 +33,7 @@ A mutant is a whole new text of one file; nothing is written here.
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Optional, Sequence
 
@@ -48,6 +53,7 @@ OPERATORS = (
     "use_private_name",
     "break_port",
     "foreign_write",
+    "add_io_call",
 )
 DEFAULT_LIBRARIES = ("pickle",)
 
@@ -619,53 +625,235 @@ def _module_names(tree: ast.Module) -> set[str]:
     return names
 
 
+def _functions(
+    tree: ast.Module,
+) -> Iterator[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]]:
+    """The module-level functions of ``tree``, by name."""
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield node.name, node
+
+
+def _parameters(function: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    arguments = function.args
+    return {
+        a.arg for a in arguments.posonlyargs + arguments.args + arguments.kwonlyargs
+    }
+
+
+def _annotated_class(annotation: Optional[ast.expr]) -> Optional[str]:
+    """The class name a parameter's annotation names (``Inventory``,
+    ``inventory.Inventory``, ``"Inventory"``), else ``None``."""
+    if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+        name = annotation.value.rpartition(".")[2]
+        return name if name.isidentifier() else None
+    if isinstance(annotation, ast.Name):
+        return annotation.id
+    if isinstance(annotation, ast.Attribute):
+        return annotation.attr
+    return None
+
+
+def _data_attributes(classes: list[ast.ClassDef]) -> list[str]:
+    """The data attributes of a project class: its annotated class-level
+    fields and what its methods assign to ``self.<name>``; never a method."""
+    if len(classes) != 1:
+        return []  # no class of that name in the project, or several
+    (cls,) = classes
+    methods = {
+        n.name
+        for n in cls.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    found: list[str] = []
+    for node in cls.body:
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            found.append(node.target.id)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            self_name = _self_name(node)
+            for item in ast.walk(node):
+                targets: list[ast.expr] = []
+                if isinstance(item, ast.Assign):
+                    targets = list(item.targets)
+                elif isinstance(item, (ast.AnnAssign, ast.AugAssign)):
+                    targets = [item.target]
+                found += [
+                    t.attr
+                    for t in targets
+                    if isinstance(t, ast.Attribute)
+                    and isinstance(t.value, ast.Name)
+                    and t.value.id == self_name
+                ]
+    return [a for a in dict.fromkeys(found) if a not in methods]
+
+
+def _private(attribute: str) -> bool:
+    return attribute.startswith("_") and not (
+        attribute.startswith("__") and attribute.endswith("__")
+    )
+
+
+@dataclass
+class _Use:
+    """How a function uses an object it did not get as ``self``."""
+
+    first: ast.stmt  # the first statement that reads it
+    change: Optional[ast.stmt] = None  # the first ``x.method(...)`` statement
+    reads: list[str] = field(default_factory=list)  # data attributes it reads
+
+
+def _uses(
+    module: _Module,
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+    skip: set[str],
+) -> dict[str, _Use]:
+    """The objects ``function`` reads attributes of, in order of first use
+    in a simple statement (where a write can follow); their data attributes
+    are those it reads anywhere in its body (an ``if`` test too) without
+    calling them."""
+    everywhere = [node for item in function.body for node in _outside_scopes(item)]
+    called_anywhere = {id(n.func) for n in everywhere if isinstance(n, ast.Call)}
+    data: dict[str, list[str]] = {}
+    for node in sorted(
+        (
+            n
+            for n in everywhere
+            if isinstance(n, ast.Attribute)
+            and isinstance(n.ctx, ast.Load)
+            and isinstance(n.value, ast.Name)
+            and id(n) not in called_anywhere
+        ),
+        key=lambda n: (n.lineno, n.col_offset),
+    ):
+        attrs = data.setdefault(node.value.id, [])  # type: ignore[attr-defined]
+        if node.attr not in attrs:
+            attrs.append(node.attr)
+    uses: dict[str, _Use] = {}
+    statements = sorted(
+        (node for node in ast.walk(function) if isinstance(node, _SIMPLE)),
+        key=lambda node: (node.lineno, node.col_offset),
+    )
+    for statement in statements:
+        if statement.lineno == function.lineno or not _alone(module.text, statement):
+            continue  # a one-line function, or a statement sharing its line
+        nodes = list(_outside_scopes(statement))
+        called = {id(n.func) for n in nodes if isinstance(n, ast.Call)}
+        reads = sorted(
+            (
+                node
+                for node in nodes
+                if isinstance(node, ast.Attribute)
+                and isinstance(node.ctx, ast.Load)
+                and isinstance(node.value, ast.Name)
+                and node.value.id not in skip
+            ),
+            key=lambda node: (node.lineno, node.col_offset),
+        )
+        for read in reads:
+            obj = read.value.id  # type: ignore[attr-defined]
+            use = uses.setdefault(obj, _Use(statement, reads=list(data.get(obj, []))))
+            if id(read) in called and (
+                use.change is None
+                and isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Call)
+                and statement.value.func is read
+            ):
+                use.change = statement
+    return uses
+
+
 def _foreign_write(modules: list[_Module]) -> Iterator[_Change]:
-    """``x.a = x.a`` right after a method first reads ``x.a`` of an object it
-    did not get as ``self``: the value stays, but another object's attribute
-    is assigned from outside its class."""
+    """``x.a = x.a`` in a method on an object it did not get as ``self`` (in
+    a module-level function: on an object it got as a parameter). The value
+    stays, but another object's data attribute is assigned from outside its
+    class: ``a`` is never a method the code calls, and a private attribute
+    (``_stock``) is preferred, among the attributes the function reads and,
+    for a parameter annotated with a project class, the data attributes of
+    that class. The write follows the first statement that calls a method of
+    ``x`` for its effect (``x.remove(...)``), so it runs under the same
+    condition as that state change; without one, it follows the first
+    statement that reads ``x``."""
+    classes: dict[str, list[ast.ClassDef]] = {}
+    for module in modules:
+        for node in module.tree.body:
+            if isinstance(node, ast.ClassDef):
+                classes.setdefault(node.name, []).append(node)
     for module in modules:
         skip = _module_names(module.tree)
-        for name, method in _methods(module.tree):
-            self_name = _self_name(method)
-            seen: set[str] = set()
-            statements = sorted(
-                (node for node in ast.walk(method) if isinstance(node, _SIMPLE)),
-                key=lambda node: (node.lineno, node.col_offset),
-            )
-            for statement in statements:
-                if statement.lineno == method.lineno or not _alone(
-                    module.text, statement
-                ):
-                    continue  # a one-line method, or a statement sharing its line
-                reads = sorted(
-                    (
-                        node
-                        for node in _outside_scopes(statement)
-                        if isinstance(node, ast.Attribute)
-                        and isinstance(node.ctx, ast.Load)
-                        and isinstance(node.value, ast.Name)
-                        and node.value.id not in {self_name, *skip}
-                        and node.value.id not in seen
-                    ),
-                    key=lambda node: (node.lineno, node.col_offset),
-                )
-                if not reads:
+        callables = [
+            (name, method, _self_name(method), None)
+            for name, method in _methods(module.tree)
+        ] + [
+            (name, function, None, _parameters(function))
+            for name, function in _functions(module.tree)
+        ]
+        for name, function, self_name, only in callables:
+            arguments = function.args
+            annotated = {
+                a.arg: _annotated_class(a.annotation)
+                for a in arguments.posonlyargs + arguments.args + arguments.kwonlyargs
+            }
+            uses = _uses(module, function, {*skip, *([self_name] if self_name else [])})
+            for obj, use in uses.items():
+                if only is not None and obj not in only:
                     continue
-                read = reads[0]
-                target = f"{read.value.id}.{read.attr}"  # type: ignore[attr-defined]
-                seen.add(read.value.id)  # type: ignore[attr-defined]
-                line = int(statement.end_lineno or statement.lineno)
+                owner_class = annotated.get(obj)
+                candidates = use.reads + [
+                    a
+                    for a in _data_attributes(classes.get(owner_class or "", []))
+                    if a not in use.reads
+                ]
+                if not candidates:
+                    continue  # only methods of it are used: nothing to replace
+                attribute = next((a for a in candidates if _private(a)), candidates[0])
+                target = f"{obj}.{attribute}"
+                at = use.change or use.first
+                line = int(at.end_lineno or at.lineno)
                 source = _insert(
-                    module.text,
-                    line,
-                    " " * statement.col_offset + f"{target} = {target}",
+                    module.text, line, " " * at.col_offset + f"{target} = {target}"
                 )
                 yield _Change(
                     module.file,
                     f"{module.name}: {name} writes {target} (line {line + 1})",
                     source,
-                    owner=name.split(".")[0],
+                    owner=name.split(".")[0] if self_name is not None else "",
                     line=line + 1,
+                    function=name,
+                )
+
+
+# The calls ``add_io_call`` inserts, by ``member``: each talks to the user or
+# to a file and does nothing else (a missing file is no error).
+IO_CALLS = {
+    "print": ['print("archtest")'],
+    "input": ["input()"],
+    "open": [
+        "try:",
+        '    open("archtest-missing.txt", encoding="utf-8").close()',
+        "except OSError:",
+        "    pass",
+    ],
+}
+
+
+def _add_io_call(modules: list[_Module]) -> Iterator[_Change]:
+    """Each function and method first calls ``print``, ``input`` or ``open``:
+    output, keyboard input or file access in code that should have none."""
+    for module in modules:
+        callables = list(_methods(module.tree)) + list(_functions(module.tree))
+        for name, function in sorted(callables, key=lambda item: item[1].lineno):
+            if function.body[0].lineno == function.lineno:
+                continue  # a one-line function has no room for it
+            at, indent = _function_insert(function)
+            for member, lines in IO_CALLS.items():
+                yield _Change(
+                    module.file,
+                    f"{module.name}: {name} calls {member}() (line {at + 1})",
+                    _insert(
+                        module.text, at, "\n".join(" " * indent + x for x in lines)
+                    ),
+                    member=member,
+                    line=at + 1,
                     function=name,
                 )
 
@@ -726,8 +914,10 @@ def generate_mutants(
             found = _use_private_name(modules)
         elif operator == "break_port":
             found = _break_port(modules)
-        else:
+        elif operator == "foreign_write":
             found = _foreign_write(modules)
+        else:
+            found = _add_io_call(modules)
         for change in found:
             try:
                 for text in (change.source, *(text for _, text in change.also)):
@@ -754,4 +944,4 @@ def generate_mutants(
     return produced[:limit] if limit is not None else produced
 
 
-__all__ = ["DEFAULT_LIBRARIES", "OPERATORS", "Mutant", "generate_mutants"]
+__all__ = ["DEFAULT_LIBRARIES", "IO_CALLS", "OPERATORS", "Mutant", "generate_mutants"]

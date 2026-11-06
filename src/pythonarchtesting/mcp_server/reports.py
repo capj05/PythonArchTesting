@@ -3,15 +3,39 @@ from __future__ import annotations
 import functools
 import json
 from collections import Counter
-from typing import Any, Callable, TypeVar
+from dataclasses import dataclass
+from typing import Any, Callable, Optional, TypeVar
 
 from pythonarchtesting.mcp_server.errors import ToolInputError, require_absolute
+from pythonarchtesting.mcp_server.principles import resolve_principle
+from pythonarchtesting.principles import (
+    BUILTIN_ERRORS,
+    MISSING_REQUIRED_ENTITY,
+    Finding,
+    Principle,
+    PrincipleError,
+    classify_target,
+    mapping_name,
+    principle_markers,
+    result_entity,
+    rule_marker,
+)
 from pythonarchtesting.report.schema_v2 import validate_report_schema_v2
 
 _MAX_LIMIT = 200
 _TOP_RULES = 20
 _EVIDENCE_CAP = 5
 _NOT_PROBLEMS = ("OK", "SKIPPED")
+# The bucket of the violations no typical error of the principle explains.
+UNCLASSIFIED = "unclassified"
+# The verdicts of a submission by a principle.
+PASSED, FAILED, NOT_JUDGED = "passed", "failed", "not_judged"
+# The reason a submission is not judged when every result of the principle's
+# checks was SKIPPED without one of its own, or when it has none at all.
+SKIPPED_REASON = "skipped"
+NO_CHECKS_REASON = "no_principle_checks"
+# The most submission names one bucket of class_overview lists.
+_NAMES_CAP = 50
 
 _F = TypeVar("_F", bound=Callable[..., dict[str, Any]])
 
@@ -62,10 +86,124 @@ def _problems(target: dict[str, Any]) -> list[dict[str, Any]]:
     return [r for r in target["results"] if _is_problem(r)]
 
 
+def _findings(principle: Principle, target: dict[str, Any]) -> list[Finding]:
+    """The classified violations of one target, in the order of its results
+    (``classify_target``: one finding per missing entity; with a file that
+    does not parse, its syntax errors and the violations found in the rest)."""
+    return classify_target(principle, target["results"])
+
+
+def _errors(principle: Principle) -> list[PrincipleError]:
+    """The principle's typical errors, then the tool's own."""
+    return [*principle.errors, *BUILTIN_ERRORS.values()]
+
+
+@dataclass(frozen=True)
+class _Judgement:
+    """One submission by a principle.
+
+    ``errors``: the distinct error ids of its violations, first seen first
+    (``UNCLASSIFIED`` for a violation no typical error explains);
+    ``not_judged``: the distinct reasons of its results without a verdict.
+    ``verdict``: ``failed`` with any violation (a missing required entity is
+    one); else ``not_judged`` with any
+    result without a verdict, or when every result of the principle's checks
+    was SKIPPED (a static run) or there is none; else ``passed``."""
+
+    verdict: str
+    errors: list[str]
+    not_judged: list[str]
+    findings: list[Finding]
+
+    def row(self) -> dict[str, Any]:
+        row: dict[str, Any] = {"verdict": self.verdict, "errors": self.errors}
+        if self.not_judged:
+            row["not_judged"] = self.not_judged
+        return row
+
+
+def _relevant(principle: Principle, target: dict[str, Any]) -> list[dict[str, Any]]:
+    """The results of the principle's markers."""
+    markers = principle_markers(principle)
+    return [r for r in target["results"] if rule_marker(str(r["rule_id"])) in markers]
+
+
+def _unjudged_reason(results: list[dict[str, Any]]) -> Optional[str]:
+    """Why results of the principle's checks give no verdict: none at all, or
+    all SKIPPED (the reason of the first, e.g. ``dynamic_checks_disabled``)."""
+    if not results:
+        return NO_CHECKS_REASON
+    if all(r["status"] == "SKIPPED" for r in results):
+        return str(_details(results[0]).get("reason") or SKIPPED_REASON)
+    return None
+
+
+def _judge(principle: Principle, target: dict[str, Any]) -> _Judgement:
+    findings = _findings(principle, target)
+    errors = list(
+        dict.fromkeys(f.error_id or UNCLASSIFIED for f in findings if not f.not_judged)
+    )
+    reasons = list(dict.fromkeys(str(f.reason) for f in findings if f.not_judged))
+    if not errors and not reasons:
+        reason = _unjudged_reason(_relevant(principle, target))
+        if reason is not None:
+            reasons = [reason]
+    if errors:
+        verdict = FAILED
+    elif reasons:
+        verdict = NOT_JUDGED
+    else:
+        verdict = PASSED
+    return _Judgement(verdict, errors, reasons, findings)
+
+
+def _judge_all(principle: Principle, targets: list[dict[str, Any]]) -> list[_Judgement]:
+    return [_judge(principle, target) for target in targets]
+
+
+def _verdict_counts(judgements: list[_Judgement]) -> dict[str, int]:
+    counts = Counter(j.verdict for j in judgements)
+    return {verdict: counts[verdict] for verdict in (PASSED, FAILED, NOT_JUDGED)}
+
+
+def _not_judged_names(
+    targets: list[dict[str, Any]], judgements: list[_Judgement]
+) -> dict[str, list[str]]:
+    """Reason -> the not judged submissions with it, first seen first."""
+    names: dict[str, list[str]] = {}
+    for target, judgement in zip(targets, judgements):
+        if judgement.verdict == NOT_JUDGED:
+            for reason in judgement.not_judged:
+                names.setdefault(reason, []).append(target["display_name"])
+    return names
+
+
+def _bucket_order(principle: Principle) -> list[str]:
+    """Catalogue errors in catalogue order, then a missing entity, then the
+    violations no typical error explains (a syntax error is no violation)."""
+    return [error.id for error in principle.errors] + [
+        MISSING_REQUIRED_ENTITY,
+        UNCLASSIFIED,
+    ]
+
+
+def _bucket(names: list[str]) -> dict[str, Any]:
+    return {
+        "count": len(names),
+        "submissions": names[:_NAMES_CAP],
+        "submissions_total": len(names),
+    }
+
+
 def summarize_payload(
-    report: dict[str, Any], report_path: str, offset: int = 0, limit: int = 50
+    report: dict[str, Any],
+    report_path: str,
+    offset: int = 0,
+    limit: int = 50,
+    principle: Optional[Principle] = None,
 ) -> dict[str, Any]:
-    """Summarize an already loaded report."""
+    """Summarize an already loaded report; with a principle, also count the
+    targets per typical error and list each target's errors."""
     offset, limit = _page(offset, limit)
     targets = report["targets"]
     failing: Counter[str] = Counter()
@@ -80,7 +218,7 @@ def summarize_payload(
         for key in {rule_key(r) for r in _problems(target)}:
             failing[key] += 1
     run = report.get("run", {})
-    return {
+    summary: dict[str, Any] = {
         "report_path": report_path,
         "exit_code": report["exit_code"],
         "mode": run.get("mode"),
@@ -108,13 +246,38 @@ def summarize_payload(
             ]
         ],
     }
+    if principle is not None:
+        judgements = _judge_all(principle, targets)
+        counts = Counter(error_id for j in judgements for error_id in j.errors)
+        summary["principle"] = principle.id
+        summary.update(_verdict_counts(judgements))
+        summary["by_error"] = {
+            error_id: counts[error_id]
+            for error_id in _bucket_order(principle)
+            if counts[error_id]
+        }
+        summary["not_judged_by_reason"] = {
+            reason: len(names)
+            for reason, names in _not_judged_names(targets, judgements).items()
+        }
+        for row, judgement in zip(
+            summary["targets"], judgements[offset : offset + limit]
+        ):
+            row.update(judgement.row())
+    return summary
 
 
 @_malformed_as_input_error
 def summarize_report(
-    report_path: str, offset: int = 0, limit: int = 50
+    report_path: str,
+    offset: int = 0,
+    limit: int = 50,
+    principle: Optional[str] = None,
 ) -> dict[str, Any]:
-    return summarize_payload(load_report(report_path), report_path, offset, limit)
+    entry = resolve_principle(principle) if principle is not None else None
+    return summarize_payload(
+        load_report(report_path), report_path, offset, limit, entry
+    )
 
 
 def _details(result: dict[str, Any]) -> dict[str, Any]:
@@ -250,15 +413,6 @@ def _find_target(report: dict[str, Any], target: str) -> dict[str, Any]:
     return found
 
 
-def _mapping_name(entity_id: str) -> tuple[str, str]:
-    """The mapping name and kind of a canonical entity id."""
-    parts = str(entity_id).split(":")
-    module, qualname, kind = parts[-4], parts[-3], parts[-2]
-    if kind == "module":
-        return module or "__init__", kind
-    return f"{module or '__init__'}.{qualname}", kind
-
-
 _PROPOSE_CANDIDATES = 3
 
 
@@ -281,16 +435,16 @@ def propose_mapping(report_path: str, target: str) -> dict[str, Any]:
             if fallback and match.get("target_entity_id"):
                 by_name.append(
                     {
-                        "reference": _mapping_name(match["source_entity_id"])[0],
-                        "target": _mapping_name(match["target_entity_id"])[0],
+                        "reference": mapping_name(match["source_entity_id"])[0],
+                        "target": mapping_name(match["target_entity_id"])[0],
                         "rule": sorted(fallback)[0],
                     }
                 )
             continue
-        reference, kind = _mapping_name(match["source_entity_id"])
+        reference, kind = mapping_name(match["source_entity_id"])
         candidates = [
             {
-                "target": _mapping_name(candidate["target_entity_id"])[0],
+                "target": mapping_name(candidate["target_entity_id"])[0],
                 "confidence": candidate.get("confidence"),
             }
             for candidate in (match.get("candidates") or [])[:_PROPOSE_CANDIDATES]
@@ -327,11 +481,52 @@ def explain_target(
     include_passed: bool = False,
     offset: int = 0,
     limit: int = 20,
+    principle: Optional[str] = None,
 ) -> dict[str, Any]:
-    """List the problem results of one target, optionally with passed ones."""
+    """List the problem results of one target, optionally with passed ones.
+
+    With a principle, list its findings instead of the results: its
+    violations classified by the principle's typical errors, and its results
+    without a verdict (``not_judged``); the typical errors' title, why and fix
+    once, in ``errors``; with ``include_passed``, the passed results of the
+    principle's checks (``passed``)."""
+    entry = resolve_principle(principle) if principle is not None else None
     report = load_report(report_path)
     offset, limit = _page(offset, limit)
     found = _find_target(report, target)
+    if entry is not None:
+        judgement = _judge(entry, found)
+        findings = judgement.findings
+        page = findings[offset : offset + limit]
+        explained: dict[str, Any] = {
+            "target_id": found["target_id"],
+            "display_name": found["display_name"],
+            "exit_code": found["exit_code"],
+            "principle": entry.id,
+            "verdict": judgement.verdict,
+        }
+        if judgement.not_judged:
+            explained["not_judged"] = judgement.not_judged
+        explained.update(
+            {
+                "offset": offset,
+                "limit": limit,
+                "findings_total": len(findings),
+                "findings": [f.to_dict(brief=True) for f in page],
+                "errors": {
+                    error.id: {"title": error.title, "why": error.why, "fix": error.fix}
+                    for error in _errors(entry)
+                    if any(f.error_id == error.id for f in page)
+                },
+            }
+        )
+        if include_passed:
+            explained["passed"] = [
+                {"rule": r["rule_id"], "target": result_entity(r)}
+                for r in _relevant(entry, found)
+                if r["status"] == "OK"
+            ]
+        return explained
     wanted = [
         r
         for r in found["results"]
@@ -391,4 +586,76 @@ def explain_rule(
         "limit": limit,
         "targets_total": len(rows),
         "targets": [row for _, row in rows[offset : offset + limit]],
+    }
+
+
+@_malformed_as_input_error
+def class_overview(
+    report_path: str,
+    principle: Optional[str] = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """The class at a glance by the typical errors of a principle.
+
+    How many submissions passed, failed (a violation, or a reference entity
+    without a counterpart: ``missing_required_entity``) and were not judged
+    (no violation, but a result without a verdict, a file that does not
+    parse, or every check SKIPPED); the three add up to ``submissions``. Per
+    error id (in catalogue order, then ``missing_required_entity``,
+    ``UNCLASSIFIED`` last, only those that occur) the number of submissions
+    with it and their names (at most ``_NAMES_CAP``); the same per reason of
+    the not judged ones; and a page of submissions with their verdict, error
+    ids and reasons. The counts cover the whole report, not the page.
+
+    A missing entity the submission has under another name (a function
+    renamed into another language) is paired by a mapping: ``propose_mapping``
+    lists the candidates, and ``run_evaluation(mapping=...)`` reruns with the
+    pairs. A package without ``__init__.py``, or one importing its own modules
+    absolutely (``from inventory import X``), is evaluated as the package it
+    means (``docs/mcp.md``, "Beginner layouts").
+
+    Without ``principle``, the one the report records (a run whose source was
+    a task, ``run.principle``)."""
+    report = load_report(report_path)
+    principle = principle or (report.get("run") or {}).get("principle")
+    if principle is None:
+        raise ToolInputError(
+            "give principle: the report records none (its source was no task)"
+        )
+    entry = resolve_principle(str(principle))
+    offset, limit = _page(offset, limit)
+    targets = report["targets"]
+    judgements = _judge_all(entry, targets)
+    names: dict[str, list[str]] = {}
+    for target, judgement in zip(targets, judgements):
+        for error_id in judgement.errors:
+            names.setdefault(error_id, []).append(target["display_name"])
+    titles = {error.id: error.title for error in _errors(entry)}
+    by_error: dict[str, dict[str, Any]] = {}
+    for error_id in _bucket_order(entry):
+        if error_id not in names:
+            continue
+        bucket = _bucket(names[error_id])
+        if error_id in titles:
+            bucket = {"count": bucket.pop("count"), "title": titles[error_id], **bucket}
+        by_error[error_id] = bucket
+    return {
+        "report_path": report_path,
+        "principle": entry.id,
+        "submissions": len(targets),
+        **_verdict_counts(judgements),
+        "by_error": by_error,
+        "not_judged_by_reason": {
+            reason: _bucket(found)
+            for reason, found in _not_judged_names(targets, judgements).items()
+        },
+        "offset": offset,
+        "limit": limit,
+        "submissions_page": [
+            {"name": target["display_name"], **judgement.row()}
+            for target, judgement in list(zip(targets, judgements))[
+                offset : offset + limit
+            ]
+        ],
     }

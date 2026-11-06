@@ -2,7 +2,7 @@
 
 Configuration is INI-based. For most users, the important settings are the ones
 that choose the reference and targets, shape discovery, tune matching, and
-control reporting.
+control the report and exit code.
 
 The bundled default configuration is always loaded internally from the package.
 For normal CLI usage, when `--config` is omitted, the CLI enables config
@@ -79,16 +79,6 @@ Common fields:
 Most users should keep the defaults unless matching is too strict or too loose
 for their project layout.
 
-### `[reporting]`
-
-Controls the output formats and detail level.
-
-Common fields:
-
-- `output_formats`
-- `error_detail_level`
-- `include_traceback`
-
 ### `[report]`
 
 Controls exit behavior and report payload options.
@@ -123,10 +113,6 @@ include_init_files = true
 threshold = 0.80
 delta = 0.03
 
-[reporting]
-output_formats = json, markdown
-error_detail_level = standard
-
 [report]
 warnings_as_fail = false
 run_exit_policy = any_fail
@@ -135,20 +121,21 @@ include_config_snapshot = false
 
 ## Advanced Sections
 
-These sections are part of the supported schema but are usually secondary for
+This section is part of the supported schema but is usually secondary for
 user onboarding:
 
-- `[import]`
 - `[logging]`
-- `[error_handling]`
-- `[files]`
-- `[performance]`
-- `[memory]`
 
 ## Removed Sections
 
 - `[arch_rules]`, `[runtime]`, `[structural_check]`, and `[type_check]` are no
   longer supported. Validation now fails if one appears in a user config file.
+- `[import]`, `[error_handling]`, `[files]`, `[performance]`, `[reporting]`, and
+  `[memory]` were removed because nothing read them, together with
+  `discovery.auto_discover` and `projects.required_modules`. A config that still
+  sets them loads normally; each one produces an "unknown configuration
+  section" or "unknown configuration key" warning and is ignored.
+  The report format is chosen with `--format`.
 
 Runtime checks have no config section: `--dynamic`, `--sandbox`,
 `--sandbox-memory-mb`, and the arguments of the runtime markers control them.

@@ -33,7 +33,7 @@ def _evaluate(reference: str, target: str) -> dict[str, Any]:
     from pythonarchtesting.runner import run_projects
 
     _, states = run_projects(
-        config=load_config(cli_args={"output_format": "json"}, discover_from_cwd=False),
+        config=load_config(discover_from_cwd=False),
         source_path=reference,
         targets=[target],
         load_config_first=False,

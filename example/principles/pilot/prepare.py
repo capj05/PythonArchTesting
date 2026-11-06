@@ -42,12 +42,15 @@ import json
 import random
 import shutil
 import sys
-import tomllib
 from pathlib import Path
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
 CATALOGUE = HERE.parent
+sys.path.insert(0, str(CATALOGUE))
+
+from explain import load_entry  # noqa: E402  (the shared module lives one level up)
+
 VARIANTS = ("text", "skeleton")
 KINDS = ("err", "neutral")
 # The neutral defect the catalogue does not list (id -> description, in Czech).
@@ -94,9 +97,7 @@ def carrier_dir(carrier: str) -> str:
 
 def collect(principle_dir: Path) -> list[dict[str, Any]]:
     """Every submission of one principle, in a fixed order (before shuffling)."""
-    entry = tomllib.loads(
-        (CATALOGUE / principle_dir.name / "principle.toml").read_text(encoding="utf-8")
-    )
+    entry = load_entry(CATALOGUE / principle_dir.name)
     known = {
         "err": {error["id"] for error in entry.get("errors", [])},
         "neutral": {item["id"] for item in entry.get("neutral", [])} | set(EXTRA_NEUTRAL),

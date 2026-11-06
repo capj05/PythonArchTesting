@@ -290,7 +290,6 @@ def _run(argv: Optional[List[str]] = None) -> int:
     config_warnings: List[Any] = []
     config = load_config(
         config_path=args.config,
-        cli_args={"output_format": getattr(args, "format", None)},
         discover_from_cwd=args.config is None,
         cwd=os.getcwd(),
         warning_sink=config_warnings.append,

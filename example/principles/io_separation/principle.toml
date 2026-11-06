@@ -1,115 +1,20 @@
-# Catalogue entry: one principle, its checks, its typical errors, and the changes
-# that must NOT count as errors. Keys are English, the texts are Czech because
-# they are meant for students of a Czech introductory Python course.
-# Placeholders in `what`: {function}, {file}, {line} (the target's function);
-# from the first fact the tool reports (`details.facts`): {caller}, {callee},
-# {module}, {class}, {attribute}, {change} (in Czech), {fact_file}, {fact_line};
-# derived: {callee_short} (`print()`, `input()`, `open()`, else `module.name()`),
-# {via_last} (the helper a detour ends in) and {via_first_line} (the line of the
-# target's function the detour starts at). See verify.py.
+# Points to the catalogue entry, which ships with the tool:
+# src/pythonarchtesting/principles/catalog/io_separation.toml.
+# `[examples]` maps each of its errors and neutral changes to the variant under
+# `assignments/` that shows it; `verify.py` checks that every variant is listed.
+# The task itself (roles and cases over the unannotated `reference/`) is
+# `task.toml`.
 
 id = "io_separation"
-name = "Oddělení logiky od vstupu a výstupu"
-level = "basic"
 
-summary = """
-Funkce, které něco počítají, dostanou data parametrem a výsledek vrátí.
-S uživatelem (klávesnice, obrazovka, soubory) komunikuje jen funkce
-uživatelského rozhraní, typicky `main`.
-"""
-
-why = """
-Logiku, která nic nevypisuje ani nečte, lze použít znovu (v jiném programu, na webu,
-v testu) a lze ji vyzkoušet bez klávesnice. Funkce, která výsledek vypíše místo
-vrácení, se dá použít jen jedním způsobem: vypsat ho.
-"""
-
-[roles]
-logic = "funkce, které počítají: data dostanou parametrem a výsledek vrátí"
-io = "funkce uživatelského rozhraní: jediné místo s input(), print() a open()"
-
-[[checks]]
-role = "logic"
-marker = "forbid_runtime_calls"
-modules = ["builtins.print", "builtins.input", "io"]
-transitive = true
-cases = "u každé logické funkce běžný vstup a vstup, který skončí chybou; oba se dají zavolat bez klávesnice"
-
-[[checks]]
-role = "io"
-marker = "require_runtime_calls"
-modules = ["grades"]
-cases = "u main platný a neplatný řádek zadaný z klávesnice (`stdin`), takže main projde oběma větvemi"
-
-[[errors]]
-id = "print_instead_of_return"
-title = "výsledek se vypisuje místo vrácení"
-example = "err_print_in_logic"
-detected_by = "forbid_runtime_calls"
-what = "Funkce `{function}` ({file}:{line}) vypisuje na obrazovku: na řádku {fact_line} souboru `{fact_file}` volá `{callee_short}`."
-why = """
-Funkce má výsledek vrátit (`return`), ne vypsat. Kdo ji zavolá, pak sám rozhodne,
-co s výsledkem udělá; vypsaný text už program dál použít nemůže.
-"""
-fix = "Nahraď `print(...)` příkazem `return ...` a vypiš výsledek až v `main`."
-
-[[errors]]
-id = "input_in_logic"
-title = "logická funkce čte z klávesnice"
-example = "err_input_in_logic"
-detected_by = "forbid_runtime_calls"
-what = "Funkce `{function}` ({file}:{line}) čte z klávesnice: na řádku {fact_line} souboru `{fact_file}` volá `{callee_short}`."
-why = """
-Funkce dostává data parametrem, a přesto se ptá uživatele. Nedá se tak zavolat
-s jinými daty (ze souboru, v testu) a parametr ztrácí smysl.
-"""
-fix = "Čti vstup v `main` a funkci ho předej parametrem."
-
-[[errors]]
-id = "output_through_helper"
-title = "výstup schovaný v pomocné funkci jiného modulu"
-example = "err_print_via_helper"
-detected_by = "forbid_runtime_calls"
-what = "Funkce `{function}` ({file}:{line}) způsobí výpis přes pomocnou funkci: na řádku {via_first_line} souboru `{file}` volá `{via_last}` a ta na řádku {fact_line} souboru `{fact_file}` volá `{callee_short}`."
-why = """
-Na tom, kde je `print` napsaný, nezáleží: logická funkce, která při svém běhu
-způsobí výpis, je pořád svázaná s obrazovkou.
-"""
-fix = "Vrať informaci (např. text varování) jako součást výsledku a vypiš ji v `main`."
-
-[[errors]]
-id = "logic_in_main"
-title = "výpočet přímo v main místo v logických funkcích"
-example = "err_logic_in_main"
-detected_by = "require_runtime_calls"
-what = "Funkce `{function}` ({file}:{line}) počítá sama a logické funkce nevolá: přímo nezavolá žádnou funkci modulu `{module}`."
-why = """
-Logické funkce existují, ale `main` je nepoužívá a počítá sám. Výpočet pak opět
-nejde použít jinde ani vyzkoušet bez klávesnice.
-"""
-fix = "V `main` jen načti vstup, zavolej logické funkce a vypiš jejich výsledek."
-
-[[neutral]]
-id = "model_solution"
-title = "modelové řešení bez markerů (kontrola, že reference projde i jako odevzdání)"
-example = "ok_basic"
-
-[[neutral]]
-id = "different_ui"
-title = "jiné uživatelské rozhraní (opakované dotazy, jiné texty, víc výpisů)"
-example = "ok_different_ui"
-
-[[neutral]]
-id = "extra_pure_helper"
-title = "pomocná funkce navíc, která nic nevypisuje"
-example = "ok_extra_helper"
-
-[[neutral]]
-id = "wrong_formula"
-title = "chyba ve výpočtu (průměr dělí n + 1)"
-example = "ok_wrong_formula"
-
-[[neutral]]
-id = "style_noise"
-title = "špatný styl: jednopísmenná jména, bez typů a dokumentace, globální konstanta"
-example = "ok_style_noise"
+[examples]
+print_instead_of_return = "err_print_in_logic"
+input_in_logic = "err_input_in_logic"
+output_through_helper = "err_print_via_helper"
+file_io_in_logic = "err_open_in_logic"
+logic_in_main = "err_logic_in_main"
+model_solution = "ok_basic"
+different_ui = "ok_different_ui"
+extra_pure_helper = "ok_extra_helper"
+wrong_formula = "ok_wrong_formula"
+style_noise = "ok_style_noise"

@@ -1,22 +1,179 @@
 # PythonArchTesting
 
-PythonArchTesting compares one or more target Python projects against a
-reference project that declares architectural expectations in code. The tool
-reads passive `Annotated[...]` metadata from the reference project, matches
-source entities to target entities, and reports where each target satisfies or
-violates the declared rules.
+PythonArchTesting is a tool for teaching: it checks whether students'
+submissions apply the principle a programming task is about, and is driven by
+the teacher's AI client over MCP.
+
+A teacher picks a principle from the catalogue (for example *logic apart from
+input and output*, or *encapsulation*), binds it to an ordinary model solution
+with a short `task.toml`, and evaluates a whole class at once. Every
+submission gets a deterministic verdict (`passed`, `failed` or `not_judged`)
+and every violation is named by the principle's typical errors, with what the
+student did, why it matters and how to fix it. The tool never calls an LLM to
+decide: the AI client only words the results for the teacher and the
+students. The model solution needs no markers, and the server never edits the
+reference or the students' files.
+
+The principle's checks observe what the code does when it runs (who calls
+`print()`, who writes an object's attributes), so the evaluation runs the
+submissions in a separate, sandboxed interpreter
+([docs/dynamic-checks.md](docs/dynamic-checks.md)). Results never compare
+computed values: a student whose arithmetic is wrong but whose structure
+applies the principle passes.
+
+## Teaching workflow over MCP
+
+Install the server (`pip install ".[mcp]"`) and register
+`python-arch-test-mcp` with the AI client ([docs/mcp.md](docs/mcp.md)). The
+worked example is `example/principles/encapsulation/`.
+
+1. **Pick the principle.** `list_principles()` lists the catalogue;
+   `describe_principle("encapsulation")` returns the principle's roles, the
+   checks, the typical errors (each with `why` and `fix`) and the changes
+   that must not fail.
+2. **Write `task.toml` next to the unannotated reference**
+   ([docs/tasks.md](docs/tasks.md)). It binds each role of the principle to
+   the model solution and gives the cases the checks run:
+
+   ```
+   example/principles/encapsulation/
+     task.toml
+     reference/        inventory.py, shop.py: the model solution, no markers
+   ```
+
+   ```toml
+   principle = "encapsulation"
+
+   [roles]
+   owner = ["inventory.Inventory"]
+   client = ["shop"]              # the module's public functions
+
+   [cases]
+   "shop.sell" = [
+       { args = [{ "$new" = "inventory.Inventory", args = [{ jablko = 5 }] }, "jablko", 2] },
+   ]
+   # ... one entry per function the checks cover
+   ```
+
+3. **Prepare the task.** `prepare_task(task_dir=".../encapsulation")` checks
+   `task.toml`, runs the cases on the reference and seeds each typical error
+   into copies of it; fix what it reports until `accepted` is true.
+4. **Evaluate the class.** Each student submits a package named
+   `<ident>_<surname>` (for example `capj05_capsky`), one directory per
+   student in `targets_dir`:
+   `run_evaluation(source=".../encapsulation", targets_dir=".../submissions",
+   output_dir=".../runs")`. The task's principle is implied and the run is
+   dynamic.
+5. **Read the results by typical error.** `class_overview(report_path)` gives
+   the class: how many students passed, failed or were not judged, and which
+   typical errors occur in whose submissions. `explain_target(report_path,
+   target, principle="encapsulation")` gives one student's findings with the
+   error's `what`, `why` and `fix`. A `not_judged` submission was not checked,
+   which is not a pass.
+
+A student who kept the behaviour but renamed a required function (say
+`prodej` for `sell`) gets `missing_required_entity`;
+`propose_mapping(report_path, target)` lists the candidates and a rerun with
+`mapping={"pairs": {"shop.sell": "shop.prodej"}}` judges the renamed function.
+
+All paths passed to the MCP tools must be absolute.
+
+## The same from the command line
+
+```bash
+python-arch-test \
+    --source example/principles/encapsulation \
+    --targets-dir example/principles/encapsulation/assignments \
+    --dynamic --format json
+```
+
+A `--source` that holds `task.toml` is a task: its principle's checks are
+generated from it. `--sandbox bwrap` adds no network and a read-only file
+system for code you did not write. The example's variants (`ok_*` must pass,
+`err_*` show one typical error each; `err_report_reads_private` passes, because
+reading a private attribute from outside is a known gap, G2, in the catalogue)
+are checked against the catalogue with:
+
+```bash
+python example/principles/verify.py
+```
+
+Choosing the principle, preparing the task and reading the results by typical
+error are MCP tools; the CLI writes the JSON or Markdown report
+([docs/reporting.md](docs/reporting.md)).
+
+## Principles in the catalogue
+
+| Id | Principle | Example task |
+|---|---|---|
+| `io_separation` | Logic apart from input and output: functions return, `main` talks to the user | `example/principles/io_separation/` |
+| `encapsulation` | Encapsulation: an object's state changes only through its own methods | `example/principles/encapsulation/` |
+
+The catalogue ships with the package
+(`src/pythonarchtesting/principles/catalog/<id>.toml`); its texts are English
+and the AI client words them for the reader in any language. See
+[example/principles/README.md](example/principles/README.md).
+
+## Install
+
+Standard install:
+
+```bash
+pip install .
+```
+
+Optional MCP server (adds `mcp>=2.3,<3` and the `python-arch-test-mcp`
+command):
+
+```bash
+pip install ".[mcp]"
+```
+
+Editable development install with test and lint extras:
+
+```bash
+pip install -e .[dev]
+```
+
+Dependencies are declared in `pyproject.toml` only. The repository does not
+maintain `requirements*.txt` files.
+
+CLI entrypoints:
+
+- `python-arch-test` — installed console script
+- `python -m pythonarchtesting.cli` — direct invocation from a source checkout
+- `python-arch-test-mcp` — optional MCP server, see [docs/mcp.md](docs/mcp.md)
+
+## Advanced: writing markers and architecture checks
+
+Beyond a principle of the catalogue, a reference can state its expectations
+itself with passive `Annotated[...]` markers, and the tool checks targets
+against them, also as a general architecture checker (layers, cycles, module
+interfaces, a reference's whole dependency structure). A teaching task does
+not need any of this. [docs/overview.md](docs/overview.md) explains the
+concepts and [docs/usage-guide.md](docs/usage-guide.md) walks through a worked
+example.
+
+- **Reference project**: the source of truth that contains rule declarations.
+- **Target project**: the codebase being checked against the reference.
+- **Declarations**: passive `Annotated[...]` metadata read by the CLI; not
+  executed at import time.
+- **Reports**: JSON or Markdown output describing matching, rule results, and
+  exit status.
 
 By default the CLI is purely static: it parses source files and annotation
-metadata and does not execute application code to decide whether a rule passed.
-The opt-in `--dynamic` flag adds runtime checks of structure that the
-source alone does not reveal — which layers code actually calls, who assigns
-an object's attributes, which modules get imported by name — by running the
-target in a separate interpreter, confined by `--sandbox` (`limits` by
-default; `bwrap` adds no network and a read-only file system — use it for
-code you did not write). Like the static rules they check how the program is
-built, never what it computes ([docs/dynamic-checks.md](docs/dynamic-checks.md)).
+metadata and does not execute application code to decide whether a rule
+passed. The opt-in `--dynamic` flag adds runtime checks of structure that the
+source alone does not reveal, by running the target in a separate interpreter
+confined by `--sandbox` (`limits` by default; `bwrap` adds no network and a
+read-only file system).
 
-## What It Can Check
+The MCP tools for this side are `list_markers`, `describe_marker`,
+`validate_declarations`, `check_cases`, `verify_marker`, and the advanced
+`describe_architecture`, `check_architecture` and `propose_mapping`
+([docs/mcp.md](docs/mcp.md)).
+
+### Markers
 
 All markers are imported from `pythonarchtesting.rules`. See
 [docs/api-reference.md](docs/api-reference.md) for the full option surface and
@@ -45,7 +202,8 @@ All markers are imported from `pythonarchtesting.rules`. See
 - `architecture_entry` — the reference's module dependencies as the model of
   the architecture, with no per-module markers; `--architecture` applies its
   static part to a reference that declares nothing, `--write-model` writes
-  the model as JSON
+  the model as JSON; `--mapping FILE` pairs entities a target renamed
+  ([docs/reporting.md](docs/reporting.md#assisted-pairing))
 
 **Type identity and inheritance**
 
@@ -113,46 +271,7 @@ target is analyzed:
 python-arch-test --validate-declarations --source <reference_path>
 ```
 
-## Core Concepts
-
-- **Reference project** — the source of truth that contains rule declarations.
-- **Target project** — the codebase being checked against the reference.
-- **Declarations** — passive `Annotated[...]` metadata read by the CLI; not
-  executed at import time.
-- **Reports** — JSON or Markdown output describing matching, rule results, and
-  exit status.
-
-## Install
-
-Standard install:
-
-```bash
-pip install .
-```
-
-Optional MCP server (adds `mcp>=2.3,<3` and the `python-arch-test-mcp`
-command):
-
-```bash
-pip install ".[mcp]"
-```
-
-Editable development install with test and lint extras:
-
-```bash
-pip install -e .[dev]
-```
-
-Dependencies are declared in `pyproject.toml` only. The repository does not
-maintain `requirements*.txt` files.
-
-CLI entrypoints:
-
-- `python-arch-test` — installed console script
-- `python -m pythonarchtesting.cli` — direct invocation from a source checkout
-- `python-arch-test-mcp` — optional MCP server, see [docs/mcp.md](docs/mcp.md)
-
-## Quick Example
+### Quick Example
 
 The repository ships a canonical worked example at `example/checkout_assignment/`.
 For a marker-by-marker tour, `example/rule_showcase/` holds one small project per
@@ -210,7 +329,7 @@ subtrees. `scope="entity"` remains a compatibility alias for `module`. Bare
 `forbid_imports(...)` uses graph-based reachable-import checking by default;
 pass `mode="direct"` for the direct AST import check.
 
-## Run It
+### Run It
 
 Validate the reference declarations on their own:
 
@@ -265,7 +384,7 @@ A pre-rendered Markdown bundle for this example lives at
 `example/checkout_assignment/reports/report_md/`. JSON output is not checked in;
 run the JSON command above to produce it.
 
-## How To Read A Report
+### How To Read A Report
 
 Read the JSON output in this order:
 
@@ -282,11 +401,14 @@ full output reference.
 ## Where To Go Next
 
 - [Documentation index](docs/README.md)
-- [Overview](docs/overview.md) — concepts and supported checks
-- [Usage guide](docs/usage-guide.md) — step-by-step worked example
-- [Configuration](docs/configuration.md) — `.pythonarchtesting` reference
-- [API reference](docs/api-reference.md) — every marker and option
-- [Per-marker reference](docs/markers/README.md) — focused page per marker
-- [Pattern recipes](docs/pattern-recipes.md) — common-pattern declarations
-- [Reporting](docs/reporting.md) — output formats and exit codes
-- [Architecture](docs/architecture.md) — pipeline and module map
+- [MCP server](docs/mcp.md): the teaching workflow and every tool
+- [Tasks](docs/tasks.md): `task.toml`, a principle bound to a model solution
+- [Principle examples](example/principles/README.md): one task per principle
+- [Overview](docs/overview.md): markers, concepts and supported checks
+- [Usage guide](docs/usage-guide.md): step-by-step worked example with markers
+- [Configuration](docs/configuration.md): `.pythonarchtesting` reference
+- [API reference](docs/api-reference.md): every marker and option
+- [Per-marker reference](docs/markers/README.md): focused page per marker
+- [Pattern recipes](docs/pattern-recipes.md): common-pattern declarations
+- [Reporting](docs/reporting.md): output formats and exit codes
+- [Architecture](docs/architecture.md): pipeline and module map

@@ -59,16 +59,17 @@ import json
 import re
 import shutil
 import sys
-import tomllib
 from pathlib import Path
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
 CATALOGUE = HERE.parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(1, str(CATALOGUE))
 
 from prepare import EXTRA_NEUTRAL, VARIANTS, carrier_dir, files  # noqa: E402
 from score import judge_file, neutral_id  # noqa: E402
+from explain import load_entry  # noqa: E402
 
 ROOT = Path("/tmp/claude-1000/-home-jirka-git-PythonArchTesting/8173ba2d-10ce-4d65-89ca-58dad548b14d/scratchpad/stage")
 ROLES = ("author", "solver-text", "solver-skeleton", "injector-err", "injector-neutral", "judge")
@@ -80,7 +81,7 @@ def _entry(principle: str) -> dict[str, Any]:
     path = CATALOGUE / principle / "principle.toml"
     if not path.is_file():
         raise SystemExit(f"{path} is missing: no such principle")
-    return tomllib.loads(path.read_text(encoding="utf-8"))
+    return load_entry(path.parent)
 
 
 def _text(value: str) -> str:
@@ -132,8 +133,8 @@ def stage(args: argparse.Namespace) -> Path:
     texts: dict[str, str] = {}
     if args.role == "author":
         texts["principle.txt"] = (
-            f"Princip: {entry['name']}\n\nCo znamená:\n{_text(entry['summary'])}\n\n"
-            f"Proč na něm záleží:\n{_text(entry['why'])}\n"
+            f"Principle: {entry['name']}\n\nWhat it means:\n{_text(entry['summary'])}\n\n"
+            f"Why it matters:\n{_text(entry['why'])}\n"
         )
         inputs["skeleton"] = _need(pilot / "skeleton")
     elif args.role in ("solver-text", "solver-skeleton"):
@@ -151,14 +152,14 @@ def stage(args: argparse.Namespace) -> Path:
             if args.id not in errors:
                 raise SystemExit(f"--id must be one of {sorted(errors)}, not {args.id!r}")
             error = errors[args.id]
-            texts["error.txt"] = f"Chyba: {error['title']}\n\nProč je to chyba:\n{_text(error['why'])}\n"
+            texts["error.txt"] = f"Error: {error['title']}\n\nWhy it is an error:\n{_text(error['why'])}\n"
         else:
             defects = {item["id"]: item["title"] for item in entry.get("neutral", []) if item["id"] != "model_solution"}
             defects.update(EXTRA_NEUTRAL)
             if args.id not in defects:
                 raise SystemExit(f"--id must be one of {sorted(defects)}, not {args.id!r}")
             texts["defect.txt"] = (
-                f"Vada: {defects[args.id]}\n\nPrincip, kterého se změna nesmí dotknout: "
+                f"Defect: {defects[args.id]}\n\nThe principle the change must not touch: "
                 f"{entry['name']}\n{_text(entry['summary'])}\n"
             )
     elif args.role == "judge":

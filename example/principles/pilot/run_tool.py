@@ -1,9 +1,9 @@
 """Run the tool on every submission of the pilot and write ``<p>/tool.json``.
 
 Each submission of ``<base>/<p>/key.json`` is checked against the principle's
-reference with its markers::
+task (``task.toml`` with the unannotated reference, see ``docs/tasks.md``)::
 
-    python-arch-test --source example/principles/<p>/reference --target <path>
+    python-arch-test --source example/principles/<p> --target <path>
         --format json --dynamic --sandbox bwrap
 
 and gets ``{"verdict", "rules", "explanations", "not_run", "sha256"}``:
@@ -13,10 +13,11 @@ and gets ``{"verdict", "rules", "explanations", "not_run", "sha256"}``:
   matching found no counterpart of a reference function; as in E1-E5 this is
   no verdict); ``PASS`` otherwise;
 - ``rules``: the ``rule_id`` of every failed rule;
-- ``explanations``: the student explanation of every failure with a verdict,
-  composed from the catalogue by the same code as ``verify.py``
-  (``../explain.py``); the catalogue error is chosen by ``choose_error``, from
-  the facts of the catalogue's own example variants;
+- ``explanations``: the student explanation of every violation of a failure
+  with a verdict, one per fact, composed from the catalogue by the same code as
+  ``verify.py`` (``../explain.py``); the tool's classification
+  (``pythonarchtesting.principles.classify_result``) picks the catalogue error
+  from the declared signatures of the catalogue's errors;
 - ``not_run``: the failed rules that could not run the code (probe or case
   errors); they count as ``FAIL`` here, and ``score.py`` takes a submission
   with any of them out of the tool's rates;
@@ -47,11 +48,9 @@ from prepare import files, sha256, whole  # noqa: E402
 from explain import (  # noqa: E402  (the shared module lives one level up)
     CLI,
     NO_MATCH,
-    choose_error,
-    error_signatures,
-    explanation,
+    finding_text,
+    findings,
     load_entry,
-    run_catalogue,
 )
 
 _NOT_RUN = ("case_setup_failed", "reference_failed", "target_kind_mismatch")
@@ -62,13 +61,13 @@ def _did_not_run(result: dict[str, Any]) -> bool:
     return result["status"] == "ERROR" or reason.startswith("probe_") or reason in _NOT_RUN
 
 
-def check(reference: Path, target: Path) -> list[dict[str, Any]]:
-    """The results of one tool run on one submission."""
+def check(task: Path, target: Path) -> list[dict[str, Any]]:
+    """The results of one tool run on one submission, against ``task``."""
     with tempfile.TemporaryDirectory() as tmp:
         output = Path(tmp) / "report.json"
         command = [
             str(CLI),
-            "--source", str(reference),
+            "--source", str(task),
             "--target", str(target),
             "--format", "json", "--output", str(output),
             "--dynamic", "--sandbox", "bwrap",
@@ -83,21 +82,17 @@ def check(reference: Path, target: Path) -> list[dict[str, Any]]:
     return [result for t in report["targets"] for result in t["results"]]
 
 
-def verdict(results: list[dict[str, Any]], entry: dict, signatures: dict) -> dict[str, Any]:
+def verdict(results: list[dict[str, Any]], entry: dict) -> dict[str, Any]:
     failed = [r for r in results if r["status"] in ("FAILED", "ERROR")]
     unmatched = [r for r in failed if (r.get("details") or {}).get("reason") == NO_MATCH]
     not_run = [r for r in failed if r not in unmatched and _did_not_run(r)]
     judged = [r for r in failed if r not in unmatched and r not in not_run]
     explanations: list[str] = []
     for result in judged:
-        error = choose_error(entry, result, signatures)
-        text = (
-            explanation(error, result)
-            if error is not None
-            else f"**Co:** pravidlo `{result['rule_id']}` selhalo: {result.get('message', '')}"
-        )
-        if text not in explanations:
-            explanations.append(text)
+        for finding in findings(entry, result):
+            text = finding_text(finding)
+            if text not in explanations:
+                explanations.append(text)
     if judged or not_run:
         decision = "FAIL"
     elif unmatched:
@@ -115,13 +110,11 @@ def verdict(results: list[dict[str, Any]], entry: dict, signatures: dict) -> dic
 def run_principle(principle_dir: Path, jobs: int) -> dict[str, dict[str, Any]]:
     catalogue_dir = CATALOGUE / principle_dir.name
     entry = load_entry(catalogue_dir)
-    signatures = error_signatures(entry, run_catalogue(catalogue_dir))
     key = json.loads((principle_dir / "key.json").read_text(encoding="utf-8"))
-    reference = catalogue_dir / "reference"
 
     def one(neutral: str) -> tuple[str, dict[str, Any]]:
         target = principle_dir / key[neutral]["path"]
-        found = verdict(check(reference, target), entry, signatures)
+        found = verdict(check(catalogue_dir, target), entry)
         found["sha256"] = sha256(whole(neutral, files(target)))
         return neutral, found
 

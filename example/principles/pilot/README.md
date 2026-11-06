@@ -115,6 +115,11 @@ printed path, then `stage.py collect <stage>`.
    rules, the rules that could not run the code (`not_run`), the student
    explanation of each failure, composed from the catalogue by the same code
    as `verify.py` (`../explain.py`), and the `sha256` of the code it checked.
+   The source is the principle's task (`../<p>/`: `task.toml` beside the
+   unannotated reference, `docs/tasks.md`). The recorded `tool.json` was made
+   from the reference with markers; rerun from the task, every submission
+   keeps its verdict and its failed rules (2026-11-06; only the explanations'
+   language differs, the catalogue being English now).
 8. **Judges.** One agent per batch (role `judge`, prompt J); runs `sonnet-1`,
    `haiku-1`.
 9. **Score.** `python example/principles/pilot/score.py` writes `results.md`
@@ -144,8 +149,12 @@ repository stays unchanged.
 ## Prompts
 
 `<stage>` is the absolute path `stage.py` printed for this agent. Text in
-`«…»` is pasted verbatim from `../<p>/principle.toml`; the agent does not
-read that file.
+`«…»` is pasted verbatim from the catalogue entry
+(`src/pythonarchtesting/principles/catalog/<p>.toml`); the agent does not
+read that file. The recorded run used the Czech texts of commit `c1152c6`: the
+entries then kept in `../<p>/principle.toml`, and Czech labels in the files
+`stage.py` writes (`principle.txt`, `error.txt`, `defect.txt`), which are
+English now.
 
 **A — assignment author** (role `author`; the stage holds the principle's
 name, summary and why, and the skeleton):

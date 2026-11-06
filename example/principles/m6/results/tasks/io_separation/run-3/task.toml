@@ -1,0 +1,11 @@
+principle = "io_separation"
+
+[roles]
+logic = ["grades.parse_grades", "grades.average", "grades.format_summary"]
+io = ["app.main"]
+
+[cases]
+"grades.parse_grades" = [{args = ["1 2 3"]}, {args = ["1 x 3"]}]
+"grades.average" = [{args = [[1, 2, 3]]}, {args = [[]]}]
+"grades.format_summary" = [{args = [[1, 2, 3]]}, {args = [[]]}]
+"app.main" = [{stdin = "1 2 3\n"}, {stdin = "1 x 3\n"}]

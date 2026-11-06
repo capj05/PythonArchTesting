@@ -23,11 +23,14 @@ import contextlib
 import dis
 import enum
 import importlib
+import importlib.abc
+import importlib.machinery
 import importlib.util
 import inspect
 import io
 import itertools
 import json
+import keyword
 import os
 import random
 import signal
@@ -43,10 +46,32 @@ _MISSING = object()
 # Frames running this file's own code (the write recorder's __setattr__
 # wrapper, the case runner) are not target code and not a layer.
 _PROBE_GLOBALS = globals()
+# ``importlib.import_module`` before the import recorder wraps it: the sibling
+# aliases load the package's module through it, which is no import the
+# target's code made.
+_IMPORT_MODULE = importlib.import_module
 
 
 class CaseSetupError(Exception):
-    """A case could not be prepared, so the target was never called."""
+    """A case could not be prepared, so the target was never called.
+
+    ``unresolved`` is the name a case's ``{"$new": ...}`` gave that the
+    target does not have (a class the reference has, so the case could run
+    there), else ``None``."""
+
+    def __init__(self, message: str, unresolved: str | None = None) -> None:
+        super().__init__(message)
+        self.unresolved = unresolved
+
+
+def _setup_failed(outcome: dict[str, Any], exc: CaseSetupError) -> dict[str, Any]:
+    """Mark ``outcome`` as a case that could not be prepared, naming the
+    unresolved ``$new`` (``unresolved``) when that was why."""
+    outcome["status"] = "error"
+    outcome["failures"].append(f"setup: {exc}")
+    if exc.unresolved is not None:
+        outcome["unresolved"] = exc.unresolved
+    return outcome
 
 
 class JobTimeout(BaseException):
@@ -85,7 +110,16 @@ def _resolve_name(name: str, namespace: dict[str, Any], package: str | None) -> 
         except ImportError as exc:
             raise CaseSetupError(f"cannot resolve {name!r}: {exc}") from exc
     else:
-        raise CaseSetupError(f"cannot resolve {name!r} in the target module")
+        # A root that is no package is on ``sys.path``: ``inventory.Inventory``
+        # names its top-level module ``inventory``.
+        try:
+            if not rest:
+                raise ImportError(name)
+            value = importlib.import_module(head)
+        except ImportError as exc:
+            raise CaseSetupError(
+                f"cannot resolve {name!r} in the target module"
+            ) from exc
     for part in rest.split(".") if rest else ():
         parent, value = value, getattr(value, part, _MISSING)
         if value is _MISSING and hasattr(parent, "__path__"):
@@ -185,7 +219,10 @@ def _build_value(value: Any, namespace: dict[str, Any], package: str | None) -> 
         }
         return _Spy(str(value["$spy"]), returns)
     if isinstance(value, dict) and "$new" in value:
-        factory = _resolve_name(str(value["$new"]), namespace, package)
+        try:
+            factory = _resolve_name(str(value["$new"]), namespace, package)
+        except CaseSetupError as exc:
+            raise CaseSetupError(str(exc), unresolved=str(value["$new"])) from exc
         for recorder in _RECORDING:
             recorder.wrap_loaded()
         args = [
@@ -257,7 +294,9 @@ class _Project:
     def classes(self) -> list[type]:
         """Classes defined in loaded project modules, bases before subclasses."""
         classes: list[type] = []
-        for module in list(sys.modules.values()):
+        # A module aliased under a second name (``_SiblingAliases``) once.
+        modules = {id(module): module for module in list(sys.modules.values())}
+        for module in modules.values():
             if self.relpath(getattr(module, "__file__", None)) is None:
                 continue
             for value in list(vars(module).values()):
@@ -1519,9 +1558,7 @@ def _inspect_class(
             for k, v in (case.get("kwargs") or {}).items()
         }
     except CaseSetupError as exc:
-        outcome["status"] = "error"
-        outcome["failures"].append(f"setup: {exc}")
-        return outcome
+        return _setup_failed(outcome, exc)
     outcome["abstract"] = bool(inspect.isabstract(cls))
     outcome["abstract_methods"] = sorted(getattr(cls, "__abstractmethods__", ()))
     if observe.get("singleton") is not None:
@@ -1541,9 +1578,7 @@ def _inspect_class(
     try:
         _run_steps(obj, list(case.get("steps") or []), namespace, package)
     except CaseSetupError as exc:
-        outcome["status"] = "error"
-        outcome["failures"].append(f"setup: {exc}")
-        return outcome
+        return _setup_failed(outcome, exc)
     _SPY_CALLS.clear()
     members: dict[str, Any] = {}
     for name in observe.get("names") or []:
@@ -1816,9 +1851,7 @@ def _observe_case(
     except CaseSetupError as exc:
         if instances is not None:
             instances.stop()
-        outcome["status"] = "error"
-        failures.append(f"setup: {exc}")
-        return outcome
+        return _setup_failed(outcome, exc)
 
     # Internal keys used by the runtime enforce_flow check: "capture_stages"
     # runs the reference and reports the project calls each flow stage makes;
@@ -1871,9 +1904,7 @@ def _observe_case(
             else:
                 _run_to_completion(func(*args, **kwargs))
     except CaseSetupError as exc:
-        outcome["status"] = "error"
-        failures.append(f"setup: {exc}")
-        return outcome
+        return _setup_failed(outcome, exc)
     except JobTimeout:
         raise
     except BaseException as exc:  # SystemExit included: report, do not die
@@ -2022,10 +2053,102 @@ def _reset_random() -> None:
     random.seed(0)
 
 
+def _stand_in_package(root: str, package: str) -> None:
+    """An empty package for a root without ``__init__.py`` (a beginner left it
+    out, but the modules import relatively): imported as if the file were
+    there and empty, never through whatever else on ``sys.path`` bears the
+    root's name."""
+    if package in sys.modules or os.path.isfile(os.path.join(root, "__init__.py")):
+        return
+    spec = importlib.machinery.ModuleSpec(package, None, is_package=True)
+    spec.submodule_search_locations = [root]
+    stand_in = importlib.util.module_from_spec(spec)
+    stand_in.__path__ = [root]
+    sys.modules[package] = stand_in
+
+
+def _sibling_names(root: str, package: str) -> set[str]:
+    """The modules and subpackages of the package that an absolute import
+    may name (``from inventory import X`` inside it), as a beginner who runs
+    the code from inside the directory writes it.
+
+    A name is left out when it would shadow anything else: a standard-library
+    module (``sys.stdlib_module_names``, also one not importable here), a
+    module already imported, or one the interpreter finds on its own path (an
+    installed distribution). Such a sibling is reachable only relatively or
+    through the package's name, and the absolute import gets the other module.
+    Runs before the root's parent goes on ``sys.path``, so the package's own
+    neighbours are no reason to leave a name out.
+    """
+    names: set[str] = set()
+    for entry in sorted(os.listdir(root)):
+        path = os.path.join(root, entry)
+        if entry.endswith(".py") and os.path.isfile(path):
+            name = entry[:-3]
+        elif os.path.isdir(path) and any(
+            item.endswith(".py") for item in os.listdir(path)
+        ):
+            name = entry
+        else:
+            continue
+        if (
+            name in ("__init__", package)
+            or not name.isidentifier()
+            or keyword.iskeyword(name)
+            or name in sys.modules
+            or name in sys.stdlib_module_names
+            or name in sys.builtin_module_names
+        ):
+            continue
+        try:
+            found = importlib.util.find_spec(name)
+        except (ImportError, ValueError):
+            continue
+        if found is None:
+            names.add(name)
+    return names
+
+
+class _SiblingAliases(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """Resolve an absolute import of a sibling module to the package's module.
+
+    ``import inventory`` inside package ``pkg`` loads ``pkg.inventory`` and
+    binds the same module object under ``inventory`` too: one module, so its
+    classes are the ones the cases construct (``$new``) and ``isinstance``
+    sees. ``inventory.sub`` likewise becomes ``pkg.inventory.sub``. Only the
+    names of ``_sibling_names``; anything else is left to the other finders.
+    """
+
+    def __init__(self, package: str, names: set[str]) -> None:
+        self._package = package
+        self._names = frozenset(names)
+        self._specs: dict[str, Any] = {}
+
+    def find_spec(self, fullname: str, path: Any = None, target: Any = None) -> Any:
+        if fullname.partition(".")[0] not in self._names:
+            return None
+        return importlib.machinery.ModuleSpec(fullname, self)
+
+    def create_module(self, spec: Any) -> Any:
+        module = _IMPORT_MODULE(f"{self._package}.{spec.name}")
+        self._specs[spec.name] = module.__spec__
+        return module
+
+    def exec_module(self, module: Any) -> None:
+        # The import system set the alias's spec on the module; it keeps its own.
+        alias = module.__spec__.name
+        module.__spec__ = self._specs.pop(alias)
+
+
 def _import_target(request: dict[str, Any]) -> tuple[Any, str | None]:
     _reset_random()
     root = request["target_root"]
     package = request.get("package")
+    if package:
+        _stand_in_package(root, package)
+        names = _sibling_names(root, package)
+        if names:
+            sys.meta_path.insert(0, _SiblingAliases(package, names))
     sys.path.insert(0, os.path.dirname(root) if package else root)
     module_path = request["module_path"]
     if package:
@@ -2033,6 +2156,7 @@ def _import_target(request: dict[str, Any]) -> tuple[Any, str | None]:
             module = _import_without_parents(root, package, module_path)
             if module is not None:
                 return module, package
+            _stand_in_package(root, package)
         module_path = f"{package}.{module_path}" if module_path else package
     return importlib.import_module(module_path), package
 
@@ -2060,10 +2184,19 @@ def _import_without_parents(root: str, package: str, module_path: str) -> Any:
     try:
         return importlib.import_module(f"{package}.{module_path}")
     except Exception:  # noqa: BLE001 - any failure: fall back to a plain import
-        for name in list(sys.modules):
-            if name == package or name.startswith(f"{package}."):
+        # Also the aliases (``_SiblingAliases``) bound to the package's
+        # modules: the plain import must not find the first attempt's module
+        # under a sibling's name and load a second one under the package's.
+        for name, module in list(sys.modules.items()):
+            if _in_package(name, package) or _in_package(
+                str(getattr(module, "__name__", "")), package
+            ):
                 del sys.modules[name]
         return None
+
+
+def _in_package(name: str, package: str) -> bool:
+    return name == package or name.startswith(f"{package}.")
 
 
 def main() -> int:

@@ -17,10 +17,6 @@ FORBIDDEN_IMPORTS: Dict[str, List[str]] = {
         # Util modules should not pull in declaration or execution layers.
         "pythonarchtesting.rules",
     ],
-    "pythonarchtesting.report.dispatcher": [
-        "pythonarchtesting.report.formats",
-        "pythonarchtesting.report.generators",
-    ],
     "pythonarchtesting.cli": [
         "pythonarchtesting.execution",
         "pythonarchtesting.runner",

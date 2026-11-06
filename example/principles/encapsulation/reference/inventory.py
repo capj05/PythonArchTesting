@@ -1,5 +1,3 @@
-"""The inventory owns its stock: only its own methods change it."""
-
 from __future__ import annotations
 
 

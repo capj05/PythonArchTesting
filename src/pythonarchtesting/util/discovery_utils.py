@@ -15,12 +15,7 @@ def _get_config_bool(config: Config, section: str, key: str, default: bool) -> b
         section_map = {
             "discovery": config.discovery,
             "matching": config.matching,
-            "performance": config.performance,
             "logging": config.logging,
-            "reporting": config.reporting,
-            "files": config.files,
-            "import_config": config.import_config,
-            "error_handling": config.error_handling,
             "projects": config.projects,
             "report": config.report,
         }
@@ -53,12 +48,7 @@ def _get_config_int(config: Config, section: str, key: str, default: int) -> int
         section_map = {
             "discovery": config.discovery,
             "matching": config.matching,
-            "performance": config.performance,
             "logging": config.logging,
-            "reporting": config.reporting,
-            "files": config.files,
-            "import_config": config.import_config,
-            "error_handling": config.error_handling,
             "projects": config.projects,
             "report": config.report,
         }
@@ -94,12 +84,7 @@ def _get_config_list(
         section_map = {
             "discovery": config.discovery,
             "matching": config.matching,
-            "performance": config.performance,
             "logging": config.logging,
-            "reporting": config.reporting,
-            "files": config.files,
-            "import_config": config.import_config,
-            "error_handling": config.error_handling,
             "projects": config.projects,
             "report": config.report,
         }

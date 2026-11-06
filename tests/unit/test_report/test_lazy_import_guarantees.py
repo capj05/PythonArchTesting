@@ -29,8 +29,9 @@ print(json.dumps({"mods": mods}))
     mods = payload["mods"]
 
     concrete = {
-        "pythonarchtesting.report.json_generator",
-        "pythonarchtesting.report.markdown_generator",
+        "pythonarchtesting.report.api",
+        "pythonarchtesting.report.renderers.json",
+        "pythonarchtesting.report.renderers.markdown_bundle",
     }
     assert not any(m.startswith("sqlalchemy") for m in mods)
     assert not concrete.intersection(set(mods))
@@ -52,8 +53,9 @@ print(json.dumps({"mods": mods}))
     mods = payload["mods"]
 
     concrete = {
-        "pythonarchtesting.report.json_generator",
-        "pythonarchtesting.report.markdown_generator",
+        "pythonarchtesting.report.api",
+        "pythonarchtesting.report.renderers.json",
+        "pythonarchtesting.report.renderers.markdown_bundle",
     }
     assert not any(m.startswith("sqlalchemy") for m in mods)
     assert not concrete.intersection(set(mods))

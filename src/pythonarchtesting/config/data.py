@@ -22,56 +22,8 @@ class DiscoveryConfig:
     )
     included_file_patterns: List[str] = field(default_factory=lambda: ["*.py"])
     include_init_files: bool = True
-    auto_discover: bool = True
     exclude_hidden_dirs: bool = True
     follow_symlinks: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class ReportingConfig:
-    """Reporting configuration."""
-
-    max_string_representation: int = 100
-    error_detail_level: str = "full"
-    include_traceback: bool = False
-    output_formats: List[str] = field(default_factory=lambda: ["json"])
-
-
-@dataclass(frozen=True, slots=True)
-class FilesConfig:
-    """File handling configuration."""
-
-    python_extension: str = ".py"
-    init_filename: str = "__init__.py"
-
-
-@dataclass(frozen=True, slots=True)
-class PerformanceConfig:
-    """Performance tuning configuration."""
-
-    default_timeout: int = 30
-
-
-@dataclass(frozen=True, slots=True)
-class MemoryConfig:
-    """Memory management configuration."""
-
-    cleanup_enabled: bool = True
-    lazy_loading: bool = True
-    max_validation_results: int = 10000
-    min_module_usage: int = 0
-    max_module_age_hours: float = 24.0
-    auto_cleanup: bool = True
-    cleanup_interval: int = 1000
-
-
-@dataclass(frozen=True, slots=True)
-class ImportConfig:
-    """Import handling configuration."""
-
-    max_modules: int = 100
-    import_timeout: float = 10.0
-    show_import_warnings: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,17 +51,6 @@ class ReportConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class ErrorHandlingConfig:
-    """Error handling configuration."""
-
-    continue_on_error: bool = True
-    continue_on_import_error: bool = True
-    show_detailed_errors: bool = True
-    include_suggestions: bool = True
-    max_error_context_depth: int = 5
-
-
-@dataclass(frozen=True, slots=True)
 class ProjectsConfig:
     """Project configuration."""
 
@@ -121,7 +62,6 @@ class ProjectsConfig:
     exclude_patterns: List[str] = field(
         default_factory=lambda: [".git", "__pycache__", "template"]
     )
-    required_modules: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,14 +85,8 @@ class Config:
 
     # Core configuration sections
     discovery: DiscoveryConfig = field(default_factory=DiscoveryConfig)
-    reporting: ReportingConfig = field(default_factory=ReportingConfig)
-    files: FilesConfig = field(default_factory=FilesConfig)
-    performance: PerformanceConfig = field(default_factory=PerformanceConfig)
-    memory: MemoryConfig = field(default_factory=MemoryConfig)
-    import_config: ImportConfig = field(default_factory=ImportConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     report: ReportConfig = field(default_factory=ReportConfig)
-    error_handling: ErrorHandlingConfig = field(default_factory=ErrorHandlingConfig)
     projects: ProjectsConfig = field(
         default_factory=lambda: ProjectsConfig(source_path=Path("."))
     )
@@ -263,14 +197,8 @@ def create_config_from_dict(config_dict: Dict[str, Dict[str, Any]]) -> Config:
 
     return Config(
         discovery=_get_section("discovery", DiscoveryConfig),
-        reporting=_get_section("reporting", ReportingConfig),
-        files=_get_section("files", FilesConfig),
-        performance=_get_section("performance", PerformanceConfig),
-        memory=_get_section("memory", MemoryConfig),
-        import_config=_get_section("import", ImportConfig),
         logging=_get_section("logging", LoggingConfig),
         report=_get_section("report", ReportConfig),
-        error_handling=_get_section("error_handling", ErrorHandlingConfig),
         projects=_get_section("projects", ProjectsConfig, source_path=Path(".")),
         matching=_get_section("matching", MatchingConfig),
         raw=config_dict,

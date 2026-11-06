@@ -393,7 +393,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--output", type=Path, default=HERE / "results.md")
     args = parser.parse_args()
-    config = load_config(config_path=None, cli_args={}, discover_from_cwd=False)
+    config = load_config(config_path=None, discover_from_cwd=False)
     showcase = sorted(p for p in (EXAMPLES / "rule_showcase").iterdir() if p.is_dir())
     assignment_roots = [EXAMPLES / "checkout_assignment", *showcase]
     states = {

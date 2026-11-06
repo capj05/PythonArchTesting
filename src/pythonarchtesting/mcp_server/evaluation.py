@@ -38,7 +38,6 @@ def resolve_config(source: Path, config: Optional[str]) -> tuple[Config, str]:
                 break
     loaded = load_config(
         config_path=str(config_path) if config_path else None,
-        cli_args={"output_format": "json"},
         discover_from_cwd=False,
     )
     return loaded, str(config_path) if config_path else "defaults"

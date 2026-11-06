@@ -1,0 +1,19 @@
+# The task: the catalogue principle `io_separation` bound to the unannotated
+# model solution in `reference/`. The tool turns each check of the catalogue
+# entry into the declaration a marker would give, for every entity of the
+# check's role, with that entity's cases (see docs/tasks.md).
+
+principle = "io_separation"
+
+[roles]
+# A module stands for its top-level public functions.
+logic = ["grades"]
+io = ["app.main"]
+
+[cases]
+# logic: an ordinary input and one that ends in an error, no keyboard needed.
+"grades.parse_grades" = [{ args = ["1 2 3 1"] }, { args = ["1 x 7"] }]
+"grades.average" = [{ args = [[1, 2, 3, 1]] }, { args = [[]] }]
+"grades.format_summary" = [{ args = [[1, 2, 3, 1]] }]
+# io: a valid and an invalid line typed on the keyboard.
+"app.main" = [{ args = [], stdin = "1 2 3 1\n" }, { args = [], stdin = "1 x\n" }]

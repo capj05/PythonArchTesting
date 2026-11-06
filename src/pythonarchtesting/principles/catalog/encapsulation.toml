@@ -1,0 +1,115 @@
+# Catalogue entry; see io_separation.toml for the format notes.
+
+id = "encapsulation"
+name = "Encapsulation"
+level = "basic"
+
+summary = """
+An object manages its own state (its attributes). Other code changes that state
+only by calling the object's methods and reads it only through its public
+methods or properties; it does not touch attributes starting with an underscore
+from outside.
+"""
+
+why = """
+The rules that protect the object's state (for example "a quantity never drops
+below zero") then live in one place, the methods of the class. Code that changes
+the attributes from outside bypasses these rules, and every change to how the
+class stores its data breaks it.
+"""
+
+[roles]
+owner = "the class the state belongs to"
+client = "the functions that work with an object of the owner class from outside it"
+
+[[checks]]
+role = "client"
+marker = "forbid_foreign_writes"
+cases = "for every client function an owner object whose state the function really changes; where the owner's method refuses some changes, also a case it refuses"
+
+[[errors]]
+id = "bypass_method"
+title = "a change of state bypasses the method of the class"
+detected_by = "forbid_foreign_writes"
+what = "Function `{function}` ({file}:{line}) changes the object's state from outside: on line {fact_line} of `{fact_file}` it writes to attribute `{class}.{attribute}` ({change})."
+why = """
+The owner class has a method for this change that enforces its rules (a valid
+value, the other attributes kept consistent with it). Writing to the attribute
+directly skips these rules, so the state can stop making sense.
+"""
+fix = "Call the owner's method that performs this change instead of writing to its attribute."
+signature = { kind = "write", change = "mutated", via = false, private = true }
+# No operator: foreign_write assigns an attribute; none changes its contents.
+
+[[errors]]
+id = "mutate_container"
+title = "changing a list or dictionary that belongs to the object"
+detected_by = "forbid_foreign_writes"
+what = "Function `{function}` ({file}:{line}) changes the contents of another object's attribute: on line {fact_line} of `{fact_file}` it writes to attribute `{class}.{attribute}` ({change})."
+why = """
+An `append` to the object's list, or a new key in its dictionary, is a change of
+its state too. The object itself should decide what its containers hold;
+otherwise entries appear that none of its methods made.
+"""
+fix = "Call the owner's method that makes this change, or add such a method to the owner class."
+signature = { kind = "write", change = "mutated", via = false, private = false }
+# No operator: foreign_write assigns an attribute; none changes its contents.
+
+[[errors]]
+id = "replace_attribute"
+title = "replacing an attribute of another object"
+detected_by = "forbid_foreign_writes"
+what = "Function `{function}` ({file}:{line}) replaces an attribute of another object: on line {fact_line} of `{fact_file}` it writes to attribute `{class}.{attribute}` ({change})."
+why = """
+The function replaces the object's internal data with its own version. The
+object does not know about the change, and once the class changes how it stores
+its data, the function stops working.
+"""
+fix = "Use the owner's public methods to read and change the state, and leave its internal attribute alone."
+signature = { kind = "write", change = "assigned", via = false, private = true }
+# The mutants assign a data attribute of a parameter, a private one first: the
+# reference reads none, so the one its methods assign to self (`_stock` of an
+# `Inventory` the annotation names), after the call that changes the state.
+operator = "foreign_write"
+
+[[errors]]
+id = "read_private"
+title = "reading a private attribute from outside"
+gap = "G2"
+why = """
+An attribute starting with an underscore is internal to the class. Code that
+reads it from outside depends on how the class stores its data and breaks with
+every change inside the class.
+"""
+fix = "Read the state through the owner's public methods or properties."
+
+[[neutral]]
+id = "model_solution"
+title = "the model solution without markers (the reference also passes as a submission)"
+
+[[neutral]]
+id = "property"
+title = "an extra property (`@property`) that the client reads"
+
+[[neutral]]
+id = "extra_method"
+title = "an extra method of the class that the client calls"
+
+[[neutral]]
+id = "wrong_math"
+title = "a mistake in a computation the principle does not concern (a wrong total)"
+
+[[neutral]]
+id = "style_noise"
+title = "poor style: one-letter names, no types or docstrings"
+
+[[gaps]]
+id = "G2"
+title = "reading private attributes from outside is not checked"
+detail = """
+`forbid_foreign_writes` follows only writes and changes. No marker reports
+`obj._x` outside the object's class (`module_interface` guards the private names
+of modules, not of attributes). Proposal: a static check of access to
+`_attributes` through an object other than `self`/`cls`, outside the body of its
+own class.
+"""

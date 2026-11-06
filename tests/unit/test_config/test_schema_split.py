@@ -24,19 +24,6 @@ def test_schema_payload_still_contains_expected_sections() -> None:
     assert "type_check" not in CONFIGURATION_SCHEMA
 
 
-def test_files_schema_does_not_include_bootstrap_filename_keys() -> None:
-    files_schema = CONFIGURATION_SCHEMA["files"]
-    assert "config_default" not in files_schema
-    assert "config_custom" not in files_schema
-
-
-def test_parallel_performance_keys_are_not_in_schema() -> None:
-    performance_schema = CONFIGURATION_SCHEMA["performance"]
-    for key in (
-        "parallel_processing",
-        "max_workers",
-        "min_parallel_items",
-        "parallel_imports",
-        "parallel_validation",
-    ):
-        assert key not in performance_schema
+def test_sections_without_a_live_key_are_not_in_schema() -> None:
+    for section in ("files", "performance", "import", "reporting", "error_handling"):
+        assert section not in CONFIGURATION_SCHEMA

@@ -1,0 +1,193 @@
+section,principle,item,measure,value
+VO3,encapsulation,example,accepted,yes
+VO3,encapsulation,example,problems,0
+VO3,encapsulation,example,copied example,n/a
+VO3,encapsulation,example,errors flagged,9/12
+VO3,encapsulation,example,as the injected error,6/12
+VO3,encapsulation,example,defects flagged (FP),0/12
+VO3,encapsulation,example,carriers flagged,0/3
+VO3,encapsulation,example,unmatched,0/27
+VO3,encapsulation,example,not judged,0/27
+VO3,encapsulation,run-1,accepted,yes
+VO3,encapsulation,run-1,problems,0
+VO3,encapsulation,run-1,copied example,no
+VO3,encapsulation,run-1,errors flagged,9/12
+VO3,encapsulation,run-1,as the injected error,6/12
+VO3,encapsulation,run-1,defects flagged (FP),0/12
+VO3,encapsulation,run-1,carriers flagged,0/3
+VO3,encapsulation,run-1,unmatched,0/27
+VO3,encapsulation,run-1,not judged,0/27
+VO3,encapsulation,run-2,accepted,yes
+VO3,encapsulation,run-2,problems,0
+VO3,encapsulation,run-2,copied example,no
+VO3,encapsulation,run-2,errors flagged,9/12
+VO3,encapsulation,run-2,as the injected error,6/12
+VO3,encapsulation,run-2,defects flagged (FP),0/12
+VO3,encapsulation,run-2,carriers flagged,0/3
+VO3,encapsulation,run-2,unmatched,0/27
+VO3,encapsulation,run-2,not judged,0/27
+VO3,encapsulation,run-3,accepted,yes
+VO3,encapsulation,run-3,problems,0
+VO3,encapsulation,run-3,copied example,no
+VO3,encapsulation,run-3,errors flagged,9/12
+VO3,encapsulation,run-3,as the injected error,6/12
+VO3,encapsulation,run-3,defects flagged (FP),0/12
+VO3,encapsulation,run-3,carriers flagged,0/3
+VO3,encapsulation,run-3,unmatched,0/27
+VO3,encapsulation,run-3,not judged,0/27
+VO3,io_separation,example,accepted,yes
+VO3,io_separation,example,problems,0
+VO3,io_separation,example,copied example,n/a
+VO3,io_separation,example,errors flagged,6/9
+VO3,io_separation,example,as the injected error,6/9
+VO3,io_separation,example,defects flagged (FP),0/12
+VO3,io_separation,example,carriers flagged,0/3
+VO3,io_separation,example,unmatched,0/24
+VO3,io_separation,example,not judged,0/24
+VO3,io_separation,run-1,accepted,yes
+VO3,io_separation,run-1,problems,0
+VO3,io_separation,run-1,copied example,no
+VO3,io_separation,run-1,errors flagged,6/9
+VO3,io_separation,run-1,as the injected error,6/9
+VO3,io_separation,run-1,defects flagged (FP),0/12
+VO3,io_separation,run-1,carriers flagged,0/3
+VO3,io_separation,run-1,unmatched,0/24
+VO3,io_separation,run-1,not judged,0/24
+VO3,io_separation,run-2,accepted,yes
+VO3,io_separation,run-2,problems,0
+VO3,io_separation,run-2,copied example,no
+VO3,io_separation,run-2,errors flagged,6/9
+VO3,io_separation,run-2,as the injected error,6/9
+VO3,io_separation,run-2,defects flagged (FP),0/12
+VO3,io_separation,run-2,carriers flagged,0/3
+VO3,io_separation,run-2,unmatched,0/24
+VO3,io_separation,run-2,not judged,0/24
+VO3,io_separation,run-3,accepted,yes
+VO3,io_separation,run-3,problems,0
+VO3,io_separation,run-3,copied example,no
+VO3,io_separation,run-3,errors flagged,6/9
+VO3,io_separation,run-3,as the injected error,6/9
+VO3,io_separation,run-3,defects flagged (FP),0/12
+VO3,io_separation,run-3,carriers flagged,0/3
+VO3,io_separation,run-3,unmatched,0/24
+VO3,io_separation,run-3,not judged,0/24
+VO5,encapsulation,bypass_method-skeleton_haiku-1,location,2
+VO5,encapsulation,bypass_method-skeleton_haiku-1,principle,2
+VO5,encapsulation,bypass_method-skeleton_haiku-1,reason,2
+VO5,encapsulation,bypass_method-skeleton_haiku-1,explainer model,sonnet
+VO5,encapsulation,bypass_method-skeleton_haiku-1,rater model,opus
+VO5,encapsulation,bypass_method-skeleton_haiku-1,same model,no
+VO5,encapsulation,bypass_method-skeleton_haiku-1,owner review,1
+VO5,encapsulation,bypass_method-skeleton_opus-1,location,2
+VO5,encapsulation,bypass_method-skeleton_opus-1,principle,2
+VO5,encapsulation,bypass_method-skeleton_opus-1,reason,2
+VO5,encapsulation,bypass_method-skeleton_opus-1,explainer model,sonnet
+VO5,encapsulation,bypass_method-skeleton_opus-1,rater model,opus
+VO5,encapsulation,bypass_method-skeleton_opus-1,same model,no
+VO5,encapsulation,bypass_method-skeleton_opus-1,owner review,0
+VO5,encapsulation,mutate_container-skeleton_opus-1,location,1
+VO5,encapsulation,mutate_container-skeleton_opus-1,principle,2
+VO5,encapsulation,mutate_container-skeleton_opus-1,reason,2
+VO5,encapsulation,mutate_container-skeleton_opus-1,explainer model,sonnet
+VO5,encapsulation,mutate_container-skeleton_opus-1,rater model,opus
+VO5,encapsulation,mutate_container-skeleton_opus-1,same model,no
+VO5,encapsulation,mutate_container-skeleton_opus-1,owner review,0
+VO5,encapsulation,replace_attribute-skeleton_haiku-1,location,2
+VO5,encapsulation,replace_attribute-skeleton_haiku-1,principle,2
+VO5,encapsulation,replace_attribute-skeleton_haiku-1,reason,2
+VO5,encapsulation,replace_attribute-skeleton_haiku-1,explainer model,sonnet
+VO5,encapsulation,replace_attribute-skeleton_haiku-1,rater model,opus
+VO5,encapsulation,replace_attribute-skeleton_haiku-1,same model,no
+VO5,encapsulation,replace_attribute-skeleton_haiku-1,owner review,0
+VO5,encapsulation,replace_attribute-skeleton_opus-1,location,2
+VO5,encapsulation,replace_attribute-skeleton_opus-1,principle,2
+VO5,encapsulation,replace_attribute-skeleton_opus-1,reason,2
+VO5,encapsulation,replace_attribute-skeleton_opus-1,explainer model,sonnet
+VO5,encapsulation,replace_attribute-skeleton_opus-1,rater model,opus
+VO5,encapsulation,replace_attribute-skeleton_opus-1,same model,no
+VO5,encapsulation,replace_attribute-skeleton_opus-1,owner review,1
+VO5,encapsulation,replace_attribute-skeleton_sonnet-1,location,2
+VO5,encapsulation,replace_attribute-skeleton_sonnet-1,principle,2
+VO5,encapsulation,replace_attribute-skeleton_sonnet-1,reason,2
+VO5,encapsulation,replace_attribute-skeleton_sonnet-1,explainer model,sonnet
+VO5,encapsulation,replace_attribute-skeleton_sonnet-1,rater model,opus
+VO5,encapsulation,replace_attribute-skeleton_sonnet-1,same model,no
+VO5,encapsulation,replace_attribute-skeleton_sonnet-1,owner review,1
+VO5,io_separation,input_in_logic-skeleton_haiku-1,location,2
+VO5,io_separation,input_in_logic-skeleton_haiku-1,principle,2
+VO5,io_separation,input_in_logic-skeleton_haiku-1,reason,2
+VO5,io_separation,input_in_logic-skeleton_haiku-1,explainer model,sonnet
+VO5,io_separation,input_in_logic-skeleton_haiku-1,rater model,opus
+VO5,io_separation,input_in_logic-skeleton_haiku-1,same model,no
+VO5,io_separation,input_in_logic-skeleton_haiku-1,owner review,1
+VO5,io_separation,input_in_logic-skeleton_opus-1,location,2
+VO5,io_separation,input_in_logic-skeleton_opus-1,principle,2
+VO5,io_separation,input_in_logic-skeleton_opus-1,reason,2
+VO5,io_separation,input_in_logic-skeleton_opus-1,explainer model,sonnet
+VO5,io_separation,input_in_logic-skeleton_opus-1,rater model,opus
+VO5,io_separation,input_in_logic-skeleton_opus-1,same model,no
+VO5,io_separation,input_in_logic-skeleton_opus-1,owner review,1
+VO5,io_separation,input_in_logic-skeleton_sonnet-1,location,2
+VO5,io_separation,input_in_logic-skeleton_sonnet-1,principle,2
+VO5,io_separation,input_in_logic-skeleton_sonnet-1,reason,2
+VO5,io_separation,input_in_logic-skeleton_sonnet-1,explainer model,sonnet
+VO5,io_separation,input_in_logic-skeleton_sonnet-1,rater model,opus
+VO5,io_separation,input_in_logic-skeleton_sonnet-1,same model,no
+VO5,io_separation,input_in_logic-skeleton_sonnet-1,owner review,1
+VO5,io_separation,print_instead_of_return-skeleton_haiku-1,location,2
+VO5,io_separation,print_instead_of_return-skeleton_haiku-1,principle,2
+VO5,io_separation,print_instead_of_return-skeleton_haiku-1,reason,2
+VO5,io_separation,print_instead_of_return-skeleton_haiku-1,explainer model,sonnet
+VO5,io_separation,print_instead_of_return-skeleton_haiku-1,rater model,opus
+VO5,io_separation,print_instead_of_return-skeleton_haiku-1,same model,no
+VO5,io_separation,print_instead_of_return-skeleton_haiku-1,owner review,0
+VO5,io_separation,print_instead_of_return-skeleton_opus-1,location,2
+VO5,io_separation,print_instead_of_return-skeleton_opus-1,principle,2
+VO5,io_separation,print_instead_of_return-skeleton_opus-1,reason,2
+VO5,io_separation,print_instead_of_return-skeleton_opus-1,explainer model,sonnet
+VO5,io_separation,print_instead_of_return-skeleton_opus-1,rater model,opus
+VO5,io_separation,print_instead_of_return-skeleton_opus-1,same model,no
+VO5,io_separation,print_instead_of_return-skeleton_opus-1,owner review,0
+VO5,io_separation,print_instead_of_return-skeleton_sonnet-1,location,2
+VO5,io_separation,print_instead_of_return-skeleton_sonnet-1,principle,2
+VO5,io_separation,print_instead_of_return-skeleton_sonnet-1,reason,2
+VO5,io_separation,print_instead_of_return-skeleton_sonnet-1,explainer model,sonnet
+VO5,io_separation,print_instead_of_return-skeleton_sonnet-1,rater model,opus
+VO5,io_separation,print_instead_of_return-skeleton_sonnet-1,same model,no
+VO5,io_separation,print_instead_of_return-skeleton_sonnet-1,owner review,0
+realistic,encapsulation,dvop02_dvorak,absolute imports,no
+realistic,encapsulation,dvop02_dvorak,__init__.py,yes
+realistic,encapsulation,dvop02_dvorak,verdict,passed
+realistic,encapsulation,dvop02_dvorak,errors,none
+realistic,encapsulation,dvop02_dvorak,not judged,none
+realistic,encapsulation,dvop02_dvorak,judge sonnet-1,does not violate
+realistic,encapsulation,novj01_novak,absolute imports,no
+realistic,encapsulation,novj01_novak,__init__.py,yes
+realistic,encapsulation,novj01_novak,verdict,passed
+realistic,encapsulation,novj01_novak,errors,none
+realistic,encapsulation,novj01_novak,not judged,none
+realistic,encapsulation,novj01_novak,judge sonnet-1,does not violate
+realistic,encapsulation,svoe03_svoboda,absolute imports,yes
+realistic,encapsulation,svoe03_svoboda,__init__.py,yes
+realistic,encapsulation,svoe03_svoboda,verdict,passed
+realistic,encapsulation,svoe03_svoboda,errors,none
+realistic,encapsulation,svoe03_svoboda,not judged,none
+realistic,encapsulation,svoe03_svoboda,judge sonnet-1,does not violate
+realistic,io_separation,horm05_horak,absolute imports,no
+realistic,io_separation,horm05_horak,__init__.py,yes
+realistic,io_separation,horm05_horak,verdict,passed
+realistic,io_separation,horm05_horak,errors,none
+realistic,io_separation,horm05_horak,not judged,none
+realistic,io_separation,horm05_horak,judge sonnet-1,does not violate
+realistic,io_separation,kral04_kral,absolute imports,no
+realistic,io_separation,kral04_kral,__init__.py,yes
+realistic,io_separation,kral04_kral,verdict,passed
+realistic,io_separation,kral04_kral,errors,none
+realistic,io_separation,kral04_kral,not judged,none
+realistic,io_separation,kral04_kral,judge sonnet-1,does not violate
+realistic,io_separation,vesk06_vesely,absolute imports,yes
+realistic,io_separation,vesk06_vesely,__init__.py,no
+realistic,io_separation,vesk06_vesely,verdict,passed
+realistic,io_separation,vesk06_vesely,errors,none
+realistic,io_separation,vesk06_vesely,not judged,none
+realistic,io_separation,vesk06_vesely,judge sonnet-1,does not violate

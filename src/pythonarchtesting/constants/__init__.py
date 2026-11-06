@@ -81,22 +81,10 @@ class ReportingConstants:
     # String limits
     MAX_STRING_REPRESENTATION: Final[int] = 100
     MAX_ERROR_MESSAGE_LENGTH: Final[int] = 500
-    MAX_DESCRIPTION_LENGTH: Final[int] = 50
 
     # Output formats
     JSON_FORMAT: Final[str] = "json"
     MARKDOWN_FORMAT: Final[str] = "markdown"
-    # Status icons for markdown reports
-    STATUS_ICONS: Final[Dict[str, str]] = {
-        "OK": "✅",
-        "ERROR": "❌",
-        "WARNING": "⚠️",
-        "FAILED": "❌",
-        "NOT_STARTED": "⏳",
-        "IN_PROGRESS": "🔄",
-        "COMPLETED": "✅",
-        "PROCESSING": "🔄",
-    }
 
 
 # ============================================================================

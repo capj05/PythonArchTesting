@@ -45,7 +45,7 @@ def _rules(reference: Path) -> tuple[int, int]:
     from pythonarchtesting.runner.source_prep import prepare_source
 
     state = prepare_source(
-        config=load_config(cli_args={}, discover_from_cwd=False), source_path=reference
+        config=load_config(discover_from_cwd=False), source_path=reference
     )
     invalid = sum(1 for rule in state.rules if "invalid" in rule.rule_id)
     return len(state.rules) - invalid, invalid + len(state.compiler_validations)

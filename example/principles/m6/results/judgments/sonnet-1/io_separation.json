@@ -1,0 +1,3 @@
+[{"id":"horm05_horak","violates":false,"reason":"grades.py only parses, computes and returns; input and print are confined to main.","explanation":""},
+{"id":"kral04_kral","violates":false,"reason":"grades.py has no input or print; all I/O is in main.","explanation":""},
+{"id":"vesk06_vesely","violates":false,"reason":"grades.py is pure logic returning values or raising ValueError; I/O only in main.","explanation":""}]

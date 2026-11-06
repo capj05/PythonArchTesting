@@ -6,6 +6,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pythonarchtesting.config.accessors import get_bool, get_float, get_int
 
+# ``Entity.extras`` key of a reference entity whose name the assignment
+# prescribes (a task's role binds it): it is paired only with a target entity
+# of the same qualified name (in any module) or by an explicit mapping, never
+# by structure or similarity alone.
+NAME_REQUIRED = "name_required"
+
 
 class MatchStatus(str, Enum):
     MATCHED = "matched"

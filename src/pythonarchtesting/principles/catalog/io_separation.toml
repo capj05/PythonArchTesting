@@ -1,0 +1,157 @@
+# Catalogue entry: one principle, its checks, its typical errors, and the changes
+# that must NOT count as errors. The file is named after its `id`. Texts are
+# English; an AI client words them for students in any language.
+#
+# - `summary`, `why`: what the principle means and why it matters;
+# - `[roles]`: the parts of a task's code the checks refer to. Texts here are
+#   generic: what plays each role in a task is set by the task's `task.toml`
+#   (see docs/tasks.md and `example/principles/<id>/task.toml`);
+# - `[[checks]]`: the marker that covers a role, and what its cases must exercise.
+#   Its targets are `modules` (fixed dotted names such as `builtins.print`) and,
+#   with `target_role`, the modules of the entities playing that role;
+# - `[[errors]]`: typical errors. Each has either `detected_by` (the marker that
+#   fails on it) with `what` and `signature`, or `gap` (a known miss, see `[[gaps]]`).
+#   `signature` is what tells the error from the others of its marker: the first
+#   fact of the failed result reduced to `kind` (call for forbid_runtime_calls,
+#   missing_call for require_runtime_calls, write for forbid_foreign_writes),
+#   `callee` ("module:name") of a call, `change` (assigned, mutated, deleted,
+#   bypassed) of a write, `via` (the call took a detour through other code) and
+#   `private` (the attribute written starts with `_`). A signature matches a
+#   fact on the keys it declares; keys it leaves out match anything. Two errors
+#   of one marker must not declare the same signature. Optional `operator`: the
+#   mutation operator that seeds this kind of error into a task's reference,
+#   so `prepare_task` can confirm the check catches it; an error without one
+#   is reported as not verifiable by mutation;
+# - `[[neutral]]`: changes unrelated to the principle, which must pass;
+# - `[[gaps]]`: what the tool cannot check yet, and why.
+#
+# Placeholders in `what`: {function}, {file}, {line} (the target's function);
+# from the first fact the tool reports (`details.facts`): {caller}, {callee},
+# {module}, {class}, {attribute}, {change}, {fact_file}, {fact_line}; derived:
+# {callee_short} (`print()`, `input()`, `open()`, else `module.name()`),
+# {via_last} (the helper a detour ends in) and {via_first_line} (the line of the
+# target's function the detour starts at).
+
+id = "io_separation"
+name = "Logic apart from input and output"
+level = "basic"
+
+summary = """
+Functions that compute something get their data as parameters and return the
+result. Only the user-interface functions, typically `main`, talk to the user
+(keyboard, screen, files).
+"""
+
+why = """
+Logic that neither prints nor reads can be reused (in another program, on the
+web, in a test) and can be tried out without a keyboard. A function that prints
+its result instead of returning it can be used in one way only: to print it.
+"""
+
+[roles]
+logic = "the functions that compute: they get data as parameters and return the result"
+io = "the user-interface functions (typically `main`): the only place with input(), print() and open()"
+
+[[checks]]
+role = "logic"
+marker = "forbid_runtime_calls"
+modules = ["builtins.print", "builtins.input", "io"]
+transitive = true
+cases = "for every logic function an ordinary input and an input that ends in an error; both can be called without a keyboard"
+
+[[checks]]
+role = "io"
+marker = "require_runtime_calls"
+target_role = "logic"
+cases = "for every io function a valid and an invalid input typed on the keyboard (`stdin`), so that it goes through both branches"
+
+[[errors]]
+id = "print_instead_of_return"
+title = "the result is printed instead of returned"
+detected_by = "forbid_runtime_calls"
+what = "Function `{function}` ({file}:{line}) prints to the screen: on line {fact_line} of `{fact_file}` it calls `{callee_short}`."
+why = """
+A function should return its result (`return`), not print it. Whoever calls it
+then decides what to do with the result; printed text can no longer be used by
+the program.
+"""
+fix = "Replace `print(...)` with `return ...` and print the result in `main`."
+signature = { kind = "call", callee = "builtins:print", via = false }
+operator = "add_io_call"
+
+[[errors]]
+id = "input_in_logic"
+title = "a logic function reads from the keyboard"
+detected_by = "forbid_runtime_calls"
+what = "Function `{function}` ({file}:{line}) reads from the keyboard: on line {fact_line} of `{fact_file}` it calls `{callee_short}`."
+why = """
+The function gets its data as a parameter and still asks the user. It cannot be
+called with other data (from a file, in a test), and the parameter loses its
+point.
+"""
+fix = "Read the input in `main` and pass it to the function as a parameter."
+signature = { kind = "call", callee = "builtins:input", via = false }
+operator = "add_io_call"
+
+[[errors]]
+id = "output_through_helper"
+title = "output hidden in a helper function"
+detected_by = "forbid_runtime_calls"
+what = "Function `{function}` ({file}:{line}) prints through a helper: on line {via_first_line} of `{file}` it calls `{via_last}`, which calls `{callee_short}` on line {fact_line} of `{fact_file}`."
+why = """
+Where the `print` is written does not matter: a logic function that causes
+output while it runs is still tied to the screen.
+"""
+fix = "Return the information (for example the text of a warning) as part of the result and print it in `main`."
+signature = { kind = "call", callee = "builtins:print", via = true }
+# No operator: add_io_call prints in a logic function, and a logic function
+# that calls another one is reported as calling print directly (`via` is
+# empty); a detour needs a helper outside the checked functions.
+
+[[errors]]
+id = "file_io_in_logic"
+title = "a logic function opens or reads a file"
+detected_by = "forbid_runtime_calls"
+what = "Function `{function}` ({file}:{line}) works with a file: on line {fact_line} of `{fact_file}` it calls `{callee_short}`."
+why = """
+Where the data comes from is the job of the user interface. A function that
+opens a file itself works only with that file: it cannot be given its data in
+another way (typed on the keyboard, from another program, in a test).
+"""
+fix = "Open and read the file in `main` and pass its contents to the function as a parameter."
+signature = { kind = "call", callee = "io:open", via = false }
+operator = "add_io_call"
+
+[[errors]]
+id = "logic_in_main"
+title = "main computes by itself instead of calling the logic functions"
+detected_by = "require_runtime_calls"
+what = "Function `{function}` ({file}:{line}) computes by itself and does not use the logic functions: it calls no function of module `{module}` directly."
+why = """
+The logic functions exist, but `main` does not use them and computes by itself.
+The computation again cannot be used elsewhere or tried out without a keyboard.
+"""
+fix = "In `main` only read the input, call the logic functions and print their result."
+signature = { kind = "missing_call", via = false }
+# No operator: drop_call cuts only calls to a collaborator an object holds
+# (`self.x.m()`), not a function's direct calls to another module.
+
+[[neutral]]
+id = "model_solution"
+title = "the model solution without markers (the reference also passes as a submission)"
+
+[[neutral]]
+id = "different_ui"
+title = "a different user interface (repeated prompts, other texts, more output)"
+
+[[neutral]]
+id = "extra_pure_helper"
+title = "an extra helper function that prints nothing"
+
+[[neutral]]
+id = "wrong_formula"
+title = "a mistake in the computation itself (a wrong formula)"
+
+[[neutral]]
+id = "style_noise"
+title = "poor style: one-letter names, no types or docstrings, a global constant"

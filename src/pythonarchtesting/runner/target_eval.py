@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from dataclasses import replace
 from pathlib import Path
 from typing import Callable, List, Tuple
@@ -27,6 +28,27 @@ ParsePythonModulesFn = Callable[
     ...,
     Tuple[List[ParsedModule], List[Tuple[Path, SyntaxError]]],
 ]
+
+
+def _relative_file(file_path: Path, root: Path) -> str:
+    try:
+        return Path(file_path).resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return Path(file_path).name
+
+
+def _left_out_root_init(source_path: Path, target_path: Path) -> bool:
+    """Whether the target is a package whose ``__init__.py`` was left out: the
+    reference's root is a package, the target's root has Python files but no
+    ``__init__.py``. Its root module is then an empty one, so the reference's
+    root module has its counterpart, as with an empty ``__init__.py``."""
+    if not (Path(source_path) / "__init__.py").is_file():
+        return False
+    if (target_path / "__init__.py").exists() or (
+        target_path / "__init__.pyi"
+    ).exists():
+        return False
+    return target_path.is_dir() and any(target_path.glob("*.py"))
 
 
 def evaluate_target(
@@ -58,17 +80,27 @@ def evaluate_target(
                 project_name=spec.target_id,
                 details={
                     "exception": str(exc),
+                    "message": getattr(exc, "msg", None) or str(exc),
+                    # Relative to the target's root: the submission's file,
+                    # unlike a reference's syntax error every target repeats.
+                    "file": _relative_file(file_path, Path(spec.path)),
                     "lineno": getattr(exc, "lineno", None),
                     "offset": getattr(exc, "offset", None),
                 },
             )
         )
 
-    for parsed in parsed_modules:
+    modules = [
+        (parsed.tree, parsed.file_text, parsed.file_path) for parsed in parsed_modules
+    ]
+    if _left_out_root_init(run_state.source_path, Path(spec.path)):
+        # Evaluated as if the beginner's missing __init__.py were there, empty.
+        modules.append((ast.parse(""), "", Path(spec.path) / "__init__.py"))
+    for tree, file_text, file_path in modules:
         matchable, _ = extract_entities_from_ast_with_nonmatchable(
-            parsed.tree,
-            parsed.file_text,
-            parsed.file_path,
+            tree,
+            file_text,
+            file_path,
             spec.path,
             None,
             role="target",
