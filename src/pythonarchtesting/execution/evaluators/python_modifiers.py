@@ -267,8 +267,26 @@ def _negative_modifier_result_details(
     }
 
 
+def _not_abstract_fact(target: Entity, details: dict[str, Any]) -> dict[str, Any]:
+    """The fact of an ``is_abstract_class`` that fails: the class, the methods
+    it defines without an abstract decorator, where it is defined."""
+    return {
+        "kind": "not_abstract",
+        "class": f"{target.module_path}:{target.qualname}",
+        "concrete_methods": list(details["declared_concrete_names"]),
+        "file": str(target.filepath_rel),
+        "line": target.lineno,
+    }
+
+
 class PythonModifierEvaluator:
-    """Evaluator for Python-native class and method modifier rules."""
+    """Evaluator for Python-native class and method modifier rules.
+
+    A failed ``is_abstract_class`` has one violation with its fact in
+    ``details.facts`` (aligned 1:1 with ``details.violations``): ``kind``
+    ``not_abstract``, ``class`` (``module:qualname``), ``concrete_methods``
+    (what the class defines without an abstract decorator), ``file``,
+    ``line``."""
 
     def evaluate(
         self,
@@ -439,6 +457,13 @@ class PythonModifierEvaluator:
                     else "target class has no unresolved abstract members"
                 )
                 status: RuleStatus = "OK" if is_abstract else "FAILED"
+                if not is_abstract:
+                    fact = _not_abstract_fact(target, details)
+                    details["violations"] = [
+                        f"{fact['class']} is not abstract: no abstract method is "
+                        f"left to its subclasses ({fact['file']}:{fact['line']})"
+                    ]
+                    details["facts"] = [fact]
             else:
                 details["reason"] = (
                     "target class has no unresolved abstract members"

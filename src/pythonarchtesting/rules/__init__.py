@@ -44,6 +44,7 @@ def _get_core_decorators() -> dict[str, Any]:
         forbid_cycles,
         forbid_foreign_writes,
         forbid_imports,
+        forbid_private_access,
         forbid_runtime_calls,
         forbid_runtime_imports,
         forbid_runtime_instantiation,
@@ -111,6 +112,7 @@ def _get_core_decorators() -> dict[str, Any]:
         "forbid_runtime_calls": forbid_runtime_calls,
         "require_runtime_calls": require_runtime_calls,
         "forbid_foreign_writes": forbid_foreign_writes,
+        "forbid_private_access": forbid_private_access,
         "forbid_runtime_instantiation": forbid_runtime_instantiation,
         "enforce_reference_calls": enforce_reference_calls,
         "is_runtime_singleton": is_runtime_singleton,
@@ -166,6 +168,9 @@ require_runtime_calls = _LazyMarkerFactory(
 )
 forbid_foreign_writes = _LazyMarkerFactory(
     "forbid_foreign_writes", _get_core_decorators
+)
+forbid_private_access = _LazyMarkerFactory(
+    "forbid_private_access", _get_core_decorators
 )
 forbid_runtime_instantiation = _LazyMarkerFactory(
     "forbid_runtime_instantiation", _get_core_decorators
@@ -232,6 +237,7 @@ __all__ = [
     "forbid_runtime_calls",
     "require_runtime_calls",
     "forbid_foreign_writes",
+    "forbid_private_access",
     "forbid_runtime_instantiation",
     "enforce_reference_calls",
     "is_runtime_singleton",

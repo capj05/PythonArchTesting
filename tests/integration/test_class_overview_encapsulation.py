@@ -19,7 +19,9 @@ _CLASS = {
     "err_restock_writes_log": "xxxx03_svoboda",
     "err_clear_out_replaces_stock": "xxxx04_cerna",
     "ok_wrong_math": "xxxx05_kral",
-    # Reading a private attribute is a known gap (G2): it passes.
+    # Reading a private attribute (forbid_private_access, static). dvorak's
+    # code reads _stock too, on the line before its write; cerna's reads it
+    # on the line that replaces it, which is part of that write (one finding).
     "err_report_reads_private": "xxxx06_benes",
 }
 # Built from ok_basic in the test: shop.py raises on import, so nothing is
@@ -75,12 +77,13 @@ def test_class_overview_of_six_submissions(tmp_path: Path) -> None:
         overview["failed"],
         overview["not_judged"],
     )
-    assert counts == (8, 3, 4, 1)
+    assert counts == (8, 2, 5, 1)
     counts = {error_id: b["count"] for error_id, b in overview["by_error"].items()}
     assert counts == {
         "bypass_method": 1,
         "mutate_container": 1,
         "replace_attribute": 1,
+        "read_private": 2,
         "unclassified": 1,
     }
     names = {error_id: b["submissions"] for error_id, b in overview["by_error"].items()}
@@ -88,6 +91,7 @@ def test_class_overview_of_six_submissions(tmp_path: Path) -> None:
         "bypass_method": ["xxxx02_dvorak"],
         "mutate_container": ["xxxx03_svoboda"],
         "replace_attribute": ["xxxx04_cerna"],
+        "read_private": ["xxxx02_dvorak", "xxxx06_benes"],
         "unclassified": [_DELETES],
     }
     assert {
@@ -96,8 +100,9 @@ def test_class_overview_of_six_submissions(tmp_path: Path) -> None:
     } == {"probe_import_error": [_BROKEN]}
     rows = {row["name"]: row for row in overview["submissions_page"]}
     assert set(rows) == {*_CLASS.values(), _BROKEN, _DELETES}
-    assert rows["xxxx06_benes"]["errors"] == [] and rows["xxxx05_kral"]["errors"] == []
-    assert rows["xxxx06_benes"]["verdict"] == "passed"
+    assert rows["xxxx06_benes"]["errors"] == ["read_private"]
+    assert rows["xxxx05_kral"]["errors"] == []
+    assert rows["xxxx06_benes"]["verdict"] == "failed"
     assert rows[_BROKEN]["verdict"] == "not_judged"
     assert rows[_DELETES]["verdict"] == "failed"
 
@@ -112,7 +117,12 @@ def test_class_overview_of_six_submissions(tmp_path: Path) -> None:
     assert all(f["not_judged"] and f["target"] for f in broken["findings"])
 
     found = explain_target(str(report), "xxxx04_cerna", principle="encapsulation")
+    # `inventory._stock = {... inventory._stock.items() ...}`: the read on
+    # the line of the write is part of it.
     [finding] = found["findings"]
     assert finding["error_id"] == "replace_attribute"
     assert finding["target"] == "shop:clear_out"
     assert "`Inventory._stock`" in finding["what"]
+    benes = explain_target(str(report), "xxxx06_benes", principle="encapsulation")
+    assert [f["error_id"] for f in benes["findings"]] == ["read_private"] * 2
+    assert all(f["target"] == "shop:report" for f in benes["findings"])

@@ -1256,6 +1256,37 @@ def forbid_foreign_writes(
     )
 
 
+def forbid_private_access(
+    *,
+    allow: list[str] | None = None,
+    severity: str = "error",
+    message: str | None = None,
+) -> RuleMarker:
+    """
+    Capture a static encapsulation policy for the rule engine.
+
+    The matched target function or method may not read an attribute starting
+    with an underscore (not a dunder) of an object other than its own
+    ``self``/``cls``, unless it is a method of the class that defines that
+    attribute; ``report.py`` reading ``inventory._stock`` is a violation.
+    ``allow`` lists attribute names that may be read anyway.
+
+    This helper is declaration-only and returns passive annotation metadata.
+    """
+    cleaned = _clean_kwargs(
+        {
+            "allow": list(allow) if allow is not None else None,
+            "severity": severity,
+        }
+    )
+    return _make_rule_marker(
+        "forbid_private_access",
+        cleaned,
+        message=message,
+        severity=_resolve_severity(severity),
+    )
+
+
 def forbid_runtime_imports(
     *forbidden: str,
     allow: list[str] | None = None,

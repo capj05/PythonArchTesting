@@ -108,6 +108,8 @@ error are MCP tools; the CLI writes the JSON or Markdown report
 |---|---|---|
 | `io_separation` | Logic apart from input and output: functions return, `main` talks to the user | `example/principles/io_separation/` |
 | `encapsulation` | Encapsulation: an object's state changes only through its own methods | `example/principles/encapsulation/` |
+| `polymorphism` | Inheritance and polymorphism: variants derive from an abstract base, clients call its methods instead of branching on the type | `example/principles/polymorphism/` |
+| `strategy` | Interchangeable behaviour passed in from outside: the code doing a job gets the object for one part of it as a constructor parameter and calls it, never builds it itself | `example/principles/strategy/` |
 
 The catalogue ships with the package
 (`src/pythonarchtesting/principles/catalog/<id>.toml`); its texts are English

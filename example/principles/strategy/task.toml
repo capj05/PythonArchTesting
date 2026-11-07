@@ -1,0 +1,31 @@
+# The task: the catalogue principle `strategy` bound to the unannotated
+# model solution in `reference/` (see ../io_separation/task.toml and
+# docs/tasks.md).
+
+principle = "strategy"
+
+[roles]
+# require_runtime_delegation (to the spy named "strategy") and
+# forbid_runtime_instantiation with target_role = "strategy".
+context = ["pricing.PriceCalculator.total"]
+# Only the target of forbid_runtime_instantiation: the check forbids
+# building these classes (not the rest of their module). A module name would
+# stand for its top-level public functions, and `discounts` has none.
+strategy = [
+    "discounts.NoDiscount",
+    "discounts.PercentDiscount",
+    "discounts.BulkDiscount",
+]
+
+[cases]
+# Ordinary baskets; every case reaches the discount, so the reference
+# delegates in each of them.
+"pricing.PriceCalculator.total" = [
+    { args = [[120.0, 30.5]] },
+    { args = [[999.9, 0.1, 250.0]] },
+]
+
+[init]
+# The calculator gets a spy in place of its discount: it must call it, and it
+# must not build a discount of its own.
+"pricing.PriceCalculator.total" = { args = [{ "$spy" = "strategy" }] }

@@ -73,6 +73,15 @@ def test_operators_are_named() -> None:
         "break_port",
         "foreign_write",
         "add_io_call",
+        "mutate_private_container",
+        "mutate_public_container",
+        "stub_role_call",
+        "add_io_via_helper",
+        "read_private_attribute",
+        "add_builtin_call",
+        "drop_base",
+        "concretize_base",
+        "hardcode_collaborator",
     )
 
 
@@ -482,3 +491,921 @@ def test_add_io_call_talks_to_the_user_first_thing(tmp_path: Path) -> None:
     )
     for mutant in mutants:
         ast.parse(mutant.source)
+
+
+def _inserted(original: str, mutant: str) -> list[str]:
+    """The lines ``mutant`` adds to ``original``; it must remove none."""
+    import difflib
+
+    diff = list(difflib.ndiff(original.splitlines(), mutant.splitlines()))
+    assert not [line for line in diff if line.startswith("- ")], diff
+    return [line[2:] for line in diff if line.startswith("+ ")]
+
+
+_CONTAINERS = {
+    "__init__.py": "",
+    "store.py": (
+        "class Box:\n"
+        "    def __init__(self):\n"
+        "        self._items = {}\n"
+        "        self.name = 'box'\n\n"
+        "    def put(self, key, value):\n"
+        "        self._items[key] = value\n\n\n"
+        "class Bag:\n"
+        "    def __init__(self, things=None):\n"
+        "        self._things: list[str] = list(things or [])\n"
+        "        self.tags = []\n\n"
+        "    def add(self, thing):\n"
+        "        self._things.append(thing)\n\n"
+        "    def tags_of(self, other: 'Bag'):\n"
+        "        other.add('x')\n"
+        "        return other.tags\n\n\n"
+        "class Pot:\n"
+        "    def __init__(self):\n"
+        "        self._shape = ()\n"
+        "        self._seen = set()\n\n"
+        "    def mark(self, item):\n"
+        "        self._seen.add(item)\n"
+    ),
+    "client.py": (
+        "from .store import Bag, Box\n\n\n"
+        "def fill(box: Box):\n"
+        "    box.put('a', 1)\n"
+        "    return box\n\n\n"
+        "def pack(bag: Bag, extra):\n"
+        "    size = len(extra)\n"
+        "    bag.add('x')\n"
+        "    return size\n\n\n"
+        "def visit(pot):\n"
+        "    pot.mark(1)\n\n\n"
+        "def tally(seen: set[int]):\n"
+        "    seen.add(1)\n"
+    ),
+}
+
+
+def test_mutate_private_container_dict_list_set(tmp_path: Path) -> None:
+    root = _write_tree(tmp_path / "pkg", _CONTAINERS)
+    original = (root / "client.py").read_text(encoding="utf-8")
+
+    mutants = _by(root, "mutate_private_container")
+
+    # One per client function and object, right after the first statement
+    # that calls a method of it; the class of an unannotated parameter is the
+    # one project class with the methods called on it, and an annotated
+    # parameter of no project class is none (``seen: set[int]``, though Bag
+    # has an ``add``). A tuple is no container; a method of the class itself
+    # is no client.
+    assert [(m.file, m.function, m.owner, m.member, m.line) for m in mutants] == [
+        ("client.py", "fill", "Box", "_items", 6),
+        ("client.py", "pack", "Bag", "_things", 12),
+        ("client.py", "visit", "Pot", "_seen", 17),
+    ]
+    assert [_inserted(original, m.source) for m in mutants] == [
+        ['    box._items["__archtest__"] = 0'],
+        ["    bag._things.append(0)"],
+        ["    pot._seen.add(0)"],
+    ]
+    for mutant in mutants:
+        ast.parse(mutant.source)
+    assert generate_mutants(root, ["mutate_private_container"]) == mutants
+
+
+def test_mutate_public_container_skips_private_and_methods(tmp_path: Path) -> None:
+    root = _write_tree(tmp_path / "pkg", _CONTAINERS)
+    original = (root / "client.py").read_text(encoding="utf-8")
+
+    mutants = _by(root, "mutate_public_container")
+
+    # Only Bag has a public container (``tags``): Box's ``name`` is a string,
+    # Pot's containers are private, and a method (``add``) is never one.
+    assert [(m.function, m.owner, m.member) for m in mutants] == [
+        ("pack", "Bag", "tags")
+    ]
+    assert _inserted(original, mutants[0].source) == ["    bag.tags.append(0)"]
+    ast.parse(mutants[0].source)
+
+
+def test_stub_role_call_replaces_only_logic_calls(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "__init__.py": "",
+            "grades.py": (
+                "def parse(text):\n    return [int(w) for w in text.split()]\n\n\n"
+                "def average(grades):\n    return sum(grades) / len(grades)\n\n\n"
+                "class Report:\n    pass\n"
+            ),
+            "tools.py": "def size(items):\n    return len(items)\n",
+            "app.py": (
+                "from . import tools\n"
+                "from .grades import Report, average, parse\n\n\n"
+                "def main():\n"
+                "    text = input('> ')\n"
+                "    grades = parse(text)\n"
+                "    print(average(parse(text)), tools.size(grades), Report())\n"
+                "    print(len(grades))\n"
+            ),
+        },
+    )
+
+    mutants = [m for m in _by(root, "stub_role_call") if m.file == "app.py"]
+
+    # One mutant per module the function calls functions of (``member``);
+    # print, input, len and a class are left alone.
+    stub = "(lambda *a, **k: None)"
+    assert [(m.function, m.member, m.line) for m in mutants] == [
+        ("main", "grades", 7),
+        ("main", "tools", 8),
+    ]
+    by_member = {m.member: m.source.splitlines() for m in mutants}
+    assert by_member["grades"][5:9] == [
+        "    text = input('> ')",
+        f"    grades = {stub}(text)",
+        f"    print({stub}({stub}(text)), tools.size(grades), Report())",
+        "    print(len(grades))",
+    ]
+    assert by_member["tools"][7] == (
+        f"    print(average(parse(text)), {stub}(grades), Report())"
+    )
+    for mutant in mutants:
+        ast.parse(mutant.source)
+
+
+def test_add_io_via_helper_creates_helper_module_and_call(tmp_path: Path) -> None:
+    files = {
+        "grades.py": (
+            "def average(grades):\n"
+            '    """Mean."""\n'
+            "    return sum(grades) / len(grades)\n\n\n"
+            "def one(): return 1\n"
+        )
+    }
+    package = _write_tree(tmp_path / "pkg", {"__init__.py": "", **files})
+    flat = _write_tree(tmp_path / "flat", files)
+    original = files["grades.py"]
+
+    mutants = _by(package, "add_io_via_helper")
+
+    # A new helper module that prints, and one line in each function with a
+    # body of its own lines that imports and calls it first thing; a module
+    # of a package imports it relatively, a top-level module absolutely.
+    helper = "def say(*args):\n    print(*args)\n"
+    assert [(m.file, m.function, m.member, m.line) for m in mutants] == [
+        ("grades.py", "average", "print", 3)
+    ]
+    (mutant,) = mutants
+    assert mutant.also == (("_archtest_helper.py", helper),)
+    assert _inserted(original, mutant.source) == [
+        '    from ._archtest_helper import say; say("archtest")'
+    ]
+    ast.parse(mutant.source)
+    assert _by(package, "add_io_via_helper") == mutants
+    (absolute,) = _by(flat, "add_io_via_helper")
+    assert _inserted(original, absolute.source) == [
+        '    from _archtest_helper import say; say("archtest")'
+    ]
+
+
+_READS = {
+    "__init__.py": "",
+    "store.py": (
+        "class Box:\n"
+        "    def __init__(self):\n"
+        "        self._items = {}\n"
+        "        self.__secret = 1\n"
+        "        self.name = 'box'\n\n"
+        "    def size(self):\n"
+        "        return len(self._items)\n\n"
+        "    def merge(self, other: 'Box'):\n"
+        "        return self.size() + other.size()\n\n\n"
+        "class Tag:\n"
+        "    def __init__(self):\n"
+        "        self.__code = 'x'\n\n"
+        "    def code(self):\n"
+        "        return self.__code\n"
+    ),
+    "client.py": (
+        "from .store import Box, Tag\n\n\n"
+        "def count(box: Box) -> int:\n"
+        '    """Count."""\n'
+        "    return box.size()\n\n\n"
+        "def label(tag: Tag):\n"
+        "    return tag.code()\n\n\n"
+        "def plain(items: dict):\n"
+        "    return items.items()\n\n\n"
+        "def busy(box: Box):\n"
+        "    for _ in range(2):\n"
+        "        box.size()\n"
+    ),
+}
+
+
+def test_read_private_attribute_operator(tmp_path: Path) -> None:
+    root = _write_tree(tmp_path / "pkg", _READS)
+    original = (root / "client.py").read_text(encoding="utf-8")
+
+    mutants = _by(root, "read_private_attribute")
+
+    # A client function reads the first private data attribute of an object
+    # of a project class it got as a parameter, first thing (after the
+    # docstring). A name-mangled attribute is read as a student outside the
+    # class must spell it (``tag._Tag__code``); a method of the class itself
+    # is no client (``Box.merge``), a parameter of no project class gives
+    # nothing (``items: dict``), nor does a function that uses ``_`` itself.
+    assert [(m.file, m.function, m.owner, m.member, m.line) for m in mutants] == [
+        ("client.py", "count", "Box", "_items", 6),
+        ("client.py", "label", "Tag", "_Tag__code", 10),
+    ]
+    assert [_inserted(original, m.source) for m in mutants] == [
+        ["    _ = box._items"],
+        ["    _ = tag._Tag__code"],
+    ]
+    for mutant in mutants:
+        ast.parse(mutant.source)
+    assert generate_mutants(root, ["read_private_attribute"]) == mutants
+
+
+def test_read_private_attribute_sees_attributes_a_tuple_assigns(
+    tmp_path: Path,
+) -> None:
+    """``self._x, self._y = x, y`` assigns two data attributes: the operator
+    reads the first."""
+    files = {
+        "__init__.py": "",
+        "point.py": (
+            "class Point:\n"
+            "    def __init__(self, x, y):\n"
+            "        self._x, self._y = x, y\n\n"
+            "    def x(self):\n"
+            "        return self._x\n"
+        ),
+        "client.py": (
+            "from .point import Point\n\n\n"
+            "def show(p: Point):\n"
+            "    return p.x()\n"
+        ),
+    }
+    root = _write_tree(tmp_path / "pkg", files)
+
+    mutants = _by(root, "read_private_attribute")
+
+    assert [(m.function, m.owner, m.member) for m in mutants] == [
+        ("show", "Point", "_x")
+    ]
+
+
+_WIDE = {
+    "__init__.py": "",
+    "store.py": (
+        "from collections import Counter, OrderedDict, defaultdict\n"
+        "from dataclasses import dataclass, field\n\n\n"
+        "class A:\n"
+        "    def __init__(self, items=None):\n"
+        "        self._items = items if items is not None else {}\n\n"
+        "    def get(self):\n        return self._items\n\n\n"
+        "class B:\n"
+        "    def __init__(self, items=None):\n"
+        "        self._items = items or []\n\n"
+        "    def get(self):\n        return self._items\n\n\n"
+        "class C:\n"
+        "    def __init__(self):\n"
+        "        self._counts = defaultdict(int)\n\n"
+        "    def get(self):\n        return self._counts\n\n\n"
+        "class D:\n"
+        "    def __init__(self):\n"
+        "        self._seen = {x for x in ()}\n\n"
+        "    def get(self):\n        return self._seen\n\n\n"
+        "@dataclass\n"
+        "class E:\n"
+        "    _rows: list = field(default_factory=list)\n\n"
+        "    def get(self):\n        return self._rows\n\n\n"
+        "class F:\n"
+        "    def __init__(self):\n"
+        "        self._maybe = [] if self else None\n"
+        "        self._reset = []\n\n"
+        "    def get(self):\n        return self._maybe\n\n"
+        "    def reset(self):\n        self._reset = None\n\n\n"
+        "class G:\n"
+        "    def __init__(self):\n"
+        "        self.__hidden = Counter()\n"
+        "        self._order = OrderedDict()\n\n"
+        "    def get(self):\n        return self.__hidden\n"
+    ),
+    "client.py": (
+        "from .store import A, B, C, D, E, F, G\n\n\n"
+        "def a(x: A):\n    x.get()\n\n\n"
+        "def b(x: B):\n    x.get()\n\n\n"
+        "def c(x: C):\n    x.get()\n\n\n"
+        "def d(x: D):\n    x.get()\n\n\n"
+        "def e(x: E):\n    x.get()\n\n\n"
+        "def f(x: F):\n    x.get()\n\n\n"
+        "def g(x: G):\n    x.get()\n"
+    ),
+}
+
+
+def test_mutate_private_container_recognises_more_containers(tmp_path: Path) -> None:
+    """A choice with a container branch, ``defaultdict``/``Counter``/
+    ``OrderedDict``, a comprehension and a dataclass field's default factory
+    build containers; ``[] if ... else None`` may leave none, and a container
+    another method sets to ``None`` (F's ``_reset``) is none either. A
+    name-mangled ``__hidden`` is written as code outside G must: ``_G__hidden``."""
+    root = _write_tree(tmp_path / "pkg", _WIDE)
+    original = (root / "client.py").read_text(encoding="utf-8")
+
+    mutants = _by(root, "mutate_private_container")
+
+    assert [(m.function, m.owner, m.member) for m in mutants] == [
+        ("a", "A", "_items"),
+        ("b", "B", "_items"),
+        ("c", "C", "_counts"),
+        ("d", "D", "_seen"),
+        ("e", "E", "_rows"),
+        ("g", "G", "_G__hidden"),
+    ]
+    assert [_inserted(original, m.source) for m in mutants] == [
+        ['    x._items["__archtest__"] = 0'],
+        ["    x._items.append(0)"],
+        ['    x._counts["__archtest__"] = 0'],
+        ["    x._seen.add(0)"],
+        ["    x._rows.append(0)"],
+        ['    x._G__hidden["__archtest__"] = 0'],
+    ]
+
+
+_UNANNOTATED = {
+    "__init__.py": "",
+    "store.py": (
+        "class Store:\n"
+        "    def __init__(self):\n"
+        "        self._items = {}\n\n"
+        "    def items(self):\n        return dict(self._items)\n\n"
+        "    def take(self, key):\n        return self._items.pop(key)\n"
+    ),
+    "client.py": (
+        "def listing(pairs):\n"
+        "    pairs.items()\n"
+        "    return pairs\n\n\n"
+        "def grab(store, key):\n"
+        "    store.take(key)\n"
+        "    return key\n"
+    ),
+}
+
+
+def test_an_unannotated_parameter_is_no_guessed_project_object(tmp_path: Path) -> None:
+    """Without the task's cases, a parameter on which only methods a builtin
+    container has too are called (``pairs.items()``) is not taken for a
+    ``Store``; one on which ``take`` is called is. With them, the class the
+    cases build decides, and a parameter they build nothing for is none."""
+    root = _write_tree(tmp_path / "pkg", _UNANNOTATED)
+
+    guessed = _by(root, "mutate_private_container")
+    hinted = generate_mutants(
+        root,
+        ["mutate_private_container"],
+        parameter_classes={
+            ("client.py", "listing"): {"pairs": "Store"},
+            ("client.py", "grab"): {},
+        },
+    )
+
+    assert [(m.function, m.owner) for m in guessed] == [("grab", "Store")]
+    assert [(m.function, m.owner) for m in hinted] == [("listing", "Store")]
+
+
+def test_foreign_write_writes_a_mangled_attribute_as_outside_code_must(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "__init__.py": "",
+            "store.py": (
+                "class Store:\n"
+                "    def __init__(self):\n"
+                "        self.__items = {}\n\n"
+                "    def size(self):\n        return len(self.__items)\n"
+            ),
+            "client.py": (
+                "from .store import Store\n\n\n"
+                "def count(store: Store):\n"
+                "    store.size()\n"
+                "    return 1\n"
+            ),
+        },
+    )
+    original = (root / "client.py").read_text(encoding="utf-8")
+
+    [mutant] = _by(root, "foreign_write")
+
+    assert _inserted(original, mutant.source) == [
+        "    store._Store__items = store._Store__items"
+    ]
+
+
+def test_stub_role_call_follows_a_star_import(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "__init__.py": "",
+            "grades.py": (
+                "def parse(text):\n    return text.split()\n\n\n"
+                "def _hidden():\n    return 0\n"
+            ),
+            "app.py": (
+                "from .grades import *\n\n\n"
+                "def main():\n"
+                "    words = parse(input())\n"
+                "    print(words)\n"
+            ),
+        },
+    )
+
+    [mutant] = _by(root, "stub_role_call")
+
+    assert (mutant.function, mutant.member) == ("main", "grades")
+    assert "(lambda *a, **k: None)(input())" in mutant.source
+
+
+_KINDS = {
+    "__init__.py": "",
+    "kinds.py": (
+        "from abc import ABC, abstractmethod\n"
+        "import abc\n\n\n"
+        "class Base(ABC):\n"
+        "    @abstractmethod\n"
+        "    def size(self) -> float:\n"
+        "        raise NotImplementedError\n\n"
+        "    @abc.abstractmethod\n"
+        "    def name(self) -> str: ...\n\n"
+        "    def twice(self) -> float:\n"
+        "        return 2 * self.size()\n\n\n"
+        "class Meta(metaclass=abc.ABCMeta):\n"
+        "    @abstractmethod\n"
+        "    def run(self): ...\n\n\n"
+        "class One(Base):\n"
+        "    def size(self) -> float:\n"
+        "        return 1.0\n\n"
+        "    def name(self) -> str:\n"
+        "        return 'one'\n\n\n"
+        "class Two(One, Meta, metaclass=abc.ABCMeta):\n"
+        "    def run(self):\n"
+        "        return 2\n\n\n"
+        "class Plain(object):\n"
+        "    pass\n"
+    ),
+    "client.py": (
+        "def total(items):\n"
+        "    return sum(item.size() for item in items)\n\n\n"
+        "def short(items): return items\n"
+    ),
+}
+
+
+def test_add_builtin_call_seeds_any_builtin_call_first_thing(tmp_path: Path) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_KINDS))
+
+    mutants = [m for m in _by(root, "add_builtin_call") if m.file == "client.py"]
+
+    # The I/O calls of add_io_call, and a type check: isinstance() and type();
+    # a one-line function has no room for them.
+    assert [(m.function, m.member, m.line) for m in mutants] == [
+        ("total", "print", 2),
+        ("total", "input", 2),
+        ("total", "open", 2),
+        ("total", "isinstance", 2),
+        ("total", "type", 2),
+    ]
+    # Each a real type test, as forbid_runtime_calls counts one: a class
+    # computed at run time, a result of type() that is compared.
+    assert "    isinstance(None, (object,)[0])\n    return sum" in mutants[3].source
+    assert "    type(None) == object\n    return sum" in mutants[4].source
+    for mutant in mutants:
+        ast.parse(mutant.source)
+
+
+def test_add_io_call_is_add_builtin_call_restricted_to_input_and_output(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_KINDS))
+
+    io = _by(root, "add_io_call")
+    builtin = [
+        m
+        for m in _by(root, "add_builtin_call")
+        if m.member in ("print", "input", "open")
+    ]
+
+    assert [(m.file, m.function, m.member, m.source) for m in io] == [
+        (m.file, m.function, m.member, m.source) for m in builtin
+    ]
+
+
+def test_drop_base_removes_one_base_of_a_class(tmp_path: Path) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_KINDS))
+    original = (root / "kinds.py").read_text(encoding="utf-8")
+
+    mutants = _by(root, "drop_base")
+
+    # One mutant per class and base; `object` and keywords stay.
+    assert [(m.function, m.member, m.line) for m in mutants] == [
+        ("Base", "ABC", 5),
+        ("One", "Base", 22),
+        ("Two", "One", 30),
+        ("Two", "Meta", 30),
+    ]
+    assert all(m.file == "kinds.py" for m in mutants)
+    assert "\nclass One:\n" in mutants[1].source
+    assert "\nclass Two(Meta, metaclass=abc.ABCMeta):\n" in mutants[2].source
+    assert "\nclass Two(One, metaclass=abc.ABCMeta):\n" in mutants[3].source
+    for mutant in mutants:
+        ast.parse(mutant.source)
+        assert mutant.source.count("\n") == original.count("\n")
+
+
+def test_drop_base_handles_a_header_over_several_lines(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "m.py": (
+                "class A: pass\n\n\n"
+                "class B(  # the base\n"
+                "    A,\n"
+                "):\n"
+                "    x = 1\n"
+            )
+        },
+    )
+
+    [mutant] = _by(root, "drop_base")
+
+    assert mutant.function == "B"
+    assert "class B:\n    x = 1\n" in mutant.source
+    ast.parse(mutant.source)
+
+
+def test_concretize_base_makes_an_abstract_class_concrete(tmp_path: Path) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_KINDS))
+
+    mutants = _by(root, "concretize_base")
+
+    # A class with an abstract marker of its own: ABC or ABCMeta among its
+    # bases, or an @abstractmethod method. Two has only the metaclass.
+    assert [(m.function, m.line) for m in mutants] == [
+        ("Base", 5),
+        ("Meta", 17),
+        ("Two", 30),
+    ]
+    base = mutants[0].source
+    assert "class Base:\n    def size(self) -> float:\n" in base
+    assert "    def name(self) -> str: ...\n" in base
+    assert "abstractmethod\n    def" not in base.split("class Meta")[0]
+    # The import may stay; the rest of the module does not change.
+    assert base.startswith("from abc import ABC, abstractmethod\nimport abc\n")
+    assert "class Meta(metaclass=abc.ABCMeta):\n    @abstractmethod" in base
+    assert "class Meta:\n    def run(self): ...\n" in mutants[1].source
+    assert "class Two(One, Meta):\n" in mutants[2].source
+    for mutant in mutants:
+        ast.parse(mutant.source)
+
+
+def test_concretize_base_drops_a_protocol_base(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "m.py": (
+                "import typing\n"
+                "from typing import Protocol\n\n\n"
+                "class P(Protocol):\n"
+                "    def run(self) -> int: ...\n\n\n"
+                "class Q(typing.Protocol):\n"
+                "    def run(self) -> int: ...\n"
+            )
+        },
+    )
+
+    mutants = _by(root, "concretize_base")
+
+    assert [m.function for m in mutants] == ["P", "Q"]
+    assert "\nclass P:\n" in mutants[0].source
+    assert "\nclass Q:\n" in mutants[1].source
+
+
+_INJECTED = {
+    "__init__.py": "",
+    "pricing.py": (
+        "from __future__ import annotations\n\n"
+        "from .discounts import Discount\n\n\n"
+        "class Calc:\n"
+        "    def __init__(self, discount: Discount, rate=1) -> None:\n"
+        "        self.discount = discount\n"
+        "        self.rate = rate\n\n"
+        "    def total(self, prices):\n"
+        "        return self.discount.apply(sum(prices)) * self.rate\n"
+    ),
+    "discounts.py": (
+        "from abc import ABC, abstractmethod\n"
+        "from dataclasses import dataclass\n"
+        "from typing import Protocol\n\n\n"
+        "class Discount(Protocol):\n"
+        "    def apply(self, amount): ...\n\n\n"
+        "class Base(ABC):\n"
+        "    @abstractmethod\n"
+        "    def apply(self, amount): ...\n\n\n"
+        "@dataclass\n"
+        "class Fixed:\n"
+        "    value: float\n\n\n"
+        "class Half(Base):\n"
+        "    def __init__(self, ratio=0.5, *, rounding=None):\n"
+        "        self.ratio = ratio\n\n"
+        "    def apply(self, amount):\n"
+        "        return amount * self.ratio\n\n\n"
+        "class Percent:\n"
+        "    def __init__(self, percent):\n"
+        "        self.percent = percent\n\n\n"
+        "class Zero(Base):\n"
+        "    def apply(self, amount):\n"
+        "        return amount\n"
+    ),
+}
+
+
+def test_hardcode_collaborator_builds_the_first_class_needing_no_arguments(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_INJECTED))
+
+    mutants = [
+        m
+        for m in generate_mutants(
+            root, ["hardcode_collaborator"], instantiable=["discounts"]
+        )
+        if m.file == "pricing.py"
+    ]
+
+    # One mutant per collaborator the constructor keeps. The class is the
+    # first by name that can be built without arguments: Base is abstract,
+    # Discount a protocol, Fixed a dataclass with a required field.
+    assert [(m.function, m.collaborator, m.member, m.line) for m in mutants] == [
+        ("Calc.__init__", "discount", "Half", 9),
+        ("Calc.__init__", "rate", "Half", 10),
+    ]
+    assert mutants[0].owner == "Calc"
+    assert mutants[0].file == "pricing.py"
+    assert mutants[0].description == (
+        "pricing: Calc.__init__ builds its own discount as Half() (line 9)"
+    )
+    source = mutants[0].source
+    # The import follows the module's own import of that module.
+    assert source.startswith(
+        "from __future__ import annotations\n\n"
+        "from .discounts import Discount\n"
+        "from .discounts import Half\n"
+    )
+    assert "        self.discount = Half()\n        self.rate = rate\n" in source
+    for mutant in mutants:
+        ast.parse(mutant.source)
+
+
+def test_hardcode_collaborator_reuses_the_module_s_own_names(tmp_path: Path) -> None:
+    files = dict(_INJECTED)
+    files["pricing.py"] = (
+        "from . import discounts\n\n\n"
+        "class Calc:\n"
+        "    def __init__(self, discount):\n"
+        "        self.discount = discount\n"
+    )
+    files["shop.py"] = (
+        "from .discounts import Zero, Half as H\n\n\n"
+        "class Shop:\n"
+        "    def __init__(self, discount):\n"
+        "        self.discount = discount\n"
+    )
+    root = _write_tree(tmp_path / "pkg", files)
+
+    mutants = generate_mutants(
+        root, ["hardcode_collaborator"], instantiable=["discounts"]
+    )
+
+    by_file = {m.file: m for m in mutants}
+    assert "        self.discount = discounts.Half()\n" in by_file["pricing.py"].source
+    assert "        self.discount = H()\n" in by_file["shop.py"].source
+    # Nothing is imported when the module has the name already.
+    assert by_file["pricing.py"].source.count("import") == 1
+    assert by_file["shop.py"].source.count("import") == 1
+
+
+def test_hardcode_collaborator_without_a_class_to_build_makes_nothing(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_INJECTED))
+
+    # pricing holds only Calc, whose constructor needs its collaborators.
+    assert (
+        generate_mutants(root, ["hardcode_collaborator"], instantiable=["pricing"])
+        == []
+    )
+
+
+def test_hardcode_collaborator_by_default_builds_any_other_project_class(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_INJECTED))
+
+    mutants = _by(root, "hardcode_collaborator")
+
+    # Every project module, but never the class of the constructor itself:
+    # Half keeps a ratio, which becomes the next class by name, Zero (its
+    # abstract base needs no arguments either).
+    assert [(m.owner, m.collaborator, m.member) for m in mutants] == [
+        ("Half", "ratio", "Zero"),
+        ("Percent", "percent", "Half"),
+        ("Calc", "discount", "Half"),
+        ("Calc", "rate", "Half"),
+    ]
+    # A class of the module itself needs no import.
+    assert mutants[0].source.count("import") == _INJECTED["discounts.py"].count(
+        "import"
+    )
+    assert "        self.ratio = Zero()\n" in mutants[0].source
+
+
+def test_drop_call_names_the_method_it_changes(root: Path) -> None:
+    mutants = _by(root, "drop_call")
+
+    assert {m.function for m in mutants} == {"Service.place"}
+
+
+# Review of N5: the injection operators see an annotated assignment, a
+# function strategy called directly, and only the parameters a task spies.
+_ANNOTATED = {
+    "__init__.py": "",
+    "pricing.py": (
+        "from .discounts import Discount\n\n\n"
+        "class Calc:\n"
+        "    def __init__(self, discount: Discount, rate: float) -> None:\n"
+        "        self.discount: Discount = discount\n"
+        "        self.rate = rate\n\n"
+        "    def total(self, prices):\n"
+        "        return self.discount.apply(sum(prices)) * self.rate\n"
+    ),
+    "discounts.py": (
+        "class Discount:\n" "    def apply(self, amount):\n" "        return amount\n"
+    ),
+}
+
+
+def test_injection_operators_see_an_annotated_assignment(tmp_path: Path) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_ANNOTATED))
+
+    hardcoded = generate_mutants(
+        root, ["hardcode_collaborator"], instantiable=["discounts"]
+    )
+    rebuilt = _by(root, "rebuild_injected")
+    dropped = _by(root, "drop_call")
+
+    assert [(m.collaborator, m.line) for m in hardcoded] == [
+        ("discount", 6),
+        ("rate", 7),
+    ]
+    assert "        self.discount: Discount = Discount()\n" in hardcoded[0].source
+    assert [m.collaborator for m in rebuilt] == ["discount", "rate"]
+    assert "        self.discount: Discount = type(discount)()\n" in rebuilt[0].source
+    # The collaborator of the call is the parameter the attribute was given.
+    assert [(m.collaborator, m.member) for m in dropped] == [("discount", "apply")]
+
+
+def test_hardcode_collaborator_only_hardcodes_the_parameters_given_a_spy(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_ANNOTATED))
+
+    mutants = generate_mutants(
+        root,
+        ["hardcode_collaborator"],
+        instantiable=["discounts"],
+        spied={("pricing.py", "Calc"): frozenset({"discount"})},
+    )
+    # A class the task gives no spy to keeps its constructor.
+    none = generate_mutants(
+        root, ["hardcode_collaborator"], instantiable=["discounts"], spied={}
+    )
+
+    assert [m.collaborator for m in mutants] == ["discount"]
+    assert none == []
+
+
+_ACTIONS = {
+    "adventure.py": (
+        "class Log:\n"
+        "    def __init__(self):\n"
+        "        self.lines = []\n\n\n"
+        "class Action:\n"
+        "    def __init__(self, name, execute):\n"
+        "        self.name = name\n"
+        "        self.execute = execute\n"
+        "        self.log = Log()\n\n"
+        "    def run(self, state):\n"
+        "        result = self.execute(state)\n"
+        "        self.execute(state)\n"
+        "        self.name(state)\n"
+        "        return f'{self.name}: {result}'\n\n\n"
+        "def take(state):\n"
+        "    return 'taken'\n"
+    ),
+}
+
+
+def test_drop_call_cuts_a_call_of_a_function_the_constructor_was_given(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(tmp_path / "flat", dict(_ACTIONS))
+
+    mutants = _by(root, "drop_call")
+
+    # self.execute holds a parameter, so calling it is a call of the
+    # collaborator; so is self.name, which holds a parameter too.
+    assert [(m.collaborator, m.member, m.line) for m in mutants] == [
+        ("execute", "", 13),
+        ("execute", "", 14),
+        ("name", "", 15),
+    ]
+    by_line = {m.line: m for m in mutants}
+    assert "        result = state\n" in by_line[13].source
+    assert "        pass\n        self.name(state)\n" in by_line[14].source
+    assert by_line[13].description == (
+        "adventure: Action.run no longer calls self.execute "
+        "(line 13, its first argument passed through)"
+    )
+
+
+_BUILDABLE = {
+    "__init__.py": "",
+    "pricing.py": (
+        "class Calc:\n"
+        "    def __init__(self, discount):\n"
+        "        self.discount = discount\n"
+    ),
+    "discounts.py": (
+        "from abc import ABC, abstractmethod\n"
+        "from dataclasses import dataclass\n\n\n"
+        "class Base(ABC):\n"
+        "    @abstractmethod\n"
+        "    def apply(self, amount): ...\n\n\n"
+        "class AHalf(Base):\n"
+        "    pass\n\n\n"
+        "@dataclass\n"
+        "class Fixed:\n"
+        "    value: float\n\n\n"
+        "@dataclass\n"
+        "class BFixed(Fixed):\n"
+        "    note: str = ''\n\n\n"
+        "class CMiddle(Base):\n"
+        "    def apply(self, amount):\n"
+        "        return amount\n\n\n"
+        "class DLeaf(CMiddle):\n"
+        "    pass\n"
+    ),
+}
+
+
+def test_hardcode_collaborator_skips_classes_that_cannot_be_built(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_BUILDABLE))
+
+    mutants = generate_mutants(
+        root, ["hardcode_collaborator"], instantiable=["discounts"]
+    )
+
+    # AHalf leaves the abstract apply unimplemented; BFixed inherits the
+    # required field of Fixed. CMiddle implements apply.
+    assert [m.member for m in mutants] == ["CMiddle"]
+
+
+def test_hardcode_collaborator_imports_absolutely_in_a_flat_reference(
+    tmp_path: Path,
+) -> None:
+    files = {name: text for name, text in _BUILDABLE.items() if name != "__init__.py"}
+    root = _write_tree(tmp_path / "flat", files)
+
+    (mutant,) = generate_mutants(
+        root, ["hardcode_collaborator"], instantiable=["discounts"]
+    )
+
+    assert mutant.source.startswith("from discounts import CMiddle\n")
+    assert "        self.discount = CMiddle()\n" in mutant.source
+
+
+def test_hardcode_collaborator_targets_classes_by_qualified_name(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(tmp_path / "pkg", dict(_BUILDABLE))
+
+    mutants = generate_mutants(
+        root, ["hardcode_collaborator"], instantiable=["discounts.DLeaf"]
+    )
+
+    assert [m.member for m in mutants] == ["DLeaf"]

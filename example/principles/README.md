@@ -8,6 +8,8 @@ principle? Everything else about the code is deliberately ignored.
 |---|---|---|
 | `io_separation/` | Logic apart from input and output (functions return, `main` talks to the user) | basic |
 | `encapsulation/` | Encapsulation (an object's state changes only through its own methods) | basic |
+| `polymorphism/` | Inheritance and polymorphism instead of branching on the type (variants of an abstract base; clients call its methods, no test of an object's class) | basic |
+| `strategy/` | Interchangeable behaviour passed in from outside (the code doing a job gets the object for one part of it in its constructor, calls it and never builds it) | basic |
 
 ## Layout of one principle
 

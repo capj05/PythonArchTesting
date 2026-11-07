@@ -12,6 +12,10 @@ catalogue entry promises:
   it declares, and ``choose_error`` must pick that error for the failure;
 - an error's variant with ``gap`` is a known miss and is expected to pass.
 
+The last column lists every error the tool classifies the variant's findings
+as (``classify_target``, which takes the read a write makes for the write),
+in the order found: one defect should give one error.
+
 For every detected error the explanation is composed from the entry's
 ``what`` / ``why`` / ``fix`` and the facts of the report, without any LLM; the
 placeholders are listed in ``explain.py``, which ``pilot/run_tool.py`` shares.
@@ -29,16 +33,29 @@ from pathlib import Path
 
 from explain import choose_error, explanation, first_failure, load_entry, run_catalogue, signature
 
-from pythonarchtesting.principles import signature_matches
+from pythonarchtesting.principles import classify_target, get_principle, signature_matches
 
 HERE = Path(__file__).resolve().parent
+
+
+def all_findings(principle_id: str, results: list[dict]) -> str:
+    """The distinct errors of a variant's findings, in the order found."""
+    found = classify_target(get_principle(principle_id), results)
+    ids = dict.fromkeys(
+        f"`{f.error_id}`" if f.error_id else ("not judged" if f.not_judged else "unclassified")
+        for f in found
+    )
+    return ", ".join(ids) or "—"
 
 
 def check_principle(principle_dir: Path) -> tuple[list[str], bool]:
     entry = load_entry(principle_dir)
     results = run_catalogue(principle_dir)
     lines = [f"## {entry['name']} (`{entry['id']}`)", ""]
-    lines += ["| Variant | Kind | Expected | Tool | Match |", "|---|---|---|---|---|"]
+    lines += [
+        "| Variant | Kind | Expected | Tool | Match | All findings |",
+        "|---|---|---|---|---|---|",
+    ]
     explanations: list[str] = []
     ok = True
     listed: set[str] = set()
@@ -48,7 +65,8 @@ def check_principle(principle_dir: Path) -> tuple[list[str], bool]:
         verdict = "FAIL" if first_failure(results[item["example"]], None) else "PASS"
         match = verdict == "PASS"
         ok &= match
-        lines.append(f"| `{item['example']}` | neutral change: {item['title']} | PASS | {verdict} | {'✓' if match else '✗'} |")
+        found = all_findings(entry["id"], results[item["example"]])
+        lines.append(f"| `{item['example']}` | neutral change: {item['title']} | PASS | {verdict} | {'✓' if match else '✗'} | {found} |")
 
     for error in entry.get("errors", []):
         listed.add(error["example"])
@@ -72,7 +90,8 @@ def check_principle(principle_dir: Path) -> tuple[list[str], bool]:
             if failure:
                 explanations += [f"### `{error['example']}`: {error['title']}", "", explanation(error, failure), ""]
         ok &= match
-        lines.append(f"| `{error['example']}` | error: {error['title']} | {expected} | {verdict} | {'✓' if match else '✗'} |")
+        found = all_findings(entry["id"], variant_results)
+        lines.append(f"| `{error['example']}` | error: {error['title']} | {expected} | {verdict} | {'✓' if match else '✗'} | {found} |")
 
     unlisted = sorted(set(results) - listed)
     if unlisted:

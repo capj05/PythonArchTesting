@@ -87,6 +87,7 @@ def _unverified_reasons(details: Dict[str, Any]) -> list[str]:
         ("unexercised_lines", coverage.get("unexercised_lines")),
         ("unchecked_stages", details.get("unchecked_stages")),
         ("reference_calls_not_made", details.get("absences")),
+        ("calls_not_observable", details.get("unobserved_calls")),
         (
             "case_raised",
             any(

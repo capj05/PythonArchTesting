@@ -344,10 +344,13 @@ def _generated(code: Any) -> bool:
     return name.startswith("<") and not name.startswith("<frozen")
 
 
-def _c_callee(arg: Any) -> tuple[str, str] | None:
+def _c_callee(
+    arg: Any, watched: frozenset[str] = frozenset()
+) -> tuple[str, str] | None:
     """The module and name of a builtin or C function a frame calls.
 
-    ``None`` for what belongs to no layer: ``len()``, ``list.append()``.
+    ``None`` for what belongs to no layer: ``len()``, ``list.append()``; a
+    builtin in ``watched`` (``isinstance``) is reported under ``builtins``.
     """
     owner = getattr(arg, "__self__", None)
     module = getattr(arg, "__module__", None)
@@ -360,6 +363,8 @@ def _c_callee(arg: Any) -> tuple[str, str] | None:
         # I/O is a layer of its own: open() is io.open, and print()
         # and input() talk to the console.
         return io_module, str(name)
+    if name in watched and getattr(builtins, str(name), None) is arg:
+        return "builtins", str(name)
     if module == "builtins" or (name and getattr(builtins, name, None) is arg):
         # len(), print(), list.append() belong to no layer; open() is
         # a builtin too, although it reports _io as its module.
@@ -370,6 +375,17 @@ def _c_callee(arg: Any) -> tuple[str, str] | None:
         # pickle.dumps is _pickle.dumps; report the public module.
         module = module[1:]
     return str(module), str(getattr(arg, "__qualname__", arg))
+
+
+# The sys.monitoring tool ids to watch ``type()`` with, in order: 3 and 4 are
+# free for any tool; 0 (debugger), 1 (coverage), 2 (profiler) and 5
+# (optimizer) are taken last, the debugger's never first.
+_TOOL_IDS = (3, 4, 5, 2, 1, 0)
+
+
+def _monitoring() -> Any:
+    """``sys.monitoring``, or ``None`` before Python 3.12."""
+    return getattr(sys, "monitoring", None)
 
 
 class CallRecorder:
@@ -390,6 +406,12 @@ class CallRecorder:
     it carries the ``origin`` (that code) and the project code ``via`` which
     the call was reached, outermost first.
 
+    With ``builtins`` (and ``caller_module``) a call of one of those builtins
+    of no layer (``isinstance``, ``type``) counts as a call into
+    ``builtins``. ``type()`` is a class, which the profile hook does not see
+    called; from Python 3.12 ``sys.monitoring`` reports it, before that it
+    is not recorded.
+
     With ``external`` (and no ``caller_module``) a call from project code
     into a module outside the project counts as well, named by its top-level
     package and marked ``external``: the libraries the project uses. Only the
@@ -403,14 +425,18 @@ class CallRecorder:
         project: _Project | None = None,
         transitive: bool = False,
         external: bool = False,
+        builtins: Iterable[str] = (),
     ) -> None:
         self._caller = caller_module
+        self._builtins = frozenset(builtins)
         self._external = external and caller_module is None and project is not None
         self._package = package
         self._project = project
         self._transitive = transitive and project is not None
         self.calls: list[dict[str, Any]] = []
         self._seen: set[tuple[Any, ...]] = set()
+        # Watched calls that could not be seen, with why (``builtins.type``).
+        self.unobserved: dict[str, str] = {}
 
     def _note_through(self, caller: Any, module: str | None, callee: str) -> None:
         """Note a call by other code, if code of the caller module led to it."""
@@ -535,7 +561,7 @@ class CallRecorder:
                 note = self._note_through
             if note is None:
                 return
-            target = _c_callee(arg)
+            target = _c_callee(arg, self._builtins)
             if target is not None:
                 note(frame, target[0], target[1])
 
@@ -557,6 +583,52 @@ class CallRecorder:
         package = self._package
         return bool(package) and (module == package or module.startswith(f"{package}."))
 
+    def _on_call(self, code: Any, offset: int, called: Any, arg0: Any) -> None:
+        """A ``sys.monitoring`` call event: a call of ``type`` is noted as
+        the profile hook notes a builtin it sees called."""
+        _ = (code, offset, arg0)
+        if called is type:
+            self.profile(sys._getframe(1), "c_call", type)
+
+    @contextlib.contextmanager
+    def _watching_type(self) -> Iterator[None]:
+        """Report calls of ``type()``, which the profile hook does not see,
+        while ``builtins`` asks for them (Python 3.12+, a free tool id).
+        When they cannot be seen, ``unobserved`` says so: a verdict must not
+        silently depend on the interpreter."""
+        if "type" not in self._builtins or self._caller is None:
+            yield
+            return
+        monitoring = _monitoring()
+        if monitoring is None:
+            self.unobserved = {"builtins.type": "needs Python 3.12+ (sys.monitoring)"}
+            yield
+            return
+        tool = next((i for i in _TOOL_IDS if monitoring.get_tool(i) is None), None)
+        if tool is None:
+            self.unobserved = {"builtins.type": "no free sys.monitoring tool id"}
+            yield
+            return
+        claimed = False
+        try:
+            monitoring.use_tool_id(tool, "pythonarchtesting-probe")
+            claimed = True
+            monitoring.register_callback(tool, monitoring.events.CALL, self._on_call)
+            monitoring.set_events(tool, monitoring.events.CALL)
+            yield
+        finally:
+            # Each step on its own: a JobTimeout in one must not leak the id.
+            try:
+                if claimed:
+                    monitoring.set_events(tool, 0)
+            finally:
+                try:
+                    if claimed:
+                        monitoring.register_callback(tool, monitoring.events.CALL, None)
+                finally:
+                    if claimed:
+                        monitoring.free_tool_id(tool)
+
     @contextlib.contextmanager
     def watching(self) -> Iterator[None]:
         # threading.setprofile covers threads the target starts meanwhile.
@@ -565,7 +637,8 @@ class CallRecorder:
         sys.setprofile(self.profile)
         threading.setprofile(self.profile)
         try:
-            yield
+            with self._watching_type():
+                yield
         finally:
             sys.setprofile(previous)
             threading.setprofile(previous_threads)
@@ -1868,10 +1941,18 @@ def _observe_case(
             None, package, project, external=bool(observe.get("external"))
         )
     elif observe.get("calls") == "transitive":
-        calls = CallRecorder(module.__name__, package, project, transitive=True)
+        calls = CallRecorder(
+            module.__name__,
+            package,
+            project,
+            transitive=True,
+            builtins=observe.get("builtins") or (),
+        )
     elif observe.get("calls"):
         # The project only names the file of each call here.
-        calls = CallRecorder(module.__name__, package, project)
+        calls = CallRecorder(
+            module.__name__, package, project, builtins=observe.get("builtins") or ()
+        )
     tracing = bool(capture or flow_calls)
     if tracing and project is None:
         project = _Project(os.path.dirname(str(module.__file__)), package)
@@ -1924,6 +2005,8 @@ def _observe_case(
         outcome["lines"] = coverage
     if calls is not None:
         outcome["calls"] = calls.calls
+        if calls.unobserved:
+            outcome["unobserved"] = dict(calls.unobserved)
     if writes is not None and observe.get("writes"):
         outcome["writes"] = list(writes.writes)
     if instances is not None and observe.get("instances"):

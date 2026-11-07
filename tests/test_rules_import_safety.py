@@ -62,6 +62,7 @@ def test_rules_public_surface_is_core_only() -> None:
         "forbid_runtime_calls",
         "require_runtime_calls",
         "forbid_foreign_writes",
+        "forbid_private_access",
         "forbid_runtime_imports",
         "enforce_reference_calls",
         "forbid_runtime_instantiation",

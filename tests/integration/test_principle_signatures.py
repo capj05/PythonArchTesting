@@ -77,4 +77,4 @@ def test_declared_signature_matches_the_example_variant(
 
 
 def test_every_principle_has_an_example_pointer() -> None:
-    assert len(_detected_errors()) == 8
+    assert len(_detected_errors()) == 16

@@ -38,9 +38,31 @@ MARKER_FACT_KINDS: Mapping[str, str] = MappingProxyType(
         "forbid_runtime_calls": "call",
         "require_runtime_calls": "missing_call",
         "forbid_foreign_writes": "write",
+        "forbid_private_access": "read",
+        "subclass_of": "not_subclass",
+        "is_abstract_class": "not_abstract",
+        "require_runtime_delegation": "missing_delegation",
+        "forbid_runtime_instantiation": "instance",
     }
 )
 FACT_KINDS = tuple(MARKER_FACT_KINDS.values())
+# Markers checked statically, without running code: their checks take no
+# ``cases``, and a task gives the entities they cover none.
+STATIC_MARKERS = frozenset(
+    {"forbid_private_access", "subclass_of", "is_abstract_class"}
+)
+# Markers whose entities are classes: a role they cover binds classes only.
+CLASS_MARKERS = frozenset({"subclass_of", "is_abstract_class"})
+# The one marker that takes a class as its target (``target_kind = "class"``).
+CLASS_TARGET_MARKERS = frozenset({"subclass_of"})
+# Markers whose ``target_role`` gives the classes bound to that role, not
+# their modules: the objects a context must not build are the strategy
+# classes, not anything else their module defines. A role that binds no
+# class gives such a check no target: it is not applicable.
+INSTANCE_TARGET_MARKERS = frozenset({"forbid_runtime_instantiation"})
+# What a check's ``target_role`` gives its marker: the modules of the
+# entities bound to that role, or the one class bound to it.
+TARGET_KINDS = ("module", "class")
 # The ways a ``write`` fact changes an attribute.
 WRITE_CHANGES = ("assigned", "mutated", "deleted", "bypassed")
 # What each key of an error's ``signature`` means.
@@ -49,7 +71,8 @@ SIGNATURE_KEYS: Mapping[str, str] = MappingProxyType(
         "kind": "the kind of the first fact: " + ", ".join(FACT_KINDS),
         "callee": "of a call: the function called, as 'module:name'",
         "change": "of a write: how the attribute changed: " + ", ".join(WRITE_CHANGES),
-        "via": "the call or write took a detour through other code (a helper)",
+        "via": "the call, write or instance took a detour through other code "
+        "(a helper)",
         "private": "of a write: the attribute written starts with '_'",
     }
 )
@@ -64,15 +87,23 @@ PLACEHOLDERS: Mapping[str, str] = MappingProxyType(
         "caller": "the function that made the call or write",
         "callee": "the function called, as 'module:name'",
         "module": "the module whose functions a required call should reach",
-        "class": "the class of the object written to",
-        "attribute": "the attribute written",
+        "class": "of a write or read: the class of the object written to or read "
+        "from; else the class concerned, as 'module:Class' (the one not derived "
+        "from the base, not abstract, or instantiated)",
+        "attribute": "the attribute written or read",
         "change": "how the attribute changed, in words",
-        "fact_file": "the file of the call or write",
-        "fact_line": "the line of the call or write",
+        "fact_file": "the file of the call, write or read",
+        "fact_line": "the line of the call, write or read",
         "callee_short": "the callee as a beginner writes it: print(), input(), "
         "open(), else module.name()",
         "via_last": "the helper a detour ends in, as 'module:name'",
         "via_first_line": "the line of the function the detour starts at",
+        "expected_base": "the base class a class should derive from, as "
+        "'module:Class'",
+        "concrete_methods": "the methods a class that should be abstract "
+        "defines without an abstract decorator, comma-separated",
+        "creator": "the function that created the object, as 'module:name'",
+        "expected": "the collaborator (or 'collaborator.method') never " "delegated to",
     }
 )
 
@@ -134,14 +165,18 @@ class CheckTemplate:
 
     The marker's targets are ``modules`` (fixed dotted names, such as
     ``builtins.print``) and, with ``target_role``, the modules of the entities
-    playing that role in the task."""
+    playing that role in the task; with ``target_kind`` ``"class"`` instead
+    the qualified name of the one class bound to that role. ``cases`` says
+    what the cases of each covered entity must exercise; ``None`` for a
+    static marker (``STATIC_MARKERS``), which runs nothing."""
 
     role: str
     marker: str
-    cases: str
+    cases: Optional[str]
     modules: tuple[str, ...] = ()
     target_role: Optional[str] = None
     transitive: Optional[bool] = None
+    target_kind: str = "module"
 
     def to_dict(self) -> dict[str, Any]:
         data = {
@@ -149,6 +184,7 @@ class CheckTemplate:
             "marker": self.marker,
             "modules": list(self.modules) or None,
             "target_role": self.target_role,
+            "target_kind": None if self.target_kind == "module" else self.target_kind,
             "transitive": self.transitive,
             "cases": self.cases,
         }
@@ -370,7 +406,8 @@ def _check_placeholders(template: str, where: str) -> None:
 
 def _check(table: _Table, roles: Mapping[str, str]) -> CheckTemplate:
     table.check_keys(
-        ("role", "marker", "cases"), ("modules", "target_role", "transitive")
+        ("role", "marker"),
+        ("cases", "modules", "target_role", "transitive", "target_kind"),
     )
     role = table.text("role")
     if role not in roles:
@@ -380,10 +417,37 @@ def _check(table: _Table, roles: Mapping[str, str]) -> CheckTemplate:
         raise CatalogError(
             f"{table.where}: target_role {target_role!r} is not one of the [roles]"
         )
+    target_kind = table.optional_text("target_kind") or "module"
+    if target_kind not in TARGET_KINDS:
+        raise CatalogError(
+            f"{table.where}: target_kind {target_kind!r} is not one of {TARGET_KINDS}"
+        )
+    if target_kind == "class" and target_role is None:
+        raise CatalogError(f"{table.where}: target_kind 'class' needs a target_role")
     marker = table.text("marker")
     if marker not in MARKERS:
         raise CatalogError(
             f"{table.where}: marker {marker!r} is not one of the tool's markers"
+        )
+    if target_kind == "class" and marker not in CLASS_TARGET_MARKERS:
+        raise CatalogError(
+            f"{table.where}: target_kind 'class' is for "
+            f"{', '.join(sorted(CLASS_TARGET_MARKERS))}, not {marker!r}"
+        )
+    if target_kind == "class" and "modules" in table.raw():
+        raise CatalogError(
+            f"{table.where}: target_kind 'class' takes its one target from "
+            "target_role: remove 'modules'"
+        )
+    static = marker in STATIC_MARKERS
+    if static == ("cases" in table.raw()):
+        raise CatalogError(
+            f"{table.where}: "
+            + (
+                f"{marker!r} is static and runs no cases: remove 'cases'"
+                if static
+                else "missing key 'cases'"
+            )
         )
     modules = table.raw().get("modules", [])
     if not isinstance(modules, list) or not all(isinstance(m, str) for m in modules):
@@ -396,10 +460,11 @@ def _check(table: _Table, roles: Mapping[str, str]) -> CheckTemplate:
     return CheckTemplate(
         role=role,
         marker=marker,
-        cases=table.text("cases"),
+        cases=table.optional_text("cases"),
         modules=tuple(modules),
         target_role=target_role,
         transitive=table.optional_bool("transitive"),
+        target_kind=target_kind,
     )
 
 

@@ -60,6 +60,9 @@ from pythonarchtesting.rules.compilation.decorators.nominal_type import (
     compile_not_subclass_of,
     compile_subclass_of,
 )
+from pythonarchtesting.rules.compilation.decorators.private_access import (
+    compile_forbid_private_access,
+)
 from pythonarchtesting.rules.compilation.decorators.protocols import (
     compile_implements_protocol,
 )
@@ -165,6 +168,7 @@ def compile_rules(
         "forbid_runtime_calls": compile_forbid_runtime_calls,
         "require_runtime_calls": compile_require_runtime_calls,
         "forbid_foreign_writes": compile_forbid_foreign_writes,
+        "forbid_private_access": compile_forbid_private_access,
         "forbid_runtime_instantiation": compile_forbid_runtime_instantiation,
         "enforce_reference_calls": compile_enforce_reference_calls,
         "is_runtime_singleton": compile_is_runtime_singleton,

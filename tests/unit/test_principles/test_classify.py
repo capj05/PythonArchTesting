@@ -197,6 +197,145 @@ def test_an_unmatched_entity_is_a_missing_required_entity():
     assert "shop.py:18" in finding.what
 
 
+_READS = "ENC001/forbid_private_access/v1"
+
+
+def _read(attribute: str, line: int, receiver: bool = False) -> dict:
+    return {
+        "kind": "read",
+        "attribute": attribute,
+        "class": "Inventory",
+        "file": "shop.py",
+        "line": line,
+        "reader": "shop:sell",
+        **({"receiver": True} if receiver else {}),
+    }
+
+
+def test_classify_target_drops_a_read_that_is_part_of_a_write():
+    """``inventory._stock.setdefault(k, 0)`` reads ``_stock`` to change it:
+    one defect, the write. A read of it on another line stays a finding."""
+    principle = get_principle("encapsulation")
+    writes = _result(_WRITES, [_write("_stock", "mutated", 10)])
+    reads = _result(_READS, [_read("_stock", 10, True), _read("_stock", 12)])
+
+    findings = classify_target(principle, [writes, reads])
+
+    assert [(f.error_id, f.facts["line"]) for f in findings] == [
+        ("bypass_method", 10),
+        ("read_private", 12),
+    ]
+    # Without the write both reads are findings, in either order of results.
+    assert len(classify_target(principle, [reads])) == 2
+    assert [f.error_id for f in classify_target(principle, [reads, writes])] == [
+        "read_private",
+        "bypass_method",
+    ]
+
+
+def test_classify_target_keeps_a_read_on_a_write_line_that_is_no_receiver():
+    """``inv._stock.update(other._stock)``, ``a._x = b._x`` and
+    ``x = inv._log; inv._log = []``: the read of the other object (or the
+    read before the write) is a defect of its own; only the receiver of the
+    method call that makes the write goes."""
+    principle = get_principle("encapsulation")
+    writes = _result(_WRITES, [_write("_stock", "mutated", 10)])
+    reads = _result(_READS, [_read("_stock", 10, True), _read("_stock", 10)])
+
+    findings = classify_target(principle, [writes, reads])
+
+    assert [(f.error_id, f.facts["line"]) for f in findings] == [
+        ("bypass_method", 10),
+        ("read_private", 10),
+    ]
+    assert "receiver" not in findings[1].facts
+
+
+def _isinstance(case: int, line: int, caller: str = "report:total") -> dict:
+    return {
+        "kind": "call",
+        "case": case,
+        "callee": "builtins:isinstance",
+        "caller": caller,
+        "file": "report.py",
+        "line": line,
+        "via": [],
+    }
+
+
+def test_classify_target_gives_one_finding_per_defect_not_per_case():
+    """The same call site in every case, and in a helper two client
+    functions share, is one ``type_switch``; another line is another."""
+    principle = get_principle("polymorphism")
+    total = _result(
+        _CALLS, [_isinstance(0, 11), _isinstance(1, 11), _isinstance(0, 13)]
+    )
+    describe = _result(_CALLS, [_isinstance(0, 11, "report:_kind")])
+
+    findings = classify_target(principle, [total, describe])
+
+    assert [(f.error_id, f.facts["line"]) for f in findings] == [
+        ("type_switch", 11),
+        ("type_switch", 13),
+    ]
+    assert findings[0].facts["cases"] == [0, 1]
+    assert "cases" not in findings[1].facts
+
+
+def _warn(case: int, caller: str, origin_line: int) -> dict:
+    """A print in a helper module, reached by ``caller`` through ``warn()``."""
+    return {
+        "kind": "call",
+        "case": case,
+        "callee": "builtins:print",
+        "caller": caller,
+        "file": "messages.py",
+        "line": 5,
+        "via": ["messages:warn"],
+        "origin_line": origin_line,
+    }
+
+
+def test_classify_target_keeps_each_caller_of_a_shared_helper_apart():
+    """Two logic functions that both call a printing helper are two defects,
+    though the print is one line: each caller is fixed on its own line. The
+    cases of one caller are not merged into the other's."""
+    principle = get_principle("io_separation")
+    parse = _result(_CALLS, [_warn(0, "grades:parse_grades", 6)])
+    average = _result(
+        _CALLS,
+        [_warn(0, "grades:average", 20), _warn(1, "grades:average", 20)],
+    )
+
+    findings = classify_target(principle, [parse, average])
+
+    assert [
+        (f.error_id, f.facts["caller"], f.facts.get("cases")) for f in findings
+    ] == [
+        ("output_through_helper", "grades:parse_grades", None),
+        ("output_through_helper", "grades:average", [0, 1]),
+    ]
+
+
+def test_classify_target_collapses_a_write_that_differs_only_in_its_case():
+    principle = get_principle("encapsulation")
+    writes = _result(
+        _WRITES,
+        [
+            _write("_stock", "mutated", 10),
+            {**_write("_stock", "mutated", 10), "case": 1},
+            _write("_stock", "assigned", 10),
+        ],
+    )
+
+    findings = classify_target(principle, [writes])
+
+    assert [(f.error_id, f.facts.get("cases")) for f in findings] == [
+        ("bypass_method", [0, 1]),
+        ("replace_attribute", None),
+    ]
+
+
 def test_classify_target_gives_one_missing_entity_for_several_rules():
     principle = get_principle("encapsulation")
     first, second, other = _unmatched(), _unmatched(_CALLS), _unmatched()
@@ -475,7 +614,8 @@ def test_rule_marker(rule_id: str, marker: str):
 
 def test_principle_markers_cover_checks_and_errors():
     assert principle_markers(get_principle("encapsulation")) == {
-        "forbid_foreign_writes"
+        "forbid_foreign_writes",
+        "forbid_private_access",
     }
     assert principle_markers(get_principle("io_separation")) == {
         "forbid_runtime_calls",
@@ -489,6 +629,8 @@ def test_principle_markers_cover_checks_and_errors():
         ("builtins:print", "print()"),
         ("builtins:input", "input()"),
         ("io:open", "open()"),
+        ("builtins:isinstance", "isinstance()"),
+        ("builtins:type", "type()"),
         ("grades:average", "grades.average()"),
     ],
 )
@@ -516,6 +658,117 @@ def test_fill_what_uses_the_target_the_fact_and_the_derived_values():
     assert text == "sell shop.py:8 12 messages:warn print() messages.py:4 ?"
 
 
+@pytest.mark.parametrize(
+    ("fact", "template", "text"),
+    [
+        (
+            {
+                "kind": "not_subclass",
+                "class": "shapes:Circle",
+                "expected_base": "shapes:Shape",
+            },
+            "{class} < {expected_base}",
+            "shapes:Circle < shapes:Shape",
+        ),
+        (
+            {"kind": "not_abstract", "concrete_methods": ["area", "describe"]},
+            "{concrete_methods}",
+            "area, describe",
+        ),
+        (
+            {"kind": "instance", "creator": "pricing:total", "class": "d:Bulk"},
+            "{creator} {class}",
+            "pricing:total d:Bulk",
+        ),
+        (
+            {"kind": "missing_delegation", "expected": "strategy"},
+            "{expected}",
+            "strategy",
+        ),
+    ],
+)
+def test_fill_what_fills_the_facts_of_hierarchy_and_strategy_markers(
+    fact: dict, template: str, text: str
+):
+    assert fill_what(template, _result(_CALLS), fact) == text
+
+
 def test_fill_what_words_the_change():
     text = fill_what("{change}", _result(_WRITES), _write("log", "mutated"))
     assert text == "changes its contents"
+
+
+_DELEGATES = "DYN008/require_runtime_delegation/v1"
+_BUILDS = "DYN005/forbid_runtime_instantiation/v1"
+
+
+def _missing(caller: str, case: int = 0) -> dict:
+    return {
+        "kind": "missing_delegation",
+        "case": case,
+        "caller": caller,
+        "expected": "self.discount",
+        "raised": None,
+    }
+
+
+def _instance(creator: str, case: int = 0) -> dict:
+    return {
+        "kind": "instance",
+        "case": case,
+        "creator": creator,
+        "class": "discounts:NoDiscount",
+        "file": "pricing.py",
+        "line": 8,
+        "via": [],
+    }
+
+
+def test_classify_target_folds_a_missing_delegation_into_a_built_strategy():
+    """A constructor that builds its own strategy never calls the spy, so the
+    delegation check fails too: one defect, hardcoded_strategy (review of
+    N5). A context of another class still misses its delegation."""
+    principle = get_principle("strategy")
+    built = _result(_BUILDS, [_instance("pricing:Calc.__init__")])
+    missing = _result(
+        _DELEGATES,
+        [_missing("pricing:Calc.total"), _missing("pricing:Calc.total", 1)],
+    )
+    other = _result(_DELEGATES, [_missing("pricing:Shop.total")])
+
+    findings = classify_target(principle, [missing, built, other])
+
+    assert [
+        (f.error_id, f.facts.get("caller") or f.facts.get("creator")) for f in findings
+    ] == [
+        ("hardcoded_strategy", "pricing:Calc.__init__"),
+        ("no_delegation", "pricing:Shop.total"),
+    ]
+    # Without the instance, the missing delegation is the finding.
+    assert [f.error_id for f in classify_target(principle, [missing])] == [
+        "no_delegation"
+    ]
+
+
+def test_classify_target_folds_a_receiver_only_into_a_write_of_its_own_kind():
+    """``a._x = b._x.setdefault(k, d)``: ``b._x`` is the receiver of a
+    method that changes its contents, so it folds only into a ``mutated``
+    write; the ``assigned`` write of ``a._x`` on that line is another
+    object's, and b's read stays (review of N5). A rebuilt attribute
+    (``obj._x = {... obj._x ...}``) folds into its ``assigned`` write."""
+    principle = get_principle("encapsulation")
+    assigned = _result(_WRITES, [_write("_stock", "assigned", 10)])
+    mutated = _result(_WRITES, [_write("_stock", "mutated", 10)])
+    by_method = _result(_READS, [{**_read("_stock", 10), "receiver": "mutated"}])
+    rebuilt = _result(_READS, [{**_read("_stock", 10), "receiver": "assigned"}])
+
+    assert [f.error_id for f in classify_target(principle, [assigned, by_method])] == [
+        "replace_attribute",
+        "read_private",
+    ]
+    assert [f.error_id for f in classify_target(principle, [mutated, by_method])] == [
+        "bypass_method"
+    ]
+    assert [f.error_id for f in classify_target(principle, [assigned, rebuilt])] == [
+        "replace_attribute"
+    ]

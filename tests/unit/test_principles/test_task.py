@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,11 @@ from pythonarchtesting.principles.task import (
     needed_roles,
 )
 from pythonarchtesting.runner.source_prep import prepare_source
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - exercised only on Python 3.10
+    import tomli as tomllib
 
 _GRADES = """\
 def parse_grades(text):
@@ -294,9 +300,47 @@ def test_a_class_method_and_init_are_bound(tmp_path: Path) -> None:
 
     _, checks = _bind(task_dir)
 
-    [check] = checks
-    assert (check.entity, check.marker) == ("shop.Shop.sell", "forbid_foreign_writes")
-    assert check.params["init"] == {"args": []}
+    runtime, static = checks
+    assert (runtime.entity, runtime.marker) == (
+        "shop.Shop.sell",
+        "forbid_foreign_writes",
+    )
+    assert runtime.params["init"] == {"args": []}
+    # The static check on the same method runs nothing: no cases, no init.
+    assert (static.entity, static.marker) == ("shop.Shop.sell", "forbid_private_access")
+    assert static.params["cases"] is None and static.params["init"] is None
+
+
+def test_a_static_check_is_declared_without_cases(tmp_path: Path) -> None:
+    """The client's static check (``forbid_private_access``) is declared
+    without cases beside its runtime one, which takes the entity's cases."""
+    task_dir = tmp_path / "task"
+    reference = task_dir / "reference"
+    reference.mkdir(parents=True)
+    (reference / "__init__.py").write_text("", encoding="utf-8")
+    (reference / "shop.py").write_text(
+        "class Shop:\n    def __init__(self):\n        self._n = 0\n\n"
+        "    def count(self):\n        return self._n\n\n\n"
+        "def show(shop: Shop):\n    return shop.count()\n",
+        encoding="utf-8",
+    )
+    (task_dir / "task.toml").write_text(
+        'principle = "encapsulation"\n\n[roles]\nowner = ["shop.Shop"]\n'
+        'client = ["shop.show"]\n\n'
+        '[cases]\n"shop.show" = [{ args = [{ "$new" = "shop.Shop" }] }]\n',
+        encoding="utf-8",
+    )
+
+    entities, checks = _bind(task_dir)
+
+    assert [(c.entity, c.marker) for c in checks] == [
+        ("shop.show", "forbid_foreign_writes"),
+        ("shop.show", "forbid_private_access"),
+    ]
+    [show] = [e for e in entities if e.qualname == "show"]
+    kinds = [d.kind for d in show.annotation_declarations]
+    assert kinds == ["forbid_foreign_writes", "forbid_private_access"]
+    assert show.annotation_declarations[1].params == {}
 
 
 def test_the_entities_a_role_binds_are_required_by_name(tmp_path: Path) -> None:
@@ -343,3 +387,221 @@ def test_invalid_cases_are_refused_when_the_task_is_bound(
 
     assert f"[cases] 'grades.parse_grades': {message}" in _problems(raised)
     assert len(raised.value.problems) == 1
+
+
+# A principle whose roles bind classes: the base is checked statically
+# (``is_abstract_class``) and so are its variants (``subclass_of`` the class
+# bound to ``base``, ``target_kind = "class"``); neither runs any case.
+_HIERARCHY = """\
+id = "hierarchy"
+name = "Hierarchy"
+level = "basic"
+summary = "Variants share a base."
+why = "Because."
+errors = []
+
+[roles]
+base = "the base the variants share"
+variant = "the variants"
+
+[[checks]]
+role = "base"
+marker = "is_abstract_class"
+
+[[checks]]
+role = "variant"
+marker = "subclass_of"
+target_role = "base"
+target_kind = "class"
+"""
+
+_SHAPES = """\
+from abc import ABC, abstractmethod
+
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self):
+        raise NotImplementedError
+
+
+class Circle(Shape):
+    def area(self):
+        return 3
+
+
+class Square(Shape):
+    def area(self):
+        return 4
+
+
+def total(shapes):
+    return sum(shape.area() for shape in shapes)
+"""
+
+
+def _hierarchy_task(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, roles: str
+) -> Path:
+    from pythonarchtesting.principles import task as task_module
+    from pythonarchtesting.principles.catalog import parse_principle
+
+    principle = parse_principle(tomllib.loads(_HIERARCHY), "hierarchy.toml")
+    monkeypatch.setattr(task_module, "get_principle", lambda _: principle)
+    task_dir = tmp_path / "task"
+    reference = task_dir / "reference"
+    reference.mkdir(parents=True)
+    (reference / "__init__.py").write_text("", encoding="utf-8")
+    (reference / "shapes.py").write_text(_SHAPES, encoding="utf-8")
+    (task_dir / "task.toml").write_text(
+        f'principle = "hierarchy"\n\n[roles]\n{roles}', encoding="utf-8"
+    )
+    return task_dir
+
+
+_ROLES = 'base = ["shapes.Shape"]\nvariant = ["shapes.Circle", "shapes.Square"]\n'
+
+
+def test_a_role_with_only_static_checks_needs_no_cases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, checks = _bind(_hierarchy_task(tmp_path, monkeypatch, _ROLES))
+
+    assert [(c.entity, c.marker) for c in checks] == [
+        ("shapes.Shape", "is_abstract_class"),
+        ("shapes.Circle", "subclass_of"),
+        ("shapes.Square", "subclass_of"),
+    ]
+    assert all(c.params["cases"] is None for c in checks)
+
+
+def test_target_kind_class_resolves_single_class(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import Mock
+
+    from pythonarchtesting.rules.compilation import compile_rules
+
+    entities, checks = _bind(_hierarchy_task(tmp_path, monkeypatch, _ROLES))
+
+    # The check gets the class bound to `base`, not its module.
+    assert [c.params["modules"] for c in checks[1:]] == [["shapes.Shape"]] * 2
+    [circle] = [e for e in entities if e.qualname == "Circle"]
+    assert circle.annotation_declarations[0].params == {"base": "shapes.Shape"}
+    rules, _, _ = compile_rules(entities, Mock())
+    assert sorted(str(r.rule_id) for r in rules) == [
+        "MOD001/is_abstract_class/v1",
+        "NOM001/subclass_of/v1",
+        "NOM001/subclass_of/v1",
+    ]
+
+
+def test_target_kind_class_rejects_multiple_classes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    roles = 'base = ["shapes.Shape", "shapes.Circle"]\nvariant = ["shapes.Square"]\n'
+    task_dir = _hierarchy_task(tmp_path, monkeypatch, roles)
+
+    with pytest.raises(TaskError) as raised:
+        _bind(task_dir)
+
+    assert (
+        "role 'base' binds 2 classes (shapes.Shape, shapes.Circle): subclass_of "
+        "(role 'variant', target_kind 'class') needs exactly one class"
+        in _problems(raised)
+    )
+
+
+@pytest.mark.parametrize(
+    ("roles", "problem"),
+    [
+        # A function in a role a class marker covers: no invalid declaration
+        # on the reference, a problem of the task.
+        (
+            'base = ["shapes.Shape"]\nvariant = ["shapes.Circle", "shapes.total"]\n',
+            "[roles] 'variant': 'shapes.total' is a function, not a class; "
+            "subclass_of checks classes: bind classes (module.Class)",
+        ),
+        (
+            'base = ["shapes.total"]\nvariant = ["shapes.Circle"]\n',
+            "[roles] 'base': 'shapes.total' is a function, not a class; "
+            "is_abstract_class checks classes: bind classes (module.Class)",
+        ),
+        # Not silently dropped beside the one class either.
+        (
+            'base = ["shapes.Shape", "shapes.total"]\nvariant = ["shapes.Circle"]\n',
+            "[roles] 'base': 'shapes.total' is a function, not a class",
+        ),
+        # A module stands for its functions, which are no classes.
+        (
+            'base = ["shapes"]\nvariant = ["shapes.Circle"]\n',
+            "[roles] 'base': 'shapes.total' is a function, not a class",
+        ),
+        # The base among its own variants.
+        (
+            'base = ["shapes.Shape"]\nvariant = ["shapes.Shape", "shapes.Circle"]\n',
+            "[roles] 'variant': 'shapes.Shape' is the class role 'base' binds; "
+            "subclass_of needs the classes derived from it, not the class itself",
+        ),
+    ],
+)
+def test_a_class_role_binds_classes_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, roles: str, problem: str
+) -> None:
+    task_dir = _hierarchy_task(tmp_path, monkeypatch, roles)
+
+    with pytest.raises(TaskError) as raised:
+        _bind(task_dir)
+
+    assert problem in _problems(raised)
+
+
+def test_forbid_runtime_instantiation_targets_the_classes_of_its_role() -> None:
+    """The strategy role binds classes: the check gets those classes, not
+    their whole module (review of N5)."""
+    example = Path(__file__).resolve().parents[3] / "example" / "principles"
+
+    _, checks = _bind(example / "strategy")
+
+    [instances] = [c for c in checks if c.marker == "forbid_runtime_instantiation"]
+    assert instances.params["modules"] == [
+        "discounts.NoDiscount",
+        "discounts.PercentDiscount",
+        "discounts.BulkDiscount",
+    ]
+    assert instances.not_applicable is None
+
+
+def test_a_role_of_functions_leaves_forbid_runtime_instantiation_not_applicable(
+    tmp_path: Path,
+) -> None:
+    task = tmp_path / "adventure"
+    (task / "reference").mkdir(parents=True)
+    (task / "reference" / "adventure.py").write_text(
+        "class Action:\n"
+        "    def __init__(self, execute):\n"
+        "        self.execute = execute\n\n"
+        "    def run(self, state):\n"
+        "        return self.execute(state)\n\n\n"
+        "def take(state):\n"
+        "    return 'taken'\n",
+        encoding="utf-8",
+    )
+    (task / "task.toml").write_text(
+        'principle = "strategy"\n\n[roles]\ncontext = ["adventure.Action.run"]\n'
+        'strategy = ["adventure.take"]\n\n[cases]\n'
+        '"adventure.Action.run" = [{ args = [{ room = "hall" }] }]\n\n[init]\n'
+        '"adventure.Action.run" = { args = [{ "$spy" = "strategy" }] }\n',
+        encoding="utf-8",
+    )
+
+    entities, checks = _bind(task)
+
+    [instances] = [c for c in checks if c.marker == "forbid_runtime_instantiation"]
+    assert instances.not_applicable is not None
+    assert "role 'strategy' binds no class" in instances.not_applicable
+    # No declaration is made for it.
+    [run] = [e for e in entities if e.qualname == "Action.run"]
+    markers = {d.kind for d in run.annotation_declarations}
+    assert "forbid_runtime_instantiation" not in markers
+    assert "require_runtime_delegation" in markers

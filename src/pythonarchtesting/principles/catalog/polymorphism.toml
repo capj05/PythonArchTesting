@@ -1,0 +1,184 @@
+# Catalogue entry; see io_separation.toml for the format notes.
+
+id = "polymorphism"
+name = "Inheritance and polymorphism instead of branching on the type"
+level = "basic"
+
+summary = """
+Kinds of objects that do the same job in different ways are classes derived from
+one abstract base class, and each overrides the base's methods in its own way.
+Code that works with such objects calls the methods of the base instead of
+testing which class an object is.
+"""
+
+why = """
+The behaviour of each kind then lives in its own class. A new kind is one new
+class: no code that uses the objects changes. Code that branches on the type
+(`isinstance`, `type(x) == ...`) has to be found and extended for every new kind,
+and a kind it forgets is silently handled wrong.
+"""
+
+[roles]
+base = "the abstract base class: it declares the methods every variant must provide"
+variant = "the concrete classes derived from the base: each implements the methods in its own way"
+client = "the functions that work with objects of the variants by calling the methods of the base, not by testing their class"
+
+[[checks]]
+role = "base"
+marker = "is_abstract_class"
+# Static: it reads the code and runs nothing, so it takes no cases.
+
+[[checks]]
+role = "variant"
+marker = "subclass_of"
+target_role = "base"
+target_kind = "class"
+# Static as well.
+
+[[checks]]
+role = "client"
+marker = "forbid_runtime_calls"
+modules = ["builtins.isinstance", "builtins.type"]
+# Not transitive: only a call made by code of the client's own module counts,
+# its helpers included. A variant that checks the type of its own arguments
+# (`isinstance` in its constructor or a method) is not the client branching
+# on the type, and the objects the cases build (`$new`) are made before the
+# client runs. Only calls that plainly test no type are dropped (see
+# docs/markers/forbid_runtime_calls.md): `isinstance` against builtin or
+# standard library types only (`isinstance(x, (int, float))`,
+# `isinstance(items, list)`, which validate input), and `type()` only
+# displayed (`f"{type(x).__name__}"`); every other call counts.
+cases = "for every client function one list holding an object of every variant, built by the case (`$new`), so that a branch on the type runs for each of them; and an empty list"
+
+[[errors]]
+id = "type_switch"
+title = "the client branches on the type of an object instead of calling its method"
+detected_by = "forbid_runtime_calls"
+what = "Function `{function}` ({file}:{line}) asks which class an object is: on line {fact_line} of `{fact_file}` it calls `{callee_short}`."
+why = """
+Every kind of object already knows how to do the job: that is what its method
+is for. A chain of `isinstance` tests repeats the work of the classes outside
+them, and every new kind needs another branch here; a kind the chain forgets is
+handled wrong or not at all.
+"""
+fix = "Call the method the base class declares (the same call for every object) and move the code of each branch into the method of its class."
+signature = { kind = "call", callee = "builtins:isinstance" }
+# Only a test against a class of the project counts. The mutants call
+# `isinstance(None, (object,)[0])` first thing in a client function: a class
+# computed at run time counts, as it cannot be told from a project one.
+operator = "add_builtin_call"
+
+[[errors]]
+id = "type_comparison"
+title = "the client asks for the type of an object with `type()` instead of calling its method"
+detected_by = "forbid_runtime_calls"
+what = "Function `{function}` ({file}:{line}) asks which class an object is: on line {fact_line} of `{fact_file}` it calls `{callee_short}`."
+why = """
+Comparing `type(x)` with a class, or its name `type(x).__name__` with a
+string, is the same branching on the type as `isinstance`, and it is stricter
+still: an object of a class derived from the one compared with does not pass
+the test.
+"""
+fix = "Call the method the base class declares (the same call for every object) and move the code of each branch into the method of its class."
+signature = { kind = "call", callee = "builtins:type" }
+# A call of `type()` counts unless its result is only displayed (in an
+# f-string, printed, or its name joined into a text that is not compared);
+# so a comparison of its name (`type(x).__name__ == "..."`) is this error
+# too, a name only shown in a text is not; `isinstance` is
+# type_switch. Two errors rather than one signature listing both callees: a
+# signature names one callee, and the two calls need different wording.
+# The mutants compare `type(None) == object` first thing in a client function. A call of
+# `type()` is seen on Python 3.12 and later only (see forbid_runtime_calls).
+operator = "add_builtin_call"
+
+[[errors]]
+id = "not_a_subclass"
+title = "a variant does not derive from the base class"
+detected_by = "subclass_of"
+what = "Class `{class}` ({fact_file}:{fact_line}) does not derive from the base class `{expected_base}`."
+why = """
+The class has the methods, but nothing states that it is a kind of the base.
+The base cannot require it to implement every method, and a reader or a tool
+cannot see that it may be used wherever the base is expected.
+"""
+fix = "Derive the class from the base class: name the base in parentheses after the class name."
+signature = { kind = "not_subclass" }
+# The mutants drop the base from the list of bases of one variant.
+operator = "drop_base"
+
+[[errors]]
+id = "concrete_base"
+title = "the base class is not abstract"
+detected_by = "is_abstract_class"
+what = "Class `{class}` ({fact_file}:{fact_line}) should be an abstract base class, but it declares no abstract method; it defines these methods as ordinary ones: {concrete_methods}."
+why = """
+A base class whose methods are ordinary ones can be instantiated by mistake,
+and a variant that forgets to implement a method inherits the base's version:
+the mistake shows only when that method is called (or never, when the base's
+version returns something), instead of when the variant is created.
+"""
+fix = "Derive the base from `ABC` (module `abc`) and mark each method every variant must implement with `@abstractmethod`."
+signature = { kind = "not_abstract" }
+# The mutants drop `ABC` (or `metaclass=ABCMeta`, `Protocol`) from the bases
+# of one abstract class and `@abstractmethod` from its methods; the import of
+# `abc` may stay.
+operator = "concretize_base"
+
+[[neutral]]
+id = "model_solution"
+title = "the model solution without markers (the reference also passes as a submission)"
+
+[[neutral]]
+id = "extra_variant"
+title = "another variant derived from the base, which the task does not name"
+
+[[neutral]]
+id = "helper_method"
+title = "an extra helper method in a variant"
+
+[[neutral]]
+id = "type_check_in_variant"
+title = "a variant checks the type of its own constructor arguments (`isinstance` outside the client)"
+
+[[neutral]]
+id = "wrong_formula"
+title = "a mistake in a computation the principle does not concern (a wrong formula in a variant)"
+
+[[neutral]]
+id = "style_noise"
+title = "poor style: other names, no types, a loop instead of a comprehension"
+
+[[gaps]]
+id = "protocol_base"
+title = "a base written as a `typing.Protocol` without `@abstractmethod` counts as concrete"
+detail = """
+is_abstract_class knows an abstract method only by its decorator
+(`@abstractmethod`), so a base derived from `typing.Protocol` whose methods
+have the body `...` fails as concrete_base, although Python refuses to create
+an object of a protocol class too. A protocol whose methods are marked
+`@abstractmethod` passes. The variants must still name the protocol as their
+base: a variant that only has the same methods, without deriving from it, is
+not_a_subclass, because the principle taught is inheritance.
+"""
+
+[[gaps]]
+id = "type_test_without_a_call"
+title = "a branch on the type that calls nothing: `match` with a class pattern, `obj.__class__`"
+detail = """
+forbid_runtime_calls sees the calls `isinstance()` and `type()`. A `match`
+statement with a class pattern (`case SomeClass():`) and a comparison of
+`obj.__class__` test the type without calling either, so a client that
+branches that way passes.
+"""
+
+[[gaps]]
+id = "duck_typing"
+title = "a branch on what an object has instead of what it is: `hasattr`, `getattr`, catching `AttributeError`, reading a variant's own data"
+detail = """
+forbid_runtime_calls sees the calls `isinstance()` and `type()`. A client
+that asks whether an object has an attribute (`hasattr(obj, "x")`,
+`getattr(obj, "x", None)`, `try: ... except AttributeError`) and then
+computes by itself from the data of a variant (`obj.x * obj.y`) branches on
+the kind of the object just the same, but makes neither call, so it passes.
+The check promises only that the client does not test the class of an object.
+"""

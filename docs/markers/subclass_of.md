@@ -47,6 +47,12 @@ class CsvRepository(BaseRepository):
 ## What it checks
 
 - The matched target class is a strict subclass (direct or transitive) of the matched target counterpart of the named source base.
+- A failure has one violation and its fact in `details.facts` (aligned 1:1
+  with `details.violations`): `kind` (`not_subclass`), `class` and
+  `expected_base` (both `module:Class`, the submission's names), `file`,
+  `line` (where the class is defined). When the base itself has no
+  counterpart in the submission the result has no fact: that is no verdict
+  on the class.
 
 ## What it does not check
 

@@ -27,6 +27,11 @@ role = "client"
 marker = "forbid_foreign_writes"
 cases = "for every client function an owner object whose state the function really changes; where the owner's method refuses some changes, also a case it refuses"
 
+[[checks]]
+role = "client"
+marker = "forbid_private_access"
+# Static: it reads the code and runs nothing, so it takes no cases.
+
 [[errors]]
 id = "bypass_method"
 title = "a change of state bypasses the method of the class"
@@ -39,7 +44,10 @@ directly skips these rules, so the state can stop making sense.
 """
 fix = "Call the owner's method that performs this change instead of writing to its attribute."
 signature = { kind = "write", change = "mutated", via = false, private = true }
-# No operator: foreign_write assigns an attribute; none changes its contents.
+# The mutants change the contents of the first private container the owner's
+# constructor creates (a dict, list or set), right after the client's first
+# call of a method of the owner object.
+operator = "mutate_private_container"
 
 [[errors]]
 id = "mutate_container"
@@ -53,7 +61,9 @@ otherwise entries appear that none of its methods made.
 """
 fix = "Call the owner's method that makes this change, or add such a method to the owner class."
 signature = { kind = "write", change = "mutated", via = false, private = false }
-# No operator: foreign_write assigns an attribute; none changes its contents.
+# The same with the first public container; an owner without one gives no
+# mutant.
+operator = "mutate_public_container"
 
 [[errors]]
 id = "replace_attribute"
@@ -75,13 +85,18 @@ operator = "foreign_write"
 [[errors]]
 id = "read_private"
 title = "reading a private attribute from outside"
-gap = "G2"
+detected_by = "forbid_private_access"
+what = "Function `{function}` ({file}:{line}) reads another object's internal state: on line {fact_line} of `{fact_file}` it reads attribute `{attribute}`, which starts with an underscore, from outside the object's class."
 why = """
 An attribute starting with an underscore is internal to the class. Code that
 reads it from outside depends on how the class stores its data and breaks with
 every change inside the class.
 """
 fix = "Read the state through the owner's public methods or properties."
+signature = { kind = "read" }
+# The mutants read the first private data attribute of an owner object a
+# client function gets as a parameter, first thing (`_ = obj._x`).
+operator = "read_private_attribute"
 
 [[neutral]]
 id = "model_solution"
@@ -102,14 +117,3 @@ title = "a mistake in a computation the principle does not concern (a wrong tota
 [[neutral]]
 id = "style_noise"
 title = "poor style: one-letter names, no types or docstrings"
-
-[[gaps]]
-id = "G2"
-title = "reading private attributes from outside is not checked"
-detail = """
-`forbid_foreign_writes` follows only writes and changes. No marker reports
-`obj._x` outside the object's class (`module_interface` guards the private names
-of modules, not of attributes). Proposal: a static check of access to
-`_attributes` through an object other than `self`/`cls`, outside the body of its
-own class.
-"""

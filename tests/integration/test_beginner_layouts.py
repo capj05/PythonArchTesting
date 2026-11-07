@@ -2,7 +2,9 @@
 
 Each test copies ``err_sell_bypasses_remove`` of the encapsulation principle
 into a temporary ``targets_dir`` as ``capj05_capsky`` (a student's package
-name, not the reference's), changes it the way a beginner would, runs
+name, not the reference's), with its test of the stock read through
+``quantity()`` so that the bypass is its only violation (the variant also
+reads ``_stock``, a ``read_private``), changes it the way a beginner would, runs
 ``--dynamic`` against the reference and reads the result by the principle:
 
 - no ``__init__.py``, or a sibling module imported absolutely
@@ -50,6 +52,11 @@ def _submit(
     submissions = tmp_path / "submissions"
     package = submissions / student
     shutil.copytree(_PRINCIPLE / "assignments" / "err_sell_bypasses_remove", package)
+    _replace(
+        package / "shop.py",
+        "inventory._stock.get(item, 0) >= quantity",
+        "inventory.quantity(item) >= quantity",
+    )
     change(package)
     report = tmp_path / "report.json"
     extra: list[str] = []

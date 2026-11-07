@@ -71,9 +71,14 @@ def _write(directory: Path, text: str, name: str = "demo") -> Path:
     return directory
 
 
-def test_packaged_catalogue_holds_both_principles():
+def test_packaged_catalogue_holds_every_principle():
     catalogue = load_catalog()
-    assert sorted(catalogue) == ["encapsulation", "io_separation"]
+    assert sorted(catalogue) == [
+        "encapsulation",
+        "io_separation",
+        "polymorphism",
+        "strategy",
+    ]
     assert all(isinstance(p, Principle) for p in catalogue.values())
 
 
@@ -117,10 +122,37 @@ def test_to_dict_is_json_and_omits_missing_fields():
     errors = {error["id"]: error for error in data["errors"]}
     assert "gap" not in errors["bypass_method"]
     assert errors["bypass_method"]["signature"]["private"] is True
-    assert errors["read_private"]["gap"] == "G2"
-    assert "detected_by" not in errors["read_private"]
-    assert "signature" not in errors["read_private"]
-    assert data["gaps"][0]["id"] == "G2"
+    # G2 is closed: forbid_private_access reads the code for it.
+    assert "gap" not in errors["read_private"]
+    assert errors["read_private"]["detected_by"] == "forbid_private_access"
+    assert errors["read_private"]["signature"] == {"kind": "read"}
+    assert data["gaps"] == []
+    static = [c for c in data["checks"] if c["marker"] == "forbid_private_access"]
+    assert static == [{"role": "client", "marker": "forbid_private_access"}]
+
+
+_STATIC_CHECK = """
+[[checks]]
+role = "logic"
+marker = "forbid_private_access"
+"""
+
+
+def test_a_static_check_takes_no_cases(tmp_path: Path):
+    text = _VALID.replace("[[errors]]", _STATIC_CHECK + "\n[[errors]]", 1)
+    principle = load_catalog(_write(tmp_path, text))["demo"]
+    assert principle.checks[1].cases is None
+    assert "cases" not in principle.checks[1].to_dict()
+
+    with_cases = text.replace(
+        'marker = "forbid_private_access"\n',
+        'marker = "forbid_private_access"\ncases = "any"\n',
+    )
+    with pytest.raises(CatalogError, match="static and runs no cases"):
+        load_catalog(_write(tmp_path / "with", with_cases))
+    without = _VALID.replace('cases = "an ordinary input"\n', "")
+    with pytest.raises(CatalogError, match="missing key 'cases'"):
+        load_catalog(_write(tmp_path / "without", without))
 
 
 def test_load_catalog_from_a_directory(tmp_path: Path):
@@ -278,6 +310,32 @@ def test_target_role_must_name_a_declared_role(tmp_path: Path):
         load_catalog(_write(tmp_path, text))
 
 
+_CLASS_CHECK = """
+[[checks]]
+role = "logic"
+marker = "subclass_of"
+target_role = "logic"
+target_kind = "class"
+"""
+
+
+def test_target_kind_class_is_kept_and_needs_a_target_role(tmp_path: Path):
+    text = _VALID.replace("[[errors]]", _CLASS_CHECK + "\n[[errors]]", 1)
+    principle = load_catalog(_write(tmp_path, text))["demo"]
+    assert principle.checks[0].target_kind == "module"
+    assert "target_kind" not in principle.checks[0].to_dict()
+    assert principle.checks[1].target_kind == "class"
+    assert principle.checks[1].to_dict()["target_kind"] == "class"
+    assert principle.checks[1].cases is None  # subclass_of is static
+
+    without_role = text.replace('target_role = "logic"\ntarget_kind', "target_kind")
+    with pytest.raises(CatalogError, match="target_kind 'class' needs a target_role"):
+        load_catalog(_write(tmp_path / "without", without_role))
+    unknown = text.replace('target_kind = "class"', 'target_kind = "function"')
+    with pytest.raises(CatalogError, match="target_kind 'function' is not one of"):
+        load_catalog(_write(tmp_path / "unknown", unknown))
+
+
 def test_target_role_is_kept(tmp_path: Path):
     text = _VALID.replace("transitive = true", 'target_role = "logic"')
     principle = load_catalog(_write(tmp_path, text))["demo"]
@@ -334,7 +392,25 @@ def test_signature_matches_on_declared_keys_only():
 def test_packaged_catalogue_names_no_task():
     for principle in load_catalog().values():
         text = json.dumps(principle.to_dict()).casefold()
-        for word in ("inventory", "grades", "shop", "stock", "history"):
+        for word in (
+            "inventory",
+            "grades",
+            "shop",
+            "stock",
+            "history",
+            "shape",
+            "circle",
+            "rectangle",
+            "square",
+            "area",
+            "report",
+            "price",
+            "discount",
+            "calculator",
+            "bulk",
+            "percent",
+            "checkout",
+        ):
             assert word not in text, (principle.id, word)
 
 
@@ -371,5 +447,42 @@ def test_packaged_operators_seed_their_errors():
         ("io_separation", "print_instead_of_return"): "add_io_call",
         ("io_separation", "input_in_logic"): "add_io_call",
         ("io_separation", "file_io_in_logic"): "add_io_call",
+        ("io_separation", "output_through_helper"): "add_io_via_helper",
+        ("io_separation", "logic_in_main"): "stub_role_call",
+        ("encapsulation", "bypass_method"): "mutate_private_container",
+        ("encapsulation", "mutate_container"): "mutate_public_container",
         ("encapsulation", "replace_attribute"): "foreign_write",
+        ("encapsulation", "read_private"): "read_private_attribute",
+        ("polymorphism", "type_switch"): "add_builtin_call",
+        ("polymorphism", "type_comparison"): "add_builtin_call",
+        ("polymorphism", "not_a_subclass"): "drop_base",
+        ("polymorphism", "concrete_base"): "concretize_base",
+        ("strategy", "no_delegation"): "drop_call",
+        ("strategy", "hardcoded_strategy"): "hardcode_collaborator",
+        ("strategy", "type_switch_on_strategy"): "add_builtin_call",
     }
+
+
+@pytest.mark.parametrize(
+    ("check", "message"),
+    [
+        (
+            'role = "logic"\nmarker = "forbid_runtime_calls"\n'
+            'target_role = "logic"\ntarget_kind = "class"\ncases = "x"\n',
+            "target_kind 'class' is for subclass_of, not 'forbid_runtime_calls'",
+        ),
+        (
+            'role = "logic"\nmarker = "subclass_of"\nmodules = ["shapes"]\n'
+            'target_role = "logic"\ntarget_kind = "class"\n',
+            "target_kind 'class' takes its one target from target_role: "
+            "remove 'modules'",
+        ),
+    ],
+)
+def test_target_kind_class_is_only_for_subclass_of_without_modules(
+    tmp_path: Path, check: str, message: str
+) -> None:
+    text = _VALID.replace("[[errors]]", f"[[checks]]\n{check}\n[[errors]]", 1)
+
+    with pytest.raises(CatalogError, match=message):
+        load_catalog(_write(tmp_path, text))

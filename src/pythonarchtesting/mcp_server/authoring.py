@@ -263,9 +263,12 @@ _OPERATORS_BY_MARKER: dict[str, tuple[str, ...]] = {
     "forbid_runtime_imports": ("add_library", "dynamic_import"),
     "module_interface": ("use_private_name",),
     "forbid_foreign_writes": ("foreign_write",),
+    "forbid_private_access": ("read_private_attribute",),
     "implements_protocol": ("break_port",),
     "implements_runtime_protocol": ("break_port",),
     "enforce_reference_calls": ("drop_call", "rebuild_injected"),
+    "subclass_of": ("drop_base",),
+    "is_abstract_class": ("concretize_base",),
 }
 _DETAILS = ("problems", "all")
 _RUNTIME_ONLY = "<runtime only>"

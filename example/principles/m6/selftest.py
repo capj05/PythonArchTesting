@@ -241,7 +241,7 @@ def _check_results(h: Harness, students: dict[str, str]) -> None:
         if real.get(student, [""] * 5)[4] != "passed":
             h.failures.append(f"realistic {student} is {real.get(student)}, not passed")
     vo5 = _rows(results, "VO5")
-    if len(vo5) != 3 or vo5[-1][0] != "mean" or any(row[6:9] != ["fake-explainer", "fake-rater", "no"]
+    if len(vo5) != len(students) + 1 or vo5[-1][0] != "mean" or any(row[6:9] != ["fake-explainer", "fake-rater", "no"]
                                                       for row in vo5[:-1]):
         h.failures.append(f"VO5 rows are {vo5}")
 

@@ -1,0 +1,37 @@
+# The task: the catalogue principle `polymorphism` bound to the unannotated
+# model solution in `reference/` (see ../io_separation/task.toml and
+# docs/tasks.md).
+
+principle = "polymorphism"
+
+[roles]
+# is_abstract_class (static): the base the variants share.
+base = ["shapes.Shape"]
+# subclass_of (static) with target_role = "base", target_kind = "class" (both
+# set by the catalogue entry's [[checks]]): the check gets the class bound to
+# `base`, not its module.
+variant = ["shapes.Circle", "shapes.Rectangle", "shapes.Square"]
+# A module stands for its top-level public functions: total_area and
+# describe_all (forbid_runtime_calls of builtins.isinstance and builtins.type).
+client = ["report"]
+
+[cases]
+# One shape of every kind in one list, so a branch on the type runs for each
+# of them; and an empty list. The shapes are built by the case (`$new`), not
+# by the client.
+"report.total_area" = [
+    { args = [[
+        { "$new" = "shapes.Circle", args = [1.0] },
+        { "$new" = "shapes.Rectangle", args = [2.0, 3.0] },
+        { "$new" = "shapes.Square", args = [2.0] },
+    ]] },
+    { args = [[]] },
+]
+"report.describe_all" = [
+    { args = [[
+        { "$new" = "shapes.Circle", args = [1.0] },
+        { "$new" = "shapes.Rectangle", args = [2.0, 3.0] },
+        { "$new" = "shapes.Square", args = [2.0] },
+    ]] },
+    { args = [[]] },
+]

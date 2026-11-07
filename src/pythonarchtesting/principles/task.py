@@ -22,14 +22,24 @@ Each ``[[checks]]`` of the catalogue entry becomes, for every entity bound to
 its role, the declaration a marker ``marker(*modules, transitive=...,
 cases=<the entity's cases>, init=<its init>)`` in that entity's body would
 give. ``modules`` are the check's own plus, with ``target_role``, the modules
-of the entities bound to that role. The declarations are produced by the same
+of the entities bound to that role, or with ``target_kind = "class"`` the
+qualified name of the one class bound to it (``subclass_of("shapes.Shape")``).
+For ``forbid_runtime_instantiation`` (``catalog.INSTANCE_TARGET_MARKERS``)
+``target_role`` gives the qualified names of the classes bound to that role
+(``discounts.NoDiscount``), not their modules; a role that binds no class
+(strategies written as functions) leaves the check without a target: it
+makes no declaration and its ``TaskCheck`` says why (``not_applicable``).
+A static marker's check (``catalog.STATIC_MARKERS``) runs nothing: its
+declaration has no cases, and the entities it covers need none for it; a role
+with only static checks needs no cases at all. The declarations are produced by the same
 parser that reads markers from source (``extract_annotation_declarations``)
 and are compiled by the same compilers; the reference files are not touched.
 
 Problems are collected and raised together as one ``TaskError``:
 
 - a role a check needs (its ``role`` or ``target_role``) that ``[roles]``
-  leaves unbound, a role the principle does not have, an empty role;
+  leaves unbound, a role the principle does not have, an empty role; a
+  ``target_role`` of ``target_kind = "class"`` that binds no class or several;
 - an entity the reference does not have (with the closest names it has), a
   module without public functions;
 - an entity of a check without ``cases``, cases or init for an entity no
@@ -59,6 +69,9 @@ from pythonarchtesting.entities_extraction.annotations import (
 from pythonarchtesting.exceptions import ConfigurationError, ErrorContext
 from pythonarchtesting.matching.models import NAME_REQUIRED
 from pythonarchtesting.principles.catalog import (
+    CLASS_MARKERS,
+    INSTANCE_TARGET_MARKERS,
+    STATIC_MARKERS,
     CheckTemplate,
     Principle,
     UnknownPrincipleError,
@@ -110,6 +123,9 @@ class TaskCheck:
     entity_id: str
     marker: str
     params: Mapping[str, Any]
+    # Why the check has nothing to check in this task (no declaration was
+    # made), or ``None``.
+    not_applicable: Optional[str] = None
 
 
 def is_task(path: Path) -> bool:
@@ -253,14 +269,16 @@ def _declaration(
     check: CheckTemplate,
     modules: Sequence[str],
     entity: Entity,
-    cases: list[Any],
+    cases: Optional[list[Any]],
     init: Optional[dict[str, Any]],
 ) -> Any:
-    """The declaration a marker of ``check`` in ``entity``'s body would give."""
+    """The declaration a marker of ``check`` in ``entity``'s body would give;
+    a static marker's (``cases`` ``None``) takes no cases."""
     params: dict[str, Any] = {}
     if check.transitive is not None:
         params["transitive"] = check.transitive
-    params["cases"] = cases
+    if cases is not None:
+        params["cases"] = cases
     if init is not None:
         params["init"] = init
     text = _marker_text(check.marker, modules, params)
@@ -319,6 +337,84 @@ def _cases_problem(
     )
 
 
+def _targets(
+    check: CheckTemplate, bound: Mapping[str, list[Entity]]
+) -> tuple[list[str], Optional[str]]:
+    """The marker's targets for ``check``: its own ``modules`` and, with a
+    ``target_role``, the modules of the entities bound to that role, or with
+    ``target_kind`` ``"class"`` the one class bound to it. The problem, if
+    that role binds no class or several."""
+    modules = list(check.modules)
+    if check.target_role is None:
+        return modules, None
+    targets = bound.get(check.target_role, [])
+    if check.target_kind != "class" and check.marker in INSTANCE_TARGET_MARKERS:
+        for entity in targets:
+            if entity.kind == "class" and _entity_name(entity) not in modules:
+                modules.append(_entity_name(entity))
+        return modules, None
+    if check.target_kind != "class":
+        for entity in targets:
+            if entity.module_path not in modules:
+                modules.append(str(entity.module_path))
+        return modules, None
+    if not targets:
+        return modules, None  # the role's own problem is reported already
+    classes = [_entity_name(e) for e in targets if e.kind == "class"]
+    if len(classes) == 1:
+        return modules + classes, None
+    binds = (
+        f"binds {len(classes)} classes ({', '.join(classes)})"
+        if classes
+        else "binds no class"
+    )
+    return modules, (
+        f"[roles] role {check.target_role!r} {binds}: {check.marker} (role "
+        f"{check.role!r}, target_kind 'class') needs exactly one class"
+    )
+
+
+def _class_roles(task: Task) -> dict[str, str]:
+    """Role -> why it binds classes only: a class marker covers it, or it is
+    the ``target_role`` of a ``target_kind = "class"`` check."""
+    found: dict[str, str] = {}
+    for check in task.principle.checks:
+        if check.marker in CLASS_MARKERS:
+            found.setdefault(check.role, f"{check.marker} checks classes")
+        if check.target_kind == "class" and check.target_role is not None:
+            found.setdefault(
+                check.target_role,
+                f"{check.marker} (role {check.role!r}, target_kind 'class') "
+                "takes its class",
+            )
+    return found
+
+
+def _not_classes(
+    task: Task, bound: dict[str, list[Entity]], problems: list[str]
+) -> None:
+    """Report, and unbind, what a class-only role binds that is no class, and
+    a class a ``target_kind = "class"`` check would compare with itself."""
+    for role, why in _class_roles(task).items():
+        for entity in [e for e in bound.get(role, []) if e.kind != "class"]:
+            problems.append(
+                f"[roles] {role!r}: {_entity_name(entity)!r} is a {entity.kind}, "
+                f"not a class; {why}: bind classes (module.Class)"
+            )
+            bound[role].remove(entity)
+    for check in task.principle.checks:
+        if check.target_kind != "class" or check.target_role is None:
+            continue
+        targets = bound.get(check.target_role, [])
+        for entity in bound.get(check.role, []):
+            if len(targets) == 1 and entity is targets[0]:
+                problems.append(
+                    f"[roles] {check.role!r}: {_entity_name(entity)!r} is the "
+                    f"class role {check.target_role!r} binds; {check.marker} "
+                    "needs the classes derived from it, not the class itself"
+                )
+
+
 def bind_task(
     task: Task, entities: Sequence[Entity]
 ) -> tuple[list[Entity], list[TaskCheck]]:
@@ -337,24 +433,62 @@ def bind_task(
             "evaluate the reference without task.toml"
         )
     bound: dict[str, list[Entity]] = {}
+    class_roles = _class_roles(task)
     for role, names in task.roles.items():
         bound[role] = []
         for name in names:
             found, problem = _resolve(name, entities)
             if problem is not None:
+                if role in class_roles:
+                    problem += f"; {class_roles[role]}: bind classes (module.Class)"
                 problems.append(f"[roles] {role!r}: {problem}")
             bound[role].extend(e for e in found if e not in bound[role])
+    _not_classes(task, bound, problems)
     covered: set[str] = set()
     declarations: dict[str, list[Any]] = {}
     checks: list[TaskCheck] = []
     for check in task.principle.checks:
-        modules = list(check.modules)
-        if check.target_role is not None:
-            for entity in bound.get(check.target_role, []):
-                if entity.module_path not in modules:
-                    modules.append(str(entity.module_path))
+        modules, problem = _targets(check, bound)
+        if problem is not None:
+            problems.append(problem)
+            continue
+        untargeted = (
+            f"role {check.target_role!r} binds no class, so {check.marker} "
+            f"(role {check.role!r}) has no object it could forbid building"
+            if not modules and check.marker in INSTANCE_TARGET_MARKERS
+            else None
+        )
         for entity in bound.get(check.role, []):
             name = _entity_name(entity)
+            if untargeted is not None:
+                # Nothing to check: no declaration, but its cases are covered.
+                covered.add(name)
+                checks.append(
+                    TaskCheck(
+                        role=check.role,
+                        entity=name,
+                        entity_id=entity.canonical_id,
+                        marker=check.marker,
+                        params={"modules": [], "cases": None, "init": None},
+                        not_applicable=untargeted,
+                    )
+                )
+                continue
+            if check.marker in STATIC_MARKERS:
+                # Runs nothing: no cases, and it does not cover the entity's.
+                declarations.setdefault(entity.canonical_id, []).append(
+                    _declaration(check, modules, entity, None, None)
+                )
+                checks.append(
+                    TaskCheck(
+                        role=check.role,
+                        entity=name,
+                        entity_id=entity.canonical_id,
+                        marker=check.marker,
+                        params={"modules": modules, "cases": None, "init": None},
+                    )
+                )
+                continue
             covered.add(name)
             cases = task.cases.get(name)
             if cases is None:

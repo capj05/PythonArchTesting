@@ -8,12 +8,18 @@
 #   (see docs/tasks.md and `example/principles/<id>/task.toml`);
 # - `[[checks]]`: the marker that covers a role, and what its cases must exercise.
 #   Its targets are `modules` (fixed dotted names such as `builtins.print`) and,
-#   with `target_role`, the modules of the entities playing that role;
+#   with `target_role`, the modules of the entities playing that role; with
+#   `target_kind = "class"` (default "module") instead the one class playing
+#   it. A static marker (forbid_private_access, subclass_of,
+#   is_abstract_class) runs no code and takes no `cases`;
 # - `[[errors]]`: typical errors. Each has either `detected_by` (the marker that
 #   fails on it) with `what` and `signature`, or `gap` (a known miss, see `[[gaps]]`).
 #   `signature` is what tells the error from the others of its marker: the first
 #   fact of the failed result reduced to `kind` (call for forbid_runtime_calls,
-#   missing_call for require_runtime_calls, write for forbid_foreign_writes),
+#   missing_call for require_runtime_calls, write for forbid_foreign_writes,
+#   read for forbid_private_access, not_subclass for subclass_of, not_abstract
+#   for is_abstract_class, missing_delegation for require_runtime_delegation,
+#   instance for forbid_runtime_instantiation),
 #   `callee` ("module:name") of a call, `change` (assigned, mutated, deleted,
 #   bypassed) of a write, `via` (the call took a detour through other code) and
 #   `private` (the attribute written starts with `_`). A signature matches a
@@ -27,7 +33,8 @@
 #
 # Placeholders in `what`: {function}, {file}, {line} (the target's function);
 # from the first fact the tool reports (`details.facts`): {caller}, {callee},
-# {module}, {class}, {attribute}, {change}, {fact_file}, {fact_line}; derived:
+# {module}, {class}, {attribute}, {change}, {fact_file}, {fact_line},
+# {expected_base}, {concrete_methods}, {creator}, {expected}; derived:
 # {callee_short} (`print()`, `input()`, `open()`, else `module.name()`),
 # {via_last} (the helper a detour ends in) and {via_first_line} (the line of the
 # target's function the detour starts at).
@@ -104,9 +111,9 @@ output while it runs is still tied to the screen.
 """
 fix = "Return the information (for example the text of a warning) as part of the result and print it in `main`."
 signature = { kind = "call", callee = "builtins:print", via = true }
-# No operator: add_io_call prints in a logic function, and a logic function
-# that calls another one is reported as calling print directly (`via` is
-# empty); a detour needs a helper outside the checked functions.
+# The mutants add a helper module that prints, outside the checked functions,
+# and a logic function calls it first thing: a detour (`via` is not empty).
+operator = "add_io_via_helper"
 
 [[errors]]
 id = "file_io_in_logic"
@@ -133,8 +140,9 @@ The computation again cannot be used elsewhere or tried out without a keyboard.
 """
 fix = "In `main` only read the input, call the logic functions and print their result."
 signature = { kind = "missing_call", via = false }
-# No operator: drop_call cuts only calls to a collaborator an object holds
-# (`self.x.m()`), not a function's direct calls to another module.
+# The mutants stop the io function's calls into a module of the logic role:
+# each call's function becomes a lambda that does nothing.
+operator = "stub_role_call"
 
 [[neutral]]
 id = "model_solution"

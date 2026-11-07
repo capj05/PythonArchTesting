@@ -26,6 +26,10 @@ All markers are imported from `pythonarchtesting.rules`.
 - [module_interface](module_interface.md) — a module used by the others only through its listed or public names, on imports and (with `--dynamic`) on calls
 - [architecture_entry](architecture_entry.md) — the reference's module dependencies as the model, on imports and (with `--dynamic`) on calls, objects created and libraries used
 
+## Encapsulation
+
+- [forbid_private_access](forbid_private_access.md) — private attributes of another object read from outside its class (static)
+
 ## Type Identity And Inheritance
 
 - [implements_protocol](implements_protocol.md) — structural protocol conformance

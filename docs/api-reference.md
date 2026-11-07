@@ -103,6 +103,7 @@ documented in [pattern-recipes.md](pattern-recipes.md).
 | `require_runtime_calls(...)` | Runtime check: require calls into the named modules | Function- or method-body `__archtest__: Annotated[...]` |
 | `enforce_reference_calls(...)` | Runtime check: reproduce the reference's call graph | Function- or method-body `__archtest__: Annotated[...]` |
 | `forbid_foreign_writes(...)` | Runtime check: forbid attribute writes on foreign objects | Function- or method-body `__archtest__: Annotated[...]` |
+| `forbid_private_access(...)` | Forbid reading another object's private (`_x`) attributes from outside its class | Function- or method-body `__archtest__: Annotated[...]` |
 | `forbid_runtime_instantiation(...)` | Runtime check: forbid building injected collaborators internally | Function- or method-body `__archtest__: Annotated[...]` |
 | `require_runtime_delegation(...)` | Runtime check: require delegation to an injected spy | Function- or method-body `__archtest__: Annotated[...]` |
 | `forbid_runtime_imports(...)` | Runtime check: forbid modules imported when the module loads | Module-level `__archtest__: Annotated[...]` |
@@ -2061,6 +2062,29 @@ Non-goals in v1:
 - No changes inside objects an attribute holds other than builtin containers,
   or inside containers nested in them (`obj.rows[0].append(x)`)
 - No exceptions, enums, or classes outside the analysed project
+
+### `forbid_private_access(...)`
+
+See also: [markers/forbid_private_access.md](markers/forbid_private_access.md).
+
+Encapsulation checked statically. The matched target function or method may
+not read an attribute starting with an underscore (not a dunder) of an object
+other than its own `self`/`cls`, unless it is a method of the class that
+defines the attribute. Names bound to modules (`module._helper`) and writes
+(left to `forbid_foreign_writes`) are not reported. Runs without `--dynamic`.
+
+Rule id: `ENC001/forbid_private_access/v1`, rule type `private_access`,
+evidence type `static`.
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `allow` | `list[str] \| None` | `None` | Attribute names that may be read anyway |
+| `severity` | `str` | `"error"` | Violation severity |
+| `message` | `str \| None` | `None` | Custom message override |
+
+Result `details.facts` lists, aligned 1:1 with `details.violations`, `kind`
+(`read`), `attribute`, `class` (from the parameter's annotation, else
+`null`), `file`, `line` and `reader` per private read.
 
 ### `forbid_runtime_imports(...)`
 

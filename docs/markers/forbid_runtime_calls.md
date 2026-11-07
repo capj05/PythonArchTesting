@@ -132,6 +132,37 @@ matched entities, as for `modules`.
   run after it returned.
 - Calls of builtins (`len`, `list.append`) — they belong to no layer. The I/O
   builtins `open`, `print`, and `input` are the exception (see above).
+  `isinstance()` and `type()` are recorded only when the rule names them
+  (`builtins.isinstance`, `builtins.type`; plain `builtins` does not), so
+  that code branching on the type of an object can be forbidden without
+  every other rule's report growing with them. `type()` is seen from
+  Python 3.12 on (through `sys.monitoring`, tool id 3 or 4 first, the
+  debugger's 0 last); before that, or with no tool id free, it is not
+  recorded, and the result says so: `details.unobserved_calls` names the
+  call and why, a pass carries `calls_not_observable` in
+  `details.unverified` and its message ends in `not observable: ...`.
+  Each call site is recorded once per case.
+- A call of `isinstance()` or `type()` that plainly tests no type of an
+  object. The rule reads the line of each such call in the target's code and
+  drops only two kinds: `isinstance(x, C)` when every class it names is a
+  builtin or standard library type (`int`, `float`, `str`, `bool`, `list`,
+  `dict`, `set`, `tuple`, `bytes`, `complex`, `type(None)`, a builtin
+  exception, `numbers.Number` and the other `numbers` classes,
+  `collections.abc` classes such as `Mapping`, `decimal.Decimal`, ...; also
+  imported under another name), and `type(x)` that is only displayed: a
+  value of an f-string, an argument of `print`, `str`, `repr` or `format`,
+  or its `__name__` / `__qualname__` in an f-string or a concatenation,
+  where what displays it is not compared, used as a subscript key, a
+  `match` subject or the key of `.get()`. So `if not isinstance(items,
+  list): raise ...`, `isinstance(a, (int, float))` and
+  `f"{type(x).__name__}"` are no violations. Every other call counts: a
+  project class, also imported under another name (`isinstance(x, C)` after
+  `from .shapes import Circle as C`), a tuple of classes kept in a constant
+  (`isinstance(x, SHAPES)`), a class held by an attribute
+  (`isinstance(x, self.kind)`) or computed at run time, `type(x)` kept in a
+  variable (`t = type(x)`), compared, or used as a key
+  (`handlers.get(type(x))`), and a file or line the rule cannot parse.
+  Several calls on one line count when any of them does.
 - Calls the cases do not reach; see [Cases](../dynamic-checks.md#cases).
 - What the call computes. Results are never compared.
 

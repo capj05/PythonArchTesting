@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+import ast
+from pathlib import Path
+from typing import Any, Optional
 
 from pythonarchtesting.architecture.compare import fold_new_modules
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult, RuleStatus
@@ -9,6 +11,7 @@ from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 
 from .messages import _build_rule_result
+from .type_tests import TypeTests
 
 _SUPPORTED_TARGET_KINDS = frozenset({"function", "method"})
 
@@ -147,6 +150,16 @@ def _raised_note(cases: list[dict[str, Any]]) -> str:
     )
 
 
+def _unobserved_note(details: dict[str, Any]) -> str:
+    """Which calls the rule names could not be seen, and why."""
+    unobserved = details.get("unobserved_calls") or {}
+    if not unobserved:
+        return ""
+    return "; not observable: " + ", ".join(
+        f"{name}() ({why})" for name, why in unobserved.items()
+    )
+
+
 def _missed_in_case(case: dict[str, Any]) -> str:
     """Why a call may be absent: the code that would make it did not run."""
     missed = (case.get("lines") or {}).get("missed") or []
@@ -203,6 +216,8 @@ class _ObservingEvaluator:
     # rule's entity belongs to; set by ``evaluate``.
     _names = NameTranslation([])
     _source_module: str | None = None
+    _target_name: str = ""
+    _target_file: str | None = None
 
     def _own(self, module: Any, code: Any) -> bool:
         """Whether ``code`` of the target's ``module`` plays the rule module's part.
@@ -272,7 +287,10 @@ class _ObservingEvaluator:
         from pythonarchtesting.dynamic.runner import run_cases
 
         self._names = NameTranslation.from_context(ctx)
+        self._target_root = ctx.target_root
         self._source_module = source.module_path
+        self._target_name = f"{target.module_path}:{target.qualname}"
+        self._target_file = str(target.filepath_rel)
         batched = ctx.dynamic_cache.get(cache_key(rule, target))
         details["batched"] = batched is not None
         outcome = batched or run_cases(
@@ -332,6 +350,7 @@ class _ObservingEvaluator:
                 self._passed_summary(rule, len(cases))
                 + _raised_note(outcome.cases)
                 + _coverage_note(coverage)
+                + _unobserved_note(details)
             )
             return _build_rule_result(rule, source, target, match, "OK", details, ())
         details["violations"] = violations
@@ -354,6 +373,9 @@ class RuntimeCallsEvaluator(_ObservingEvaluator):
         violations: list[str] = []
         # One fact per violation, in the same order (B1 F3).
         facts: list[dict[str, Any]] = []
+        # A call of isinstance or type counts only where it tests a type.
+        root = getattr(self, "_target_root", None)
+        type_tests = TypeTests(Path(root) if root is not None else None)
         for case in cases:
             index = case.get("index")
             calls = [
@@ -383,10 +405,21 @@ class RuntimeCallsEvaluator(_ObservingEvaluator):
             for call in calls:
                 if self._hits(call, allow) or self._passes_through(call, through):
                     continue
-                if self._hits(call, modules):
+                if self._hits(call, modules) and type_tests.is_type_test(
+                    f"{call.get('module')}:{call.get('callee')}",
+                    call.get("file"),
+                    call.get("line"),
+                ):
                     violations.append(f"case {index}: {_describe_call(call)}")
                     facts.append(_call_fact(index, call))
         details["facts"] = facts
+        unobserved: dict[str, str] = {}
+        for case in cases:
+            unobserved.update(case.get("unobserved") or {})
+        if unobserved:
+            # The cases ran, but some calls the rule names could not be seen
+            # on this interpreter: the verdict holds without them.
+            details["unobserved_calls"] = dict(sorted(unobserved.items()))
         return violations
 
     def _layer(self, call: dict[str, Any]) -> str:
@@ -448,11 +481,38 @@ def _describe_instance(instance: dict[str, Any]) -> str:
     )
 
 
+def _instance_fact(index: Any, instance: dict[str, Any]) -> dict[str, Any]:
+    """The structured form of an instance ``_describe_instance`` puts in words.
+
+    ``creator`` is the target's code the object is charged to; for one built
+    by other code on its behalf ``via`` lists that code (outermost first), and
+    ``file`` and ``line`` say where the object itself was built.
+    """
+    origin = instance.get("origin")
+    creator = (
+        f"{origin.get('from')}:{origin.get('caller')}"
+        if origin
+        else instance.get("creator")
+    )
+    via = (instance.get("via") or []) if origin else []
+    return {
+        "kind": "instance",
+        "case": index,
+        "creator": creator,
+        "class": f"{instance.get('module')}:{instance.get('class')}",
+        "file": instance.get("file"),
+        "line": instance.get("line"),
+        "via": [f"{step.get('module')}:{step.get('caller')}" for step in via],
+    }
+
+
 class RuntimeInstancesEvaluator(_ObservingEvaluator):
     """Evaluator for ``forbid_runtime_instantiation``.
 
     The probe reports every project class instantiated by project code; only
-    objects created by code of the target's own module count here.
+    objects created by code of the target's own module count here. A name in
+    ``modules`` is a module (each of its classes counts) or a class
+    (``module.Class``, by its name in the reference).
     """
 
     def _violations(
@@ -463,11 +523,15 @@ class RuntimeInstancesEvaluator(_ObservingEvaluator):
         through = [str(name) for name in rule.params.get("through") or []]
         own = str(details.get("target_module"))
         violations: list[str] = []
+        # One fact per violation, in the same order.
+        facts: list[dict[str, Any]] = []
         for case in cases:
             for instance in case.get("instances") or []:
-                name = self._names.source_module(
-                    str(instance.get("module")), str(instance.get("class"))
-                )
+                module, cls = str(instance.get("module")), str(instance.get("class"))
+                name = self._names.source_module(module, cls)
+                # The class by its reference name: a target may name a class.
+                source = self._names.source_name(module, cls)
+                full = ".".join(source) if source else f"{name}.{cls}"
                 origin = instance.get("origin")
                 if origin:
                     # Built by other code on the target's behalf (transitive).
@@ -484,10 +548,12 @@ class RuntimeInstancesEvaluator(_ObservingEvaluator):
                         continue
                 if any(_in_module(name, prefix) for prefix in allow):
                     continue
-                if any(_in_module(name, prefix) for prefix in modules):
+                if any(_in_module(full, prefix) for prefix in modules):
                     violations.append(
                         f"case {case.get('index')}: {_describe_instance(instance)}"
                     )
+                    facts.append(_instance_fact(case.get("index"), instance))
+        details["facts"] = facts
         return violations
 
     def _passed_summary(self, rule: Rule, case_count: int) -> str:
@@ -865,7 +931,76 @@ def _observer_violations(rule: Rule, case: dict[str, Any]) -> list[str]:
     return violations
 
 
-def _delegation_violations(rule: Rule, case: dict[str, Any]) -> list[str]:
+def spy_holder(tree: ast.Module, owner: str, init: Any, spy: str) -> Optional[str]:
+    """What the constructor of class ``owner`` (its qualname) keeps the spy
+    named ``spy`` in, given ``init`` (``{"args": [...], "kwargs": {...}}``):
+    ``self.x`` for ``self.x = p`` (or ``self.x: T = p``), else the parameter
+    ``p`` itself; ``None`` when the class, its ``__init__`` or the spy is not
+    found."""
+    if not isinstance(init, dict):
+        return None
+    body: list[ast.stmt] = tree.body
+    cls: Optional[ast.ClassDef] = None
+    for part in owner.split("."):
+        cls = next(
+            (n for n in body if isinstance(n, ast.ClassDef) and n.name == part), None
+        )
+        if cls is None:
+            return None
+        body = cls.body
+    constructor = next(
+        (
+            n
+            for n in body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name == "__init__"
+        ),
+        None,
+    )
+    if constructor is None:
+        return None
+    positional = [a.arg for a in constructor.args.posonlyargs + constructor.args.args]
+    if not positional:
+        return None
+    self_name, names = positional[0], positional[1:]
+
+    def is_spy(value: Any) -> bool:
+        return isinstance(value, dict) and value.get("$spy") == spy
+
+    given = list(zip(names, init.get("args") or []))
+    given += list((init.get("kwargs") or {}).items())
+    param = next((name for name, value in given if is_spy(value)), None)
+    if param is None:
+        return None
+    for node in ast.walk(constructor):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target: ast.expr = node.targets[0]
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            target = node.target
+        else:
+            continue
+        if (
+            isinstance(target, ast.Attribute)
+            and isinstance(target.value, ast.Name)
+            and target.value.id == self_name
+            and isinstance(node.value, ast.Name)
+            and node.value.id == param
+        ):
+            return f"{self_name}.{target.attr}"
+    return str(param)
+
+
+def _delegation_violations(
+    rule: Rule,
+    case: dict[str, Any],
+    caller: str,
+    facts: list[dict[str, Any]],
+    holder: Optional[str] = None,
+) -> list[str]:
+    """The case's violation, if it never delegated; its fact (``caller`` is
+    the target as ``module:qualname``) is appended to ``facts``. Its
+    ``expected`` names where the target keeps the spy (``holder``, such as
+    ``self.discount``), else the spy."""
     spy = str(rule.params.get("spy"))
     member = rule.params.get("member")
     calls = [
@@ -878,6 +1013,15 @@ def _delegation_violations(rule: Rule, case: dict[str, Any]) -> list[str]:
     target = f"{spy}.{member}()" if member else spy
     raised = case.get("raised")
     suffix = f"; the call raised {raised}" if raised else ""
+    facts.append(
+        {
+            "kind": "missing_delegation",
+            "case": case.get("index"),
+            "caller": caller,
+            "expected": f"{holder or spy}.{member}" if member else holder or spy,
+            "raised": raised or None,
+        }
+    )
     return [
         f"case {case.get('index')}: never delegated to "
         f"{target}{suffix}{_missed_in_case(case)}"
@@ -893,17 +1037,42 @@ class RuntimePatternEvaluator(_ObservingEvaluator):
     def _violations(
         self, rule: Rule, cases: list[dict[str, Any]], details: dict[str, Any]
     ) -> list[str]:
-        _ = details
         pattern = rule.params.get("pattern")
         violations: list[str] = []
+        facts: list[dict[str, Any]] = []
+        holder = (
+            self._spy_holder(rule) if pattern not in ("singleton", "observer") else None
+        )
         for case in cases:
             if pattern == "singleton":
                 violations.extend(_singleton_violations(case))
             elif pattern == "observer":
                 violations.extend(_observer_violations(rule, case))
             else:
-                violations.extend(_delegation_violations(rule, case))
+                violations.extend(
+                    _delegation_violations(rule, case, self._target_name, facts, holder)
+                )
+        if pattern not in ("singleton", "observer"):
+            # Only delegation reports facts (one per violation).
+            details["facts"] = facts
         return violations
+
+    def _spy_holder(self, rule: Rule) -> Optional[str]:
+        """Where the target's constructor keeps the spy (``spy_holder``), read
+        from the target's code; ``None`` when it cannot be told."""
+        root = getattr(self, "_target_root", None)
+        qualname = self._target_name.partition(":")[2]
+        owner = qualname.rpartition(".")[0]
+        file = self._target_file
+        if root is None or not owner or not file:
+            return None
+        try:
+            tree = ast.parse((Path(root) / str(file)).read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+            return None
+        return spy_holder(
+            tree, owner, rule.params.get("init"), str(rule.params.get("spy"))
+        )
 
     def _passed_summary(self, rule: Rule, case_count: int) -> str:
         pattern = rule.params.get("pattern")

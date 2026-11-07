@@ -82,6 +82,12 @@ repository:OrderRepository at service.py:18`. Worked example:
   `super().__init__()` chain.
 - Objects the case itself builds with `$new` are the caller's, not the
   target's, and do not count.
+- Each violation has a fact in `details.facts`, aligned 1:1 with
+  `details.violations`: `kind` (`instance`), `case`, `creator` (the target's
+  code the object is charged to, `module:qualname`), `class`
+  (`module:Class`), `file` and `line` (where the object was built), and
+  `via` (with `transitive=True` the code it was built through, outermost
+  first; else empty).
 
 ### Factories (`transitive=True`)
 

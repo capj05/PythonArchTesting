@@ -53,7 +53,7 @@ from explain import explanation, first_failure, load_entry, run_catalogue  # noq
 
 # Per principle, a function of ``ok_basic`` whose renaming leaves the tool no
 # counterpart of a reference function (and nothing else failing).
-_RENAMED = {"io_separation": "average", "encapsulation": "report"}
+_RENAMED = {"io_separation": "average", "encapsulation": "report", "polymorphism": "total_area", "strategy": "total"}
 _NOT_RUN = "not run"
 _UNMATCHED = "renamed"
 

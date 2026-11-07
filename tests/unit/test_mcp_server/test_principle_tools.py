@@ -11,7 +11,12 @@ from pythonarchtesting.mcp_server.principles import describe_principle, list_pri
 
 def test_list_principles_gives_one_line_each():
     items = list_principles()
-    assert [item["id"] for item in items] == ["encapsulation", "io_separation"]
+    assert [item["id"] for item in items] == [
+        "encapsulation",
+        "io_separation",
+        "polymorphism",
+        "strategy",
+    ]
     for item in items:
         assert set(item) == {"id", "name", "level", "summary"}
         assert "\n" not in item["summary"]

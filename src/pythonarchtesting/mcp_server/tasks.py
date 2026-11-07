@@ -12,14 +12,27 @@ to grade a class:
 3. every typical error of the principle that names a mutation ``operator`` is
    caught: the operator seeds that kind of error into copies of the
    reference, in the entities of the check that detects it, and the check
-   must fail on every copy and pass on the unchanged reference (``errors``).
+   must fail on every copy and pass on the unchanged reference (``errors``;
+   each check the reference fails is listed under ``problems`` with its
+   message, since a static check runs no cases that could say why).
    ``killed`` counts the mutants whose failure is classified as that error
    (its signature matched); a mutant the check catches as another error is
    ``killed_other``. An error is ``killed`` (accepted) only with at least one
    signature-matched kill; when every kill is another error's, its status is
    ``killed_other``.
-   An error without an operator is ``not_verifiable_by_mutation``, a known gap
-   is ``gap``; neither keeps the task from being accepted.
+   A mutant never counts as killed by a check the unchanged reference
+   already fails: the error is ``reference_fails``.
+   An error without an operator, or whose operator cannot seed the call its
+   signature names, is ``not_verifiable_by_mutation``; an error whose
+   operator finds nothing to change anywhere in the reference (no public
+   container to fill, no call into another module) is ``not_applicable``,
+   with ``why``, and so is an error whose check has nothing to check in the
+   task (``forbid_runtime_instantiation`` when its ``target_role`` binds no
+   class; the check is listed as ``not_applicable`` too); a known gap is
+   ``gap``. None of these keeps the task from
+   being accepted. An operator that finds something to change, but nothing in
+   the entities of the check, gives ``no_mutants``, which does: the task
+   binds the role to other code than the one the error lives in.
 
 Nothing is written into the task: the mutants live in a temporary directory.
 """
@@ -46,8 +59,53 @@ from pythonarchtesting.mcp_server.evaluation import (
     resolve_config,
 )
 
-# The call ``add_io_call`` inserts for the callee an error's signature names.
-_IO_MEMBERS = {"builtins:print": "print", "builtins:input": "input", "io:open": "open"}
+# The call each call-seeding operator inserts, for the callee an error's
+# signature names: ``add_io_call`` any of the three I/O calls,
+# ``add_io_via_helper`` only print, ``add_builtin_call`` also a type test.
+_IO_MEMBERS = {
+    "add_io_call": {
+        "builtins:print": "print",
+        "builtins:input": "input",
+        "io:open": "open",
+    },
+    "add_io_via_helper": {"builtins:print": "print"},
+    "add_builtin_call": {
+        "builtins:print": "print",
+        "builtins:input": "input",
+        "io:open": "open",
+        "builtins:isinstance": "isinstance",
+        "builtins:type": "type",
+    },
+}
+# What in the reference each operator needs, for a ``not_applicable`` error.
+_SITES = {
+    "foreign_write": "data attribute of an object a function gets from outside",
+    "mutate_private_container": (
+        "private container (a dict, list or set an owner's constructor creates) "
+        "of an object a function gets as a parameter"
+    ),
+    "mutate_public_container": (
+        "public container (a dict, list or set an owner's constructor creates) "
+        "of an object a function gets as a parameter"
+    ),
+    "read_private_attribute": (
+        "private data attribute of an object of a project class a function "
+        "gets as a parameter"
+    ),
+    "stub_role_call": "call of a function of another project module",
+    "add_io_call": "function whose body starts on a line of its own",
+    "add_io_via_helper": "function whose body starts on a line of its own",
+    "add_builtin_call": "function whose body starts on a line of its own",
+    "drop_base": "class that names a base other than object",
+    "hardcode_collaborator": (
+        "constructor that keeps a collaborator it is given (self.x = x) together "
+        "with a class of the check's modules that can be built without arguments"
+    ),
+    "concretize_base": (
+        "abstract class (ABC, Protocol or ABCMeta among its bases, or an "
+        "@abstractmethod method)"
+    ),
+}
 _SURVIVORS_SHOWN = 3
 
 
@@ -114,6 +172,20 @@ def _check_cases(
     judged: dict[str, dict[str, Any]] = {}
     report = []
     for check in checks:
+        if check.not_applicable is not None:
+            report.append(
+                {
+                    "role": check.role,
+                    "entity": check.entity,
+                    "marker": check.marker,
+                    "status": "not_applicable",
+                    "why": check.not_applicable,
+                    "accepted": True,
+                }
+            )
+            continue
+        if check.params["cases"] is None:
+            continue  # a static check runs no cases (catalog.STATIC_MARKERS)
         if check.entity not in judged:
             judged[check.entity] = judge_cases(
                 task.reference,
@@ -146,28 +218,165 @@ def _aimed(error: Any, checks: list[Any], entities: dict[str, Any]) -> set[Any]:
     return {
         (str(entities[c.entity_id].filepath_rel), str(entities[c.entity_id].qualname))
         for c in checks
-        if c.marker == error.detected_by
+        if c.marker == error.detected_by and c.not_applicable is None
     }
 
 
-def _mutants_for(
-    error: Any, mutants: list[Any], aimed: set[Any]
+def _targets(error: Any, checks: list[Any]) -> set[str]:
+    """The modules the check detecting ``error`` names (with ``target_role``,
+    those of the entities bound to that role, or their classes)."""
+    return {
+        str(module)
+        for c in checks
+        if c.marker == error.detected_by
+        for module in c.params["modules"]
+    }
+
+
+def _not_applicable(error: Any, checks: list[Any]) -> Optional[str]:
+    """Why the check detecting ``error`` has nothing to check in the task,
+    when it has not on any entity (``TaskCheck.not_applicable``)."""
+    mine = [c for c in checks if c.marker == error.detected_by]
+    if mine and all(c.not_applicable is not None for c in mine):
+        return str(mine[0].not_applicable)
+    return None
+
+
+def spied(
+    checks: list[Any], entities: dict[str, Any]
+) -> dict[tuple[str, str], set[str]]:
+    """The constructor parameters the task gives a spy: ``(file, class) ->
+    parameter names`` for each ``{"$spy": ...}`` in the ``init`` of a
+    method's checks, positional (after ``self``) or by keyword."""
+    import ast
+
+    found: dict[tuple[str, str], set[str]] = {}
+    for check in checks:
+        entity = entities.get(check.entity_id)
+        init = check.params.get("init")
+        if entity is None or entity.kind != "method" or not isinstance(init, dict):
+            continue
+        owner = str(entity.qualname).rpartition(".")[0]
+        file = str(entity.filepath_rel)
+        names: list[str] = []
+        for other in entities.values():
+            node = other.extras.get("ast_node")
+            if (
+                str(other.filepath_rel) == file
+                and str(other.qualname) == f"{owner}.__init__"
+                and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ):
+                names = [a.arg for a in node.args.posonlyargs + node.args.args][1:]
+                names += [a.arg for a in node.args.kwonlyargs]
+        given = list(zip(names, init.get("args") or []))
+        given += list((init.get("kwargs") or {}).items())
+        params = found.setdefault((file, owner), set())
+        params.update(
+            name for name, value in given if isinstance(value, dict) and "$spy" in value
+        )
+    return found
+
+
+def _callees(error: Any, checks: list[Any]) -> list[str]:
+    """The callees (``builtins:isinstance``) the check detecting ``error``
+    names (``builtins.isinstance``)."""
+    found: list[str] = []
+    for module in sorted(_targets(error, checks)):
+        head, _, last = module.rpartition(".")
+        if head and f"{head}:{last}" not in found:
+            found.append(f"{head}:{last}")
+    return found
+
+
+def _candidates(
+    error: Any, mutants: list[Any], callees: Optional[list[str]] = None
 ) -> Optional[list[Any]]:
-    """The mutants that seed ``error`` where its check looks; ``None`` when its
-    signature names a callee the operator cannot call."""
-    member = ""
+    """The mutants of ``error``'s operator anywhere in the reference (of a
+    call-seeding operator, those making the call its signature names, or
+    without one, a call of the ``callees`` its check names); ``None`` when
+    the operator cannot make that call."""
+    members: Optional[set[str]] = None
     callee = error.signature.callee if error.signature else None
-    if error.operator == "add_io_call" and callee is not None:
-        if callee not in _IO_MEMBERS:
-            return None
-        member = _IO_MEMBERS[callee]
+    if error.operator in _IO_MEMBERS:
+        wanted = [callee] if callee is not None else list(callees or [])
+        if wanted:
+            members = {
+                _IO_MEMBERS[error.operator][c]
+                for c in wanted
+                if c in _IO_MEMBERS[error.operator]
+            }
+            if not members:
+                return None
     return [
         m
         for m in mutants
-        if m.operator == error.operator
-        and (m.file, m.function) in aimed
-        and (not member or m.member == member)
+        if m.operator == error.operator and (members is None or m.member in members)
     ]
+
+
+# Operators that change a constructor: a check on a method sees the change,
+# because the method's cases build its object first. ``rebuild_injected``
+# also changes a constructor, but no catalogue error seeds with it, and its
+# mutants name no ``function`` to aim by.
+_CONSTRUCTOR_OPERATORS = frozenset({"hardcode_collaborator"})
+
+
+def _in_aimed(mutant: Any, aimed: set[Any]) -> bool:
+    if (mutant.file, mutant.function) in aimed:
+        return True
+    if mutant.operator not in _CONSTRUCTOR_OPERATORS:
+        return False
+    owner, _, method = str(mutant.function).rpartition(".")
+    return method == "__init__" and any(
+        file == mutant.file and str(qualname).startswith(f"{owner}.")
+        for file, qualname in aimed
+    )
+
+
+def _mutants_for(
+    error: Any, candidates: list[Any], aimed: set[Any], targets: set[str]
+) -> list[Any]:
+    """The ``candidates`` that seed ``error`` where its check looks. A mutant
+    of ``stub_role_call`` stops the calls into a module the check names; one
+    of a constructor operator changes the constructor of a method's class."""
+    members = targets if error.operator == "stub_role_call" else None
+    return [
+        m
+        for m in candidates
+        if _in_aimed(m, aimed) and (members is None or m.member in members)
+    ]
+
+
+def parameter_classes(
+    checks: list[Any], entities: dict[str, Any]
+) -> dict[tuple[str, str], dict[str, str]]:
+    """What the cases of the task's checks build for each function's
+    parameters: ``(file, qualname) -> {parameter: class name}`` for every
+    argument that is a project object (``{"$new": "inventory.Inventory"}``),
+    positional (after ``self`` for a method) or by keyword."""
+    import ast
+
+    found: dict[tuple[str, str], dict[str, str]] = {}
+    for check in checks:
+        entity = entities.get(check.entity_id)
+        if entity is None or check.params["cases"] is None:
+            continue
+        node = entity.extras.get("ast_node")
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        names = [a.arg for a in node.args.posonlyargs + node.args.args]
+        if entity.kind == "method":
+            names = names[1:]
+        classes = found.setdefault((str(entity.filepath_rel), str(entity.qualname)), {})
+        for case in check.params["cases"]:
+            if not isinstance(case, dict):
+                continue
+            given = list(zip(names, case.get("args") or []))
+            given += list((case.get("kwargs") or {}).items())
+            for name, value in given:
+                if isinstance(value, dict) and isinstance(value.get("$new"), str):
+                    classes.setdefault(name, value["$new"].rpartition(".")[2])
+    return found
 
 
 def _matched(principle: Any, error: Any, results: list[Any]) -> bool:
@@ -218,7 +427,11 @@ def _run_mutants(
 
 
 def _error_entry(
-    principle: Any, error: Any, chosen: Optional[list[Any]], results: dict
+    principle: Any,
+    error: Any,
+    chosen: Optional[list[Any]],
+    results: dict,
+    reference_fails: bool = False,
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "error": error.id,
@@ -230,6 +443,19 @@ def _error_entry(
         entry["why"] = (
             f"{error.operator} found nothing to change in the entities "
             f"{error.detected_by} is on"
+        )
+        return entry
+    if reference_fails:
+        # The unchanged reference fails the check already (see problems): a
+        # mutant it fails proves nothing about the error.
+        entry["status"] = "reference_fails"
+        entry["mutants"] = len(chosen)
+        entry["killed"] = 0
+        entry["killed_other"] = 0
+        entry["signature_matched"] = False
+        entry["why"] = (
+            f"the unchanged reference fails {error.detected_by} already (see "
+            "problems), so no mutant can show that it catches this error"
         )
         return entry
     outcomes = {m.id: _judge(results[m.id], str(error.detected_by))[0] for m in chosen}
@@ -272,9 +498,33 @@ def _verify_errors(
     principle = task.principle
     seeded = [e for e in principle.errors if e.operator and e.detected_by]
     operators = sorted({str(e.operator) for e in seeded})
-    every = generate_mutants(Path(task.reference), operators) if operators else []
-    chosen = {e.id: _mutants_for(e, every, _aimed(e, checks, entities)) for e in seeded}
-    unique = {m.id: m for found in chosen.values() for m in found or []}
+    # A collaborator is hardcoded as a class of the modules its check names.
+    instantiable = sorted(
+        {
+            module
+            for e in seeded
+            if e.operator == "hardcode_collaborator"
+            for module in _targets(e, checks)
+        }
+    )
+    every = (
+        generate_mutants(
+            Path(task.reference),
+            operators,
+            parameter_classes=parameter_classes(checks, entities),
+            instantiable=instantiable,
+            spied=spied(checks, entities),
+        )
+        if operators
+        else []
+    )
+    candidates = {e.id: _candidates(e, every, _callees(e, checks)) for e in seeded}
+    chosen = {
+        e.id: _mutants_for(e, found, _aimed(e, checks, entities), _targets(e, checks))
+        for e in seeded
+        if (found := candidates[e.id])
+    }
+    unique = {m.id: m for found in chosen.values() for m in found}
     truncated = len(unique) > max_mutants
     mutants = sorted(unique.values(), key=lambda m: m.id)[:max_mutants]
     kept = {m.id for m in mutants}
@@ -283,10 +533,22 @@ def _verify_errors(
         _run_mutants(task, loaded, mutants, markers, policy) if mutants else ([], {})
     )
     reference_passes = all(_judge(base, marker)[0] == "survived" for marker in markers)
+    failing = {marker for marker in markers if _judge(base, marker)[0] != "survived"}
     report = []
     for error in principle.errors:
+        untargeted = _not_applicable(error, checks) if error.detected_by else None
         if error.gap is not None:
             report.append({"error": error.id, "status": "gap", "gap": error.gap})
+        elif untargeted is not None:
+            report.append(
+                {
+                    "error": error.id,
+                    "detected_by": error.detected_by,
+                    "operator": error.operator,
+                    "status": "not_applicable",
+                    "why": f"{untargeted}; the error was not verified by a mutant",
+                }
+            )
         elif error.operator is None:
             report.append(
                 {
@@ -295,21 +557,62 @@ def _verify_errors(
                     "status": "not_verifiable_by_mutation",
                 }
             )
+        elif candidates[error.id] is None:
+            report.append(
+                {
+                    "error": error.id,
+                    "detected_by": error.detected_by,
+                    "operator": error.operator,
+                    "status": "not_verifiable_by_mutation",
+                    "why": (
+                        f"{error.operator} cannot seed a call of "
+                        f"{error.signature.callee}"
+                    ),
+                }
+            )
+        elif not candidates[error.id]:
+            site = _SITES.get(str(error.operator), "place to seed the error")
+            report.append(
+                {
+                    "error": error.id,
+                    "detected_by": error.detected_by,
+                    "operator": error.operator,
+                    "status": "not_applicable",
+                    "why": (
+                        f"the reference contains no {site}; the error was not "
+                        "verified by a mutant"
+                    ),
+                }
+            )
         else:
-            found = chosen[error.id]
             report.append(
                 _error_entry(
                     principle,
                     error,
-                    [m for m in found or [] if m.id in kept],
+                    [m for m in chosen[error.id] if m.id in kept],
                     results,
+                    reference_fails=str(error.detected_by) in failing,
                 )
             )
     return {
         "reference_passes": reference_passes,
         "truncated": truncated,
         "errors": report,
+        "reference_problems": _reference_problems(base, markers),
     }
+
+
+def _reference_problems(base: list[Any], markers: set[str]) -> list[str]:
+    """Why the unchanged reference fails a check: one line per failed rule
+    (a static check runs no cases, so nothing else says it)."""
+    from pythonarchtesting.principles import rule_marker
+
+    return [
+        f"{rule_marker(str(r.rule_id))} fails on the reference: "
+        + str((r.details or {}).get("summary") or r.message)
+        for r in base
+        if r.status == "FAILED" and rule_marker(str(r.rule_id)) in markers
+    ]
 
 
 def prepare_task(
@@ -354,9 +657,11 @@ def prepare_task(
             ).source_entities
         }
         result["checks"] = _check_cases(task, checks, entities, min_coverage, policy)
-        result.update(
-            _verify_errors(task, loaded, checks, entities, int(max_mutants), policy)
+        verified = _verify_errors(
+            task, loaded, checks, entities, int(max_mutants), policy
         )
+        result["problems"] = verified.pop("reference_problems")
+        result.update(verified)
     except (ConfigurationError, OSError) as exc:
         raise ToolInputError(str(exc)) from exc
     result["accepted"] = (
@@ -364,7 +669,8 @@ def prepare_task(
         and result["reference_passes"]
         and not result["truncated"]
         and all(
-            e["status"] in ("killed", "not_verifiable_by_mutation", "gap")
+            e["status"]
+            in ("killed", "not_verifiable_by_mutation", "not_applicable", "gap")
             for e in result["errors"]
         )
     )

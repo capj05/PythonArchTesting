@@ -31,7 +31,8 @@ Deterministic: no LLM decides anything here.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Optional
 
 from pythonarchtesting.principles.catalog import (
@@ -92,12 +93,23 @@ _CHANGES = {
     "deleted": "deletes it",
     "bypassed": "assigns it past `__setattr__`",
 }
-_FACT_KEYS = ("caller", "callee", "module", "class", "attribute")
+_FACT_KEYS = (
+    "caller",
+    "callee",
+    "module",
+    "class",
+    "attribute",
+    "expected_base",
+    "creator",
+    "expected",
+)
 # Callees a beginner knows by their bare name, not by their module.
 _BARE_CALLEES = {
     "builtins:print": "print",
     "builtins:input": "input",
     "io:open": "open",
+    "builtins:isinstance": "isinstance",
+    "builtins:type": "type",
 }
 
 
@@ -186,6 +198,8 @@ def fill_what(template: str, result: Mapping[str, Any], fact: Mapping[str, Any])
         values["callee_short"] = callee_short(str(fact["callee"]))
     if fact.get("change") is not None:
         values["change"] = _CHANGES.get(fact["change"], fact["change"])
+    if fact.get("concrete_methods") is not None:
+        values["concrete_methods"] = ", ".join(map(str, fact["concrete_methods"]))
     return template.format_map(values)
 
 
@@ -538,7 +552,16 @@ def classify_target(
     When a file of the submission does not parse, its ``syntax_error``
     findings and the violations found in the code the tool could read (a
     catalogue error or unclassified), but none of what may follow from the
-    unreadable file (``_noise``)."""
+    unreadable file (``_noise``). A ``read`` that is the object of a method
+    call (``receiver``) on the line a ``write`` of its attribute is on is
+    part of that write and no finding of its own, and so is a
+    ``missing_delegation`` of a method whose class builds a forbidden object
+    (an ``instance``): it never calls the collaborator it was given because
+    it built its own. One defect is one finding
+    (``_defect``): a call through a helper by its caller and the line the
+    detour starts at, another call, a read or a static fact by its place,
+    another fact of a case by all but its case; ``facts.cases`` then lists
+    the cases."""
     results = list(results)
     broken = any(_is_syntax_error(result) for result in results)
     findings: list[Finding] = []
@@ -560,4 +583,138 @@ def classify_target(
                 for item in finding.facts.get(name) or []:
                     if item not in first.facts[name]:
                         first.facts[name].append(item)
-    return findings
+    return _collapsed(
+        _without_delegations_of_builders(_without_reads_of_writes(findings))
+    )
+
+
+# Facts of one place in the code: the same kind at the same place is one
+# defect however many cases or rules report it.
+_PLACE_KINDS = ("call", "read", "not_subclass", "not_abstract")
+
+
+def _defect(finding: Finding) -> Optional[tuple[Any, ...]]:
+    """What makes two findings one defect, or ``None`` when nothing does: a
+    call reached through other code (``via``) by its error, caller and the
+    caller's line the detour starts at (two callers of one printing helper
+    are two defects); a call, read or static fact by its error and place
+    (file, line, and the attribute or callee); any other fact of a case by
+    its error, rule and every key but ``case``."""
+    facts = dict(finding.facts or {})
+    if finding.not_judged or not facts.get("kind"):
+        return None
+    if facts["kind"] == "call" and facts.get("via"):
+        return (
+            finding.error_id,
+            "via",
+            facts.get("caller"),
+            facts.get("origin_line"),
+            facts.get("callee"),
+        )
+    if facts["kind"] in _PLACE_KINDS:
+        return (
+            finding.error_id,
+            facts["kind"],
+            facts.get("file"),
+            facts.get("line"),
+            facts.get("attribute"),
+            facts.get("callee"),
+        )
+    if "case" not in facts:
+        return None
+    facts.pop("case")
+    return (
+        finding.error_id,
+        finding.rule,
+        json.dumps(facts, sort_keys=True, default=str),
+    )
+
+
+def _collapsed(findings: list[Finding]) -> list[Finding]:
+    """One finding per defect (``_defect``), the first; its facts list the
+    ``cases`` of every finding it stands for (when they have cases)."""
+    first: dict[tuple[Any, ...], int] = {}
+    cases: dict[int, list[Any]] = {}
+    kept: list[Finding] = []
+    for finding in findings:
+        key = _defect(finding)
+        if key is None:
+            kept.append(finding)
+            continue
+        case = (finding.facts or {}).get("case")
+        if key not in first:
+            first[key] = len(kept)
+            kept.append(finding)
+            cases[first[key]] = []
+        at = first[key]
+        if case is not None and case not in cases[at]:
+            cases[at].append(case)
+    return [
+        (
+            replace(finding, facts={**finding.facts, "cases": cases[index]})
+            if len(cases.get(index) or []) > 1
+            else finding
+        )
+        for index, finding in enumerate(kept)
+    ]
+
+
+def _place(finding: Finding) -> tuple[Any, Any, Any]:
+    facts = finding.facts or {}
+    return (facts.get("file"), facts.get("line"), facts.get("attribute"))
+
+
+def _without_reads_of_writes(findings: list[Finding]) -> list[Finding]:
+    """``findings`` without a ``read`` that is the object a method is called
+    on (``receiver``) at the place (file, line, attribute) of a ``write`` of
+    the change the receiver makes: ``obj._x.append(v)`` reads ``_x`` to
+    change its contents (``receiver`` ``mutated``), which is one defect, the
+    ``mutated`` write; ``obj._x = {... obj._x ...}`` rebuilds it
+    (``assigned``). Any other read stays: ``a._x = b._x`` reads another
+    object, and so does ``a._x = b._x.setdefault(k, d)``, whose ``assigned``
+    write is a's. A receiver given as ``True`` folds into any write there."""
+    written: set[tuple[Any, ...]] = set()
+    for f in findings:
+        facts = f.facts or {}
+        if facts.get("kind") == "write":
+            written.add(_place(f))
+            written.add((*_place(f), facts.get("change")))
+
+    def folded(f: Finding) -> bool:
+        facts = f.facts or {}
+        receiver = facts.get("receiver")
+        if facts.get("kind") != "read" or not receiver:
+            return False
+        if receiver is True:
+            return _place(f) in written
+        return (*_place(f), receiver) in written
+
+    return [f for f in findings if not folded(f)]
+
+
+def _owner(code: Any) -> Optional[str]:
+    """``module:Class`` of a method given as ``module:Class.method``."""
+    module, _, qualname = str(code or "").partition(":")
+    owner = qualname.rpartition(".")[0]
+    return f"{module}:{owner}" if module and owner else None
+
+
+def _without_delegations_of_builders(findings: list[Finding]) -> list[Finding]:
+    """``findings`` without a ``missing_delegation`` of a method whose class
+    builds an object the task forbids building (an ``instance`` fact created
+    by code of the same class): a constructor that builds its own
+    collaborator never calls the one it was given, which is one defect, the
+    building."""
+    builders = {
+        _owner((f.facts or {}).get("creator"))
+        for f in findings
+        if (f.facts or {}).get("kind") == "instance" and f.error_id is not None
+    } - {None}
+    return [
+        f
+        for f in findings
+        if not (
+            (f.facts or {}).get("kind") == "missing_delegation"
+            and _owner((f.facts or {}).get("caller")) in builders
+        )
+    ]
