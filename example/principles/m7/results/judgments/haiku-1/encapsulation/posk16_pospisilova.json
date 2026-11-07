@@ -1,0 +1,8 @@
+[
+  {
+    "id": "posk16_pospisilova",
+    "violates": false,
+    "reason": "Stav je uložen do privátního atributu _stock, z vnějšku se čte jen přes quantity a items (kopie), a shop.py pracuje se skladem výhradně přes veřejné metody add, remove, quantity a items.",
+    "explanation": ""
+  }
+]

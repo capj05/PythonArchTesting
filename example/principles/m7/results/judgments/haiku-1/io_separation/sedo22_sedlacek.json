@@ -1,0 +1,1 @@
+[{"id": "sedo22_sedlacek", "violates": false, "reason": "Modul grades.py neprovádí žádný vstup ani výstup; parsování, průměr i souhrn jsou čisté funkce vracející hodnoty, zatímco input() a print() zůstávají v main().", "explanation": ""}]

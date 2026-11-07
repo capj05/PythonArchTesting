@@ -1,0 +1,1 @@
+[{"id": "proa11_prochazka", "violates": false, "reason": "Stav je v privatnim _stock, shop.py pracuje jen ppres verejne metody add, remove, quantity a items, items() vraci kopii a konstruktor stock kopiruje.", "explanation": ""}]

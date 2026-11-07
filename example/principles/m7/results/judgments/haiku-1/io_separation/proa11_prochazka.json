@@ -1,0 +1,8 @@
+[
+  {
+    "id": "proa11_prochazka",
+    "violates": false,
+    "reason": "grades.py contains only pure functions that take data as parameters and return results, while input() and print() are confined to app.py's main().",
+    "explanation": ""
+  }
+]

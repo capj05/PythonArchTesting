@@ -1,0 +1,1 @@
+[{"id":"sedo22_sedlacek","violates":false,"reason":"shop.py works with Inventory only through add, remove, quantity and items, the stock rules are enforced inside Inventory, and items() returns a copy.","explanation":""}]

@@ -1,0 +1,1 @@
+[{"id":"benz20_benesova","violates":false,"reason":"shop.py works with Inventory only through add, remove, quantity and items, never touches underscore attributes, and items() returns a copy.","explanation":""}]

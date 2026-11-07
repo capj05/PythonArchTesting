@@ -1,0 +1,1 @@
+[{"id":"jele18_jelinek","violates":false,"reason":"shop.py works with Inventory only through public methods (remove, add, quantity, items) and never touches _stock; Inventory enforces its own rules and returns a copy.","explanation":""}]

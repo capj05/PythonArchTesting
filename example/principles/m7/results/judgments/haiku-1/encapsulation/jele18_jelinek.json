@@ -1,0 +1,8 @@
+[
+  {
+    "id": "jele18_jelinek",
+    "violates": false,
+    "reason": "Inventory keeps its state in a private _stock attribute, shop.py touches the stock only through add, remove, quantity and items, and items() returns a copy, so the rules stay inside the class.",
+    "explanation": ""
+  }
+]

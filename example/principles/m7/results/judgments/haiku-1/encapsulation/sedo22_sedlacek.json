@@ -1,0 +1,8 @@
+[
+  {
+    "id": "sedo22_sedlacek",
+    "violates": true,
+    "reason": "Třída Inventory ukládá stav do veřejného atributu self.stock, který je zvenku čitelný i zapisovatelný a obchází pravidla skladu.",
+    "explanation": "Stav skladu je uložen v atributu self.stock bez podtržítka, takže je to veřejné rozhraní třídy. Kterýkoli kód může napsat inv.stock[\"jablka\"] = -5 nebo inv.stock[\"banany\"] = 0 a obejít tak kontroly v metodách add, remove a __init__, včetně pravidla, že položka s nulou zmizí. Zadání přitom výslovně požaduje, aby na vnitřní atributy zvenku nikdo nesahal a aby žádná funkce nemohla pravidla skladu obejít. Metody items() a konstruktor sice vracejí, resp. kopírují data správně, ale samotné uložení zůstává přístupné, takže změna vnitřní reprezentace by vyžadovala úpravy všude, kde se k self.stock kdokoli dostal. Shop.py se k atributu sám nedostává a používá jen veřejné metody, takže problém je v samotné třídě Inventory."
+  }
+]

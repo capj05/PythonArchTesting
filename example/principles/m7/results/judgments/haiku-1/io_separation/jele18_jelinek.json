@@ -1,0 +1,1 @@
+[{"id": "jele18_jelinek", "violates": false, "reason": "grades.py contains no input or print calls; parse_grades, average and format_summary receive data as parameters and return results, and only main() in app.py reads and writes.", "explanation": ""}]

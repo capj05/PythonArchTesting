@@ -1,0 +1,1 @@
+[{"id":"kucm12_kucera","violates":false,"reason":"The stock is held in a private _stock dict, items() returns a copy, and shop.py uses only add, remove and quantity.","explanation":""}]

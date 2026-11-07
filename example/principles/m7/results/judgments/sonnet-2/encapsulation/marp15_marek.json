@@ -1,0 +1,1 @@
+[{"id": "marp15_marek", "violates": false, "reason": "Inventory keeps its state in a private _stock and enforces the rules itself; shop.py uses only add, remove, quantity and items, and items() returns a copy.", "explanation": ""}]

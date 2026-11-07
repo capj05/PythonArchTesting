@@ -1,0 +1,8 @@
+{
+ "student": "jele18_jelinek",
+ "model": "sonnet",
+ "variant": "no-principle",
+ "run": 2,
+ "pilot": "/home/jirka/git/PythonArchTesting/.worktrees/pc-b/example/principles/pilot",
+ "init": true
+}

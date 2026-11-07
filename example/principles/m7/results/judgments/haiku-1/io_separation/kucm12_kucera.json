@@ -1,0 +1,8 @@
+[
+  {
+    "id": "kucm12_kucera",
+    "violates": false,
+    "reason": "The parsing, averaging and summary functions in grades.py take their data as parameters and return values, with no input() or print() calls; input and output stay in main() in app.py.",
+    "explanation": ""
+  }
+]

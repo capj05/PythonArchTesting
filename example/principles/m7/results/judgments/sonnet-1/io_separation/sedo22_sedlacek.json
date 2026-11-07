@@ -1,0 +1,1 @@
+[{"id": "sedo22_sedlacek", "violates": false, "reason": "All input() and print() calls are confined to main in app.py; grades.py functions take parameters and return values or raise ValueError.", "explanation": ""}]

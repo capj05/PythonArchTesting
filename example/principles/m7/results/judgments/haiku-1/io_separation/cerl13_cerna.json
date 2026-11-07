@@ -1,0 +1,8 @@
+[
+  {
+    "id": "cerl13_cerna",
+    "violates": false,
+    "reason": "The parsing, average and summary logic in grades.py takes its data as parameters and returns values without reading input or printing, and input() and print() appear only in app.py's main().",
+    "explanation": ""
+  }
+]

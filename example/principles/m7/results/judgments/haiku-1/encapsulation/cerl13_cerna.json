@@ -1,0 +1,8 @@
+[
+  {
+    "id": "cerl13_cerna",
+    "violates": false,
+    "reason": "Stav skladu je uložen v privátním atributu `_stock`, který se mimo třídu nepoužívá, a `shop.py` pracuje se skladem jen přes `add`, `remove`, `quantity` a `items`.",
+    "explanation": ""
+  }
+]

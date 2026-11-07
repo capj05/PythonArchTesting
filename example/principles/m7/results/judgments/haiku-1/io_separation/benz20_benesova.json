@@ -1,0 +1,8 @@
+[
+  {
+    "id": "benz20_benesova",
+    "violates": false,
+    "reason": "The logic in grades.py (parse_grades, average, format_summary) takes its data as parameters and returns values without any input or output, and input() and print() appear only in app.py's main().",
+    "explanation": ""
+  }
+]

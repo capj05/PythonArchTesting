@@ -1,0 +1,1 @@
+[{"id":"proa11_prochazka","violates":false,"reason":"Stav je v _stock uvnitr Inventory, shop.py pouziva jen add/remove/quantity/items a items() i konstruktor kopiruji data.","explanation":""}]

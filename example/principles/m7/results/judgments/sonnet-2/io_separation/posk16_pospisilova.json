@@ -1,0 +1,1 @@
+[{"id":"posk16_pospisilova","violates":false,"reason":"grades.py functions take parameters and return values or raise ValueError, and all input() and print() calls are only in main.","explanation":""}]

@@ -1,0 +1,8 @@
+{
+ "student": "sedo22_sedlacek",
+ "model": "opus",
+ "variant": "no-principle",
+ "run": 2,
+ "pilot": "/home/jirka/git/PythonArchTesting/.worktrees/pc-b/example/principles/pilot",
+ "init": true
+}

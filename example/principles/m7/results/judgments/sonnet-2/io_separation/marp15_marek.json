@@ -1,0 +1,1 @@
+[{"id": "marp15_marek", "violates": false, "reason": "grades.py has no input()/print(); all logic takes parameters and returns values, and only main() does input and output.", "explanation": ""}]

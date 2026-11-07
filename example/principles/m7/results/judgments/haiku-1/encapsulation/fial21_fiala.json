@@ -1,0 +1,8 @@
+[
+  {
+    "id": "fial21_fiala",
+    "violates": true,
+    "reason": "The shop.py functions restock and clear_out read and write the internal dict inventory.stock directly, bypassing the public methods add, remove, quantity and items that the assignment requires.",
+    "explanation": "Funkce restock a clear_out v shop.py přistupují přímo k vnitřnímu slovníku inventory.stock a mění ho (inventory.stock[item] = ..., del inventory.stock[item]), místo aby pracovaly přes veřejné metody Inventory. Zadání přitom výslovně žádá, aby shop.py se skladem pracoval jen přes add, remove, quantity a items. Tím se pravidla skladu (kladná množství, nelze ubrat víc než je k dispozici, zmizení položky s nulou) obcházejí a vnitřní uložení nelze změnit, aniž by se shop.py musel upravit. Porušení je tedy přímé a týká se obou funkcí."
+  }
+]

@@ -1,0 +1,8 @@
+[
+  {
+    "id": "posk16_pospisilova",
+    "violates": false,
+    "reason": "grades.py contains only pure functions that take their data as parameters and return results, with no input() or print(), and all reading and printing stays in app.main.",
+    "explanation": ""
+  }
+]

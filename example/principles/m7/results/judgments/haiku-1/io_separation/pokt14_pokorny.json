@@ -1,0 +1,3 @@
+[
+  {"id": "pokt14_pokorny", "violates": false, "reason": "grades.py contains only pure functions that take data as parameters and return results, with no input() or print(), and all reading and printing is confined to app.py.", "explanation": ""}
+]
