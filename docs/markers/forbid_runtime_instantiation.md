@@ -26,7 +26,7 @@ marker forbids the *creation* while still allowing the use.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `*modules` (positional) | `str` | — | Dotted module names whose classes must not be instantiated; each also covers its submodules. |
+| `*modules` (positional) | `str` | — | Dotted module names whose classes must not be instantiated, each also covering its submodules; or qualified class names (`"discounts.PercentDiscount"`), each forbidding that class only. A class the target builds that matches no reference class counts when it lives in the module of a named class and looks like one (a renamed or new strategy): a named class or one of its reference bases is among its bases, or it defines a public method named like one of theirs; a value class, a dataclass or an exception of that module that does neither, and a matched class not named, stay allowed. The likeness is by name only: a helper there with a method named like a named class's counts. |
 | `cases` | `list[dict]` | — | Call arguments that drive the code, see [Cases](../dynamic-checks.md#cases). |
 
 **Optional:**

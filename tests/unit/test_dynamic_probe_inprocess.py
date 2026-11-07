@@ -817,3 +817,71 @@ def test_the_imports_fallback_leaves_no_second_module_behind(
         assert sys.modules["zz_inventory"] is inventory
     finally:
         _forget("zz_student", "zz_inventory", "zz_shop")
+
+
+_WORLD = """
+class Sack:
+    def __init__(self):
+        self.things = []
+
+    def add(self, thing):
+        self.things.append(thing)
+
+
+class Room:
+    def __init__(self):
+        self.things = []
+
+
+SACK = Sack()
+ROOMS = {"hall": Room()}
+here = ROOMS["hall"]
+"""
+
+_ACTIONS = """
+import world_mod
+
+
+def take(word):
+    world_mod.SACK.add(word)
+    world_mod.SACK.things.append(word)
+    world_mod.here.things.append(word)
+
+
+def stuff(sack):
+    sack.things.append(1)
+"""
+
+
+def test_write_recorder_watches_objects_module_globals_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = _module(_WORLD, "world_mod", str(tmp_path / "world_mod.py"), monkeypatch)
+    actions = _module(
+        _ACTIONS, "actions_mod", str(tmp_path / "actions_mod.py"), monkeypatch
+    )
+    recorder = probe.WriteRecorder(str(tmp_path))
+
+    # No argument holds the sack or the room: the module globals do. The
+    # method's own change is no foreign write; a global holding the object
+    # itself names it before a dict that holds it too.
+    recorder.start(["lamp"])
+    with recorder.watching():
+        actions.take("lamp")
+    recorder.active = False
+
+    assert [
+        (w["class"], w["attribute"], w["change"], w.get("held_by"))
+        for w in recorder.writes
+    ] == [
+        ("Sack", "things", "mutated", "world_mod.SACK"),
+        ("Room", "things", "mutated", "world_mod.here"),
+    ]
+
+    # An object the case passes is an argument's, even when a global holds it.
+    recorder.start([world.SACK])
+    with recorder.watching():
+        actions.stuff(world.SACK)
+    recorder.active = False
+
+    assert [(w["class"], w.get("held_by")) for w in recorder.writes] == [("Sack", None)]

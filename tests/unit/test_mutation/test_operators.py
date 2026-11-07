@@ -981,7 +981,7 @@ def test_add_builtin_call_seeds_any_builtin_call_first_thing(tmp_path: Path) -> 
     # Each a real type test, as forbid_runtime_calls counts one: a class
     # computed at run time, a result of type() that is compared.
     assert "    isinstance(None, (object,)[0])\n    return sum" in mutants[3].source
-    assert "    type(None) == object\n    return sum" in mutants[4].source
+    assert "    type((None,)[0]) == object\n    return sum" in mutants[4].source
     for mutant in mutants:
         ast.parse(mutant.source)
 
@@ -1409,3 +1409,109 @@ def test_hardcode_collaborator_targets_classes_by_qualified_name(
     )
 
     assert [m.member for m in mutants] == ["DLeaf"]
+
+
+# N7: a game whose objects live in module globals (``world.SACK``,
+# ``world.here``), whose lists a method other than the constructor makes
+# (``reset``), in a project base of the owner class; the actions get only
+# the words of the command.
+_GLOBALS = {
+    "__init__.py": "",
+    "world.py": (
+        "class Holder:\n"
+        "    def __init__(self):\n"
+        "        self.label = ''\n\n"
+        "    def reset(self):\n"
+        "        self.things = []\n"
+        "        self._seen = set()\n\n"
+        "    def pop(self, name):\n"
+        "        return None\n\n\n"
+        "class Sack(Holder):\n"
+        "    def __init__(self):\n"
+        "        super().__init__()\n"
+        "        self._limit = 2\n\n\n"
+        "class Room(Holder):\n"
+        "    pass\n\n\n"
+        "SACK = Sack()\n"
+        "here: Room = None\n"
+        "OTHER = 3\n"
+    ),
+    "actions.py": (
+        "from . import world\n"
+        "from .world import SACK as BAG\n\n\n"
+        "def drop(words):\n"
+        "    thing = world.SACK.pop(words[1])\n"
+        "    return thing\n\n\n"
+        "def take(words):\n"
+        "    thing = world.here.pop(words[1])\n"
+        "    return thing\n\n\n"
+        "def peek(words):\n"
+        "    size = len(words)\n"
+        "    BAG.pop(words[0])\n"
+        "    return size\n\n\n"
+        "def shadow(world):\n"
+        "    world.SACK.pop('x')\n"
+    ),
+    "absolute.py": (
+        "import pkg.world as w\n\n\n" "def drop(words):\n" "    w.SACK.pop(words[1])\n"
+    ),
+}
+
+
+def test_container_operators_reach_objects_module_globals_hold(
+    tmp_path: Path,
+) -> None:
+    root = _write_tree(tmp_path / "pkg", _GLOBALS)
+    original = (root / "actions.py").read_text(encoding="utf-8")
+
+    public = _by(root, "mutate_public_container")
+    private = _by(root, "mutate_private_container")
+
+    # Through the imported module, a name imported from it, and the package's
+    # own name; a parameter that shadows the module is no global.
+    assert [(m.file, m.function, m.owner, m.member) for m in public] == [
+        ("absolute.py", "drop", "Sack", "things"),
+        ("actions.py", "drop", "Sack", "things"),
+        ("actions.py", "take", "Room", "things"),
+        ("actions.py", "peek", "Sack", "things"),
+    ]
+    assert [_inserted(original, m.source) for m in public[1:]] == [
+        ["    world.SACK.things.append(0)"],
+        ["    world.here.things.append(0)"],
+        ["    BAG.things.append(0)"],
+    ]
+    assert [(m.function, m.member) for m in private if m.file == "actions.py"] == [
+        ("drop", "_seen"),
+        ("take", "_seen"),
+        ("peek", "_seen"),
+    ]
+
+
+def test_foreign_write_and_private_read_reach_module_globals(tmp_path: Path) -> None:
+    root = _write_tree(tmp_path / "pkg", _GLOBALS)
+    original = (root / "actions.py").read_text(encoding="utf-8")
+
+    writes = [m for m in _by(root, "foreign_write") if m.file == "actions.py"]
+    reads = [m for m in _by(root, "read_private_attribute") if m.file == "actions.py"]
+
+    # A private data attribute first (the sack's own ``_limit``, else one a
+    # base's method assigns); ``member`` names the attribute written.
+    assert [(m.function, m.owner, m.member) for m in writes] == [
+        ("drop", "Sack", "_limit"),
+        ("take", "Room", "_seen"),
+        ("peek", "Sack", "_limit"),
+    ]
+    assert _inserted(original, writes[0].source) == [
+        "    world.SACK._limit = world.SACK._limit"
+    ]
+    assert [(m.function, m.member) for m in reads] == [
+        ("drop", "_limit"),
+        ("take", "_seen"),
+        ("peek", "_limit"),
+    ]
+    assert _inserted(original, reads[0].source) == ["    _ = world.SACK._limit"]
+    # The read follows the first use of the global's object, not the first
+    # line: a global still ``None`` there (set by ``initialize()``) would
+    # crash the mutant before the case could see the read.
+    peek = reads[2].source.splitlines()
+    assert peek.index("    _ = BAG._limit") == peek.index("    BAG.pop(words[0])") + 1

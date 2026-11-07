@@ -31,7 +31,12 @@ For ``forbid_runtime_instantiation`` (``catalog.INSTANCE_TARGET_MARKERS``)
 makes no declaration and its ``TaskCheck`` says why (``not_applicable``).
 A static marker's check (``catalog.STATIC_MARKERS``) runs nothing: its
 declaration has no cases, and the entities it covers need none for it; a role
-with only static checks needs no cases at all. The declarations are produced by the same
+with only static checks needs no cases at all. A role bound to a whole module
+gives the ``forbid_runtime_calls`` check (``MODULE_COVER_MARKERS``) of each
+of the module's functions ``cover_module=True``: it also reads, statically,
+the functions a target adds to that module, which no case can run (every
+check, so that a target renaming one function does not switch it off). The
+declarations are produced by the same
 parser that reads markers from source (``extract_annotation_declarations``)
 and are compiled by the same compilers; the reference files are not touched.
 
@@ -126,6 +131,12 @@ class TaskCheck:
     # Why the check has nothing to check in this task (no declaration was
     # made), or ``None``.
     not_applicable: Optional[str] = None
+
+
+# Markers whose check, on a role bound to a whole module, also covers the
+# functions a target adds to that module, statically (``cover_module``): no
+# case of the task can run a function the reference does not have.
+MODULE_COVER_MARKERS = frozenset({"forbid_runtime_calls"})
 
 
 def is_task(path: Path) -> bool:
@@ -271,6 +282,7 @@ def _declaration(
     entity: Entity,
     cases: Optional[list[Any]],
     init: Optional[dict[str, Any]],
+    cover_module: bool = False,
 ) -> Any:
     """The declaration a marker of ``check`` in ``entity``'s body would give;
     a static marker's (``cases`` ``None``) takes no cases."""
@@ -281,6 +293,8 @@ def _declaration(
         params["cases"] = cases
     if init is not None:
         params["init"] = init
+    if cover_module:
+        params["cover_module"] = True
     text = _marker_text(check.marker, modules, params)
     (declaration,) = extract_annotation_declarations(ast.parse(text).body, text)
     return dataclasses.replace(declaration, lineno=entity.lineno, col=0)
@@ -337,21 +351,109 @@ def _cases_problem(
     )
 
 
+_INTERFACE_BASES = frozenset({"ABC", "Protocol"})
+
+
+def _class_node(entity: Entity) -> Optional[ast.ClassDef]:
+    node = entity.extras.get("ast_node")
+    return node if isinstance(node, ast.ClassDef) else None
+
+
+def _base_names(node: ast.ClassDef) -> set[str]:
+    names = set()
+    for base in node.bases:
+        if isinstance(base, ast.Subscript):
+            base = base.value  # Protocol[T]
+        if isinstance(base, ast.Name):
+            names.add(base.id)
+        elif isinstance(base, ast.Attribute):
+            names.add(base.attr)
+    return names
+
+
+def _interface(node: ast.ClassDef) -> bool:
+    """Whether the class is an interface: ``ABC`` or ``Protocol`` among its
+    bases, ``metaclass=ABCMeta``, or an ``@abstractmethod``."""
+    if _base_names(node) & _INTERFACE_BASES or any(
+        k.arg == "metaclass" and "ABCMeta" in ast.unparse(k.value)
+        for k in node.keywords
+    ):
+        return True
+    return any(
+        "abstractmethod" in ast.unparse(d)
+        for item in node.body
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for d in item.decorator_list
+    )
+
+
+def _methods_of(node: ast.ClassDef) -> set[str]:
+    return {
+        item.name
+        for item in node.body
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and not item.name.startswith("__")
+    }
+
+
+def _implementations(interface: Entity, entities: Sequence[Entity]) -> list[Entity]:
+    """The classes of the reference that implement ``interface`` (an
+    abstract class or a ``Protocol``): its subclasses, nearest first, and for
+    a ``Protocol`` also the classes defining every method it declares."""
+    node = _class_node(interface)
+    if node is None or not _interface(node):
+        return []
+    classes = [
+        (e, n)
+        for e in entities
+        if e.kind == "class"
+        and (n := _class_node(e)) is not None
+        and e is not interface
+    ]
+    names = {str(interface.qualname)}
+    found: list[Entity] = []
+    grown = True
+    while grown:
+        grown = False
+        for entity, cls in classes:
+            if entity not in found and _base_names(cls) & names:
+                found.append(entity)
+                names.add(str(entity.qualname))
+                grown = True
+    if "Protocol" in _base_names(node) and (wanted := _methods_of(node)):
+        found += [
+            entity
+            for entity, cls in classes
+            if entity not in found
+            and not _interface(cls)
+            and wanted <= _methods_of(cls)
+        ]
+    return [e for e in found if not _interface(_class_node(e) or node)]
+
+
 def _targets(
-    check: CheckTemplate, bound: Mapping[str, list[Entity]]
+    check: CheckTemplate,
+    bound: Mapping[str, list[Entity]],
+    entities: Sequence[Entity] = (),
 ) -> tuple[list[str], Optional[str]]:
     """The marker's targets for ``check``: its own ``modules`` and, with a
     ``target_role``, the modules of the entities bound to that role, or with
-    ``target_kind`` ``"class"`` the one class bound to it. The problem, if
-    that role binds no class or several."""
+    ``target_kind`` ``"class"`` the one class bound to it. A role an
+    instantiation marker targets gives its classes; a bound interface (an
+    abstract class or a ``Protocol``) stands for the classes of
+    ``entities`` that implement it. The problem, if that role binds no class
+    or several."""
     modules = list(check.modules)
     if check.target_role is None:
         return modules, None
     targets = bound.get(check.target_role, [])
     if check.target_kind != "class" and check.marker in INSTANCE_TARGET_MARKERS:
         for entity in targets:
-            if entity.kind == "class" and _entity_name(entity) not in modules:
-                modules.append(_entity_name(entity))
+            if entity.kind != "class":
+                continue
+            for cls in [entity, *_implementations(entity, entities)]:
+                if _entity_name(cls) not in modules:
+                    modules.append(_entity_name(cls))
         return modules, None
     if check.target_kind != "class":
         for entity in targets:
@@ -433,6 +535,11 @@ def bind_task(
             "evaluate the reference without task.toml"
         )
     bound: dict[str, list[Entity]] = {}
+    # Per role, the functions of each module the role binds as a whole: the
+    # check of each also covers, statically, what the target adds to the
+    # module (every one, so that a target renaming one of them does not
+    # switch the scan off; the static facts merge per place in classify).
+    covering: dict[str, set[str]] = {}
     class_roles = _class_roles(task)
     for role, names in task.roles.items():
         bound[role] = []
@@ -442,13 +549,15 @@ def bind_task(
                 if role in class_roles:
                     problem += f"; {class_roles[role]}: bind classes (module.Class)"
                 problems.append(f"[roles] {role!r}: {problem}")
+            if found and found[0].kind != "module" and _entity_name(found[0]) != name:
+                covering.setdefault(role, set()).update(e.canonical_id for e in found)
             bound[role].extend(e for e in found if e not in bound[role])
     _not_classes(task, bound, problems)
     covered: set[str] = set()
     declarations: dict[str, list[Any]] = {}
     checks: list[TaskCheck] = []
     for check in task.principle.checks:
-        modules, problem = _targets(check, bound)
+        modules, problem = _targets(check, bound, entities)
         if problem is not None:
             problems.append(problem)
             continue
@@ -502,8 +611,12 @@ def bind_task(
             if problem is not None:
                 problems.append(f"[cases] {name!r}: {problem}")
                 continue
+            cover = (
+                check.marker in MODULE_COVER_MARKERS
+                and entity.canonical_id in covering.get(check.role, set())
+            )
             declarations.setdefault(entity.canonical_id, []).append(
-                _declaration(check, modules, entity, cases, init)
+                _declaration(check, modules, entity, cases, init, cover)
             )
             checks.append(
                 TaskCheck(
@@ -511,7 +624,12 @@ def bind_task(
                     entity=name,
                     entity_id=entity.canonical_id,
                     marker=check.marker,
-                    params={"modules": modules, "cases": cases, "init": init},
+                    params={
+                        "modules": modules,
+                        "cases": cases,
+                        "init": init,
+                        **({"cover_module": True} if cover else {}),
+                    },
                 )
             )
     for key, table in (("cases", task.cases), ("init", task.init)):
@@ -540,6 +658,7 @@ def _bound(entity: Entity, declarations: Optional[list[Any]], required: bool) ->
 
 __all__ = [
     "DEFAULT_REFERENCE",
+    "MODULE_COVER_MARKERS",
     "TASK_FILENAME",
     "Task",
     "TaskCheck",

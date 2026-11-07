@@ -194,6 +194,12 @@ def fill_what(template: str, result: Mapping[str, Any], fact: Mapping[str, Any])
         via_first_line=fact.get("origin_line") or "?",
     )
     values.update({key: fact[key] for key in _FACT_KEYS if fact.get(key) is not None})
+    if fact.get("static") and fact.get("caller"):
+        # Found statically in a function no case runs (``cover_module``): the
+        # function is that one, not the entity whose rule read it.
+        values["function"] = str(fact["caller"]).rpartition(":")[2]
+        values["file"] = fact.get("file") or "?"
+        values["line"] = fact.get("function_line") or "?"
     if fact.get("callee") is not None:
         values["callee_short"] = callee_short(str(fact["callee"]))
     if fact.get("change") is not None:
@@ -704,17 +710,34 @@ def _without_delegations_of_builders(findings: list[Finding]) -> list[Finding]:
     builds an object the task forbids building (an ``instance`` fact created
     by code of the same class): a constructor that builds its own
     collaborator never calls the one it was given, which is one defect, the
-    building."""
+    building. Likewise without one of a method that tests the kind of the
+    object it was given (``type_switch_on_strategy``)."""
     builders = {
         _owner((f.facts or {}).get("creator"))
         for f in findings
         if (f.facts or {}).get("kind") == "instance" and f.error_id is not None
+    } - {None}
+    # A method that asks which kind of object it was given (a classified
+    # isinstance/type call) and computes the kinds it tests by itself never
+    # delegates for them either: one defect, the test of the kind.
+    switchers = {
+        (f.facts or {}).get("caller")
+        for f in findings
+        if (f.facts or {}).get("kind") == "call"
+        and (f.facts or {}).get("callee") in _TYPE_CALLEES
+        and f.error_id is not None
     } - {None}
     return [
         f
         for f in findings
         if not (
             (f.facts or {}).get("kind") == "missing_delegation"
-            and _owner((f.facts or {}).get("caller")) in builders
+            and (
+                _owner((f.facts or {}).get("caller")) in builders
+                or (f.facts or {}).get("caller") in switchers
+            )
         )
     ]
+
+
+_TYPE_CALLEES = frozenset({"builtins:isinstance", "builtins:type"})

@@ -45,10 +45,11 @@ mutants of ``example/architectural_mutants``:
 - ``read_private_attribute``: a function first reads the first private data
   attribute of an object of a project class it got as a parameter
   (``_ = obj._x``; a name-mangled ``__x`` as ``obj._Owner__x``, as code
-  outside the class must spell it);
+  outside the class must spell it), or reads it of an object a module global
+  holds right after its first use;
 - ``add_builtin_call``: ``add_io_call`` generalised to any builtin call an
   error can name: the three I/O calls, ``isinstance(None, (object,)[0])``
-  and ``type(None) == object``, a branch on the type (the call is ``member``);
+  and ``type((None,)[0]) == object``, a branch on the type (the call is ``member``);
   ``add_io_call`` stays its I/O-only form;
 - ``drop_base``: a top-level class no longer names one of its bases
   (``class Square(Shape)`` becomes ``class Square``); one mutant per class
@@ -764,20 +765,43 @@ def _annotated_class(annotation: Optional[ast.expr]) -> Optional[str]:
     return None
 
 
-def _data_attributes(classes: list[ast.ClassDef]) -> list[str]:
+def _family(
+    cls: ast.ClassDef, classes: Mapping[str, list[ast.ClassDef]]
+) -> list[ast.ClassDef]:
+    """``cls`` and its project bases (each named by one project class only),
+    nearest first: the classes whose methods give an object its attributes."""
+    found: list[ast.ClassDef] = []
+    pending = [cls]
+    while pending:
+        current = pending.pop(0)
+        if any(current is known for known in found):
+            continue
+        found.append(current)
+        for base in current.bases:
+            named = classes.get(_call_name(base) or "", [])
+            if len(named) == 1:
+                pending.append(named[0])
+    return found
+
+
+def _data_attributes(
+    classes: list[ast.ClassDef], bases: Sequence[ast.ClassDef] = ()
+) -> list[str]:
     """The data attributes of a project class: its annotated class-level
-    fields and what its methods assign to ``self.<name>`` (in an unpacking
-    too); never a method."""
+    fields and what its methods (and those of its project ``bases``) assign
+    to ``self.<name>`` (in an unpacking too); never a method."""
     if len(classes) != 1:
         return []  # no class of that name in the project, or several
     (cls,) = classes
+    family = [cls, *(b for b in bases if b is not cls)]
     methods = {
         n.name
-        for n in cls.body
+        for member in family
+        for n in member.body
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
     found: list[str] = []
-    for node in cls.body:
+    for node in (n for member in family for n in member.body):
         if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             found.append(node.target.id)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -879,7 +903,9 @@ def _uses(
 
 
 def _foreign_write(
-    modules: list[_Module], hints: Optional[ParameterClasses] = None
+    modules: list[_Module],
+    hints: Optional[ParameterClasses] = None,
+    package: str = "",
 ) -> Iterator[_Change]:
     """``x.a = x.a`` in a method on an object it did not get as ``self`` (in
     a module-level function: on an object it got as a parameter). The value
@@ -890,12 +916,15 @@ def _foreign_write(
     that class. The write follows the first statement that calls a method of
     ``x`` for its effect (``x.remove(...)``), so it runs under the same
     condition as that state change; without one, it follows the first
-    statement that reads ``x``."""
+    statement that reads ``x``. An object a module global holds
+    (``world.BAG``, ``_global_owners``) is written the same way, with the
+    data attributes of its class (and of the class's project bases)."""
     classes: dict[str, list[ast.ClassDef]] = {}
     for module in modules:
         for node in module.tree.body:
             if isinstance(node, ast.ClassDef):
                 classes.setdefault(node.name, []).append(node)
+    owners = _global_owners(modules, classes, package)
     for module in modules:
         skip = _module_names(module.tree)
         callables = [
@@ -922,9 +951,11 @@ def _foreign_write(
                     continue
                 owner_class = annotated.get(obj)
                 # A name-mangled ``__x`` of the class is ``_Owner__x`` outside it.
+                named = classes.get(owner_class or "", [])
+                bases = _family(named[0], classes) if len(named) == 1 else []
                 candidates = use.reads + [
                     mangled(owner_class or "", a)
-                    for a in _data_attributes(classes.get(owner_class or "", []))
+                    for a in _data_attributes(named, bases)
                     if a not in use.reads
                 ]
                 if not candidates:
@@ -941,6 +972,33 @@ def _foreign_write(
                     f"{module.name}: {name} writes {target} (line {line + 1})",
                     source,
                     owner=name.split(".")[0] if self_name is not None else "",
+                    member=attribute,
+                    line=line + 1,
+                    function=name,
+                )
+            for obj, cls in _owners_in(function, owners.get(module.file, {})).items():
+                if self_name is not None and cls.name == name.split(".")[0]:
+                    continue
+                candidates = [
+                    mangled(cls.name, a)
+                    for a in _data_attributes([cls], _family(cls, classes))
+                ]
+                place = _first_use(module, function, obj)
+                if not candidates or place is None:
+                    continue
+                attribute = next((a for a in candidates if _private(a)), candidates[0])
+                target = f"{obj}.{attribute}"
+                line = int(place.end_lineno or place.lineno)
+                yield _Change(
+                    module.file,
+                    f"{module.name}: {name} writes {target} (line {line + 1})",
+                    _insert(
+                        module.text,
+                        line,
+                        " " * place.col_offset + f"{target} = {target}",
+                    ),
+                    owner=cls.name,
+                    member=attribute,
                     line=line + 1,
                     function=name,
                 )
@@ -968,7 +1026,7 @@ IO_CALLS = {
 BUILTIN_CALLS = {
     **IO_CALLS,
     "isinstance": ["isinstance(None, (object,)[0])"],
-    "type": ["type(None) == object"],
+    "type": ["type((None,)[0]) == object"],
 }
 
 
@@ -1072,52 +1130,61 @@ def _field_factory(value: Optional[ast.expr]) -> Optional[str]:
     return None
 
 
-def _containers(cls: ast.ClassDef) -> dict[str, str]:
-    """``attribute -> kind`` for the containers ``__init__`` assigns to
-    ``self`` (of a ``@dataclass``, also its fields with a container
-    ``default_factory``), in the order it assigns them. An attribute any method of the
-    class assigns anything else (a tuple, ``None``) is no container: changing
-    its contents could break the class itself."""
-    methods = _method_names(cls)
-    found: list[tuple[int, int, str, str, Optional[str]]] = []
-    if _is_dataclass(cls):
-        # A field the generated ``__init__`` fills from its default factory.
-        found += [
-            (node.lineno, node.col_offset, "__init__", node.target.id, kind)
-            for node in cls.body
-            if isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and (kind := _field_factory(node.value)) is not None
-        ]
-    for node in cls.body:
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        self_name = _self_name(node)
-        for item in ast.walk(node):
-            if isinstance(item, ast.Assign):
-                targets, value = list(item.targets), item.value
-            elif isinstance(item, ast.AnnAssign) and item.value is not None:
-                targets, value = [item.target], item.value
-            else:
-                continue
+def _containers(
+    cls: ast.ClassDef, bases: Sequence[ast.ClassDef] = ()
+) -> dict[str, str]:
+    """``attribute -> kind`` for the containers the methods of ``cls`` (and
+    of its project ``bases``) assign to ``self`` (of a ``@dataclass``, also
+    its fields with a container ``default_factory``): first those the
+    constructors assign, in the order they assign them, then those another
+    method assigns (a game's ``initialize()`` that fills the lists anew). An
+    attribute any method of the class assigns anything else (a tuple,
+    ``None``) is no container: changing its contents could break the class
+    itself."""
+    family = [cls, *(b for b in bases if b is not cls)]
+    methods = {name for member in family for name in _method_names(member)}
+    found: list[tuple[int, int, int, int, str, Optional[str]]] = []
+    for depth, member in enumerate(family):
+        if _is_dataclass(member):
+            # A field the generated ``__init__`` fills from its default factory.
             found += [
-                (
-                    item.lineno,
-                    item.col_offset,
-                    node.name,
-                    t.attr,
-                    _container_kind(value),
-                )
-                for t in targets
-                if isinstance(t, ast.Attribute)
-                and isinstance(t.value, ast.Name)
-                and t.value.id == self_name
+                (0, depth, node.lineno, node.col_offset, node.target.id, kind)
+                for node in member.body
+                if isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and (kind := _field_factory(node.value)) is not None
             ]
+        for node in member.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            self_name = _self_name(node)
+            later = 0 if node.name == "__init__" else 1
+            for item in ast.walk(node):
+                if isinstance(item, ast.Assign):
+                    targets, value = list(item.targets), item.value
+                elif isinstance(item, ast.AnnAssign) and item.value is not None:
+                    targets, value = [item.target], item.value
+                else:
+                    continue
+                found += [
+                    (
+                        later,
+                        depth,
+                        item.lineno,
+                        item.col_offset,
+                        t.attr,
+                        _container_kind(value),
+                    )
+                    for t in targets
+                    if isinstance(t, ast.Attribute)
+                    and isinstance(t.value, ast.Name)
+                    and t.value.id == self_name
+                ]
     kinds: dict[str, set[Optional[str]]] = {}
     initial: dict[str, str] = {}
-    for _, _, method, attribute, kind in sorted(found, key=lambda f: f[:2]):
+    for *_, attribute, kind in sorted(found, key=lambda f: f[:4]):
         kinds.setdefault(attribute, set()).add(kind)
-        if method == "__init__" and kind is not None:
+        if kind is not None:
             initial.setdefault(attribute, kind)
     return {a: k for a, k in initial.items() if kinds[a] == {k} and a not in methods}
 
@@ -1138,8 +1205,7 @@ def _called_on(function: ast.FunctionDef | ast.AsyncFunctionDef, obj: str) -> se
         for node in ast.walk(item)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
-        and isinstance(node.func.value, ast.Name)
-        and node.func.value.id == obj
+        and _dotted(node.func.value) == obj
     }
 
 
@@ -1147,8 +1213,8 @@ def _first_method_call(
     module: _Module, function: ast.FunctionDef | ast.AsyncFunctionDef, obj: str
 ) -> Optional[ast.stmt]:
     """The first simple statement of ``function``, on lines of its own, that
-    calls a method of ``obj``: a statement after it runs under the same
-    condition as that call."""
+    calls a method of ``obj`` (a name, or a module global: ``world.BAG``): a
+    statement after it runs under the same condition as that call."""
     statements = sorted(
         (node for item in function.body for node in ast.walk(item)),
         key=lambda node: (getattr(node, "lineno", 0), getattr(node, "col_offset", 0)),
@@ -1161,8 +1227,181 @@ def _first_method_call(
         if any(
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == obj
+            and _dotted(node.func.value) == obj
+            for node in _outside_scopes(statement)
+        ):
+            return statement
+    return None
+
+
+def _dotted(node: ast.expr) -> Optional[str]:
+    """``a.b.c`` of a chain of attributes on a name (``a`` of a name), else
+    ``None``."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return ".".join(reversed(parts))
+
+
+def _held_globals(
+    modules: list[_Module], classes: Mapping[str, list[ast.ClassDef]]
+) -> dict[str, dict[str, ast.ClassDef]]:
+    """``module -> {global: class}`` for the module globals that hold an
+    object of a project class: one its constructor builds (``BAG = Bag()``)
+    or one the annotation names (``current_place: Place = None``). A global
+    given objects of two classes holds neither."""
+    held: dict[str, dict[str, ast.ClassDef]] = {}
+    for module in modules:
+        found: dict[str, Optional[str]] = {}
+        for node in module.tree.body:
+            annotated: Optional[str] = None
+            if isinstance(node, ast.Assign):
+                targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                targets = [node.target.id]
+                annotated = _annotated_class(node.annotation)
+            else:
+                continue
+            value = node.value
+            built = _call_name(value.func) if isinstance(value, ast.Call) else None
+            name = next(
+                (c for c in (annotated, built) if c and len(classes.get(c, [])) == 1),
+                None,
+            )
+            if name is None:
+                continue
+            for target in targets:
+                found[target] = name if found.get(target, name) == name else None
+        held[module.name] = {
+            target: classes[name][0] for target, name in found.items() if name
+        }
+    return held
+
+
+def _project_module(name: str, names: set[str], package: str) -> Optional[str]:
+    """The project module an absolute import ``name`` names: as the modules
+    are named (``world``), or under the root package's own name
+    (``game.world``)."""
+    if name in names:
+        return name
+    if package and name == package:
+        return "" if "" in names else None
+    if package and name.startswith(package + "."):
+        rest = name[len(package) + 1 :]
+        return rest if rest in names else None
+    return None
+
+
+def _global_owners(
+    modules: list[_Module], classes: Mapping[str, list[ast.ClassDef]], package: str
+) -> dict[str, dict[str, ast.ClassDef]]:
+    """``file -> {expression: class}``: how the code of each module reaches
+    an object of a project class a module global holds: ``world.BAG`` (an
+    imported project module), ``BAG`` (imported from it, or a global of the
+    module itself)."""
+    held = _held_globals(modules, classes)
+    names = {module.name for module in modules}
+    owners: dict[str, dict[str, ast.ClassDef]] = {}
+    for module in modules:
+        mine = owners.setdefault(module.file, dict(held.get(module.name, {})))
+        parent = module.name if module.is_package else module.name.rpartition(".")[0]
+        for node in ast.walk(module.tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.asname is None and "." in alias.name:
+                        continue  # ``import a.b`` binds ``a``
+                    target = _project_module(alias.name, names, package)
+                    found = held.get(target, {}) if target is not None else {}
+                    for name, cls in found.items():
+                        mine[f"{alias.asname or alias.name}.{name}"] = cls
+                continue
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if node.level:
+                parts = parent.split(".") if parent else []
+                if node.level - 1 > len(parts):
+                    continue
+                parts = parts[: len(parts) - (node.level - 1)]
+                base: Optional[str] = ".".join(
+                    parts + ([node.module] if node.module else [])
+                )
+            else:
+                base = _project_module(node.module or "", names, package)
+            if base is None:
+                continue
+            for alias in node.names:
+                bound = alias.asname or alias.name
+                full = f"{base}.{alias.name}" if base else alias.name
+                if full in names:
+                    for name, cls in held.get(full, {}).items():
+                        mine[f"{bound}.{name}"] = cls
+                elif alias.name in held.get(base, {}):
+                    mine[bound] = held[base][alias.name]
+    return owners
+
+
+def _owners_in(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+    owners: Mapping[str, ast.ClassDef],
+) -> dict[str, ast.ClassDef]:
+    """The objects held in module globals (``_global_owners``) that
+    ``function`` reads, by expression, in the order it first reads them; a
+    name the function binds itself (a parameter, a local) is none."""
+    if not owners:
+        return {}
+    declared = {
+        name
+        for node in ast.walk(function)
+        if isinstance(node, (ast.Global, ast.Nonlocal))
+        for name in node.names
+    }
+    local = _parameters(function) | {
+        node.id
+        for node in ast.walk(function)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
+    }
+    local -= declared
+    nodes = sorted(
+        (
+            node
+            for item in function.body
+            for node in _outside_scopes(item)
+            if isinstance(node, (ast.Name, ast.Attribute))
+            and isinstance(node.ctx, ast.Load)
+        ),
+        key=lambda node: (node.lineno, node.col_offset),
+    )
+    found: dict[str, ast.ClassDef] = {}
+    for node in nodes:
+        text = _dotted(node)
+        if text is not None and text in owners and text.split(".")[0] not in local:
+            found.setdefault(text, owners[text])
+    return found
+
+
+def _first_use(
+    module: _Module, function: ast.FunctionDef | ast.AsyncFunctionDef, obj: str
+) -> Optional[ast.stmt]:
+    """The first simple statement of ``function``, on lines of its own, that
+    calls a method of ``obj`` or else reads it."""
+    called = _first_method_call(module, function, obj)
+    if called is not None:
+        return called
+    statements = sorted(
+        (node for item in function.body for node in ast.walk(item)),
+        key=lambda node: (getattr(node, "lineno", 0), getattr(node, "col_offset", 0)),
+    )
+    for statement in statements:
+        if not isinstance(statement, _SIMPLE) or not _alone(module.text, statement):
+            continue
+        if statement.lineno != function.lineno and any(
+            isinstance(node, (ast.Name, ast.Attribute))
+            and isinstance(node.ctx, ast.Load)
+            and _dotted(node) == obj
             for node in _outside_scopes(statement)
         ):
             return statement
@@ -1201,24 +1440,31 @@ def _owner_class(
 
 
 def _mutate_container(
-    modules: list[_Module], private: bool, hints: Optional[ParameterClasses] = None
+    modules: list[_Module],
+    private: bool,
+    hints: Optional[ParameterClasses] = None,
+    package: str = "",
 ) -> Iterator[_Change]:
     """Right after the first statement of a client function that calls a
-    method of an object of a project class (a parameter, never ``self``),
-    the function changes the contents of that object's first private (or
-    public) container: a key in a dict, an item appended to a list or added
-    to a set. A method of the class itself is no client."""
+    method of an object of a project class (a parameter, never ``self``, or
+    one a module global holds: ``world.BAG``), the function changes the
+    contents of that object's first private (or public) container: a key in
+    a dict, an item appended to a list or added to a set. A method of the
+    class itself is no client."""
     classes: dict[str, list[ast.ClassDef]] = {}
     for module in modules:
         for node in module.tree.body:
             if isinstance(node, ast.ClassDef):
                 classes.setdefault(node.name, []).append(node)
+    owners = _global_owners(modules, classes, package)
     for module in modules:
         callables = [
             (name, method, _self_name(method)) for name, method in _methods(module.tree)
         ] + [(name, function, None) for name, function in _functions(module.tree)]
         for name, function, self_name in sorted(callables, key=lambda c: c[1].lineno):
             arguments = function.args
+            # (object, its class, whether a module global holds it)
+            found: list[tuple[str, ast.ClassDef, bool]] = []
             for arg in arguments.posonlyargs + arguments.args + arguments.kwonlyargs:
                 if arg.arg == self_name:
                     continue
@@ -1229,21 +1475,28 @@ def _mutate_container(
                     None if hints is None else hints.get((module.file, name)),
                     arg.arg,
                 )
-                if cls is None or (
-                    self_name is not None and cls.name == name.split(".")[0]
-                ):
+                if cls is not None:
+                    found.append((arg.arg, cls, False))
+            found += [
+                (obj, cls, True)
+                for obj, cls in _owners_in(
+                    function, owners.get(module.file, {})
+                ).items()
+            ]
+            for obj, cls, held in found:
+                if self_name is not None and cls.name == name.split(".")[0]:
                     continue
                 attributes = [
                     (a, kind)
-                    for a, kind in _containers(cls).items()
+                    for a, kind in _containers(cls, _family(cls, classes)).items()
                     if (_private(a) if private else not a.startswith("_"))
                 ]
-                statement = _first_method_call(module, function, arg.arg)
+                statement = _first_method_call(module, function, obj)
                 if not attributes or statement is None:
                     continue
                 attribute, kind = attributes[0]
                 attribute = mangled(cls.name, attribute)
-                target = f"{arg.arg}.{attribute}"
+                target = f"{obj}.{attribute}"
                 line = int(statement.end_lineno or statement.lineno)
                 fill = CONTAINER_FILLS[kind].format(target=target)
                 yield _Change(
@@ -1399,18 +1652,24 @@ def _add_io_via_helper(modules: list[_Module]) -> Iterator[_Change]:
 
 
 def _read_private_attribute(
-    modules: list[_Module], hints: Optional[ParameterClasses] = None
+    modules: list[_Module],
+    hints: Optional[ParameterClasses] = None,
+    package: str = "",
 ) -> Iterator[_Change]:
     """A client function (or a method of another class) reads the first
     private data attribute of an object of a project class it got as a
-    parameter, first thing: ``_ = obj._x``. Nothing else changes, so the
-    mutant runs as the reference does. A function that uses the name ``_``
-    itself, or has its body on the ``def`` line, gives none."""
+    parameter, first thing: ``_ = obj._x``; else of one a module global
+    holds (``world.BAG``), right after the first statement that uses it, as
+    ``foreign_write`` does (a global may still be ``None`` when the function
+    starts). Nothing else changes, so the mutant runs as the reference
+    does. A function that uses the name ``_`` itself, or has its body on the
+    ``def`` line, gives none."""
     classes: dict[str, list[ast.ClassDef]] = {}
     for module in modules:
         for node in module.tree.body:
             if isinstance(node, ast.ClassDef):
                 classes.setdefault(node.name, []).append(node)
+    owners = _global_owners(modules, classes, package)
     for module in modules:
         callables = [
             (name, method, _self_name(method)) for name, method in _methods(module.tree)
@@ -1422,6 +1681,8 @@ def _read_private_attribute(
             ):
                 continue
             arguments = function.args
+            # (object, its class, whether a module global holds it)
+            found: list[tuple[str, ast.ClassDef, bool]] = []
             for arg in arguments.posonlyargs + arguments.args + arguments.kwonlyargs:
                 if arg.arg == self_name:
                     continue
@@ -1432,16 +1693,35 @@ def _read_private_attribute(
                     None if hints is None else hints.get((module.file, name)),
                     arg.arg,
                 )
-                if cls is None or (
-                    self_name is not None and cls.name == name.split(".")[0]
-                ):
+                if cls is not None:
+                    found.append((arg.arg, cls, False))
+            found += [
+                (obj, cls, True)
+                for obj, cls in _owners_in(
+                    function, owners.get(module.file, {})
+                ).items()
+            ]
+            for obj, cls, held in found:
+                if self_name is not None and cls.name == name.split(".")[0]:
                     continue
-                private = [a for a in _data_attributes([cls]) if _private(a)]
+                private = [
+                    a
+                    for a in _data_attributes([cls], _family(cls, classes))
+                    if _private(a)
+                ]
                 if not private:
                     continue
                 attribute = mangled(cls.name, private[0])
-                target = f"{arg.arg}.{attribute}"
-                at, indent = _function_insert(function)
+                target = f"{obj}.{attribute}"
+                if held:
+                    # After the first use: a global may still be ``None``
+                    # when the function starts (until ``initialize()``).
+                    place = _first_use(module, function, obj)
+                    if place is None:
+                        continue
+                    at, indent = int(place.end_lineno or place.lineno), place.col_offset
+                else:
+                    at, indent = _function_insert(function)
                 yield _Change(
                     module.file,
                     f"{module.name}: {name} reads {target} (line {at + 1})",
@@ -1890,6 +2170,8 @@ def generate_mutants(
             f"unknown operator(s) {', '.join(unknown)}; use {', '.join(OPERATORS)}"
         )
     modules = _modules(root)
+    # The name absolute imports reach the project by (``game.world``).
+    package = Path(root).name if (Path(root) / "__init__.py").is_file() else ""
     produced: list[Mutant] = []
     for operator in OPERATORS:
         if operator not in chosen:
@@ -1911,19 +2193,19 @@ def generate_mutants(
         elif operator == "break_port":
             found = _break_port(modules)
         elif operator == "foreign_write":
-            found = _foreign_write(modules, parameter_classes)
+            found = _foreign_write(modules, parameter_classes, package)
         elif operator == "add_io_call":
             found = _add_io_call(modules)
         elif operator == "mutate_private_container":
-            found = _mutate_container(modules, True, parameter_classes)
+            found = _mutate_container(modules, True, parameter_classes, package)
         elif operator == "mutate_public_container":
-            found = _mutate_container(modules, False, parameter_classes)
+            found = _mutate_container(modules, False, parameter_classes, package)
         elif operator == "stub_role_call":
             found = _stub_role_call(modules)
         elif operator == "add_io_via_helper":
             found = _add_io_via_helper(modules)
         elif operator == "read_private_attribute":
-            found = _read_private_attribute(modules, parameter_classes)
+            found = _read_private_attribute(modules, parameter_classes, package)
         elif operator == "add_builtin_call":
             found = _add_io_call(modules, BUILTIN_CALLS)
         elif operator == "drop_base":

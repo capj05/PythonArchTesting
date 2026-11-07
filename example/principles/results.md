@@ -177,13 +177,14 @@ forbid_runtime_calls sees the calls `isinstance()` and `type()`. A client that a
 | `ok_rounding_bug` | neutral change: a mistake in a computation the principle does not concern (rounding) | PASS | PASS | ✓ | — |
 | `ok_style_noise` | neutral change: poor style: other names, loops instead of built-in functions, comments | PASS | PASS | ✓ | — |
 | `ok_strategy_as_function` | neutral change: the interchangeable behaviour written as plain functions (or closures a factory function returns) instead of classes | PASS | PASS | ✓ | — |
-| `err_total_if_chain` | error: the code doing the job does that part of it by itself instead of calling the object it was given | FAIL (require_runtime_delegation) | FAIL | ✓ | `type_switch_on_strategy`, `no_delegation` |
+| `err_total_ignores_discount` | error: the code doing the job does that part of it by itself instead of calling the object it was given | FAIL (require_runtime_delegation) | FAIL | ✓ | `no_delegation` |
 | `err_calculator_builds_discount` | error: the code doing the job builds its interchangeable object itself | FAIL (forbid_runtime_instantiation) | FAIL | ✓ | `hardcoded_strategy` |
 | `err_total_isinstance_fallback` | error: the code doing the job asks which kind of object it was given | FAIL (forbid_runtime_calls) | FAIL | ✓ | `type_switch_on_strategy` |
+| `err_total_if_chain` | error: the code doing the job asks which kind of object it was given | FAIL (forbid_runtime_calls) | FAIL | ✓ | `type_switch_on_strategy` |
 
 ### Explanations (composed from the catalogue and the report, no LLM)
 
-### `err_total_if_chain`: the code doing the job does that part of it by itself instead of calling the object it was given
+### `err_total_ignores_discount`: the code doing the job does that part of it by itself instead of calling the object it was given
 
 **What:** Method `PriceCalculator.total` (pricing.py:10) never calls the interchangeable object it was given (`self.discount`): it does that part of the job by itself, or branches on which kind of object it has.
 
@@ -214,4 +215,8 @@ forbid_runtime_instantiation sees objects of classes being built. When the inter
 ### Gap result_discarded: code that calls the object it was given but throws away what it returns is not found
 
 require_runtime_delegation sees whether the given object (the spy) is called, not what is done with its answer. Code that calls it and then computes the result by itself (`self.x.apply(amount)` as a statement of its own, then `return amount * 0.9`) delegates as far as the check can tell, so it passes. The spy returns no real answer, so its result cannot be followed through the code either; a future check would need to compare the result of the context with the result of the strategy it was given.
+
+### Gap unmatched_class_by_method_name: a helper class beside the interchangeable classes that has a method named like theirs is classified as hardcoded_strategy
+
+A class the code doing the job builds, which no class of the reference matches, is taken for an interchangeable one when it lives in their module and has one of them (or their common interface) among its bases, or defines a public method named like one of theirs. The likeness is by name only: a helper class of that module that happens to have such a method counts too, and a new interchangeable class with no such base and only differently named methods does not (it could not stand in for the others anyway). Exceptions never count. A future check would need to tell, from how the object is used, whether the code doing the job calls it in place of the one it was given.
 

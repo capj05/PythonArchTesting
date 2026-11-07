@@ -792,6 +792,7 @@ def _runtime_calls_marker(
     message: str | None,
     transitive: bool = False,
     through: list[str] | None = None,
+    cover_module: bool = False,
 ) -> RuleMarker:
     cleaned = _clean_kwargs(
         {
@@ -799,6 +800,7 @@ def _runtime_calls_marker(
             "allow": list(allow or []),
             "transitive": transitive or None,
             "through": list(through) if through is not None else None,
+            "cover_module": cover_module or None,
             "cases": list(cases),
             "init": dict(init) if init is not None else None,
             "timeout_s": timeout_s,
@@ -823,6 +825,7 @@ def forbid_runtime_calls(
     timeout_s: float = 5.0,
     severity: str = "error",
     message: str | None = None,
+    cover_module: bool = False,
 ) -> RuleMarker:
     """
     Capture a runtime layering policy for the rule engine.
@@ -839,6 +842,11 @@ def forbid_runtime_calls(
     module), unless that code was reached through a module in ``through`` —
     the layer whose job it is to make the call.
 
+    With ``cover_module=True`` the functions of the target's module that no
+    reference entity matches (a function the target adds, which no case
+    runs) are checked statically too: a call in their body of a builtin the
+    listed modules name (``print``, ``input``, ``open``) is a violation.
+
     This helper is declaration-only and returns passive annotation metadata.
     """
     return _runtime_calls_marker(
@@ -848,6 +856,7 @@ def forbid_runtime_calls(
         allow=allow,
         transitive=transitive,
         through=through,
+        cover_module=cover_module,
         init=init,
         timeout_s=timeout_s,
         severity=severity,

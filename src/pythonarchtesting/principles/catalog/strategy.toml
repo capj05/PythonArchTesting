@@ -110,7 +110,7 @@ fix = "Remove the test of the kind: call what the constructor stored for every k
 signature = { kind = "call" }
 # One error for `isinstance()` and `type()`: the signature names no callee,
 # so the mutants make both calls the check names, first thing in a context
-# method (`isinstance(None, (object,)[0])`, `type(None) == object`). A call
+# method (`isinstance(None, (object,)[0])`, `type((None,)[0]) == object`). A call
 # of `type()` is seen on Python 3.12 and later only (see
 # forbid_runtime_calls).
 operator = "add_builtin_call"
@@ -166,4 +166,19 @@ result by itself (`self.x.apply(amount)` as a statement of its own, then
 The spy returns no real answer, so its result cannot be followed through the
 code either; a future check would need to compare the result of the context
 with the result of the strategy it was given.
+"""
+
+[[gaps]]
+id = "unmatched_class_by_method_name"
+title = "a helper class beside the interchangeable classes that has a method named like theirs is classified as hardcoded_strategy"
+detail = """
+A class the code doing the job builds, which no class of the reference
+matches, is taken for an interchangeable one when it lives in their module
+and has one of them (or their common interface) among its bases, or defines a
+public method named like one of theirs. The likeness is by name only: a
+helper class of that module that happens to have such a method counts too,
+and a new interchangeable class with no such base and only differently named
+methods does not (it could not stand in for the others anyway). Exceptions
+never count. A future check would need to tell, from how the object is used,
+whether the code doing the job calls it in place of the one it was given.
 """

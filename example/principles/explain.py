@@ -2,7 +2,8 @@
 
 The catalogue entries ship with the tool (``pythonarchtesting.principles``);
 ``<principle>/principle.toml`` here names its entry by ``id`` and maps each
-error and neutral change to its example variant (``[examples]``);
+error and neutral change to its example variant (``[examples]``) and, in
+``[more_examples]``, lists further variants that show it;
 ``<principle>/task.toml`` binds the entry's roles to the unannotated
 ``reference/`` and gives the cases, and the tool runs with the principle
 directory itself as ``--source`` (a task, see ``docs/tasks.md``).
@@ -43,7 +44,8 @@ NO_MATCH = "required_target_missing"
 
 def load_entry(principle_dir: Path) -> dict[str, Any]:
     """The catalogue entry ``<principle>/principle.toml`` points to, as a dict;
-    each error and neutral change also carries its ``example`` variant. The
+    each error and neutral change also carries its ``example`` variant and
+    the ``more_examples`` that show it too (``[more_examples]``). The
     task (``task.toml``) must be of the same principle and bind every role of
     the entry."""
     path = principle_dir / "principle.toml"
@@ -61,8 +63,13 @@ def load_entry(principle_dir: Path) -> dict[str, Any]:
     missing = sorted(item["id"] for item in items if item["id"] not in examples)
     if unknown or missing:
         raise SystemExit(f"{path}: [examples] names unknown ids {unknown} and lacks {missing}")
+    more: dict[str, list[str]] = pointer.get("more_examples", {})
+    unknown = sorted(set(more) - {item["id"] for item in items})
+    if unknown:
+        raise SystemExit(f"{path}: [more_examples] names unknown ids {unknown}")
     for item in items:
         item["example"] = examples[item["id"]]
+        item["more_examples"] = list(more.get(item["id"], []))
     return entry
 
 

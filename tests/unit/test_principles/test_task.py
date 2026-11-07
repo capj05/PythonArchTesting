@@ -68,7 +68,7 @@ def parse_grades(text):
         None,
         forbid_runtime_calls(
             "builtins.print", "builtins.input", "io", transitive=True,
-            cases=[{"args": ["1 2"]}],
+            cases=[{"args": ["1 2"]}], cover_module=True,
         ),
     ]
     return [int(word) for word in text.split()]
@@ -79,7 +79,7 @@ def average(grades):
         None,
         forbid_runtime_calls(
             "builtins.print", "builtins.input", "io", transitive=True,
-            cases=[{"args": [[1, 2]]}, {"args": [[]]}],
+            cases=[{"args": [[1, 2]]}, {"args": [[]]}], cover_module=True,
         ),
     ]
     if not grades:
@@ -151,6 +151,15 @@ def test_a_task_binds_every_check_to_its_entities(tmp_path: Path) -> None:
     # target_role: the modules of the entities playing that role.
     assert checks[2].params["modules"] == ["grades"]
     assert checks[0].params["modules"] == ["builtins.print", "builtins.input", "io"]
+    # The role binds the whole module: the check of each of its functions
+    # also covers, statically, the functions a target adds to it (N7), so
+    # renaming any one of them does not switch the scan off; one bound by
+    # name does not.
+    assert [c.params.get("cover_module", False) for c in checks] == [
+        True,
+        True,
+        False,
+    ]
 
 
 def test_a_role_the_checks_need_must_be_bound(tmp_path: Path) -> None:

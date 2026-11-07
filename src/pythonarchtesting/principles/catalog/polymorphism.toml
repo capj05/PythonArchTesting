@@ -87,7 +87,7 @@ signature = { kind = "call", callee = "builtins:type" }
 # too, a name only shown in a text is not; `isinstance` is
 # type_switch. Two errors rather than one signature listing both callees: a
 # signature names one callee, and the two calls need different wording.
-# The mutants compare `type(None) == object` first thing in a client function. A call of
+# The mutants compare `type((None,)[0]) == object` first thing in a client function. A call of
 # `type()` is seen on Python 3.12 and later only (see forbid_runtime_calls).
 operator = "add_builtin_call"
 

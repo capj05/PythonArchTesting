@@ -76,11 +76,26 @@ function of `grades`, and `require_runtime_calls("grades", cases=...)` on
 `target_role` gives the qualified names of the classes bound to that role
 (`discounts.NoDiscount`), not their modules, so that the context may still
 build other objects of the same module (a `Log` beside the strategies). A
-role that binds no class (strategies written as functions,
+bound interface (an abstract class or a `Protocol`, `strategy =
+["discounts.Discount"]`) stands for the classes of the reference that
+implement it: its subclasses and, for a `Protocol`, the classes defining every
+method it declares. A class a submission builds that no reference class
+matches (a strategy renamed `PercentOff`, or a new `HalfPrice`) counts when it
+lives in the module of a bound class and looks like one: a bound class or an
+interface of theirs is among its bases, or it defines a public method named
+like one of theirs (`apply`). The reference cannot name it. A class of its own
+that is no such class (a value `Money`, a dataclass, an exception), a class
+of its own in another module, and a reference class the role does not bind
+stay allowed. The likeness is by name only: a helper of that module that
+happens to define a method named like a bound class's is counted (the
+strategy catalogue's gap `unmatched_class_by_method_name`). A role that binds no class (strategies written as functions,
 `strategy = ["adventure.take", "adventure.look"]`) leaves the check without
 a target: no declaration is made, `prepare_task` lists the check as
 `not_applicable` with `why`, and the error it detects (`hardcoded_strategy`)
-is `not_applicable` too; nothing is a failure of the reference.
+is `not_applicable` too; nothing is a failure of the reference. When the
+modules of those functions also define classes, `problems` carries a line
+starting `WARNING:` that says so (the teacher may have meant the classes);
+the task is still accepted.
 
 With `target_kind = "class"` (default `"module"`) the check gets, instead of
 the modules of the entities bound to `target_role`, the qualified name of the
@@ -139,7 +154,7 @@ returns them as a tool error.
   function, only for the calls into a module the check names, and
   `foreign_write`, `mutate_private_container`, `mutate_public_container` and
   `read_private_attribute` in the client functions; `add_builtin_call`
-  (`isinstance(None, (object,)[0])` or `type(None) == object`) in the client functions,
+  (`isinstance(None, (object,)[0])` or `type((None,)[0]) == object`) in the client functions,
   `drop_base` in a variant class and `concretize_base` in the base class;
   `drop_call` cuts `self.x.m(...)`, and `self.x(...)` when the constructor
   stored a parameter in `x` (a function passed in); `hardcode_collaborator`
@@ -152,6 +167,17 @@ returns them as a tool error.
   `$new` the entity's cases build for it, and only without cases from its
   annotation or the one project class that has every method called on it
   (never when a builtin container or `str` has each of those methods too).
+  They also reach an object a module global holds (`world.BAG` built by
+  `BAG = Bag()`, `world.current_place` annotated `current_place: Place =
+  None`; through the imported module, a name imported from it, or a global
+  of the function's own module), so a client that gets only a list of words
+  is seeded too. A container is a dict, list or set any method of the owner
+  class or of its project base assigns to `self` (a game's `initialize()`,
+  not only `__init__`), unless another method assigns it something else;
+  the constructor's containers come first. `foreign_write` seeds only an
+  attribute of the privacy the error's signature declares (`replace_attribute`:
+  a private one), so a reference whose owners have no private data attribute
+  gives that error `not_applicable`.
   A static check (`forbid_private_access`, `subclass_of`,
   `is_abstract_class`) runs no cases and is not listed
   under `checks`. An error counts as `killed` only when at least one mutant's
@@ -166,7 +192,11 @@ returns them as a tool error.
   nothing in the entities of the detecting check, gives `no_mutants`, which
   does: the role is bound to other code than the one the error lives in. An
   error whose operator cannot make the call its signature names (`add_io_via_helper`
-  only prints) is `not_verifiable_by_mutation`, with `why`.
+  only prints), or without a callee none of the calls its check names, is
+  `not_verifiable_by_mutation`, with `why` naming them. A check that fails on
+  the unchanged reference, or does not run on it (a case that cannot be set
+  up), is a line of `problems` with its reason, and its errors are
+  `reference_fails`.
   A mutant that changes a constructor (`hardcode_collaborator`) counts for
   a check on any method of its class: the method's cases build the object
   first. When the unchanged reference already fails the detecting check (its
@@ -204,3 +234,20 @@ finding is `missing_required_entity`, even when another of its functions
 `{"pairs": {"shop.sell": "shop.prodej"}}` pairs them; the checks then judge
 `prodej`. Entities no role binds keep the usual matching by name, structure
 and similarity.
+
+The pairing of a renamed entity is the teacher's AI's job, not a heuristic of
+the tool: it reads the submission's code, decides which of its functions plays
+the reference's role and passes the pair as `mapping` (see
+[MCP § Renamed entities](mcp.md#renamed-entities)). `propose_mapping` is only a
+hint: it ranks candidates by name and structure and may offer none for a
+function whose name and body both differ.
+
+A role bound to a whole module (`logic = ["actions"]`) also covers the
+functions a submission adds to that module, which no case can run: the
+`forbid_runtime_calls` check of every function of the module gets
+`cover_module=True` and reads their bodies for `print`, `input` and `open`
+([forbid_runtime_calls](markers/forbid_runtime_calls.md#functions-no-case-runs-cover_moduletrue)),
+so a submission that renames one of the module's functions does not switch
+the scan off; a call found by several checks is reported once.
+A call through a helper of another module is not seen there, nor a call in a
+method of a class the submission adds.

@@ -228,6 +228,8 @@ def _check_results(h: Harness, students: dict[str, str]) -> None:
         errors = sum(1 for error in entry.get("errors", []) if "gap" not in error)
         defects = sum(1 for item in entry.get("neutral", []) if item["example"] != "ok_basic") + 1
         total = errors + defects + 2
+        # Every injected error (its example variant) is flagged as that error
+        # and nothing else: a classification lost to another error fails here.
         known = [f"{errors}/{errors}", f"{errors}/{errors}", f"0/{defects}", "0/2", f"1/{total}", f"0/{total}"]
         for label, copied in (("example", "n/a"), ("run-1", "yes")):
             if rows.get((principle, label)) != ["yes", "0", copied, *known]:

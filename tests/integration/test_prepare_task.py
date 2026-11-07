@@ -413,7 +413,11 @@ def test_prepare_task_accepts_strategies_written_as_functions(tmp_path: Path) ->
 
     result = prepare_task(str(task), sandbox="limits")
 
-    assert result["problems"] == [], result
+    # Accepted, with a warning: the module also has classes (Log, Action),
+    # so the teacher's AI sees why building one is not checked.
+    [warning] = result["problems"]
+    assert warning.startswith("WARNING: role 'strategy' binds only functions")
+    assert "adventure.Log" in warning and "not_applicable" in warning
     assert result["accepted"] is True, result
     statuses = {e["error"]: e for e in result["errors"]}
     assert statuses["no_delegation"]["status"] == "killed"
@@ -457,8 +461,26 @@ def test_prepare_task_accepts_strategies_written_as_functions(tmp_path: Path) ->
             ],
             1,
         ),
+        # A context that inherits its constructor from a project base (review
+        # of the N5 fix round): the spy is kept by the base's __init__.
+        (
+            [
+                (
+                    "pricing.py",
+                    "class PriceCalculator:\n",
+                    "class Calculator:\n",
+                ),
+                (
+                    "pricing.py",
+                    "        self.discount = discount\n",
+                    "        self.discount = discount\n\n\n"
+                    "class PriceCalculator(Calculator):\n",
+                ),
+            ],
+            1,
+        ),
     ],
-    ids=["annotated", "second_parameter"],
+    ids=["annotated", "second_parameter", "inherited_constructor"],
 )
 def test_prepare_task_hardcodes_only_the_spied_strategy(
     tmp_path: Path, changes: list[tuple[str, str, str]], mutants: int

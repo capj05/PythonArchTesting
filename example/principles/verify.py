@@ -2,7 +2,9 @@
 
 For each ``<principle>/principle.toml`` (a pointer to the packaged catalogue
 entry, ``pythonarchtesting.principles``, with the example variant of each of
-its items) this runs the tool once over ``<principle>/assignments``
+its items, and in ``[more_examples]`` further variants of an item, each held
+to the same promise and given a row of its own; only the example's failure is
+explained) this runs the tool once over ``<principle>/assignments``
 (``--dynamic --sandbox bwrap``) and compares each variant with what the
 catalogue entry promises:
 
@@ -61,37 +63,39 @@ def check_principle(principle_dir: Path) -> tuple[list[str], bool]:
     listed: set[str] = set()
 
     for item in entry.get("neutral", []):
-        listed.add(item["example"])
-        verdict = "FAIL" if first_failure(results[item["example"]], None) else "PASS"
-        match = verdict == "PASS"
-        ok &= match
-        found = all_findings(entry["id"], results[item["example"]])
-        lines.append(f"| `{item['example']}` | neutral change: {item['title']} | PASS | {verdict} | {'✓' if match else '✗'} | {found} |")
+        for variant in [item["example"], *item["more_examples"]]:
+            listed.add(variant)
+            verdict = "FAIL" if first_failure(results[variant], None) else "PASS"
+            match = verdict == "PASS"
+            ok &= match
+            found = all_findings(entry["id"], results[variant])
+            lines.append(f"| `{variant}` | neutral change: {item['title']} | PASS | {verdict} | {'✓' if match else '✗'} | {found} |")
 
     for error in entry.get("errors", []):
-        listed.add(error["example"])
-        variant_results = results[error["example"]]
-        if "gap" in error:
-            failure = first_failure(variant_results, None)
-            verdict = "FAIL" if failure else "PASS"
-            match = verdict == "PASS"
-            expected = f"PASS (gap {error['gap']})"
-        else:
-            failure = first_failure(variant_results, error["detected_by"])
-            verdict = "FAIL" if failure else "PASS"
-            match = verdict == "FAIL"
-            expected = f"FAIL ({error['detected_by']})"
-            if failure and not signature_matches(error["signature"], signature(failure)):
-                match = False
-                verdict = f"FAIL, signature {signature(failure)} is not the declared one"
-            elif failure and (chosen := choose_error(entry, failure)) is not error:
-                match = False
-                verdict = f"FAIL, classified as {chosen['id'] if chosen else 'no error'}"
-            if failure:
-                explanations += [f"### `{error['example']}`: {error['title']}", "", explanation(error, failure), ""]
-        ok &= match
-        found = all_findings(entry["id"], variant_results)
-        lines.append(f"| `{error['example']}` | error: {error['title']} | {expected} | {verdict} | {'✓' if match else '✗'} | {found} |")
+        for variant in [error["example"], *error["more_examples"]]:
+            listed.add(variant)
+            variant_results = results[variant]
+            if "gap" in error:
+                failure = first_failure(variant_results, None)
+                verdict = "FAIL" if failure else "PASS"
+                match = verdict == "PASS"
+                expected = f"PASS (gap {error['gap']})"
+            else:
+                failure = first_failure(variant_results, error["detected_by"])
+                verdict = "FAIL" if failure else "PASS"
+                match = verdict == "FAIL"
+                expected = f"FAIL ({error['detected_by']})"
+                if failure and not signature_matches(error["signature"], signature(failure)):
+                    match = False
+                    verdict = f"FAIL, signature {signature(failure)} is not the declared one"
+                elif failure and (chosen := choose_error(entry, failure)) is not error:
+                    match = False
+                    verdict = f"FAIL, classified as {chosen['id'] if chosen else 'no error'}"
+                if failure and variant == error["example"]:
+                    explanations += [f"### `{variant}`: {error['title']}", "", explanation(error, failure), ""]
+            ok &= match
+            found = all_findings(entry["id"], variant_results)
+            lines.append(f"| `{variant}` | error: {error['title']} | {expected} | {verdict} | {'✓' if match else '✗'} | {found} |")
 
     unlisted = sorted(set(results) - listed)
     if unlisted:

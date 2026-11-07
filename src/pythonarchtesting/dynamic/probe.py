@@ -309,6 +309,15 @@ class _Project:
                     classes.append(value)
         return sorted(classes, key=lambda cls: len(cls.__mro__))
 
+    def modules(self) -> list[Any]:
+        """The loaded project modules, each once."""
+        modules = {id(module): module for module in list(sys.modules.values())}
+        return [
+            module
+            for module in modules.values()
+            if self.relpath(getattr(module, "__file__", None)) is not None
+        ]
+
 
 def _code_name(code: Any) -> str:
     # co_qualname exists from Python 3.11; co_name is the fallback.
@@ -791,6 +800,9 @@ class WriteRecorder:
         # Container id (a __dict__ included) -> ids of the watched instances
         # holding it; a C method of the container can change only those.
         self._held: dict[int, set[int]] = {}
+        # Watched instance id -> the module global that holds it (``world.BAG``),
+        # for an instance the case reaches only through that global.
+        self._holders: dict[int, str] = {}
         # Library frames handed a watched object or container, compared on return.
         self._library: set[Any] = set()
 
@@ -800,7 +812,13 @@ class WriteRecorder:
         ``roots`` (the case's arguments, the instance a method runs on) and
         the project instances they hold are watched for changes that bypass
         ``__setattr__``; instances built while the case runs are added as
-        they are.
+        they are. So are the project instances the project's modules hold in
+        their global variables (``world.BAG``, or one in a dict ``world.ROOMS``
+        holds), which code reaches without getting them as an argument; a
+        write to one of them names that global (``held_by``). The label is
+        taken here, at the start of the case: an object a global gets while
+        the case runs has none, and one moved from one global to another
+        keeps the first.
         """
         self.install()
         self.writes = []
@@ -808,13 +826,42 @@ class WriteRecorder:
         self._classes = set(self._project.classes())
         self._watched = {}
         self._held = {}
+        self._holders = {}
         self._library = set()
-        self._collect(roots)
+        visited: set[int] = set()
+        self._collect(roots, visited)
+        self._collect_globals(visited)
         self.active = True
 
-    def _collect(self, roots: Iterable[Any]) -> None:
+    def _collect_globals(self, visited: set[int]) -> None:
+        """Watch the project instances held in the project modules' globals.
+
+        A global holding an instance itself comes before one holding it in a
+        container, so the instance is named by the global that holds it.
+        """
+        direct: list[tuple[str, Any]] = []
+        nested: list[tuple[str, Any]] = []
+        for module in self._project.modules():
+            local = _local_module(getattr(module, "__name__", None), self._package)
+            for name, value in list(vars(module).items()):
+                if name.startswith("__") or isinstance(
+                    value, (types.ModuleType, type, types.FunctionType)
+                ):
+                    continue
+                label = f"{local}.{name}"
+                if type(value) in self._classes:
+                    direct.append((label, value))
+                elif isinstance(value, (list, tuple, set, frozenset, dict)) and (
+                    len(value) <= _CONTENT_LIMIT
+                ):
+                    nested.append((label, value))
+        for label, value in direct + nested:
+            self._collect([value], visited, label)
+
+    def _collect(
+        self, roots: Iterable[Any], visited: set[int], label: str | None = None
+    ) -> None:
         pending = [(root, 0) for root in roots]
-        visited: set[int] = set()
         while pending:
             obj, depth = pending.pop()
             if id(obj) in visited or depth > _WATCH_DEPTH:
@@ -822,6 +869,8 @@ class WriteRecorder:
             visited.add(id(obj))
             if type(obj) in self._classes:
                 self._watch(obj)
+                if label is not None:
+                    self._holders[id(obj)] = label
                 values = list(getattr(obj, "__dict__", {}).values())
             elif isinstance(obj, (list, tuple, set, frozenset)):
                 values = list(obj)
@@ -1057,16 +1106,18 @@ class WriteRecorder:
         if key in self._seen:
             return
         self._seen.add(key)
-        self.writes.append(
-            {
-                "class": owner,
-                "attribute": name,
-                "writer": writer,
-                "file": relpath,
-                "line": frame.f_lineno,
-                "change": change,
-            }
-        )
+        write = {
+            "class": owner,
+            "attribute": name,
+            "writer": writer,
+            "file": relpath,
+            "line": frame.f_lineno,
+            "change": change,
+        }
+        holder = self._holders.get(id(obj))
+        if holder is not None:
+            write["held_by"] = holder
+        self.writes.append(write)
 
 
 _WATCH_DEPTH = 3  # how deep the case's arguments are searched for instances
@@ -1264,11 +1315,51 @@ class InstanceRecorder:
             "file": relpath,
             "line": frame.f_lineno,
         }
+        instance.update(self._shape(cls))
         if self._origin is not None and _module_of(frame) != self._origin:
             chain = _origin_chain(frame, self._origin, self._package, self._in_project)
             if chain is not None:
                 instance["origin"], instance["via"] = chain
         self.instances.append(instance)
+
+    def _shape(self, cls: type) -> dict[str, Any]:
+        """What tells a class the reference lacks apart from another
+        strategy: its project bases as ``[module, qualname]`` (``bases``),
+        the public methods it or a project base defines (``methods``), and
+        whether it is an exception (``exception``; ``classes`` leaves those
+        unwrapped, so it is never set today)."""
+        shape: dict[str, Any] = {}
+        if issubclass(cls, BaseException):
+            shape["exception"] = True
+        project = [
+            klass
+            for klass in cls.__mro__
+            if self._project.relpath(_class_file(klass)) is not None
+        ]
+        bases = [
+            [_local_module(klass.__module__, self._package), klass.__qualname__]
+            for klass in project
+            if klass is not cls
+        ]
+        if bases:
+            shape["bases"] = bases
+        methods = sorted(
+            {
+                name
+                for klass in project
+                for name, value in vars(klass).items()
+                if not name.startswith("_")
+                and (callable(value) or isinstance(value, (staticmethod, classmethod)))
+            }
+        )
+        if methods:
+            shape["methods"] = methods
+        return shape
+
+
+def _class_file(cls: type) -> str | None:
+    """The file of the module that defines ``cls``, if it has one."""
+    return getattr(sys.modules.get(cls.__module__), "__file__", None)
 
 
 class ImportRecorder:

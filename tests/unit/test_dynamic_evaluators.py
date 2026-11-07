@@ -805,3 +805,61 @@ def test_a_passing_rule_has_no_facts() -> None:
 
     assert result.status == "OK"
     assert "facts" not in result.details
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from rich import print\n",
+        "from rich import echo as print\n",
+        "import print\n",
+        "def print(*args):\n    return None\n",
+        "class print:\n    pass\n",
+        "print = len\n",
+        "print: object = len\n",
+        "def f():\n    global print\n    print = len\n",
+    ],
+)
+def test_the_static_scan_does_not_take_a_rebound_print_for_the_builtin(
+    source: str,
+) -> None:
+    import ast
+
+    from pythonarchtesting.execution.evaluators.runtime_structure import (
+        _rebound_names,
+    )
+
+    assert "print" in _rebound_names(ast.parse(source))
+    assert "input" not in _rebound_names(ast.parse(source))
+
+
+def test_the_static_scan_keeps_a_print_nothing_rebinds() -> None:
+    import ast
+
+    from pythonarchtesting.execution.evaluators.runtime_structure import (
+        _rebound_names,
+    )
+
+    tree = ast.parse("import builtins\nx = print\nprint('x')\n")
+    assert _rebound_names(tree) == {"x", "builtins"}
+
+
+def test_a_write_to_an_object_a_global_holds_says_held_in() -> None:
+    from pythonarchtesting.execution.evaluators.runtime_structure import (
+        _describe_write,
+    )
+
+    write = {
+        "writer": "actions:take",
+        "change": "mutated",
+        "class": "Thing",
+        "attribute": "where",
+        "file": "actions.py",
+        "line": 7,
+        "held_by": "world.SACK",
+    }
+
+    assert _describe_write(write) == (
+        "actions:take changes what is held in Thing.where (held in world.SACK) "
+        "at actions.py:7"
+    )

@@ -72,6 +72,17 @@ def test_without_transitive_the_rule_has_no_such_params() -> None:
     assert "through" not in rules[0].params
 
 
+def test_cover_module_reaches_the_rule() -> None:
+    rules, evidence, _ = _on_function(
+        'forbid_runtime_calls("builtins.print", cover_module=True, cases=[{}])'
+    )
+
+    assert evidence == []
+    assert rules[0].params["cover_module"] is True
+    plain, _, _ = _on_function('forbid_runtime_calls("db", cases=[{}])')
+    assert "cover_module" not in plain[0].params
+
+
 def test_require_runtime_calls_compiles_in_require_mode() -> None:
     rules, evidence, _ = _on_function(
         'require_runtime_calls("service", cases=[{"args": [1, 2]}])'
@@ -149,6 +160,16 @@ __archtest__: Annotated[None, forbid_runtime_calls("db", cases=[{}])]
             'forbid_runtime_calls("db", transitive=True, through="service", cases=[{}])',
             "through",
             "list of module names",
+        ),
+        (
+            'forbid_runtime_calls("db", cover_module="yes", cases=[{}])',
+            "cover_module",
+            "True or False",
+        ),
+        (
+            'require_runtime_calls("db", cover_module=True, cases=[{}])',
+            "cover_module",
+            "cover_module does not apply to require_runtime_calls",
         ),
         ('forbid_runtime_calls("db", cases=[])', "cases", "non-empty list"),
         (

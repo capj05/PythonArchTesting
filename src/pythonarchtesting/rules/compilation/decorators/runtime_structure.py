@@ -302,8 +302,13 @@ def _compile_module_list(
     allow = _module_names(params_kwargs.get("allow") or [])
     transitive = params_kwargs.get("transitive", False)
     through = _module_names(params_kwargs.get("through") or [])
+    cover_module = params_kwargs.get("cover_module", False)
     problem: tuple[str, str] | None = None
-    if not modules:
+    if not isinstance(cover_module, bool):
+        problem = ("cover_module", "cover_module must be True or False")
+    elif cover_module and marker != "forbid_runtime_calls":
+        problem = ("cover_module", f"cover_module does not apply to {marker}")
+    elif not modules:
         problem = ("modules", "give at least one module name")
     elif allow is None:
         problem = ("allow", "allow must be a list of module names")
@@ -350,6 +355,7 @@ def _compile_module_list(
                 if transitive
                 else {}
             ),
+            **({"cover_module": True} if cover_module else {}),
         },
         message_template=(
             f"{marker} for " "{target.module_path}:{target.qualname}: {details.summary}"

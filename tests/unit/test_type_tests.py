@@ -147,3 +147,50 @@ def test_a_project_class_named_like_a_builtin_counts(tmp_path: Path) -> None:
     )
 
     assert tests.is_type_test("builtins:isinstance", "report.py", 5) is True
+
+
+# Review of the N5 fix round: calls of ``type`` and ``isinstance`` that are
+# no branch on the type of an object, and the ones that stay one.
+@pytest.mark.parametrize(
+    ("callee", "line", "kept"),
+    [
+        # type(None) is the class of None, not a question about an object.
+        ("type", "isinstance(a, (int, float, type(None)))", False),
+        ("type", "t = type(None)", False),
+        # type(x) handed to isinstance/issubclass is its argument, not a test.
+        ("type", "isinstance(a, type(shape))", False),
+        ("type", "issubclass(type(a), int)", False),
+        # type(self)(...) builds a new object of the same class.
+        ("type", "return type(self)(a)", False),
+        # Displayed by %-formatting, .format() or a logging call.
+        ("type", 'raise TypeError("got %s" % type(a).__name__)', False),
+        ("type", 'raise TypeError("got {}".format(type(a).__name__))', False),
+        ("type", 'log.warning("got %s", type(a).__name__)', False),
+        ("type", 'msg = "%s: %s" % (a, type(a))', False),
+        ("type", 'logging.error("got %s", type(a))', False),
+        # ... but a %-format compared, or a number's %, stays a test.
+        ("type", 'ok = "%s" % type(a).__name__ == "Circle"', True),
+        ("type", "n = type(a) % 2", True),
+        ("type", "t = type(a)", True),
+        ("type", "if type(a) is int:", True),
+        # Exceptions from any module and typing aliases are no branch.
+        ("isinstance", "if isinstance(e, json.JSONDecodeError):", False),
+        ("isinstance", "if isinstance(e, ShapeError):", False),
+        ("isinstance", "if isinstance(a, List):", False),
+        ("isinstance", "if isinstance(a, typing.Sequence):", False),
+        ("isinstance", "if isinstance(a, Circle):", True),
+        ("isinstance", "if isinstance(a, bool) or isinstance(a, Circle):", True),
+    ],
+)
+def test_no_type_test_after_the_n5_review(
+    tmp_path: Path, callee: str, line: str, kept: bool
+) -> None:
+    client = (
+        "import json\nimport logging\nimport typing\nfrom typing import List\n"
+        "from .shapes import Circle\n\n\nclass ShapeError(Exception):\n    pass\n\n\n"
+        + _function("self, a, e, shape, log", line)
+    )
+    tests = _tests(tmp_path, client)
+    lineno = client.splitlines().index(f"    {line.splitlines()[0]}") + 1
+
+    assert tests.is_type_test(f"builtins:{callee}", "report.py", lineno) is kept

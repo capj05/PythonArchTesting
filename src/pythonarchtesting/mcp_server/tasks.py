@@ -79,18 +79,21 @@ _IO_MEMBERS = {
 }
 # What in the reference each operator needs, for a ``not_applicable`` error.
 _SITES = {
-    "foreign_write": "data attribute of an object a function gets from outside",
+    "foreign_write": (
+        "data attribute of an object a function gets from outside (as a "
+        "parameter or through a module global)"
+    ),
     "mutate_private_container": (
-        "private container (a dict, list or set an owner's constructor creates) "
-        "of an object a function gets as a parameter"
+        "private container (a dict, list or set an owner's method creates) "
+        "of an object a function gets as a parameter or through a module global"
     ),
     "mutate_public_container": (
-        "public container (a dict, list or set an owner's constructor creates) "
-        "of an object a function gets as a parameter"
+        "public container (a dict, list or set an owner's method creates) "
+        "of an object a function gets as a parameter or through a module global"
     ),
     "read_private_attribute": (
         "private data attribute of an object of a project class a function "
-        "gets as a parameter"
+        "gets as a parameter or through a module global"
     ),
     "stub_role_call": "call of a function of another project module",
     "add_io_call": "function whose body starts on a line of its own",
@@ -214,12 +217,22 @@ def _check_cases(
 
 
 def _aimed(error: Any, checks: list[Any], entities: dict[str, Any]) -> set[Any]:
-    """``(file, qualname)`` of the entities the check detecting ``error`` is on."""
-    return {
+    """``(file, qualname)`` of the entities the check detecting ``error`` is on;
+    for an operator that changes a constructor, also the ``__init__`` a
+    method's class inherits from a project base (``_constructor``)."""
+    aimed = {
         (str(entities[c.entity_id].filepath_rel), str(entities[c.entity_id].qualname))
         for c in checks
         if c.marker == error.detected_by and c.not_applicable is None
     }
+    if error.operator in _CONSTRUCTOR_OPERATORS:
+        for file, qualname in list(aimed):
+            owner = qualname.rpartition(".")[0]
+            if owner:
+                (where, cls), node = _constructor(entities, file, owner)
+                if node is not None and cls != owner:
+                    aimed.add((where, f"{cls}.__init__"))
+    return aimed
 
 
 def _targets(error: Any, checks: list[Any]) -> set[str]:
@@ -247,9 +260,9 @@ def spied(
 ) -> dict[tuple[str, str], set[str]]:
     """The constructor parameters the task gives a spy: ``(file, class) ->
     parameter names`` for each ``{"$spy": ...}`` in the ``init`` of a
-    method's checks, positional (after ``self``) or by keyword."""
-    import ast
-
+    method's checks, positional (after ``self``) or by keyword. The class is
+    the one whose ``__init__`` keeps them: a project base's, when the
+    method's class inherits its constructor."""
     found: dict[tuple[str, str], set[str]] = {}
     for check in checks:
         entity = entities.get(check.entity_id)
@@ -258,23 +271,63 @@ def spied(
             continue
         owner = str(entity.qualname).rpartition(".")[0]
         file = str(entity.filepath_rel)
+        where, init_node = _constructor(entities, file, owner)
         names: list[str] = []
-        for other in entities.values():
-            node = other.extras.get("ast_node")
-            if (
-                str(other.filepath_rel) == file
-                and str(other.qualname) == f"{owner}.__init__"
-                and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            ):
-                names = [a.arg for a in node.args.posonlyargs + node.args.args][1:]
-                names += [a.arg for a in node.args.kwonlyargs]
+        if init_node is not None:
+            names = [a.arg for a in init_node.args.posonlyargs + init_node.args.args][
+                1:
+            ]
+            names += [a.arg for a in init_node.args.kwonlyargs]
         given = list(zip(names, init.get("args") or []))
         given += list((init.get("kwargs") or {}).items())
-        params = found.setdefault((file, owner), set())
+        # The parameters belong to the class whose constructor keeps them (a
+        # project base, when the class inherits its constructor).
+        params = found.setdefault(where, set())
         params.update(
             name for name, value in given if isinstance(value, dict) and "$spy" in value
         )
     return found
+
+
+def _constructor(
+    entities: dict[str, Any], file: str, owner: str
+) -> tuple[tuple[str, str], Any]:
+    """``((file, class), node)`` of the ``__init__`` objects of ``owner`` (in
+    ``file``) run: its own, else the nearest project base's (a base named by
+    one class of the reference only); ``node`` is ``None`` without one."""
+    import ast
+
+    classes: dict[str, list[Any]] = {}
+    inits: dict[tuple[str, str], Any] = {}
+    for other in entities.values():
+        node = other.extras.get("ast_node")
+        name = str(other.qualname)
+        if other.kind == "class" and isinstance(node, ast.ClassDef):
+            classes.setdefault(name.rpartition(".")[2], []).append(other)
+        elif name.endswith(".__init__") and isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            inits[(str(other.filepath_rel), name.rpartition(".")[0])] = node
+    pending, seen = [(file, owner)], set()
+    while pending:
+        key = pending.pop(0)
+        if key in seen:
+            continue
+        seen.add(key)
+        if key in inits:
+            return key, inits[key]
+        found = [
+            c
+            for c in classes.get(key[1].rpartition(".")[2], [])
+            if str(c.filepath_rel) == key[0] and str(c.qualname) == key[1]
+        ]
+        node = found[0].extras.get("ast_node") if found else None
+        for base in getattr(node, "bases", []):
+            name = base.id if isinstance(base, ast.Name) else getattr(base, "attr", "")
+            named = classes.get(name, [])
+            if len(named) == 1:
+                pending.append((str(named[0].filepath_rel), str(named[0].qualname)))
+    return (file, owner), None
 
 
 def _callees(error: Any, checks: list[Any]) -> list[str]:
@@ -307,11 +360,26 @@ def _candidates(
             }
             if not members:
                 return None
+    # A write the signature declares private (or public) is seeded only into
+    # such an attribute: one of the other kind would be another error.
+    private = getattr(error.signature, "private", None)
     return [
         m
         for m in mutants
-        if m.operator == error.operator and (members is None or m.member in members)
+        if m.operator == error.operator
+        and (members is None or m.member in members)
+        and (
+            private is None
+            or error.operator != "foreign_write"
+            or _is_private(m.member) == private
+        )
     ]
+
+
+def _is_private(attribute: str) -> bool:
+    return attribute.startswith("_") and not (
+        attribute.startswith("__") and attribute.endswith("__")
+    )
 
 
 # Operators that change a constructor: a check on a method sees the change,
@@ -564,14 +632,15 @@ def _verify_errors(
                     "detected_by": error.detected_by,
                     "operator": error.operator,
                     "status": "not_verifiable_by_mutation",
-                    "why": (
-                        f"{error.operator} cannot seed a call of "
-                        f"{error.signature.callee}"
-                    ),
+                    "why": _unseedable(error, checks),
                 }
             )
         elif not candidates[error.id]:
             site = _SITES.get(str(error.operator), "place to seed the error")
+            private = getattr(error.signature, "private", None)
+            if error.operator == "foreign_write" and private is not None:
+                # Only an attribute of that kind is seeded (``_candidates``).
+                site = ("private " if private else "public ") + site
             report.append(
                 {
                     "error": error.id,
@@ -602,17 +671,83 @@ def _verify_errors(
     }
 
 
+def _unseedable(error: Any, checks: list[Any]) -> str:
+    """Why a call-seeding operator cannot seed ``error``: the callee its
+    signature names, or, without one, the callees its check names."""
+    callee = error.signature.callee if error.signature else None
+    if callee:
+        return f"{error.operator} cannot seed a call of {callee}"
+    named = ", ".join(_callees(error, checks)) or "no callee"
+    return (
+        f"{error.operator} cannot seed a call of any callee "
+        f"{error.detected_by} names ({named})"
+    )
+
+
+def _warnings(task: Any, checks: list[Any], entities: dict[str, Any]) -> list[str]:
+    """``WARNING:`` lines that keep no task from being accepted: an
+    instantiation check that is not applicable because its ``target_role``
+    binds only functions, while their modules define classes the teacher may
+    have meant (a strategy role that binds functions beside a ``Strategy``
+    class)."""
+    from pythonarchtesting.principles.catalog import INSTANCE_TARGET_MARKERS
+
+    found: list[str] = []
+    for template in task.principle.checks:
+        role = template.target_role
+        if template.marker not in INSTANCE_TARGET_MARKERS or role is None:
+            continue
+        if not any(
+            c.marker == template.marker and c.not_applicable is not None for c in checks
+        ):
+            continue
+        names = set(task.roles.get(role, ()))
+        modules = {
+            str(e.module_path)
+            for e in entities.values()
+            if (e.kind == "function" and f"{e.module_path}.{e.qualname}" in names)
+            or (e.kind == "module" and str(e.module_path) in names)
+        }
+        classes = sorted(
+            f"{e.module_path}.{e.qualname}"
+            for e in entities.values()
+            if e.kind == "class" and str(e.module_path) in modules
+        )
+        if classes:
+            found.append(
+                f"WARNING: role {role!r} binds only functions, but their "
+                f"module also defines classes ({', '.join(classes)}): "
+                f"{template.marker} (role {template.role!r}) is not_applicable, "
+                "so code that builds such an object itself is not caught; "
+                "bind the classes (module.Class) if they are the "
+                f"{role} (the task is not rejected for this)"
+            )
+    return found
+
+
 def _reference_problems(base: list[Any], markers: set[str]) -> list[str]:
-    """Why the unchanged reference fails a check: one line per failed rule
-    (a static check runs no cases, so nothing else says it)."""
+    """Why the unchanged reference fails a check, or why a check did not run
+    on it: one line per such rule (a static check runs no cases, so nothing
+    else says it)."""
+    from pythonarchtesting.mcp_server.authoring import _did_not_run
     from pythonarchtesting.principles import rule_marker
 
-    return [
-        f"{rule_marker(str(r.rule_id))} fails on the reference: "
-        + str((r.details or {}).get("summary") or r.message)
-        for r in base
-        if r.status == "FAILED" and rule_marker(str(r.rule_id)) in markers
-    ]
+    problems: list[str] = []
+    for r in base:
+        marker = rule_marker(str(r.rule_id))
+        if marker not in markers:
+            continue
+        why = str((r.details or {}).get("summary") or r.message)
+        if _did_not_run(r):
+            reason = (r.details or {}).get("reason")
+            problems.append(
+                f"{marker} did not run on the reference"
+                + (f" ({reason})" if reason else "")
+                + f": {why}"
+            )
+        elif r.status == "FAILED":
+            problems.append(f"{marker} fails on the reference: {why}")
+    return problems
 
 
 def prepare_task(
@@ -660,7 +795,9 @@ def prepare_task(
         verified = _verify_errors(
             task, loaded, checks, entities, int(max_mutants), policy
         )
-        result["problems"] = verified.pop("reference_problems")
+        result["problems"] = verified.pop("reference_problems") + _warnings(
+            task, checks, entities
+        )
         result.update(verified)
     except (ConfigurationError, OSError) as exc:
         raise ToolInputError(str(exc)) from exc

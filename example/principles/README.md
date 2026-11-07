@@ -27,7 +27,9 @@ The catalogue entries ship with the tool, in
 `src/pythonarchtesting/principles/catalog/<id>.toml` (an MCP client reads them
 with `list_principles` and `describe_principle`, see `docs/mcp.md`).
 `<principle>/principle.toml` here names its entry (`id`) and maps each error
-and neutral change to its variant under `assignments/` (`[examples]`).
+and neutral change to its variant under `assignments/` (`[examples]`), and
+may list further variants of one (`[more_examples]`, checked by `verify.py`
+alone).
 `<principle>/task.toml` is the task ([docs/tasks.md](../../docs/tasks.md)): it
 binds each of the entry's generic roles to what plays it in `reference/`
 (`[roles]`) and gives every bound function its cases (`[cases]`); the tool

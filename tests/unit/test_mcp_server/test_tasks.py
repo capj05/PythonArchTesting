@@ -210,3 +210,119 @@ def test_a_call_seeding_error_without_a_callee_seeds_the_calls_its_check_names()
 
     assert callees == ["builtins:isinstance", "builtins:type"]
     assert _candidates(error, mutants, callees) == mutants[3:]
+
+
+def test_a_callee_less_error_names_the_callees_its_check_names() -> None:
+    """Review of the N5 fix round: never 'cannot seed a call of None'."""
+    from pythonarchtesting.mcp_server.tasks import _unseedable
+
+    error = _error("add_io_call")
+    error.detected_by = "forbid_runtime_calls"
+    checks = [
+        SimpleNamespace(
+            marker="forbid_runtime_calls", params={"modules": ["builtins.isinstance"]}
+        )
+    ]
+
+    assert _unseedable(error, checks) == (
+        "add_io_call cannot seed a call of any callee forbid_runtime_calls "
+        "names (builtins:isinstance)"
+    )
+    named = _error("add_io_via_helper", "builtins:input")
+    assert _unseedable(named, checks).endswith("a call of builtins:input")
+
+
+def test_foreign_write_seeds_only_an_attribute_of_the_declared_privacy() -> None:
+    """N7: replace_attribute is a write to a private attribute; a public one
+    would be another error (killed_other), so it is no candidate."""
+    mutants = [
+        _mutant("foreign_write", "take", "items"),
+        _mutant("foreign_write", "put", "_limit"),
+    ]
+    private = SimpleNamespace(
+        id="e",
+        operator="foreign_write",
+        signature=SimpleNamespace(callee=None, private=True),
+    )
+    either = _error("foreign_write")
+
+    assert _candidates(private, mutants) == [mutants[1]]
+    assert _candidates(either, mutants) == mutants
+
+
+def test_a_check_that_did_not_run_on_the_reference_is_a_problem() -> None:
+    """Review of the N5 fix round: reference_fails always comes with its
+    reason, also when the check did not run (a case that cannot be set up)."""
+    from pythonarchtesting.mcp_server.tasks import _reference_problems
+
+    rule = "DYN001/forbid_runtime_calls/v1"
+    base = [
+        SimpleNamespace(
+            rule_id=rule,
+            status="ERROR",
+            message="",
+            details={"reason": "reference_case_invalid", "summary": "case 0 ..."},
+        ),
+        SimpleNamespace(
+            rule_id=rule, status="FAILED", message="", details={"summary": "calls x"}
+        ),
+        SimpleNamespace(rule_id=rule, status="OK", message="", details={}),
+    ]
+
+    assert _reference_problems(base, {"forbid_runtime_calls"}) == [
+        "forbid_runtime_calls did not run on the reference "
+        "(reference_case_invalid): case 0 ...",
+        "forbid_runtime_calls fails on the reference: calls x",
+    ]
+
+
+def test_spied_follows_a_constructor_inherited_from_a_project_base() -> None:
+    """Review of the N5 fix round: a context that inherits its constructor
+    keeps the spy in the base's ``__init__``; both it and the mutants are
+    aimed there."""
+    from pythonarchtesting.mcp_server.tasks import _aimed, spied
+
+    source = (
+        "class Base:\n    def __init__(self, discount):\n"
+        "        self.discount = discount\n\n\n"
+        "class Calc(Base):\n    def total(self, prices):\n"
+        "        return self.discount.apply(sum(prices))\n"
+    )
+    tree = ast.parse(source)
+    nodes = {
+        name: next(
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, (ast.ClassDef, ast.FunctionDef)) and n.name == name
+        )
+        for name in ("Base", "Calc", "__init__", "total")
+    }
+    entities = {
+        key: SimpleNamespace(
+            extras={"ast_node": nodes[node]},
+            kind=kind,
+            filepath_rel="pricing.py",
+            qualname=qualname,
+        )
+        for key, kind, qualname, node in (
+            ("b", "class", "Base", "Base"),
+            ("c", "class", "Calc", "Calc"),
+            ("i", "method", "Base.__init__", "__init__"),
+            ("t", "method", "Calc.total", "total"),
+        )
+    }
+    check = SimpleNamespace(
+        entity_id="t",
+        marker="require_runtime_delegation",
+        not_applicable=None,
+        params={"init": {"args": [{"$spy": "strategy"}]}},
+    )
+    error = SimpleNamespace(
+        operator="hardcode_collaborator", detected_by="require_runtime_delegation"
+    )
+
+    assert spied([check], entities) == {("pricing.py", "Base"): {"discount"}}
+    assert _aimed(error, [check], entities) == {
+        ("pricing.py", "Calc.total"),
+        ("pricing.py", "Base.__init__"),
+    }

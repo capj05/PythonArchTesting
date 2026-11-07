@@ -5,7 +5,7 @@
 id = "strategy"
 
 [examples]
-no_delegation = "err_total_if_chain"
+no_delegation = "err_total_ignores_discount"
 hardcoded_strategy = "err_calculator_builds_discount"
 type_switch_on_strategy = "err_total_isinstance_fallback"
 model_solution = "ok_basic"
@@ -13,3 +13,10 @@ extra_strategy = "ok_new_discount"
 wrong_result = "ok_rounding_bug"
 style_noise = "ok_style_noise"
 strategy_as_function = "ok_strategy_as_function"
+
+[more_examples]
+# An if-chain over the kinds of discount that computes each by itself never
+# calls the discount it was given, but it asks for the kind first: it is one
+# error, the type switch (the classification folds the missing delegation
+# into it).
+type_switch_on_strategy = ["err_total_if_chain"]
