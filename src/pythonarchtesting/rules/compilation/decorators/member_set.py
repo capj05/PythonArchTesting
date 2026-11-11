@@ -7,12 +7,16 @@ from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
 from ..common import (
+    bool_param,
     build_invalid_param_sentinel_rule,
     invalid_declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    options_problem,
+    reject_invalid_param,
     reject_invalid_severity,
     with_rule_id_suffix,
+    without_none,
 )
 from .method_set import InvalidParam, parse_count_range, parse_name_selector
 
@@ -25,6 +29,24 @@ _VALID_MEMBER_KINDS = frozenset(
 _VALID_STORAGE = frozenset({"any", "instance", "class"})
 _VALID_DESCRIPTOR_KINDS = frozenset({"cached_property", "classproperty"})
 _VALID_CONSTRUCTOR_KIND = frozenset({"auto", "__init__", "__new__"})
+# logical parameter -> its default
+_BOOLS = {
+    "declared_only": False,
+    "allow_property": True,
+    "include_dynamic_attributes": False,
+    "interpret_dataclass_fields": False,
+    "include_dataclass_constructor": True,
+}
+# The enumerated and logical parameters: ``None`` declares their default.
+_OPTIONS = (
+    "member_kinds",
+    "name_match",
+    "method_kind",
+    "storage",
+    "descriptor_kinds",
+    "constructor_kind",
+    *_BOOLS,
+)
 
 
 def _drop(
@@ -110,7 +132,7 @@ def compile_require_member_set(
     from pythonarchtesting.core.models import Rule, RuleSelector
 
     _ = cfg
-    params_kwargs = dict(declaration.params)
+    params_kwargs = without_none(declaration.params, _OPTIONS)
     compiler_evidence: List[Evidence] = []
 
     if source_entity.kind != "class":
@@ -229,29 +251,25 @@ def compile_require_member_set(
         )
     min_count, max_count = counts
 
-    declared_only = bool(params_kwargs.get("declared_only", False))
-    allow_property = bool(params_kwargs.get("allow_property", True))
-    include_dynamic_attributes = bool(
-        params_kwargs.get("include_dynamic_attributes", False)
-    )
-    interpret_dataclass_fields = bool(
-        params_kwargs.get("interpret_dataclass_fields", False)
-    )
-    include_dataclass_constructor = bool(
-        params_kwargs.get("include_dataclass_constructor", True)
-    )
-
-    rejected = reject_invalid_severity(
+    reject: dict[str, Any] = {
+        "marker": _DECORATOR,
+        "rule_id_prefix": _SENTINEL_RULE_ID_PREFIX,
+        "rule_id_suffix": rule_id_suffix,
+        "evidence_type": "compiler_invalid_declaration",
+        "compiler_evidence": compiler_evidence,
+    }
+    rejected = reject_invalid_param(
         source_entity,
         declaration,
-        marker=_DECORATOR,
-        rule_id_prefix=_SENTINEL_RULE_ID_PREFIX,
-        rule_id_suffix=rule_id_suffix,
-        evidence_type="compiler_invalid_declaration",
-        compiler_evidence=compiler_evidence,
-    )
+        options_problem(params_kwargs, bools=_BOOLS),
+        **reject,
+    ) or reject_invalid_severity(source_entity, declaration, **reject)
     if rejected is not None:
         return rejected
+    flags = {
+        name: bool_param(params_kwargs, name, default=default)
+        for name, default in _BOOLS.items()
+    }
 
     base_severity = marker_severity(params_kwargs)
 
@@ -271,15 +289,15 @@ def compile_require_member_set(
             "name_match": name_match,
             "names": names,
             "pattern": pattern,
-            "declared_only": declared_only,
+            "declared_only": flags["declared_only"],
             "method_kind": method_kind,
             "storage": storage,
-            "allow_property": allow_property,
+            "allow_property": flags["allow_property"],
             "descriptor_kinds": list(descriptor_kinds) if descriptor_kinds else None,
-            "include_dynamic_attributes": include_dynamic_attributes,
-            "interpret_dataclass_fields": interpret_dataclass_fields,
+            "include_dynamic_attributes": flags["include_dynamic_attributes"],
+            "interpret_dataclass_fields": flags["interpret_dataclass_fields"],
             "constructor_kind": constructor_kind,
-            "include_dataclass_constructor": include_dataclass_constructor,
+            "include_dataclass_constructor": flags["include_dataclass_constructor"],
             "min_count": min_count,
             "max_count": max_count,
             "fail_on_unmatched": True,

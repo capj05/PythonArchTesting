@@ -11,12 +11,24 @@ from ..common import (
     declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    options_problem,
+    reject_invalid_param,
     reject_invalid_severity,
     with_rule_id_suffix,
+    without_none,
 )
 
 _VALID_STORAGE_VALUES = {"any", "instance", "class"}
 _VALID_DESCRIPTOR_KINDS = {"cached_property", "classproperty"}
+_BOOLS = (
+    "allow_property",
+    "require_writable",
+    "declared_only",
+    "allow_missing",
+    "include_dynamic_attributes",
+    "interpret_dataclass_fields",
+)
+_OPTIONS = ("storage", *_BOOLS)
 
 
 def _invalid_declaration(
@@ -72,8 +84,15 @@ def compile_required_attribute(
     from pythonarchtesting.core.models import Rule, RuleSelector
 
     _ = cfg
-    params_kwargs = dict(declaration.params)
+    params_kwargs = without_none(declaration.params, _OPTIONS)
     compiler_evidence: list[Evidence] = []
+    reject: dict[str, Any] = {
+        "marker": "required_attribute",
+        "rule_id_prefix": "API003/required_attribute/invalid_declaration",
+        "rule_id_suffix": rule_id_suffix,
+        "evidence_type": "compiler_invalid_attribute_declaration",
+        "key": "declaration",
+    }
 
     if source_entity.kind != "class":
         compiler_evidence.append(
@@ -132,24 +151,16 @@ def compile_required_attribute(
         )
         return [], compiler_evidence, []
 
-    allow_property = bool(params_kwargs.get("allow_property", False))
-    require_writable = bool(params_kwargs.get("require_writable", False))
-    declared_only = bool(params_kwargs.get("declared_only", False))
-    allow_missing, allow_missing_valid = bool_param(
-        params_kwargs,
-        "allow_missing",
-        default=False,
+    rejected = reject_invalid_param(
+        source_entity,
+        declaration,
+        options_problem(params_kwargs, bools=_BOOLS),
+        **reject,
     )
-    if not allow_missing_valid:
-        compiler_evidence.append(
-            _invalid_declaration(
-                source_entity,
-                declaration,
-                issue="invalid_allow_missing",
-                allow_missing=params_kwargs.get("allow_missing"),
-            )
-        )
-        return [], compiler_evidence, []
+    if rejected is not None:
+        return rejected
+    flags = {name: bool_param(params_kwargs, name, default=False) for name in _BOOLS}
+    allow_property = flags["allow_property"]
 
     descriptor_kinds, descriptor_kinds_valid = _normalize_descriptor_kinds(
         params_kwargs.get("descriptor_kinds")
@@ -180,42 +191,6 @@ def compile_required_attribute(
         )
         return [], compiler_evidence, []
 
-    include_dynamic_attributes, include_dynamic_attributes_valid = bool_param(
-        params_kwargs,
-        "include_dynamic_attributes",
-        default=False,
-    )
-    if not include_dynamic_attributes_valid:
-        compiler_evidence.append(
-            _invalid_declaration(
-                source_entity,
-                declaration,
-                issue="invalid_include_dynamic_attributes",
-                include_dynamic_attributes=params_kwargs.get(
-                    "include_dynamic_attributes"
-                ),
-            )
-        )
-        return [], compiler_evidence, []
-
-    interpret_dataclass_fields, interpret_dataclass_fields_valid = bool_param(
-        params_kwargs,
-        "interpret_dataclass_fields",
-        default=False,
-    )
-    if not interpret_dataclass_fields_valid:
-        compiler_evidence.append(
-            _invalid_declaration(
-                source_entity,
-                declaration,
-                issue="invalid_interpret_dataclass_fields",
-                interpret_dataclass_fields=params_kwargs.get(
-                    "interpret_dataclass_fields"
-                ),
-            )
-        )
-        return [], compiler_evidence, []
-
     if allow_property and storage == "class":
         compiler_evidence.append(
             _invalid_declaration(
@@ -231,11 +206,7 @@ def compile_required_attribute(
     rejected = reject_invalid_severity(
         source_entity,
         declaration,
-        marker="required_attribute",
-        rule_id_prefix="API003/required_attribute/invalid_declaration",
-        rule_id_suffix=rule_id_suffix,
-        evidence_type="compiler_invalid_attribute_declaration",
-        key="declaration",
+        **reject,
         compiler_evidence=compiler_evidence,
     )
     if rejected is not None:
@@ -249,8 +220,8 @@ def compile_required_attribute(
 
     uses_v2_surface = (
         params_kwargs.get("descriptor_kinds") is not None
-        or include_dynamic_attributes
-        or interpret_dataclass_fields
+        or flags["include_dynamic_attributes"]
+        or flags["interpret_dataclass_fields"]
     )
     rule_id = (
         "API003/required_attribute/v2"
@@ -274,13 +245,13 @@ def compile_required_attribute(
             "annotation": annotation,
             "storage": storage,
             "allow_property": allow_property,
-            "require_writable": require_writable,
-            "declared_only": declared_only,
-            "allow_missing": allow_missing,
+            "require_writable": flags["require_writable"],
+            "declared_only": flags["declared_only"],
+            "allow_missing": flags["allow_missing"],
             "descriptor_kinds": descriptor_kinds,
-            "include_dynamic_attributes": include_dynamic_attributes,
-            "interpret_dataclass_fields": interpret_dataclass_fields,
-            "fail_on_unmatched": not allow_missing,
+            "include_dynamic_attributes": flags["include_dynamic_attributes"],
+            "interpret_dataclass_fields": flags["interpret_dataclass_fields"],
+            "fail_on_unmatched": not flags["allow_missing"],
         },
         message_template=(
             "Required attribute mismatch for {target.module_path}:{target.qualname}: "

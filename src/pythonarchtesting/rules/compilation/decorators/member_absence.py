@@ -12,6 +12,7 @@ from ..common import (
     INVALID_SEVERITY_ISSUE,
     InvalidParam,
     bool_param,
+    bool_problem,
     build_invalid_param_sentinel_rule,
     declaration_evidence,
     invalid_severity_payload,
@@ -27,7 +28,7 @@ _VALID_NAME_MATCH = {"exact", "alias", "regex"}
 _VALID_SIGNATURE_MODES = {"any", "compatible", "exact"}
 _SENTINEL_RULE_ID_PREFIX = "NEG001/does_not_have/invalid_declaration"
 _INVALID_TARGET_ISSUE = "compiler_invalid_target"
-_INCLUDE_OPTIONS = ("include_descriptors", "include_dynamic_attributes")
+_BOOL_OPTIONS = ("declared_only", "include_descriptors", "include_dynamic_attributes")
 _V2_PARAM_KEYS = frozenset(
     {
         "aliases",
@@ -129,9 +130,9 @@ class _Declared:
     declaration carries, so it is done once for all parameters, before any of
     them is checked. ``raw_name`` and ``raw_aliases`` keep the
     values as declared, because the evidence of an invalid one reports them
-    as they were; ``pattern`` is kept as declared throughout. An ``include_*``
-    option that is no ``bool`` reads as ``False`` and is kept as declared in
-    ``invalid_options``.
+    as they were; ``pattern`` is kept as declared throughout. A logical
+    option (``declared_only``, ``include_*``) that is no ``bool`` reads as
+    ``False`` and is kept as declared in ``invalid_options``.
     """
 
     raw_name: Any
@@ -143,6 +144,7 @@ class _Declared:
     aliases: list[str] | None
     pattern: Any
     signature_mode: str
+    declared_only: bool
     include_descriptors: bool
     include_dynamic_attributes: bool
     invalid_options: tuple[tuple[str, Any], ...]
@@ -150,14 +152,17 @@ class _Declared:
     @classmethod
     def parse(cls, params: dict[str, Any]) -> _Declared:
         """Normalise ``params``: the keyword values lower-cased, the name and
-        aliases stripped, the two ``include_*`` options read as booleans."""
+        aliases stripped, the logical options read as booleans."""
         raw_name = params.get("name")
-        options: dict[str, bool] = {}
-        invalid_options: list[tuple[str, Any]] = []
-        for option in _INCLUDE_OPTIONS:
-            options[option], valid = bool_param(params, option, default=False)
-            if not valid:
-                invalid_options.append((option, params[option]))
+        options = {
+            option: bool_param(params, option, default=False)
+            for option in _BOOL_OPTIONS
+        }
+        invalid_options = [
+            (option, params[option])
+            for option in _BOOL_OPTIONS
+            if bool_problem(params, option) is not None
+        ]
         return cls(
             raw_name=raw_name,
             name=raw_name.strip() if isinstance(raw_name, str) else None,
@@ -168,6 +173,7 @@ class _Declared:
             aliases=_normalized_aliases(params.get("aliases")),
             pattern=params.get("pattern"),
             signature_mode=str(params.get("signature_mode", "any")).lower(),
+            declared_only=options["declared_only"],
             include_descriptors=options["include_descriptors"],
             include_dynamic_attributes=options["include_dynamic_attributes"],
             invalid_options=tuple(invalid_options),
@@ -385,8 +391,9 @@ def _method_only_option(
 
 
 def _validate_include_options(declared: _Declared) -> _Problem | None:
-    """The ``include_*`` options must be booleans, as the ones of the other
-    markers (:func:`bool_param`), and not switched on for methods."""
+    """The logical options must be booleans, as the ones of the other
+    markers (:func:`bool_problem`), and the ``include_*`` ones not switched
+    on for methods."""
     if declared.invalid_options:
         option, value = declared.invalid_options[0]
         return _problem(
@@ -408,7 +415,7 @@ def _validate_include_options(declared: _Declared) -> _Problem | None:
 
 def _validate_signature_options(declared: _Declared) -> _Problem | None:
     """The signature mode must be known and only compare methods (or any
-    member); then the ``include_*`` options must be valid."""
+    member); then the logical options must be valid."""
     signature_mode, member_kind = declared.signature_mode, declared.member_kind
     if signature_mode not in _VALID_SIGNATURE_MODES:
         return _problem(
@@ -600,7 +607,7 @@ def _rule_params(
         "name": _member_name(source_entity, declared),
         "member_kind": declared.member_kind,
         "storage": declared.storage,
-        "declared_only": bool(params_kwargs.get("declared_only", False)),
+        "declared_only": declared.declared_only,
         "fail_on_unmatched": False,
     }
     if not (_V2_PARAM_KEYS & set(params_kwargs) or on_method):

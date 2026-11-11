@@ -16,7 +16,13 @@ from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Rule, RuleSelector
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import with_rule_id_suffix
+from ..common import (
+    InvalidParam,
+    bool_param,
+    bool_problem,
+    with_rule_id_suffix,
+    without_none,
+)
 from .module_structure import entry_problem
 from .runtime_structure import (
     case_params,
@@ -69,7 +75,7 @@ def _defined_names(module: Entity, entities: List[Entity]) -> set[str]:
 
 def _problem(
     module: Entity, params: dict[str, Any], entities: List[Entity]
-) -> tuple[str, str] | None:
+) -> tuple[str, str] | InvalidParam | None:
     names = params.get("names") or []
     if not isinstance(names, list) or not all(isinstance(n, str) and n for n in names):
         return "names", "names must be the module's top-level names"
@@ -77,9 +83,7 @@ def _problem(
     missing = [name for name in names if name not in defined]
     if missing:
         return "names", f"the module defines no {', '.join(repr(n) for n in missing)}"
-    if not isinstance(params.get("ignore_type_checking", True), bool):
-        return "ignore_type_checking", "ignore_type_checking must be True or False"
-    return None
+    return bool_problem(params, "ignore_type_checking")
 
 
 def compile_module_interface(
@@ -92,10 +96,12 @@ def compile_module_interface(
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     _ = cfg
     entities = list(source_entities or [])
-    params = dict(declaration.params)
+    params = without_none(declaration.params, ("ignore_type_checking",))
     if source_entity.kind != "module":
         return invalid_target(source_entity, declaration, MARKER, ["module"])
-    problem = _problem(source_entity, params, entities)
+    problem: tuple[str, str] | InvalidParam | None = _problem(
+        source_entity, params, entities
+    )
     entry_entity: Entity | None = None
     if problem is None:
         problem, entry_entity = entry_problem(params, entities, MARKER)
@@ -112,7 +118,9 @@ def compile_module_interface(
     interface = {
         "names": list(params.get("names") or []),
         "module": str(source_entity.module_path),
-        "ignore_type_checking": bool(params.get("ignore_type_checking", True)),
+        "ignore_type_checking": bool_param(
+            params, "ignore_type_checking", default=True
+        ),
     }
     rules = [
         Rule(

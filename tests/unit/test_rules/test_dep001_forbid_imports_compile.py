@@ -78,7 +78,7 @@ def _architecture_rules_marker() -> None:
     ]
     __archtest__: Annotated[
         None,
-        forbid_imports("subprocess", scope="nonsense"),
+        forbid_imports("subprocess", scope="Package"),
     ]
     return None
 """
@@ -88,6 +88,30 @@ def _architecture_rules_marker() -> None:
     assert evidence == []
     assert compiler_results == []
     assert [rule.params["scope"] for rule in rules] == ["module", "module", "package"]
+
+
+def test_dep001_compile_unknown_scope_drops_the_declaration() -> None:
+    """An unknown scope is no longer replaced by ``"package"``: it makes the
+    declaration invalid, as every invalid enumerated argument does."""
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[
+        None,
+        forbid_imports("subprocess", scope="nonsense"),
+    ]
+    return None
+"""
+    source_entity, _ = build_source_index_from_rule_source(source)
+    rules, evidence, _ = compile_rules([source_entity], Mock())
+
+    assert [rule.rule_id for rule in rules] == [
+        "DEP001/forbid_imports/invalid_declaration/scope"
+    ]
+    assert rules[0].params["valid"] == ["entity", "module", "package"]
+    assert [item.payload["issue"] for item in evidence] == ["invalid_scope"]
 
 
 def test_dep001_compile_invalid_raw_mode_emits_compiler_error_evidence() -> None:

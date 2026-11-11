@@ -8,15 +8,24 @@ from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
 from ..common import (
+    bool_param,
     declaration_evidence,
     invalid_declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    options_problem,
+    reject_invalid_param,
     reject_invalid_severity,
     with_rule_id_suffix,
+    without_none,
 )
 
 _VALID_RETURN_ANNOTATION = {"off", "ignore", "warning", "error"}
+_SIGNATURE_MODES = ("compatible", "exact", "any")
+_SIGNATURE_BOOLS = ("allow_extra_params", "allow_param_rename")
+_SIGNATURE_OPTIONS = ("mode", "return_annotation", *_SIGNATURE_BOOLS)
+_METHOD_BOOLS = ("enforce_method_kind", "allow_missing", "declared_only")
+_METHOD_OPTIONS = ("signature_mode", "name_match", *_METHOD_BOOLS)
 
 
 def compile_required_entity_signature(
@@ -36,15 +45,25 @@ def compile_required_entity_signature(
     from pythonarchtesting.core.models import Rule, RuleSelector
 
     _ = cfg
-    params_kwargs = dict(declaration.params)
+    params_kwargs = without_none(declaration.params, _SIGNATURE_OPTIONS)
     compiler_evidence: List[Evidence] = []
 
-    mode = str(params_kwargs.get("mode", "compatible")).lower()
-    if mode not in {"compatible", "exact", "any"}:
-        mode = "compatible"
+    rejected = reject_invalid_param(
+        source_entity,
+        declaration,
+        options_problem(
+            params_kwargs, choices={"mode": _SIGNATURE_MODES}, bools=_SIGNATURE_BOOLS
+        ),
+        marker="required_entity_signature",
+        rule_id_prefix="API001/required_entity_signature/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
 
-    allow_extra_params = bool(params_kwargs.get("allow_extra_params", True))
-    allow_param_rename = bool(params_kwargs.get("allow_param_rename", False))
+    mode = str(params_kwargs.get("mode", "compatible")).lower()
+    allow_extra_params = bool_param(params_kwargs, "allow_extra_params", default=True)
+    allow_param_rename = bool_param(params_kwargs, "allow_param_rename", default=False)
 
     return_annotation_raw = str(
         params_kwargs.get("return_annotation", "warning")
@@ -173,16 +192,13 @@ def compile_required_method(
     from pythonarchtesting.core.models import Rule, RuleSelector
 
     _ = cfg
-    params_kwargs = dict(declaration.params)
+    params_kwargs = without_none(declaration.params, _METHOD_OPTIONS)
     compiler_evidence: List[Evidence] = []
 
     mode = str(params_kwargs.get("signature_mode", "compatible")).lower()
-    if mode not in {"compatible", "exact", "any"}:
-        mode = "compatible"
-
-    enforce_method_kind = bool(params_kwargs.get("enforce_method_kind", True))
-    allow_missing = bool(params_kwargs.get("allow_missing", False))
-    declared_only = bool(params_kwargs.get("declared_only", False))
+    enforce_method_kind = bool_param(params_kwargs, "enforce_method_kind", default=True)
+    allow_missing = bool_param(params_kwargs, "allow_missing", default=False)
+    declared_only = bool_param(params_kwargs, "declared_only", default=False)
     name_match = str(params_kwargs.get("name_match", "exact")).lower()
     aliases_raw = params_kwargs.get("aliases")
     pattern = params_kwargs.get("pattern")
@@ -197,6 +213,22 @@ def compile_required_method(
             )
         )
         return [], compiler_evidence, []
+
+    rejected = reject_invalid_param(
+        source_entity,
+        declaration,
+        options_problem(
+            params_kwargs,
+            choices={"signature_mode": _SIGNATURE_MODES},
+            bools=_METHOD_BOOLS,
+        ),
+        marker="required_method",
+        rule_id_prefix="API002/required_method/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        evidence_type="compiler_invalid_declaration",
+    )
+    if rejected is not None:
+        return rejected
 
     if name_match not in {"exact", "alias", "regex", "any"}:
         compiler_evidence.append(

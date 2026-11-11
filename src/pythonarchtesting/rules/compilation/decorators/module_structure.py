@@ -16,7 +16,13 @@ from pythonarchtesting.core.models import Rule, RuleSelector
 from pythonarchtesting.entities import DeclarationEntry, Entity
 from pythonarchtesting.execution.module_structure import in_module, parse_layers
 
-from ..common import with_rule_id_suffix
+from ..common import (
+    InvalidParam,
+    bool_param,
+    bool_problem,
+    with_rule_id_suffix,
+    without_none,
+)
 from .runtime_structure import (
     case_params,
     invalid_target,
@@ -90,11 +96,10 @@ def entry_problem(
 
 def _structure_problem(
     marker: str, params: dict[str, Any], source_entities: List[Entity]
-) -> tuple[str, str] | None:
-    if not isinstance(params.get("ignore_type_checking", True), bool):
-        return "ignore_type_checking", "ignore_type_checking must be True or False"
-    if marker != "enforce_layers":
-        return None
+) -> tuple[str, str] | InvalidParam | None:
+    problem = bool_problem(params, "ignore_type_checking")
+    if problem is not None or marker != "enforce_layers":
+        return problem
     raw = params.get("layers")
     if (
         not isinstance(raw, list)
@@ -119,7 +124,7 @@ def _structure_problem(
 
 def _structure_params(marker: str, params: dict[str, Any]) -> dict[str, Any]:
     compiled: dict[str, Any] = {
-        "ignore_type_checking": bool(params.get("ignore_type_checking", True))
+        "ignore_type_checking": bool_param(params, "ignore_type_checking", default=True)
     }
     if marker == "enforce_layers":
         compiled["layers"] = list(params["layers"])
@@ -135,11 +140,13 @@ def _compile_module_structure(
     source_entities: List[Entity],
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     static_id, static_type, runtime_id, runtime_type = _RULES[marker]
-    params = dict(declaration.params)
+    params = without_none(declaration.params, ("ignore_type_checking",))
     if source_entity.kind != "module":
         return invalid_target(source_entity, declaration, marker, ["module"])
 
-    problem = _structure_problem(marker, params, source_entities)
+    problem: tuple[str, str] | InvalidParam | None = _structure_problem(
+        marker, params, source_entities
+    )
     entry_entity: Entity | None = None
     entry = params.get("entry")
     if problem is None:

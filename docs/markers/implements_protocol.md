@@ -20,7 +20,7 @@ project.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `protocol` (positional) | `str \| Protocol class` | — | The source Protocol to satisfy, as a reference to its class or its dotted name (e.g. `"reference.Repository"`). |
+| `protocol` (positional) | `str \| Protocol class` | — | The source Protocol to satisfy, as a reference to its class or its dotted name (e.g. `"reference.Repository"`). A second positional argument is a warning and is not used (see [Positional Arguments](README.md#positional-arguments)). |
 
 **Optional:**
 
@@ -28,7 +28,7 @@ project.
 |----------|------|---------|-------------|
 | `signature_mode` | `str` | `"compatible"` | Signature matching mode for protocol methods: `"compatible"`, `"exact"`, or `"any"`. |
 | `enforce_method_kind` | `bool` | `True` | Require method-kind parity (instance / classmethod / staticmethod) between Protocol and target. |
-| `return_annotation` | `str` | `"warning"` | Return-type checking level: `"warning"`, `"error"`, or `"off"`; any other value is treated as `"warning"`. |
+| `return_annotation` | `str` | `"warning"` | Return-type checking level: `"warning"`, `"error"`, or `"off"`; any other value makes the declaration invalid (see [Logical And Enumerated Arguments](README.md#logical-and-enumerated-arguments)). |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 

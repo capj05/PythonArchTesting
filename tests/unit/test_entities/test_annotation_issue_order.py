@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import ast
 
+import pytest
+
 from pythonarchtesting.entities_extraction.annotations import (
     extract_annotation_declarations,
 )
@@ -84,7 +86,8 @@ def test_params_and_issue_order_stay_as_they_were() -> None:
         ),
         (
             "implements_protocol",
-            {"protocol": 2, "protocol_expr": "Other"},
+            # The surplus ``2`` is reported but no longer stored as the protocol.
+            {"protocol_expr": "Other"},
             [
                 _ASSIGNED,
                 ("arg", "2", 5, 31, {"index": 1, "name": "implements_protocol"}),
@@ -162,7 +165,8 @@ def test_params_and_issue_order_stay_as_they_were() -> None:
 def test_params_keep_their_insertion_order() -> None:
     declarations = extract_annotation_declarations(ast.parse(_SOURCE).body, _SOURCE)
 
-    assert list(declarations[2].params) == ["protocol", "protocol_expr"]
+    assert list(declarations[2].params) == ["protocol_expr"]
+    assert list(declarations[3].params) == ["protocol", "protocol_expr"]
     assert list(declarations[4].params) == ["name", "annotation"]
     assert list(declarations[5].params) == ["stage", "variable", "variable_explicit"]
 
@@ -173,8 +177,74 @@ def test_single_valued_issue_points_at_its_own_argument() -> None:
 
     (declaration,) = extract_annotation_declarations(ast.parse(source).body, source)
 
-    assert declaration.params == {"name": "n"}
+    # Only the first argument is the name, so the ``"n"`` after it is surplus.
+    assert declaration.params == {}
     assert _summary(declaration)[2][1:] == [
         ("arg", "f()", 1, 49, {"index": 0, "name": "required_attribute"}),
+        ("arg", "'n'", 1, 54, {"index": 1, "name": "required_attribute"}),
         ("arg", "4", 1, 59, {"index": 2, "name": "required_attribute"}),
+    ]
+
+
+def _only(marker: str):
+    source = f"__archtest__: Annotated[None, {marker}]\n"
+    (declaration,) = extract_annotation_declarations(ast.parse(source).body, source)
+    return declaration
+
+
+@pytest.mark.parametrize(
+    "marker", ["implements_protocol", "implements_runtime_protocol"]
+)
+@pytest.mark.parametrize(("surplus", "expr"), [('"x"', "'x'"), ("2", "2")])
+def test_a_surplus_argument_of_a_protocol_marker_is_an_issue(
+    marker: str, surplus: str, expr: str
+) -> None:
+    """The protocol is the first argument; a second one is never stored."""
+    declaration = _only(f"{marker}(Seller, {surplus})")
+
+    assert declaration.params == {"protocol_expr": "Seller"}
+    assert _summary(declaration)[2] == [
+        ("arg", expr, 1, 39 + len(marker), {"index": 1, "name": marker})
+    ]
+
+
+@pytest.mark.parametrize(
+    "marker", ["implements_protocol(Seller)", "implements_protocol(protocol=Seller)"]
+)
+def test_a_protocol_given_once_has_no_issue(marker: str) -> None:
+    declaration = _only(marker)
+
+    assert declaration.params == {"protocol_expr": "Seller"}
+    assert declaration.unsupported == []
+
+
+def test_a_protocol_keyword_overrides_the_positional_protocol_silently() -> None:
+    """Pinned as it is: Python itself would reject the call with a TypeError."""
+    declaration = _only("implements_protocol(Seller, protocol=Other)")
+
+    assert declaration.params == {"protocol_expr": "Other"}
+    assert declaration.unsupported == []
+
+
+def test_only_the_first_argument_is_the_value_of_a_single_valued_marker() -> None:
+    """A literal after a rejected first argument does not take its place."""
+    declaration = _only('required_attribute(f(), "n")')
+
+    assert declaration.params == {}
+    assert _summary(declaration)[2] == [
+        ("arg", "f()", 1, 49, {"index": 0, "name": "required_attribute"}),
+        ("arg", "'n'", 1, 54, {"index": 1, "name": "required_attribute"}),
+    ]
+
+
+@pytest.mark.parametrize("marker", ["required_method", "is_enum"])
+def test_a_marker_without_positional_parameters_reports_a_literal_one(
+    marker: str,
+) -> None:
+    declaration = _only(f'{marker}("x", 1)')
+
+    assert declaration.params == {}
+    assert _summary(declaration)[2] == [
+        ("arg", "'x'", 1, 31 + len(marker), {"index": 0, "name": marker}),
+        ("arg", "1", 1, 36 + len(marker), {"index": 1, "name": marker}),
     ]

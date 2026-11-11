@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Tuple, cast
+from typing import Any, Dict, Iterable, List, Literal, Mapping, Tuple, cast
 
 # The payload hashing is the one evidence collection uses: a compiler's
 # evidence and a collector's of the same payload get the same id.
@@ -88,17 +88,6 @@ def invalid_target_evidence(
     )
 
 
-def bool_param(
-    params: Dict[str, Any], name: str, *, default: bool
-) -> tuple[bool, bool]:
-    """The boolean parameter ``name`` (``default`` when absent) and whether it
-    is valid; a value that is no ``bool`` is invalid and gives ``default``."""
-    value = params.get(name, default)
-    if isinstance(value, bool):
-        return value, True
-    return default, False
-
-
 @dataclass(frozen=True)
 class InvalidParam:
     """A parameter a marker compiler refuses: what the sentinel rule and the
@@ -117,6 +106,143 @@ class InvalidParam:
             "valid": self.valid,
             "reason": self.reason,
         }
+
+
+BOOL_VALUES = [True, False]
+
+
+def without_none(params: Mapping[str, Any], names: Iterable[str]) -> Dict[str, Any]:
+    """``params`` without the ones of ``names`` declared as ``None``: such a
+    parameter takes its default, as if it were not declared."""
+    omitted = set(names)
+    return {
+        key: value
+        for key, value in params.items()
+        if not (value is None and key in omitted)
+    }
+
+
+def bool_problem(params: Mapping[str, Any], name: str) -> InvalidParam | None:
+    """Why the logical parameter ``name`` is invalid, ``None`` when it is
+    valid: ``True`` or ``False``, or absent or ``None`` for its default. Any
+    other value (``"no"``, ``1``) is invalid rather than read for its
+    truthiness."""
+    value = params.get(name)
+    if value is None or isinstance(value, bool):
+        return None
+    return InvalidParam(
+        param=name,
+        value=value,
+        valid=list(BOOL_VALUES),
+        reason=f"{name} must be True or False",
+    )
+
+
+def bool_param(params: Mapping[str, Any], name: str, *, default: bool) -> bool:
+    """The logical parameter ``name``: ``default`` when it is absent or
+    ``None``. A compiler refuses an invalid one (:func:`bool_problem`) before
+    it asks for it, so this never reads a value that is no ``bool``."""
+    value = params.get(name)
+    return value if isinstance(value, bool) else default
+
+
+def choice_problem(
+    params: Mapping[str, Any],
+    name: str,
+    choices: Iterable[str],
+    *,
+    any_case: bool = True,
+) -> InvalidParam | None:
+    """Why the enumerated parameter ``name`` is invalid, ``None`` when it is
+    valid: one of ``choices`` (in any case when ``any_case``), or absent or
+    ``None`` for its default. Any other value is invalid rather than replaced
+    by the default."""
+    valid = sorted(choices)
+    value = params.get(name)
+    if value is None:
+        return None
+    if isinstance(value, str) and (value.lower() if any_case else value) in valid:
+        return None
+    return InvalidParam(
+        param=name,
+        value=value,
+        valid=list(valid),
+        reason=f"{name} must be one of: " + ", ".join(valid),
+    )
+
+
+def options_problem(
+    params: Mapping[str, Any],
+    *,
+    bools: Iterable[str] = (),
+    choices: Mapping[str, Iterable[str]] | None = None,
+) -> InvalidParam | None:
+    """The first invalid one of the logical parameters ``bools`` and then of
+    the enumerated parameters ``choices`` (name -> valid values, read in any
+    case), ``None`` when all are valid."""
+    for name in bools:
+        problem = bool_problem(params, name)
+        if problem is not None:
+            return problem
+    for name, values in (choices or {}).items():
+        problem = choice_problem(params, name, values)
+        if problem is not None:
+            return problem
+    return None
+
+
+def invalid_param_payload(problem: InvalidParam) -> Dict[str, Any]:
+    """The payload keys every marker's evidence of an invalid logical or
+    enumerated parameter, or of an invalid severity, has, besides the one
+    naming the marker: the issue is ``invalid_<param>``. The value is under
+    ``value``, not under the parameter's name, which for ``severity`` would
+    set the severity of the evidence itself."""
+    return {
+        "issue": f"invalid_{problem.param}",
+        "param": problem.param,
+        "value": problem.value,
+        "valid": problem.valid,
+        "reason": problem.reason,
+    }
+
+
+def reject_invalid_param(
+    source_entity: Entity,
+    declaration: DeclarationEntry,
+    problem: InvalidParam | None,
+    *,
+    marker: str,
+    rule_id_prefix: str,
+    rule_id_suffix: str,
+    evidence_type: str = "compiler_invalid_param",
+    key: str = "decorator",
+    compiler_evidence: List[Evidence] | None = None,
+) -> Tuple[List[Any], List[Any], List[Any]] | None:
+    """The dropped declaration when ``problem`` is set, else ``None``.
+
+    The declaration gives a ``compiler_invalid_param`` sentinel rule under
+    the marker's ``rule_id_prefix`` and one evidence of the marker's
+    ``evidence_type``, its payload naming the marker under ``key`` and
+    carrying :func:`invalid_param_payload`; both are the ones the marker
+    reports its other invalid parameters with. ``compiler_evidence``
+    gathered before is kept ahead of it.
+    """
+    if problem is None:
+        return None
+    sentinel = build_invalid_param_sentinel_rule(
+        source_entity,
+        decorator_name=marker,
+        rule_id_prefix=rule_id_prefix,
+        rule_id_suffix=rule_id_suffix,
+        **problem.fields(),
+    )
+    evidence = declaration_evidence(
+        source_entity,
+        declaration,
+        evidence_type=evidence_type,
+        payload={key: marker, **invalid_param_payload(problem)},
+    )
+    return [sentinel], [*(compiler_evidence or []), evidence], []
 
 
 SEVERITIES = ("error", "warning", "info")
@@ -140,15 +266,8 @@ def severity_problem(params: Dict[str, Any]) -> InvalidParam | None:
 
 def invalid_severity_payload(problem: InvalidParam) -> Dict[str, Any]:
     """The payload keys every marker's evidence of an invalid severity has,
-    besides the one naming the marker. The value is not under ``severity``,
-    which would set the severity of the evidence itself."""
-    return {
-        "issue": INVALID_SEVERITY_ISSUE,
-        "param": problem.param,
-        "value": problem.value,
-        "valid": problem.valid,
-        "reason": problem.reason,
-    }
+    besides the one naming the marker (:func:`invalid_param_payload`)."""
+    return invalid_param_payload(problem)
 
 
 def reject_invalid_severity(
@@ -162,31 +281,19 @@ def reject_invalid_severity(
     key: str = "decorator",
     compiler_evidence: List[Evidence] | None = None,
 ) -> Tuple[List[Any], List[Any], List[Any]] | None:
-    """The dropped declaration when its severity is invalid, else ``None``.
-
-    The declaration gives a ``compiler_invalid_param`` sentinel rule under
-    the marker's ``rule_id_prefix`` and one evidence of the marker's
-    ``evidence_type``, its payload naming the marker under ``key``; both are
-    the ones the marker reports its other invalid parameters with.
-    ``compiler_evidence`` gathered before is kept ahead of it.
-    """
-    problem = severity_problem(dict(declaration.params))
-    if problem is None:
-        return None
-    sentinel = build_invalid_param_sentinel_rule(
-        source_entity,
-        decorator_name=marker,
-        rule_id_prefix=rule_id_prefix,
-        rule_id_suffix=rule_id_suffix,
-        **problem.fields(),
-    )
-    evidence = declaration_evidence(
+    """The dropped declaration when its severity is invalid, else ``None``;
+    reported as :func:`reject_invalid_param` reports any invalid parameter."""
+    return reject_invalid_param(
         source_entity,
         declaration,
+        severity_problem(dict(declaration.params)),
+        marker=marker,
+        rule_id_prefix=rule_id_prefix,
+        rule_id_suffix=rule_id_suffix,
         evidence_type=evidence_type,
-        payload={key: marker, **invalid_severity_payload(problem)},
+        key=key,
+        compiler_evidence=compiler_evidence,
     )
-    return [sentinel], [*(compiler_evidence or []), evidence], []
 
 
 def marker_severity(params: Dict[str, Any]) -> Literal["error", "warning", "info"]:
@@ -281,19 +388,26 @@ def build_invalid_param_sentinel_rule(
 
 
 __all__ = [
+    "BOOL_VALUES",
     "INVALID_SEVERITY_ISSUE",
     "InvalidParam",
     "SEVERITIES",
     "bool_param",
+    "bool_problem",
+    "choice_problem",
     "build_invalid_param_sentinel_rule",
     "canonicalize_payload",
     "declaration_evidence",
     "evidence_id",
     "invalid_declaration_evidence",
+    "invalid_param_payload",
     "invalid_severity_payload",
     "invalid_target_evidence",
     "marker_severity",
+    "options_problem",
+    "reject_invalid_param",
     "reject_invalid_severity",
     "severity_problem",
     "with_rule_id_suffix",
+    "without_none",
 ]

@@ -7,12 +7,18 @@ from pythonarchtesting.core.models import Rule, RuleSelector
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
 from ..common import (
+    InvalidParam,
+    bool_param,
+    bool_problem,
     build_invalid_param_sentinel_rule,
     declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    options_problem,
+    reject_invalid_param,
     reject_invalid_severity,
     with_rule_id_suffix,
+    without_none,
 )
 
 _SUPPORTED_KINDS = frozenset({"function", "method"})
@@ -249,12 +255,24 @@ def rejected_declaration(
     *,
     marker: str,
     rule_id_prefix: str,
-    problem: tuple[str, str] | None,
+    problem: tuple[str, str] | InvalidParam | None,
     rule_id_suffix: str,
 ) -> Tuple[List[Any], List[Any], List[Any]] | None:
     """The dropped declaration at its parameter ``problem``, else at an
     invalid severity; ``None`` when the declaration is valid. Both are
-    reported under the marker's ``rule_id_prefix``."""
+    reported under the marker's ``rule_id_prefix``. A ``problem`` given as
+    an :class:`InvalidParam` (an invalid logical parameter) is reported as
+    an invalid severity is, a ``(param, reason)`` one with the issue
+    ``compiler_invalid_param``."""
+    if isinstance(problem, InvalidParam):
+        return reject_invalid_param(
+            source_entity,
+            declaration,
+            problem,
+            marker=marker,
+            rule_id_prefix=rule_id_prefix,
+            rule_id_suffix=rule_id_suffix,
+        )
     if problem is not None:
         return invalid_param(
             source_entity,
@@ -282,6 +300,36 @@ def case_params(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _module_list_problem(
+    marker: str, mode: str, params: dict[str, Any], kind: str
+) -> tuple[str, str] | InvalidParam | None:
+    """The first invalid parameter of a module-list marker, checked in a
+    fixed order; ``None`` when all are valid."""
+    cover_module = bool_problem(params, "cover_module")
+    if cover_module is not None:
+        return cover_module
+    if params.get("cover_module") and marker != "forbid_runtime_calls":
+        return ("cover_module", f"cover_module does not apply to {marker}")
+    if not _module_names(params.get("modules", [])):
+        return ("modules", "give at least one module name")
+    allow = _module_names(params.get("allow") or [])
+    if allow is None:
+        return ("allow", "allow must be a list of module names")
+    if mode == "require" and allow:
+        return ("allow", f"allow does not apply to {marker}")
+    transitive = bool_problem(params, "transitive")
+    if transitive is not None:
+        return transitive
+    if params.get("transitive") and mode != "forbid":
+        return ("transitive", f"transitive does not apply to {marker}")
+    through = _module_names(params.get("through") or [])
+    if through is None:
+        return ("through", "through must be a list of module names")
+    if through and not params.get("transitive"):
+        return ("through", "through applies only with transitive=True")
+    return runtime_cases_problem(params, kind, marker)
+
+
 def _compile_module_list(
     marker: str,
     source_entity: Entity,
@@ -289,7 +337,7 @@ def _compile_module_list(
     rule_id_suffix: str,
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     rule_id, rule_type, mode, hint = _MODULE_LIST_MARKERS[marker]
-    params_kwargs = dict(declaration.params)
+    params_kwargs = without_none(declaration.params, ("transitive", "cover_module"))
     if source_entity.kind not in _SUPPORTED_KINDS:
         return invalid_target(
             source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
@@ -297,30 +345,10 @@ def _compile_module_list(
 
     modules = _module_names(params_kwargs.get("modules", []))
     allow = _module_names(params_kwargs.get("allow") or [])
-    transitive = params_kwargs.get("transitive", False)
+    transitive = bool_param(params_kwargs, "transitive", default=False)
     through = _module_names(params_kwargs.get("through") or [])
-    cover_module = params_kwargs.get("cover_module", False)
-    problem: tuple[str, str] | None = None
-    if not isinstance(cover_module, bool):
-        problem = ("cover_module", "cover_module must be True or False")
-    elif cover_module and marker != "forbid_runtime_calls":
-        problem = ("cover_module", f"cover_module does not apply to {marker}")
-    elif not modules:
-        problem = ("modules", "give at least one module name")
-    elif allow is None:
-        problem = ("allow", "allow must be a list of module names")
-    elif mode == "require" and allow:
-        problem = ("allow", f"allow does not apply to {marker}")
-    elif not isinstance(transitive, bool):
-        problem = ("transitive", "transitive must be True or False")
-    elif transitive and mode != "forbid":
-        problem = ("transitive", f"transitive does not apply to {marker}")
-    elif through is None:
-        problem = ("through", "through must be a list of module names")
-    elif through and not transitive:
-        problem = ("through", "through applies only with transitive=True")
-    else:
-        problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
+    cover_module = bool_param(params_kwargs, "cover_module", default=False)
+    problem = _module_list_problem(marker, mode, params_kwargs, source_entity.kind)
     rejected = rejected_declaration(
         source_entity,
         declaration,
@@ -415,20 +443,17 @@ def compile_enforce_reference_calls(
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     _ = cfg
     marker = "enforce_reference_calls"
-    params_kwargs = dict(declaration.params)
+    bools = ("require_all", "allow_new_modules")
+    params_kwargs = without_none(declaration.params, bools)
     if source_entity.kind not in _SUPPORTED_KINDS:
         return invalid_target(
             source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
         )
-    require_all = params_kwargs.get("require_all", False)
-    allow_new_modules = params_kwargs.get("allow_new_modules", False)
-    problem: tuple[str, str] | None = None
-    if not isinstance(require_all, bool):
-        problem = ("require_all", "require_all must be True or False")
-    elif not isinstance(allow_new_modules, bool):
-        problem = ("allow_new_modules", "allow_new_modules must be True or False")
-    else:
-        problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
+    require_all = bool_param(params_kwargs, "require_all", default=False)
+    allow_new_modules = bool_param(params_kwargs, "allow_new_modules", default=False)
+    problem: tuple[str, str] | InvalidParam | None = options_problem(
+        params_kwargs, bools=bools
+    ) or runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     rejected = rejected_declaration(
         source_entity,
         declaration,

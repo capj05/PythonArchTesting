@@ -12,8 +12,11 @@ from ..common import (
     declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    options_problem,
+    reject_invalid_param,
     reject_invalid_severity,
     with_rule_id_suffix,
+    without_none,
 )
 
 _VALID_SATISFY_WITH = frozenset(
@@ -24,6 +27,16 @@ _VALID_RETURN_ANNOTATION_MODE = frozenset({"ignore", "compatible", "exact"})
 _VALID_DETECTION_MODE = frozenset({"strict", "extended"})
 _VALID_SIGNATURE_MODES = frozenset({"compatible", "exact", "any"})
 _FACTORY_METHOD_NAMES = frozenset({"__init__", "__new__"})
+_BOOLS = ("allow_inherited", "allow_missing")
+_OPTIONS = (
+    "signature_mode",
+    "satisfy_with",
+    "name_match",
+    "return_annotation_mode",
+    "detection_mode",
+    *_BOOLS,
+)
+_INVALID_PREFIX = "API004/required_factory/invalid_param"
 
 
 def _is_factory_capable_method(entity: Entity) -> bool:
@@ -51,7 +64,7 @@ def _invalid_param_sentinel_rule(
     return build_invalid_param_sentinel_rule(
         source_entity,
         decorator_name="required_factory",
-        rule_id_prefix="API004/required_factory/invalid_param",
+        rule_id_prefix=_INVALID_PREFIX,
         param=param,
         value=value,
         valid=valid,
@@ -71,7 +84,7 @@ def compile_required_factory(
     from pythonarchtesting.core.models import Rule, RuleSelector
 
     _ = cfg
-    params_kwargs = dict(declaration.params)
+    params_kwargs = without_none(declaration.params, _OPTIONS)
     compiler_evidence: List[Evidence] = []
 
     if source_entity.kind != "method":
@@ -168,38 +181,21 @@ def compile_required_factory(
         )
         return [sentinel], compiler_evidence, []
 
-    allow_inherited = bool(params_kwargs.get("allow_inherited", True))
-    allow_missing, allow_missing_valid = bool_param(
-        params_kwargs,
-        "allow_missing",
-        default=False,
+    rejected = reject_invalid_param(
+        source_entity,
+        declaration,
+        options_problem(
+            params_kwargs, bools=_BOOLS, choices={"name_match": _VALID_NAME_MATCH}
+        ),
+        marker="required_factory",
+        rule_id_prefix=_INVALID_PREFIX,
+        rule_id_suffix=rule_id_suffix,
     )
-    if not allow_missing_valid:
-        payload = {
-            "decorator": "required_factory",
-            "issue": "compiler_invalid_param",
-            "param": "allow_missing",
-            "reason": "allow_missing must be a boolean",
-        }
-        compiler_evidence.append(
-            declaration_evidence(
-                source_entity,
-                declaration,
-                evidence_type="compiler_invalid_param",
-                payload=payload,
-            )
-        )
-        sentinel = _invalid_param_sentinel_rule(
-            source_entity,
-            param="allow_missing",
-            value=params_kwargs.get("allow_missing"),
-            reason="allow_missing must be a boolean",
-            rule_id_suffix=rule_id_suffix,
-        )
-        return [sentinel], compiler_evidence, []
+    if rejected is not None:
+        return rejected
+    allow_inherited = bool_param(params_kwargs, "allow_inherited", default=True)
+    allow_missing = bool_param(params_kwargs, "allow_missing", default=False)
     name_match = str(params_kwargs.get("name_match", "any")).lower()
-    if name_match not in _VALID_NAME_MATCH:
-        name_match = "any"
 
     aliases = params_kwargs.get("aliases")
     pattern = params_kwargs.get("pattern")
@@ -347,7 +343,7 @@ def compile_required_factory(
         source_entity,
         declaration,
         marker="required_factory",
-        rule_id_prefix="API004/required_factory/invalid_param",
+        rule_id_prefix=_INVALID_PREFIX,
         rule_id_suffix=rule_id_suffix,
         compiler_evidence=compiler_evidence,
     )

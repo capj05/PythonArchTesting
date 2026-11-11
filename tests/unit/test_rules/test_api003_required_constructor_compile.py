@@ -327,11 +327,16 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    # Reported as every invalid logical argument is: a sentinel rule and the
+    # issue invalid_allow_missing.
+    assert [rule.rule_id for rule in rules] == [
+        "API003/required_constructor/invalid_declaration/allow_missing"
+    ]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
     assert evidence[0].payload["decorator"] == "required_constructor"
-    assert "allow_missing must be a boolean" in evidence[0].payload["reason"]
+    assert evidence[0].payload["issue"] == "invalid_allow_missing"
+    assert evidence[0].payload["reason"] == "allow_missing must be True or False"
 
 
 def test_api003_compile_invalid_signature_mode_emits_compiler_evidence() -> None:

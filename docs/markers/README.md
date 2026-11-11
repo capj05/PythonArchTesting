@@ -17,6 +17,45 @@ severity but dropped, with a `compiler_invalid_param` sentinel rule for the
 parameter `severity` (valid values `["error", "warning", "info"]`) and compiler
 evidence with the issue `invalid_severity`.
 
+## Logical And Enumerated Arguments
+
+The same rule holds for every logical argument (one typed `bool`:
+`declared_only`, `allow_missing`, `ignore_type_checking`, `transitive`, …) and
+every enumerated argument (one that takes a value from a fixed list:
+`signature_mode`, `mode`, `name_match`, `storage`, `scope`, `policy`, …) of
+every marker:
+
+- A logical argument takes only `True` or `False`. Any other value (`"no"`,
+  `"false"`, `1`, `0`) is not read for its truthiness but makes the
+  declaration invalid: a `compiler_invalid_param` sentinel rule for the
+  argument (valid values `[True, False]`) and compiler evidence with the issue
+  `invalid_<argument>`, for example `invalid_declared_only`.
+- An enumerated argument takes only the values its marker's page lists, in
+  any case where the marker reads it so (`signature_mode="Exact"` is
+  `"exact"`). Any other value makes the declaration invalid instead of being
+  replaced by the default. An argument that was already checked keeps the
+  report it always had (for example `forbid_imports(mode=…)` with the issue
+  `invalid_mode`); the others report it as a logical argument does: a
+  sentinel with the valid values and the issue `invalid_<argument>`, for
+  example `required_entity_signature(mode="strict")` with `invalid_mode`.
+- `None` declares the default of either kind, as if the argument were left
+  out.
+
+The sentinel and the evidence are the ones the marker reports an invalid
+severity with.
+
+## Positional Arguments
+
+A marker whose page lists one argument as `(positional)` takes exactly that
+one positional argument; every other argument is a keyword. A positional
+argument beyond it — `implements_protocol(Seller, "x")`,
+`required_attribute("name", 4)`, or any positional argument of a marker
+without one, such as `required_method("x")` — is not used for anything: the
+declaration reports it as a warning, an `arg` issue with the argument's index
+and position (`--validate-declarations` shows it). Only the first argument is
+the value; a literal after a first argument that cannot be read does not take
+its place.
+
 ## Signature And Shape
 
 - [required_entity_signature](required_entity_signature.md) — function or method signature contract

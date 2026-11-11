@@ -27,7 +27,7 @@ instance and checks the protocol's members on it.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `protocol` (positional) | Protocol class | — | A `typing.Protocol` defined in the reference. |
+| `protocol` (positional) | Protocol class | — | A `typing.Protocol` defined in the reference. A second positional argument is a warning and is not used (see [Positional Arguments](README.md#positional-arguments)). |
 | `cases` | `list[dict]` | — | Constructor arguments (`args`, `kwargs`), see [Cases](../dynamic-checks.md#cases). |
 
 **Optional:**

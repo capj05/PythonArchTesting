@@ -1066,9 +1066,10 @@ Notes:
 - dynamic attribute detection is conservative and literal-only: only `setattr(self, "name", value)` and `setattr(cls, "name", value)` are recognized.
 - descriptor detection is opt-in and static-only; v2 does not attempt import-time or runtime descriptor resolution.
 - import absence remains the responsibility of `forbid_imports(...)`.
-- an option given as `None` takes its default; `include_descriptors` and
-  `include_dynamic_attributes` take only `True` or `False`, any other value
-  makes the declaration invalid (`invalid_include_descriptors`,
+- an option given as `None` takes its default; `declared_only`,
+  `include_descriptors` and `include_dynamic_attributes` take only `True` or
+  `False`, any other value makes the declaration invalid
+  (`invalid_declared_only`, `invalid_include_descriptors`,
   `invalid_include_dynamic_attributes`).
 
 Examples:

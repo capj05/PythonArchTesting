@@ -344,6 +344,16 @@ ISSUE_CASES: dict[str, Case] = {
         "signature_mode must be 'any' when member_kind is 'attribute'",
     ),
     # Only a bool switches an option: "no" is no False and 1 no True.
+    "invalid_declared_only": Case(
+        "class",
+        {"name": "x", "declared_only": "yes"},
+        "invalid_declared_only",
+        {"declared_only": "yes"},
+        "declared_only",
+        "yes",
+        [True, False],
+        "declared_only must be True or False",
+    ),
     "invalid_include_descriptors": Case(
         "class",
         {"name": "x", "include_descriptors": "no"},
@@ -462,6 +472,7 @@ ALL_ISSUES = {
     "missing_pattern",
     "invalid_signature_mode",
     "invalid_signature_mode_for_member_kind",
+    "invalid_declared_only",
     "invalid_include_descriptors",
     "invalid_include_dynamic_attributes",
     "include_descriptors_not_supported_for_method_kind",
@@ -774,7 +785,7 @@ def test_v1_class_rule_keeps_its_parameters_in_order() -> None:
     """A class declaration with only v1 parameters compiles to a v1 rule."""
     entity, _, rules, evidence, _ = _compile(
         "class",
-        {"name": " token ", "member_kind": "Attribute", "declared_only": "yes"},
+        {"name": " token ", "member_kind": "Attribute", "declared_only": True},
     )
 
     assert evidence == []

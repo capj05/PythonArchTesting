@@ -10,12 +10,16 @@ from pythonarchtesting.entities import DeclarationEntry, Entity
 
 from ..common import (
     InvalidParam,
+    bool_param,
+    bool_problem,
     build_invalid_param_sentinel_rule,
     invalid_declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    reject_invalid_param,
     reject_invalid_severity,
     with_rule_id_suffix,
+    without_none,
 )
 
 _DECORATOR = "require_method_set"
@@ -23,6 +27,8 @@ _SENTINEL_RULE_ID_PREFIX = "API005/require_method_set/invalid_declaration"
 
 VALID_NAME_MATCH = frozenset({"any", "regex", "names"})
 VALID_METHOD_KINDS = frozenset({"any", "instance", "classmethod", "staticmethod"})
+# The enumerated and logical parameters: ``None`` declares their default.
+_OPTIONS = ("name_match", "method_kind", "declared_only")
 
 
 def _drop(
@@ -235,7 +241,7 @@ def compile_require_method_set(
     from pythonarchtesting.core.models import Rule, RuleSelector
 
     _ = cfg
-    params_kwargs = dict(declaration.params)
+    params_kwargs = without_none(declaration.params, _OPTIONS)
     compiler_evidence: List[Evidence] = []
 
     if source_entity.kind != "class":
@@ -291,19 +297,22 @@ def compile_require_method_set(
         )
     min_count, max_count = counts
 
-    declared_only = bool(params_kwargs.get("declared_only", False))
-
-    rejected = reject_invalid_severity(
+    reject: dict[str, Any] = {
+        "marker": _DECORATOR,
+        "rule_id_prefix": _SENTINEL_RULE_ID_PREFIX,
+        "rule_id_suffix": rule_id_suffix,
+        "evidence_type": "compiler_invalid_declaration",
+        "compiler_evidence": compiler_evidence,
+    }
+    rejected = reject_invalid_param(
         source_entity,
         declaration,
-        marker=_DECORATOR,
-        rule_id_prefix=_SENTINEL_RULE_ID_PREFIX,
-        rule_id_suffix=rule_id_suffix,
-        evidence_type="compiler_invalid_declaration",
-        compiler_evidence=compiler_evidence,
-    )
+        bool_problem(params_kwargs, "declared_only"),
+        **reject,
+    ) or reject_invalid_severity(source_entity, declaration, **reject)
     if rejected is not None:
         return rejected
+    declared_only = bool_param(params_kwargs, "declared_only", default=False)
 
     base_severity = marker_severity(params_kwargs)
 

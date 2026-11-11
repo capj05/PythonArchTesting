@@ -404,18 +404,23 @@ def _positional_single_param(
     params: dict[str, Any],
     unsupported: list[dict[str, Any]],
 ) -> None:
-    """Take the first literal of a single-valued marker; any other is an issue.
+    """Take the first argument of a single-valued marker; any other is an issue.
 
-    The first value must be a string, except that ``enforce_flow`` also takes
-    its stages as a list of strings.
+    Only the argument in the first position is the value: a literal after a
+    first argument that is no literal, or after a protocol named by reference,
+    is a surplus argument and is never stored. A supported marker without a
+    positional parameter reports every literal positional argument. The value
+    must be a string, except that ``enforce_flow`` also takes its stages as a
+    list of strings.
     """
-    key = _POSITIONAL_SINGLE_ARG_NAMES.get(name)
-    if not key:
+    if name in _POSITIONAL_LIST_ARG_NAMES or name not in SUPPORTED_MARKER_NAMES:
         return
-    params[key] = literals[0][1]
-    for position, (idx, value) in enumerate(literals):
-        if position == 0 and _valid_single_value(name, value):
-            continue
+    key = _POSITIONAL_SINGLE_ARG_NAMES.get(name)
+    for idx, value in literals:
+        if idx == 0 and key:
+            params[key] = value
+            if _valid_single_value(name, value):
+                continue
         unsupported.append(
             _issue("arg", node.args[idx], expr=repr(value), index=idx, name=name)
         )

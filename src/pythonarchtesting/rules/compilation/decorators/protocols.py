@@ -11,24 +11,30 @@ from pythonarchtesting.protocols.reference_resolution import (
 )
 
 from ..common import (
+    bool_param,
     declaration_evidence,
     marker_severity,
+    options_problem,
+    reject_invalid_param,
     reject_invalid_severity,
     with_rule_id_suffix,
+    without_none,
 )
+
+# The evaluator compares signatures in each of these modes, as
+# required_method does; "any" checks only that the members exist.
+_SIGNATURE_MODES = ("compatible", "exact", "any")
+_RETURN_ANNOTATIONS = ("off", "warning", "error")
+_OPTIONS = ("signature_mode", "return_annotation", "enforce_method_kind")
 
 
 def _protocol_rule_options(
     params_kwargs: dict[str, Any],
 ) -> tuple[str, str, Literal["error", "warning", "info"]]:
+    """The signature mode, return annotation level and severity of a
+    declaration whose parameters are valid."""
     mode = str(params_kwargs.get("signature_mode", "compatible")).lower()
-    if mode not in {"compatible", "exact"}:
-        mode = "compatible"
-
     return_annotation = str(params_kwargs.get("return_annotation", "warning")).lower()
-    if return_annotation not in {"off", "warning", "error"}:
-        return_annotation = "warning"
-
     base_severity = marker_severity(params_kwargs)
 
     return mode, return_annotation, base_severity
@@ -222,26 +228,37 @@ def _compile_protocol_rule(
     if protocol_entity is None or protocol_ref is None:
         return [], compiler_evidence, []
 
-    rejected = reject_invalid_severity(
-        source_entity,
-        declaration,
-        marker=declaration.kind or "implements_protocol",
-        rule_id_prefix=f"{rule_id.rsplit('/', 1)[0]}/invalid_declaration",
-        rule_id_suffix=rule_id_suffix,
-        key="declaration",
-        compiler_evidence=compiler_evidence,
+    params_kwargs = without_none(declaration.params, _OPTIONS)
+    reject: dict[str, Any] = {
+        "marker": declaration.kind or "implements_protocol",
+        "rule_id_prefix": f"{rule_id.rsplit('/', 1)[0]}/invalid_declaration",
+        "rule_id_suffix": rule_id_suffix,
+        "key": "declaration",
+        "compiler_evidence": compiler_evidence,
+    }
+    problem = options_problem(
+        params_kwargs,
+        choices={
+            "signature_mode": _SIGNATURE_MODES,
+            "return_annotation": _RETURN_ANNOTATIONS,
+        },
+        bools=("enforce_method_kind",),
     )
+    rejected = reject_invalid_param(
+        source_entity, declaration, problem, **reject
+    ) or reject_invalid_severity(source_entity, declaration, **reject)
     if rejected is not None:
         return rejected
 
-    params_kwargs = dict(declaration.params)
     mode, return_annotation, base_severity = _protocol_rule_options(params_kwargs)
 
     params = {
         "protocol": protocol_ref,
         "protocol_entity_id": protocol_entity.canonical_id,
         "signature_mode": mode,
-        "enforce_method_kind": bool(params_kwargs.get("enforce_method_kind", True)),
+        "enforce_method_kind": bool_param(
+            params_kwargs, "enforce_method_kind", default=True
+        ),
         "return_annotation": return_annotation,
         "fail_on_unmatched": True,
     }
