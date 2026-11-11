@@ -285,8 +285,10 @@ def _validate_alias_match(declared: _Declared) -> _Problem | None:
 def _validate_regex_match(declared: _Declared) -> _Problem | None:
     """A regex match takes no aliases and needs a pattern that compiles.
 
-    The pattern is compiled as declared, not stripped, although the rule
-    keeps the stripped one.
+    The pattern is compiled stripped, as the rule keeps it, so that a
+    pattern which compiles only with its surrounding whitespace (``"a\\ "``)
+    is dropped here and not left to fail when the rule is evaluated. The
+    problems report the pattern as declared.
     """
     problem = _no_aliases(declared, "regex")
     if problem is not None:
@@ -301,7 +303,7 @@ def _validate_regex_match(declared: _Declared) -> _Problem | None:
             reason="pattern is required when name_match='regex'",
         )
     try:
-        re.compile(pattern)
+        re.compile(pattern.strip())
     except re.error as exc:
         return _problem(
             "invalid_pattern",

@@ -49,6 +49,7 @@ def _regex_error(pattern: str) -> str:
 
 
 _UNBALANCED_ERROR = _regex_error("(")
+_TRAILING_ESCAPE_ERROR = _regex_error("a\\")
 
 
 def _entities() -> dict[str, Entity]:
@@ -316,6 +317,21 @@ ISSUE_CASES: dict[str, Case] = {
         "(",
         None,
         f"pattern is not a valid regex: {_UNBALANCED_ERROR}",
+    ),
+    # The rule keeps the stripped pattern, so the stripped one is compiled:
+    # "a\\ " is a valid regex, but "a\\" left after stripping is not. Before
+    # the fix the declared pattern was compiled and the rule only failed with
+    # an evaluation ERROR. The sentinel and payload still report the pattern
+    # as declared.
+    "invalid_pattern/invalid_once_stripped": Case(
+        "class",
+        {"name_match": "regex", "pattern": "a\\ "},
+        "invalid_pattern",
+        {"pattern": "a\\ ", "error": _TRAILING_ESCAPE_ERROR},
+        "pattern",
+        "a\\ ",
+        None,
+        f"pattern is not a valid regex: {_TRAILING_ESCAPE_ERROR}",
     ),
     "invalid_signature_mode": Case(
         "class",
