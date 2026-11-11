@@ -9,6 +9,7 @@ from pythonarchtesting.entities import DeclarationEntry, Entity
 from ..common import (
     invalid_target_evidence,
     marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 
@@ -22,8 +23,6 @@ def compile_is_enum(
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     _ = cfg
     params_kwargs = dict(declaration.params)
-    base_severity = marker_severity(params_kwargs)
-
     if source_entity.kind != "class":
         return (
             [],
@@ -34,6 +33,19 @@ def compile_is_enum(
             ],
             [],
         )
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker="is_enum",
+        rule_id_prefix="ENUM001/is_enum/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        key="declaration",
+    )
+    if rejected is not None:
+        return rejected
+
+    base_severity = marker_severity(params_kwargs)
 
     rule = Rule(
         rule_id=with_rule_id_suffix("ENUM001/is_enum/v1", rule_id_suffix),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Literal, cast
+from dataclasses import dataclass
+from typing import Any, Dict, List, Literal, Tuple, cast
 
 # The payload hashing is the one evidence collection uses: a compiler's
 # evidence and a collector's of the same payload get the same id.
@@ -98,13 +99,108 @@ def bool_param(
     return default, False
 
 
+@dataclass(frozen=True)
+class InvalidParam:
+    """A parameter a marker compiler refuses: what the sentinel rule and the
+    compiler evidence of the dropped declaration report."""
+
+    param: str
+    value: Any
+    valid: list[Any] | None
+    reason: str
+
+    def fields(self) -> dict[str, Any]:
+        """The fields as the keyword arguments of a compiler's ``_drop``."""
+        return {
+            "param": self.param,
+            "value": self.value,
+            "valid": self.valid,
+            "reason": self.reason,
+        }
+
+
+SEVERITIES = ("error", "warning", "info")
+INVALID_SEVERITY_ISSUE = "invalid_severity"
+
+
+def severity_problem(params: Dict[str, Any]) -> InvalidParam | None:
+    """Why the severity a marker declares is invalid, ``None`` when it is
+    valid: one of :data:`SEVERITIES` in any case, or absent or ``None`` for
+    the default ``"error"``."""
+    raw = params.get("severity")
+    if raw is None or (isinstance(raw, str) and raw.lower() in SEVERITIES):
+        return None
+    return InvalidParam(
+        param="severity",
+        value=raw,
+        valid=list(SEVERITIES),
+        reason="severity must be one of: " + ", ".join(SEVERITIES),
+    )
+
+
+def invalid_severity_payload(problem: InvalidParam) -> Dict[str, Any]:
+    """The payload keys every marker's evidence of an invalid severity has,
+    besides the one naming the marker. The value is not under ``severity``,
+    which would set the severity of the evidence itself."""
+    return {
+        "issue": INVALID_SEVERITY_ISSUE,
+        "param": problem.param,
+        "value": problem.value,
+        "valid": problem.valid,
+        "reason": problem.reason,
+    }
+
+
+def reject_invalid_severity(
+    source_entity: Entity,
+    declaration: DeclarationEntry,
+    *,
+    marker: str,
+    rule_id_prefix: str,
+    rule_id_suffix: str,
+    evidence_type: str = "compiler_invalid_param",
+    key: str = "decorator",
+    compiler_evidence: List[Evidence] | None = None,
+) -> Tuple[List[Any], List[Any], List[Any]] | None:
+    """The dropped declaration when its severity is invalid, else ``None``.
+
+    The declaration gives a ``compiler_invalid_param`` sentinel rule under
+    the marker's ``rule_id_prefix`` and one evidence of the marker's
+    ``evidence_type``, its payload naming the marker under ``key``; both are
+    the ones the marker reports its other invalid parameters with.
+    ``compiler_evidence`` gathered before is kept ahead of it.
+    """
+    problem = severity_problem(dict(declaration.params))
+    if problem is None:
+        return None
+    sentinel = build_invalid_param_sentinel_rule(
+        source_entity,
+        decorator_name=marker,
+        rule_id_prefix=rule_id_prefix,
+        rule_id_suffix=rule_id_suffix,
+        **problem.fields(),
+    )
+    evidence = declaration_evidence(
+        source_entity,
+        declaration,
+        evidence_type=evidence_type,
+        payload={key: marker, **invalid_severity_payload(problem)},
+    )
+    return [sentinel], [*(compiler_evidence or []), evidence], []
+
+
 def marker_severity(params: Dict[str, Any]) -> Literal["error", "warning", "info"]:
     """The severity a marker declares (``severity=``, any case); ``"error"``
-    when it declares none or one that is no severity."""
-    raw = str(params.get("severity", "error")).lower()
-    if raw in {"error", "warning", "info"}:
-        return cast(Literal["error", "warning", "info"], raw)
-    return "error"
+    when it declares none. A compiler drops a declaration with an invalid
+    severity (:func:`severity_problem`) before it asks for it, so an invalid
+    one here is a bug of the compiler and raises ``ValueError``."""
+    problem = severity_problem(params)
+    if problem is not None:
+        raise ValueError(f"{problem.reason}, not {problem.value!r}")
+    raw = params.get("severity")
+    if raw is None:
+        return "error"
+    return cast(Literal["error", "warning", "info"], str(raw).lower())
 
 
 def with_rule_id_suffix(rule_id: str, suffix: str = "") -> str:
@@ -121,7 +217,7 @@ def build_invalid_param_sentinel_rule(
     rule_id_prefix: str,
     param: str,
     value: Any = None,
-    valid: list[str] | None = None,
+    valid: list[Any] | None = None,
     reason: str | None = None,
     rule_id_suffix: str = "",
 ) -> Any:
@@ -158,7 +254,7 @@ def build_invalid_param_sentinel_rule(
         "fail_on_unmatched": True,
     }
     if valid:
-        fix_hint = f"Use one of: {', '.join(sorted(valid))}"
+        fix_hint = f"Use one of: {', '.join(sorted(str(item) for item in valid))}"
     elif reason:
         fix_hint = reason
     else:
@@ -185,13 +281,19 @@ def build_invalid_param_sentinel_rule(
 
 
 __all__ = [
+    "INVALID_SEVERITY_ISSUE",
+    "InvalidParam",
+    "SEVERITIES",
     "bool_param",
     "build_invalid_param_sentinel_rule",
     "canonicalize_payload",
     "declaration_evidence",
     "evidence_id",
     "invalid_declaration_evidence",
+    "invalid_severity_payload",
     "invalid_target_evidence",
     "marker_severity",
+    "reject_invalid_severity",
+    "severity_problem",
     "with_rule_id_suffix",
 ]

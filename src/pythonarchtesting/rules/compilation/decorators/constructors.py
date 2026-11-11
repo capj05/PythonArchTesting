@@ -14,6 +14,7 @@ from ..common import (
     invalid_declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 
@@ -86,6 +87,18 @@ def compile_required_constructor(
             )
         )
         return [], compiler_evidence, []
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker=_DECORATOR,
+        rule_id_prefix="API003/required_constructor/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        evidence_type="compiler_invalid_declaration",
+        compiler_evidence=compiler_evidence,
+    )
+    if rejected is not None:
+        return rejected
 
     base_severity = marker_severity(params_kwargs)
 

@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
+
 from pythonarchtesting.rules.compilation.common import (
     build_invalid_param_sentinel_rule,
+    marker_severity,
+    severity_problem,
     with_rule_id_suffix,
 )
 from tests.unit.test_rules.protocol_rule_test_helpers import extract_entity
@@ -109,3 +115,50 @@ def test_with_rule_id_suffix_returns_unchanged_when_empty() -> None:
 
 def test_with_rule_id_suffix_appends_suffix() -> None:
     assert with_rule_id_suffix("API005/foo", "/d3") == "API005/foo/d3"
+
+
+def test_build_invalid_param_sentinel_rule_fix_hint_lists_bools() -> None:
+    sentinel = build_invalid_param_sentinel_rule(
+        _entity(),
+        decorator_name="does_not_have",
+        rule_id_prefix="NEG001/does_not_have/invalid_declaration",
+        param="include_descriptors",
+        value="no",
+        valid=[True, False],
+        reason="include_descriptors must be True or False",
+    )
+
+    assert sentinel.params["valid"] == [True, False]
+    assert sentinel.fix_hints == ("Use one of: False, True",)
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        ({}, "error"),
+        ({"severity": None}, "error"),
+        ({"severity": "warning"}, "warning"),
+        ({"severity": "INFO"}, "info"),
+        ({"severity": "Error"}, "error"),
+    ],
+)
+def test_a_valid_severity_is_read_in_any_case(
+    params: dict[str, Any], expected: str
+) -> None:
+    assert severity_problem(params) is None
+    assert marker_severity(params) == expected
+
+
+@pytest.mark.parametrize("value", ["fatal", "warn", "", " error", 1, True, ["error"]])
+def test_any_other_severity_is_invalid(value: Any) -> None:
+    problem = severity_problem({"severity": value})
+
+    assert problem is not None
+    assert problem.fields() == {
+        "param": "severity",
+        "value": value,
+        "valid": ["error", "warning", "info"],
+        "reason": "severity must be one of: error, warning, info",
+    }
+    with pytest.raises(ValueError, match="severity must be one of"):
+        marker_severity({"severity": value})

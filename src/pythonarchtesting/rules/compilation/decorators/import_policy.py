@@ -9,6 +9,7 @@ from pythonarchtesting.entities import DeclarationEntry, Entity
 from ..common import (
     declaration_evidence,
     marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 
@@ -97,6 +98,18 @@ def compile_forbid_imports(
         return [], compiler_evidence, []
 
     ignore_type_checking = bool(params_kwargs.get("ignore_type_checking", True))
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker="forbid_imports",
+        rule_id_prefix="DEP001/forbid_imports/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        key="declaration",
+        compiler_evidence=compiler_evidence,
+    )
+    if rejected is not None:
+        return rejected
 
     base_severity = marker_severity(params_kwargs)
 

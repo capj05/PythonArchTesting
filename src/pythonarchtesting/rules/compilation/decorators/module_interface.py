@@ -20,9 +20,9 @@ from ..common import with_rule_id_suffix
 from .module_structure import entry_problem
 from .runtime_structure import (
     case_params,
-    invalid_param,
     invalid_target,
     marker_severity,
+    rejected_declaration,
 )
 
 MARKER = "module_interface"
@@ -99,15 +99,16 @@ def compile_module_interface(
     entry_entity: Entity | None = None
     if problem is None:
         problem, entry_entity = entry_problem(params, entities, MARKER)
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker=MARKER,
-            rule_id_prefix=_INVALID_PREFIX,
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=MARKER,
+        rule_id_prefix=_INVALID_PREFIX,
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
     interface = {
         "names": list(params.get("names") or []),
         "module": str(source_entity.module_path),

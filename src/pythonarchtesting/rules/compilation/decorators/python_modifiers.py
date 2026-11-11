@@ -9,6 +9,7 @@ from pythonarchtesting.entities import DeclarationEntry, Entity
 from ..common import (
     invalid_target_evidence,
     marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 
@@ -28,8 +29,6 @@ def _compile_python_modifier_rule(
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     _ = cfg
     params_kwargs = dict(declaration.params)
-    base_severity = marker_severity(params_kwargs)
-
     if source_entity.kind != expected_kind:
         return (
             [],
@@ -43,6 +42,18 @@ def _compile_python_modifier_rule(
             ],
             [],
         )
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker=declaration_name,
+        rule_id_prefix=f"{rule_id.split('/')[0]}/{declaration_name}/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
+
+    base_severity = marker_severity(params_kwargs)
 
     rule = Rule(
         rule_id=with_rule_id_suffix(rule_id, rule_id_suffix),

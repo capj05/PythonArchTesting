@@ -12,6 +12,7 @@ from ..common import (
     invalid_declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 
@@ -70,6 +71,17 @@ def compile_required_entity_signature(
     return_annotation = (
         "off" if return_annotation_raw == "ignore" else return_annotation_raw
     )
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker="required_entity_signature",
+        rule_id_prefix="API001/required_entity_signature/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        compiler_evidence=compiler_evidence,
+    )
+    if rejected is not None:
+        return rejected
 
     base_severity = marker_severity(params_kwargs)
 
@@ -174,8 +186,6 @@ def compile_required_method(
     name_match = str(params_kwargs.get("name_match", "exact")).lower()
     aliases_raw = params_kwargs.get("aliases")
     pattern = params_kwargs.get("pattern")
-
-    base_severity = marker_severity(params_kwargs)
 
     if source_entity.kind != "method":
         compiler_evidence.append(
@@ -297,7 +307,8 @@ def compile_required_method(
             )
             return [], compiler_evidence, []
         try:
-            re.compile(pattern)
+            # The evaluator strips the pattern, so the stripped one is checked.
+            re.compile(pattern.strip())
         except re.error as exc:
             compiler_evidence.append(
                 invalid_declaration_evidence(
@@ -320,6 +331,20 @@ def compile_required_method(
             )
         )
         return [], compiler_evidence, []
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker="required_method",
+        rule_id_prefix="API002/required_method/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        evidence_type="compiler_invalid_declaration",
+        compiler_evidence=compiler_evidence,
+    )
+    if rejected is not None:
+        return rejected
+
+    base_severity = marker_severity(params_kwargs)
 
     selector = RuleSelector(
         source_entity_id=source_entity.canonical_id,

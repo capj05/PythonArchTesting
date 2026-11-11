@@ -11,6 +11,7 @@ from ..common import (
     invalid_declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 from .method_set import InvalidParam, parse_count_range, parse_name_selector
@@ -239,6 +240,18 @@ def compile_require_member_set(
     include_dataclass_constructor = bool(
         params_kwargs.get("include_dataclass_constructor", True)
     )
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker=_DECORATOR,
+        rule_id_prefix=_SENTINEL_RULE_ID_PREFIX,
+        rule_id_suffix=rule_id_suffix,
+        evidence_type="compiler_invalid_declaration",
+        compiler_evidence=compiler_evidence,
+    )
+    if rejected is not None:
+        return rejected
 
     base_severity = marker_severity(params_kwargs)
 

@@ -79,7 +79,7 @@ class Case(NamedTuple):
     payload_extra: dict[str, Any]
     param: str
     value: Any
-    valid: list[str] | None
+    valid: list[Any] | None
     reason: str
     surface: str = "body"
     evidence_type: str = _MEMBER_EVIDENCE
@@ -89,6 +89,7 @@ _MEMBER_KINDS = ["any", "attribute", "method", "property"]
 _STORAGES = ["any", "class", "instance"]
 _NAME_MATCHES = ["alias", "exact", "regex"]
 _SIGNATURE_MODES = ["any", "compatible", "exact"]
+_SEVERITIES = ["error", "warning", "info"]
 
 ISSUE_CASES: dict[str, Case] = {
     "compiler_invalid_surface": Case(
@@ -140,17 +141,6 @@ ISSUE_CASES: dict[str, Case] = {
         {"member_kind": "field"},
         "member_kind",
         "field",
-        _MEMBER_KINDS,
-        "member_kind must be one of: any, method, attribute, property",
-    ),
-    # An explicit None is not the default: str(None).lower() is "none".
-    "invalid_member_kind/explicit_none": Case(
-        "class",
-        {"name": "x", "member_kind": None},
-        "invalid_member_kind",
-        {"member_kind": "none"},
-        "member_kind",
-        "none",
         _MEMBER_KINDS,
         "member_kind must be one of: any, method, attribute, property",
     ),
@@ -353,26 +343,45 @@ ISSUE_CASES: dict[str, Case] = {
         ["any"],
         "signature_mode must be 'any' when member_kind is 'attribute'",
     ),
-    # Any truthy value counts, so the string "no" switches the option on; the
-    # sentinel reports True and offers the string "False".
+    # Only a bool switches an option: "no" is no False and 1 no True.
+    "invalid_include_descriptors": Case(
+        "class",
+        {"name": "x", "include_descriptors": "no"},
+        "invalid_include_descriptors",
+        {"include_descriptors": "no"},
+        "include_descriptors",
+        "no",
+        [True, False],
+        "include_descriptors must be True or False",
+    ),
+    "invalid_include_dynamic_attributes": Case(
+        "class",
+        {"name": "x", "member_kind": "method", "include_dynamic_attributes": 1},
+        "invalid_include_dynamic_attributes",
+        {"include_dynamic_attributes": 1},
+        "include_dynamic_attributes",
+        1,
+        [True, False],
+        "include_dynamic_attributes must be True or False",
+    ),
     "include_descriptors_not_supported_for_method_kind": Case(
         "class",
-        {"name": "x", "member_kind": "method", "include_descriptors": "no"},
+        {"name": "x", "member_kind": "method", "include_descriptors": True},
         "include_descriptors_not_supported_for_method_kind",
         {"member_kind": "method"},
         "include_descriptors",
         True,
-        ["False"],
+        [False],
         "include_descriptors is not supported when member_kind='method'",
     ),
     "include_dynamic_attributes_not_supported_for_method_kind": Case(
         "class",
-        {"name": "x", "member_kind": "method", "include_dynamic_attributes": 1},
+        {"name": "x", "member_kind": "method", "include_dynamic_attributes": True},
         "include_dynamic_attributes_not_supported_for_method_kind",
         {"member_kind": "method"},
         "include_dynamic_attributes",
         True,
-        ["False"],
+        [False],
         "include_dynamic_attributes is not supported when member_kind='method'",
     ),
     "invalid_member_kind_for_method_body": Case(
@@ -385,15 +394,17 @@ ISSUE_CASES: dict[str, Case] = {
         ["method", "any"],
         "member_kind must be 'method' or 'any' when declared on a method body",
     ),
-    "missing_owning_class_for_method_body": Case(
+    # The method's qualname names it: "orphan_method" was no value at all.
+    "method_outside_class": Case(
         "orphan_method",
         {},
-        "missing_owning_class_for_method_body",
-        {},
-        "target_kind",
-        "orphan_method",
+        "method_outside_class",
+        {"qualname": "dump"},
+        "target",
+        "dump",
         None,
-        "does_not_have on a method requires an owning class",
+        "does_not_have on a method body needs a method of a class; "
+        "'dump' is in none",
     ),
     "signature_mode_requires_method_body": Case(
         "class",
@@ -405,16 +416,31 @@ ISSUE_CASES: dict[str, Case] = {
         ["any"],
         "signature_mode != 'any' requires the declaration to be on a method body",
     ),
-    # The same issue as a malformed name, but the sentinel reports None.
-    "invalid_name/missing_for_exact": Case(
+    # A missing name is its own issue, not the one of a malformed name.
+    "missing_name": Case(
         "class",
         {"member_kind": "attribute"},
-        "invalid_name",
-        {"name": None},
+        "missing_name",
+        {},
         "name",
         None,
         None,
         "name is required when name_match='exact'",
+    ),
+    "invalid_severity": Case(
+        "class",
+        {"name": "x", "severity": "fatal"},
+        "invalid_severity",
+        {
+            "param": "severity",
+            "value": "fatal",
+            "valid": sorted(_SEVERITIES),
+            "reason": "severity must be one of: error, warning, info",
+        },
+        "severity",
+        "fatal",
+        _SEVERITIES,
+        "severity must be one of: error, warning, info",
     ),
 }
 
@@ -436,11 +462,15 @@ ALL_ISSUES = {
     "missing_pattern",
     "invalid_signature_mode",
     "invalid_signature_mode_for_member_kind",
+    "invalid_include_descriptors",
+    "invalid_include_dynamic_attributes",
     "include_descriptors_not_supported_for_method_kind",
     "include_dynamic_attributes_not_supported_for_method_kind",
     "invalid_member_kind_for_method_body",
-    "missing_owning_class_for_method_body",
+    "method_outside_class",
     "signature_mode_requires_method_body",
+    "missing_name",
+    "invalid_severity",
 }
 
 
@@ -458,10 +488,10 @@ def _compile(
     return entity, declaration, rules, evidence, results
 
 
-def _fix_hint(valid: list[str] | None, reason: str) -> str:
+def _fix_hint(valid: list[Any] | None, reason: str) -> str:
     """The fix hint a sentinel rule carries for ``valid`` and ``reason``."""
     if valid:
-        return f"Use one of: {', '.join(sorted(valid))}"
+        return f"Use one of: {', '.join(sorted(str(item) for item in valid))}"
     return reason
 
 
@@ -660,6 +690,24 @@ FIRST_PROBLEM_CASES: dict[str, tuple[str, dict[str, Any], str, str]] = {
         "body",
         "invalid_member_kind_for_method_body",
     ),
+    "include_type_before_method_kind": (
+        "class",
+        {"name": "x", "member_kind": "method", "include_descriptors": "yes"},
+        "body",
+        "invalid_include_descriptors",
+    ),
+    "missing_name_before_severity": (
+        "class",
+        {"member_kind": "attribute", "severity": "fatal"},
+        "body",
+        "missing_name",
+    ),
+    "class_before_severity": (
+        "orphan_method",
+        {"severity": "fatal"},
+        "body",
+        "method_outside_class",
+    ),
     "signature_mode_on_class_before_missing_name": (
         "class",
         {"signature_mode": "exact"},
@@ -742,3 +790,43 @@ def test_v1_class_rule_keeps_its_parameters_in_order() -> None:
         ("declared_only", True),
         ("fail_on_unmatched", False),
     ]
+
+
+_DEFAULTED = [
+    "member_kind",
+    "storage",
+    "name_match",
+    "signature_mode",
+    "include_descriptors",
+    "include_dynamic_attributes",
+    "declared_only",
+    "aliases",
+    "pattern",
+    "severity",
+]
+
+
+@pytest.mark.parametrize("param", _DEFAULTED)
+def test_an_explicit_none_is_the_default(param: str) -> None:
+    """``param=None`` compiles as if the parameter were not given."""
+    _, _, absent, absent_evidence, _ = _compile("class", {"name": "x"})
+    _, _, rules, evidence, _ = _compile("class", {"name": "x", param: None})
+
+    assert absent_evidence == evidence == []
+    assert [rule.rule_id for rule in rules] == [rule.rule_id for rule in absent]
+    assert rules[0].params == absent[0].params
+    assert rules[0].severity == absent[0].severity == "error"
+
+
+@pytest.mark.parametrize("value", [True, False])
+@pytest.mark.parametrize(
+    "option", ["include_descriptors", "include_dynamic_attributes"]
+)
+def test_an_include_option_takes_a_bool(option: str, value: bool) -> None:
+    """A bool is kept as it is, in the v2 parameters of the rule."""
+    _, _, rules, evidence, _ = _compile(
+        "class", {"name": "x", "member_kind": "attribute", option: value}
+    )
+
+    assert evidence == []
+    assert rules[0].params[option] is value

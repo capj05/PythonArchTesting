@@ -13,6 +13,7 @@ from pythonarchtesting.protocols.reference_resolution import (
 from ..common import (
     declaration_evidence,
     marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 
@@ -220,6 +221,18 @@ def _compile_protocol_rule(
     compiler_evidence.extend(evidence_items)
     if protocol_entity is None or protocol_ref is None:
         return [], compiler_evidence, []
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker=declaration.kind or "implements_protocol",
+        rule_id_prefix=f"{rule_id.rsplit('/', 1)[0]}/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        key="declaration",
+        compiler_evidence=compiler_evidence,
+    )
+    if rejected is not None:
+        return rejected
 
     params_kwargs = dict(declaration.params)
     mode, return_annotation, base_severity = _protocol_rule_options(params_kwargs)

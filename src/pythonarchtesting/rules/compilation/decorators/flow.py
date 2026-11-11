@@ -9,6 +9,7 @@ from pythonarchtesting.entities import DeclarationEntry, Entity
 from ..common import (
     declaration_evidence,
     marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 from ..declarations import (
@@ -178,6 +179,24 @@ def compile_enforce_flow(
             )
             return [], compiler_evidence, []
 
+    runtime = "cases" in params_kwargs
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker="enforce_flow",
+        rule_id_prefix=(
+            "FLW002/enforce_flow_runtime/invalid_declaration"
+            if runtime
+            else "FLW001/enforce_flow/invalid_declaration"
+        ),
+        rule_id_suffix=rule_id_suffix,
+        evidence_type="compiler_invalid_flow_declaration",
+        key="declaration",
+        compiler_evidence=compiler_evidence,
+    )
+    if rejected is not None:
+        return rejected
+
     base_severity = marker_severity(params_kwargs)
 
     source_flow_markers = [
@@ -192,7 +211,7 @@ def compile_enforce_flow(
         for entry in selected_flow_entries
     ]
 
-    if "cases" in params_kwargs:
+    if runtime:
         return _compile_runtime_flow(
             source_entity,
             declaration,

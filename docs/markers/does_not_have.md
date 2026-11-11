@@ -38,6 +38,15 @@ exact name, alias list, or regex pattern. A method-body declaration derives
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 
+An argument given as `None` takes its default, as if it were left out.
+`include_descriptors` and `include_dynamic_attributes` take only `True` or
+`False`: any other value (`"no"`, `0`, `1`) makes the declaration invalid
+(issue `invalid_include_descriptors` or `invalid_include_dynamic_attributes`,
+sentinel `NEG001/does_not_have/invalid_declaration/<argument>`). So does a
+missing `name` with `name_match="exact"` on a class body (issue
+`missing_name`; a `name` that is no non-empty string is `invalid_name`) and an
+invalid `severity` (see [Severity](README.md#severity)).
+
 ## Example
 
 ```python

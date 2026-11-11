@@ -11,6 +11,7 @@ from ..common import (
     declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 
@@ -242,6 +243,36 @@ def invalid_param(
     )
 
 
+def rejected_declaration(
+    source_entity: Entity,
+    declaration: DeclarationEntry,
+    *,
+    marker: str,
+    rule_id_prefix: str,
+    problem: tuple[str, str] | None,
+    rule_id_suffix: str,
+) -> Tuple[List[Any], List[Any], List[Any]] | None:
+    """The dropped declaration at its parameter ``problem``, else at an
+    invalid severity; ``None`` when the declaration is valid. Both are
+    reported under the marker's ``rule_id_prefix``."""
+    if problem is not None:
+        return invalid_param(
+            source_entity,
+            declaration,
+            marker=marker,
+            rule_id_prefix=rule_id_prefix,
+            problem=problem,
+            rule_id_suffix=rule_id_suffix,
+        )
+    return reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker=marker,
+        rule_id_prefix=rule_id_prefix,
+        rule_id_suffix=rule_id_suffix,
+    )
+
+
 def case_params(params: dict[str, Any]) -> dict[str, Any]:
     return {
         "cases": params["cases"],
@@ -290,15 +321,16 @@ def _compile_module_list(
         problem = ("through", "through applies only with transitive=True")
     else:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker=marker,
-            rule_id_prefix=f"{rule_id.rsplit('/', 1)[0]}/invalid_declaration",
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=marker,
+        rule_id_prefix=f"{rule_id.rsplit('/', 1)[0]}/invalid_declaration",
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
 
     rule = Rule(
         rule_id=with_rule_id_suffix(rule_id, rule_id_suffix),
@@ -397,15 +429,16 @@ def compile_enforce_reference_calls(
         problem = ("allow_new_modules", "allow_new_modules must be True or False")
     else:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker=marker,
-            rule_id_prefix="DYN001/enforce_reference_calls/invalid_declaration",
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=marker,
+        rule_id_prefix="DYN001/enforce_reference_calls/invalid_declaration",
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
     rule = Rule(
         rule_id=with_rule_id_suffix(
             "DYN001/enforce_reference_calls/v1", rule_id_suffix
@@ -508,15 +541,16 @@ def _compile_runtime_members(
         problem = ("types", f"types names members not listed: {unknown}")
     else:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker=marker,
-            rule_id_prefix=f"DYN005/{marker}/invalid_declaration",
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=marker,
+        rule_id_prefix=f"DYN005/{marker}/invalid_declaration",
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
     rule = _class_rule(
         source_entity,
         marker=marker,
@@ -585,15 +619,16 @@ def compile_is_runtime_concrete_class(
     if source_entity.kind != "class":
         return invalid_target(source_entity, declaration, marker, "class")
     problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker=marker,
-            rule_id_prefix=f"DYN006/{marker}/invalid_declaration",
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=marker,
+        rule_id_prefix=f"DYN006/{marker}/invalid_declaration",
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
     rule = _class_rule(
         source_entity,
         marker=marker,
@@ -625,15 +660,16 @@ def compile_is_runtime_abstract_class(
     problem = _timeout_problem(params_kwargs)
     if "cases" in params_kwargs:
         problem = ("cases", f"{marker} takes no cases: nothing is instantiated")
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker=marker,
-            rule_id_prefix=f"DYN006/{marker}/invalid_declaration",
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=marker,
+        rule_id_prefix=f"DYN006/{marker}/invalid_declaration",
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
     rule = _class_rule(
         source_entity,
         marker=marker,
@@ -693,15 +729,16 @@ def compile_implements_runtime_protocol(
     if protocol_entity is None or protocol_ref is None:
         return [], evidence, []
     problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker=marker,
-            rule_id_prefix=f"DYN007/{marker}/invalid_declaration",
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=marker,
+        rule_id_prefix=f"DYN007/{marker}/invalid_declaration",
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
     methods = {
         method.name: _required_positional(method)
         for method in protocol_methods(protocol_entity, source_entities)
@@ -775,15 +812,16 @@ def _pattern_rule(
     params_kwargs = dict(declaration.params)
     if problem is None:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker=marker,
-            rule_id_prefix=f"DYN008/{marker}/invalid_declaration",
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=marker,
+        rule_id_prefix=f"DYN008/{marker}/invalid_declaration",
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
     rule = _class_rule(
         source_entity,
         marker=marker,
@@ -942,15 +980,16 @@ def compile_forbid_foreign_writes(
             source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
         )
     problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker=marker,
-            rule_id_prefix="DYN003/forbid_foreign_writes/invalid_declaration",
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=marker,
+        rule_id_prefix="DYN003/forbid_foreign_writes/invalid_declaration",
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
     rule = Rule(
         rule_id=with_rule_id_suffix("DYN003/forbid_foreign_writes/v1", rule_id_suffix),
         rule_type="runtime_writes",
@@ -1009,15 +1048,16 @@ def compile_forbid_runtime_imports(
             "timeout_s",
             f"timeout_s must be a number in (0, {_MAX_TIMEOUT_S:g}]",
         )
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker="forbid_runtime_imports",
-            rule_id_prefix="DYN002/forbid_runtime_imports/invalid_declaration",
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker="forbid_runtime_imports",
+        rule_id_prefix="DYN002/forbid_runtime_imports/invalid_declaration",
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
 
     rule = Rule(
         rule_id=with_rule_id_suffix("DYN002/forbid_runtime_imports/v1", rule_id_suffix),
@@ -1068,4 +1108,5 @@ __all__ = [
     "invalid_param",
     "invalid_target",
     "marker_severity",
+    "rejected_declaration",
 ]

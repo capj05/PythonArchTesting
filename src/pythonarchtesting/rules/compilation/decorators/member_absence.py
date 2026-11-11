@@ -9,13 +9,17 @@ from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity, build_canonical_id
 
 from ..common import (
+    INVALID_SEVERITY_ISSUE,
+    InvalidParam,
+    bool_param,
     build_invalid_param_sentinel_rule,
     declaration_evidence,
+    invalid_severity_payload,
     invalid_target_evidence,
     marker_severity,
+    severity_problem,
     with_rule_id_suffix,
 )
-from .method_set import InvalidParam
 
 _VALID_MEMBER_KINDS = {"any", "method", "attribute", "property"}
 _VALID_STORAGE_VALUES = {"any", "instance", "class"}
@@ -23,6 +27,7 @@ _VALID_NAME_MATCH = {"exact", "alias", "regex"}
 _VALID_SIGNATURE_MODES = {"any", "compatible", "exact"}
 _SENTINEL_RULE_ID_PREFIX = "NEG001/does_not_have/invalid_declaration"
 _INVALID_TARGET_ISSUE = "compiler_invalid_target"
+_INCLUDE_OPTIONS = ("include_descriptors", "include_dynamic_attributes")
 _V2_PARAM_KEYS = frozenset(
     {
         "aliases",
@@ -55,21 +60,19 @@ def _invalid_declaration(
     )
 
 
-def _enclosing_class_qualname(entity: Entity) -> str | None:
-    if entity.kind != "method" or "." not in entity.qualname:
-        return None
-    return entity.qualname.rsplit(".", 1)[0]
-
-
-def _owning_class_id(method_entity: Entity) -> str | None:
-    class_qualname = _enclosing_class_qualname(method_entity)
-    if class_qualname is None:
+def _rule_class_id(entity: Entity) -> str | None:
+    """The class the rule is scoped to: the class whose body declares the
+    marker, or the class of the method whose body does; ``None`` for a
+    method in no class."""
+    if entity.kind == "class":
+        return entity.canonical_id
+    if "." not in entity.qualname:
         return None
     return build_canonical_id(
-        method_entity.role,
-        method_entity.root_label,
-        method_entity.module_path,
-        class_qualname,
+        entity.role,
+        entity.root_label,
+        entity.module_path,
+        entity.qualname.rsplit(".", 1)[0],
         "class",
         "-",
     )
@@ -106,7 +109,7 @@ def _problem(
     *,
     param: str,
     value: Any,
-    valid: list[str] | None,
+    valid: list[Any] | None,
     reason: str,
     **payload: Any,
 ) -> _Problem:
@@ -126,7 +129,9 @@ class _Declared:
     declaration carries, so it is done once for all parameters, before any of
     them is checked. ``raw_name`` and ``raw_aliases`` keep the
     values as declared, because the evidence of an invalid one reports them
-    as they were; ``pattern`` is kept as declared throughout.
+    as they were; ``pattern`` is kept as declared throughout. An ``include_*``
+    option that is no ``bool`` reads as ``False`` and is kept as declared in
+    ``invalid_options``.
     """
 
     raw_name: Any
@@ -140,12 +145,19 @@ class _Declared:
     signature_mode: str
     include_descriptors: bool
     include_dynamic_attributes: bool
+    invalid_options: tuple[tuple[str, Any], ...]
 
     @classmethod
     def parse(cls, params: dict[str, Any]) -> _Declared:
         """Normalise ``params``: the keyword values lower-cased, the name and
-        aliases stripped, the two ``include_*`` options read as truth values."""
+        aliases stripped, the two ``include_*`` options read as booleans."""
         raw_name = params.get("name")
+        options: dict[str, bool] = {}
+        invalid_options: list[tuple[str, Any]] = []
+        for option in _INCLUDE_OPTIONS:
+            options[option], valid = bool_param(params, option, default=False)
+            if not valid:
+                invalid_options.append((option, params[option]))
         return cls(
             raw_name=raw_name,
             name=raw_name.strip() if isinstance(raw_name, str) else None,
@@ -156,10 +168,9 @@ class _Declared:
             aliases=_normalized_aliases(params.get("aliases")),
             pattern=params.get("pattern"),
             signature_mode=str(params.get("signature_mode", "any")).lower(),
-            include_descriptors=bool(params.get("include_descriptors", False)),
-            include_dynamic_attributes=bool(
-                params.get("include_dynamic_attributes", False)
-            ),
+            include_descriptors=options["include_descriptors"],
+            include_dynamic_attributes=options["include_dynamic_attributes"],
+            invalid_options=tuple(invalid_options),
         )
 
 
@@ -360,26 +371,44 @@ def _validate_name_match(declared: _Declared) -> _Problem | None:
 def _method_only_option(
     option: str, switched_on: bool, member_kind: str
 ) -> _Problem | None:
-    """``option`` (an ``include_*`` flag) may not be switched on for methods.
-
-    The sentinel reports the switched-on option as ``True`` and offers the
-    string ``"False"``, as it always has.
-    """
+    """``option`` (an ``include_*`` flag) may not be switched on for methods."""
     if switched_on and member_kind == "method":
         return _problem(
             f"{option}_not_supported_for_method_kind",
             param=option,
             value=True,
-            valid=["False"],
+            valid=[False],
             reason=f"{option} is not supported when member_kind='method'",
             member_kind=member_kind,
         )
     return None
 
 
+def _validate_include_options(declared: _Declared) -> _Problem | None:
+    """The ``include_*`` options must be booleans, as the ones of the other
+    markers (:func:`bool_param`), and not switched on for methods."""
+    if declared.invalid_options:
+        option, value = declared.invalid_options[0]
+        return _problem(
+            f"invalid_{option}",
+            param=option,
+            value=value,
+            valid=[True, False],
+            reason=f"{option} must be True or False",
+            **{option: value},
+        )
+    return _method_only_option(
+        "include_descriptors", declared.include_descriptors, declared.member_kind
+    ) or _method_only_option(
+        "include_dynamic_attributes",
+        declared.include_dynamic_attributes,
+        declared.member_kind,
+    )
+
+
 def _validate_signature_options(declared: _Declared) -> _Problem | None:
     """The signature mode must be known and only compare methods (or any
-    member); the ``include_*`` options do not apply to methods."""
+    member); then the ``include_*`` options must be valid."""
     signature_mode, member_kind = declared.signature_mode, declared.member_kind
     if signature_mode not in _VALID_SIGNATURE_MODES:
         return _problem(
@@ -402,19 +431,15 @@ def _validate_signature_options(declared: _Declared) -> _Problem | None:
             signature_mode=signature_mode,
             member_kind=member_kind,
         )
-    return _method_only_option(
-        "include_descriptors", declared.include_descriptors, member_kind
-    ) or _method_only_option(
-        "include_dynamic_attributes", declared.include_dynamic_attributes, member_kind
-    )
+    return _validate_include_options(declared)
 
 
 def _validate_method_body(
     source_entity: Entity, declared: _Declared
 ) -> _Problem | None:
     """On a method body the marker forbids that method in its class, so the
-    member kind must allow methods and the method must have a class; on a
-    class body there is no method whose signature could be compared."""
+    member kind must allow methods; on a class body there is no method whose
+    signature could be compared."""
     if source_entity.kind == "method":
         if declared.member_kind not in {"method", "any"}:
             return _problem(
@@ -426,14 +451,6 @@ def _validate_method_body(
                     "member_kind must be 'method' or 'any' when declared on a method body"
                 ),
                 member_kind=declared.member_kind,
-            )
-        if not _owning_class_id(source_entity):
-            return _problem(
-                "missing_owning_class_for_method_body",
-                param="target_kind",
-                value="orphan_method",
-                valid=None,
-                reason="does_not_have on a method requires an owning class",
             )
         return None
     if declared.signature_mode != "any":
@@ -459,17 +476,50 @@ def _member_name(source_entity: Entity, declared: _Declared) -> str | None:
 
 
 def _validate_exact_name(source_entity: Entity, declared: _Declared) -> _Problem | None:
-    """An exact match needs a name, declared or taken from the method body."""
+    """An exact match needs a name, declared or taken from the method body;
+    a missing one is not the malformed one of :func:`_validate_name`."""
     if declared.name_match == "exact" and _member_name(source_entity, declared) is None:
         return _problem(
-            "invalid_name",
+            "missing_name",
             param="name",
             value=None,
             valid=None,
             reason="name is required when name_match='exact'",
-            name=declared.raw_name,
         )
     return None
+
+
+def _method_outside_class(source_entity: Entity) -> _Problem:
+    """A method in no class has no class to forbid it in. Extraction gives
+    every method a class, so the problem names the method by its qualname."""
+    qualname = source_entity.qualname
+    return _problem(
+        "method_outside_class",
+        param="target",
+        value=qualname,
+        valid=None,
+        reason=(
+            "does_not_have on a method body needs a method of a class; "
+            f"{qualname!r} is in none"
+        ),
+        qualname=qualname,
+    )
+
+
+def _invalid_severity(params: dict[str, Any]) -> _Problem | None:
+    """The severity must be one every marker accepts."""
+    invalid = severity_problem(params)
+    if invalid is None:
+        return None
+    return _Problem(
+        invalid=invalid,
+        issue=INVALID_SEVERITY_ISSUE,
+        payload={
+            key: value
+            for key, value in invalid_severity_payload(invalid).items()
+            if key != "issue"
+        },
+    )
 
 
 def _validate_declared(source_entity: Entity, declared: _Declared) -> _Problem | None:
@@ -489,17 +539,25 @@ def _checked_declaration(
     source_entity: Entity,
     declaration: DeclarationEntry,
     params_kwargs: dict[str, Any],
-) -> _Declared | _Problem:
-    """The normalised parameters of the declaration, or its first problem.
+) -> tuple[_Declared, str] | _Problem:
+    """The normalised parameters of the declaration and the id of the class
+    its rule is scoped to, or its first problem.
 
     The parameters are read only once the marker is known to sit on a class
-    or method body, as they always were.
+    or method body, as they always were; the class and the severity are
+    checked after them.
     """
     problem = _validate_placement(source_entity, declaration)
     if problem is not None:
         return problem
     declared = _Declared.parse(params_kwargs)
-    return _validate_declared(source_entity, declared) or declared
+    problem = _validate_declared(source_entity, declared)
+    if problem is not None:
+        return problem
+    class_id = _rule_class_id(source_entity)
+    if class_id is None:
+        return _method_outside_class(source_entity)
+    return _invalid_severity(params_kwargs) or (declared, class_id)
 
 
 def _reject(
@@ -566,13 +624,14 @@ def _rule_params(
 def _build_rule(
     source_entity: Entity,
     declared: _Declared,
+    class_id: str,
     params_kwargs: dict[str, Any],
     rule_id_suffix: str,
 ) -> Any:
     """The ``member_absence`` rule of a valid declaration.
 
-    It is always scoped to a class: on a method body it is anchored at the
-    owning class and the method is the forbidden member.
+    It is always scoped to a class, ``class_id``: on a method body that is
+    the owning class and the method is the forbidden member.
     """
     from pythonarchtesting.core.models import Rule, RuleSelector
 
@@ -582,10 +641,6 @@ def _build_rule(
         if "name_match" in rule_params
         else "NEG001/does_not_have/v1"
     )
-    if source_entity.kind == "method":
-        selector_source_entity_id = _owning_class_id(source_entity) or ""
-    else:
-        selector_source_entity_id = source_entity.canonical_id
     return Rule(
         rule_id=with_rule_id_suffix(rule_id, rule_id_suffix),
         rule_type="member_absence",
@@ -594,7 +649,7 @@ def _build_rule(
         scope="class",
         evidence_type="static",
         selector=RuleSelector(
-            source_entity_id=selector_source_entity_id,
+            source_entity_id=class_id,
             explicit_target=None,
         ),
         params=rule_params,
@@ -624,14 +679,19 @@ def compile_does_not_have(
 
     The declaration is checked parameter by parameter in a fixed order; at
     the first problem it is dropped, and a sentinel rule plus one piece of
-    compiler evidence report that problem instead.
+    compiler evidence report that problem instead. A parameter given as
+    ``None`` counts as not given: it takes its default.
     """
     _ = cfg
-    params_kwargs = dict(declaration.params)
+    params_kwargs = {
+        key: value for key, value in declaration.params.items() if value is not None
+    }
     checked = _checked_declaration(source_entity, declaration, params_kwargs)
     if isinstance(checked, _Problem):
         return _reject(source_entity, declaration, checked, rule_id_suffix)
-    return [_build_rule(source_entity, checked, params_kwargs, rule_id_suffix)], [], []
+    declared, class_id = checked
+    rule = _build_rule(source_entity, declared, class_id, params_kwargs, rule_id_suffix)
+    return [rule], [], []
 
 
 __all__ = ["compile_does_not_have"]

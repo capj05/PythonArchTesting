@@ -19,9 +19,9 @@ from pythonarchtesting.execution.module_structure import in_module, parse_layers
 from ..common import with_rule_id_suffix
 from .runtime_structure import (
     case_params,
-    invalid_param,
     invalid_target,
     marker_severity,
+    rejected_declaration,
     runtime_cases_problem,
 )
 
@@ -144,15 +144,16 @@ def _compile_module_structure(
     entry = params.get("entry")
     if problem is None:
         problem, entry_entity = entry_problem(params, source_entities, marker)
-    if problem is not None:
-        return invalid_param(
-            source_entity,
-            declaration,
-            marker=marker,
-            rule_id_prefix=f"{static_id.split('/')[0]}/{marker}/invalid_declaration",
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=marker,
+        rule_id_prefix=f"{static_id.split('/')[0]}/{marker}/invalid_declaration",
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
 
     structure = _structure_params(marker, params)
     rules = [

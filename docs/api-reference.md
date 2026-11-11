@@ -1066,6 +1066,10 @@ Notes:
 - dynamic attribute detection is conservative and literal-only: only `setattr(self, "name", value)` and `setattr(cls, "name", value)` are recognized.
 - descriptor detection is opt-in and static-only; v2 does not attempt import-time or runtime descriptor resolution.
 - import absence remains the responsibility of `forbid_imports(...)`.
+- an option given as `None` takes its default; `include_descriptors` and
+  `include_dynamic_attributes` take only `True` or `False`, any other value
+  makes the declaration invalid (`invalid_include_descriptors`,
+  `invalid_include_dynamic_attributes`).
 
 Examples:
 
@@ -2133,6 +2137,11 @@ Non-goals in v1:
 - Signature and body declarations on the same entity are tracked separately.
 - Invalid declarations remain non-fatal in normal analysis and are reported as
   compiler evidence.
+- `severity` takes `"error"`, `"warning"` or `"info"` (any case; `None` is the
+  default `"error"`) on every marker. Any other value makes the declaration
+  invalid: it is dropped with a `compiler_invalid_param` sentinel for the
+  parameter `severity` and evidence with the issue `invalid_severity`, never
+  compiled as `"error"`.
 - `--validate-declarations` is the focused source-only check for declaration
   authoring and CI.
 

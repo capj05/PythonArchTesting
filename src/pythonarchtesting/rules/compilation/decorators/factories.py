@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
@@ -11,6 +11,8 @@ from ..common import (
     build_invalid_param_sentinel_rule,
     declaration_evidence,
     invalid_target_evidence,
+    marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 
@@ -341,13 +343,18 @@ def compile_required_factory(
         )
         return [sentinel], compiler_evidence, []
 
-    base_severity_raw = str(
-        params_kwargs.get("severity", "error")
-    ).lower()  # noqa: E501
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker="required_factory",
+        rule_id_prefix="API004/required_factory/invalid_param",
+        rule_id_suffix=rule_id_suffix,
+        compiler_evidence=compiler_evidence,
+    )
+    if rejected is not None:
+        return rejected
+
+    base_severity = marker_severity(params_kwargs)
 
     selector = RuleSelector(
         source_entity_id=source_entity.canonical_id,

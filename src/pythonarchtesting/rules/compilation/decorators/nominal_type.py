@@ -13,6 +13,7 @@ from ..common import (
     declaration_evidence,
     invalid_target_evidence,
     marker_severity,
+    reject_invalid_severity,
     with_rule_id_suffix,
 )
 
@@ -143,8 +144,6 @@ def _compile_nominal_rule(
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     _ = cfg
     params_kwargs = dict(declaration.params)
-    base_severity = marker_severity(params_kwargs)
-
     if source_entity.kind != "class":
         sentinel = _sentinel(
             source_entity,
@@ -195,6 +194,20 @@ def _compile_nominal_rule(
             rule_id_suffix=rule_id_suffix,
         )
         return [sentinel], compiler_evidence, []
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker=declaration_name,
+        rule_id_prefix=f"NOM001/{declaration_name}/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        key="declaration",
+        compiler_evidence=compiler_evidence,
+    )
+    if rejected is not None:
+        return rejected
+
+    base_severity = marker_severity(params_kwargs)
 
     rule = Rule(
         rule_id=with_rule_id_suffix(rule_id, rule_id_suffix),

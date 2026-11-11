@@ -7,6 +7,16 @@ see [../api-reference.md](../api-reference.md). For ready-made combinations see
 
 All markers are imported from `pythonarchtesting.rules`.
 
+## Severity
+
+Every marker except `flow` takes `severity`: `"error"` (the default),
+`"warning"` or `"info"`, in any case; `severity=None` is the default. Any other
+value (`"fatal"`, `"warn"`, `1`) makes the declaration invalid, like an invalid
+value of any other argument: the marker is not compiled with a guessed
+severity but dropped, with a `compiler_invalid_param` sentinel rule for the
+parameter `severity` (valid values `["error", "warning", "info"]`) and compiler
+evidence with the issue `invalid_severity`.
+
 ## Signature And Shape
 
 - [required_entity_signature](required_entity_signature.md) — function or method signature contract
