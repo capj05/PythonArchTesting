@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Literal, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
@@ -9,8 +9,9 @@ from pythonarchtesting.entities import DeclarationEntry, Entity, build_canonical
 
 from ..common import (
     build_invalid_param_sentinel_rule,
-    canonicalize_payload,
-    evidence_id,
+    declaration_evidence,
+    invalid_target_evidence,
+    marker_severity,
     with_rule_id_suffix,
 )
 
@@ -31,29 +32,6 @@ _V2_PARAM_KEYS = frozenset(
 )
 
 
-def _evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-    *,
-    evidence_type: str,
-    payload: dict[str, Any],
-) -> Evidence:
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id(evidence_type, payload),
-        type=evidence_type,
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
-
-
 def _invalid_declaration(
     source_entity: Entity,
     declaration: DeclarationEntry,
@@ -66,7 +44,7 @@ def _invalid_declaration(
         "issue": issue,
         **payload_extra,
     }
-    return _evidence(
+    return declaration_evidence(
         source_entity,
         declaration,
         evidence_type="compiler_invalid_member_absence_declaration",
@@ -163,16 +141,12 @@ def compile_does_not_have(
 
     if source_entity.kind not in {"class", "method"}:
         compiler_evidence.append(
-            _evidence(
+            invalid_target_evidence(
                 source_entity,
                 declaration,
-                evidence_type="compiler_invalid_target",
-                payload={
-                    "declaration": "does_not_have",
-                    "issue": "compiler_invalid_target",
-                    "expected_kind": "class_or_method",
-                    "found_kind": source_entity.kind,
-                },
+                decorator="does_not_have",
+                expected_kind="class_or_method",
+                key="declaration",
             )
         )
         return _drop(
@@ -632,11 +606,7 @@ def compile_does_not_have(
             rule_id_suffix=rule_id_suffix,
         )
 
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
+    base_severity = marker_severity(params_kwargs)
 
     v2_requested = (
         bool(_V2_PARAM_KEYS & set(params_kwargs)) or source_entity.kind == "method"

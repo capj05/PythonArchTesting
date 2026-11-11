@@ -200,6 +200,78 @@ def test_one_request_crashing_or_overrunning_costs_the_others_nothing(
     assert doubled.cases[0]["status"] == "passed"
 
 
+_NOISY = """
+import os
+import subprocess
+import sys
+
+
+def raw():
+    os.write(1, b"raw to fd 1\\n")
+    os.write(2, b"raw to fd 2\\n")
+    return 1
+
+
+def reopened():
+    sys.stdout = os.fdopen(1, "w")
+    print("printed through a reopened stdout", flush=True)
+    return 1
+
+
+def child():
+    subprocess.run(["echo", "echoed by a child process"], check=True)
+    return 1
+"""
+
+
+def test_writes_to_the_standard_descriptors_answer_as_a_probe_of_its_own(
+    root: Path,
+) -> None:
+    (root / "noisy.py").write_text(textwrap.dedent(_NOISY), encoding="utf-8")
+    names = ["raw", "reopened", "child"]
+    job = {
+        "id": "0",
+        "qualname": "raw",
+        "kind": "function",
+        "cases": [{}],
+        "init": None,
+        "timeout_s": 5.0,
+        "observe": {},
+    }
+    jobs = [{**job, "id": str(index), "qualname": n} for index, n in enumerate(names)]
+    requests = [
+        *[(_cases(name, [{}], module_path="noisy"), 5.0) for name in names],
+        (batch_request("noisy", jobs), batch_timeout(jobs)),
+    ]
+
+    forked = run_forked(target_root=root, requests=requests, sandbox=_LIMITS)
+
+    alone = [
+        run_cases(
+            target_root=root,
+            module_path="noisy",
+            qualname=name,
+            kind="function",
+            cases=[{}],
+            init=None,
+            timeout_s=5.0,
+            sandbox=_LIMITS,
+            observe={"calls": True},
+        )
+        for name in names
+    ]
+    alone.append(
+        run_case_batch(
+            target_root=root, module_path="noisy", jobs=jobs, sandbox=_LIMITS
+        )
+    )
+    assert all(outcome is not None for outcome in forked)
+    assert [o.status for o in forked if o] == ["completed"] * 4
+    assert [o.cases[0]["status"] for o in forked[:3] if o] == ["passed"] * 3
+    assert "raw to fd 1" in (forked[0].stderr if forked[0] else "")
+    assert [_comparable(o) for o in forked if o] == [_comparable(o) for o in alone]
+
+
 def test_each_request_gets_an_empty_home_of_its_own(root: Path) -> None:
     requests = [
         (_cases("leave_a_file", [{}]), 5.0),
@@ -460,3 +532,163 @@ def test_await_child_keeps_a_status_reaped_just_before_the_alarm(
     assert status is not None
     assert os.waitstatus_to_exitcode(status) == 3
     assert not timed_out
+
+
+_SPAWNER = """
+import os
+import subprocess
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _note(pid):
+    with open(os.path.join(HERE, "spawned.pid"), "a") as f:
+        f.write(f"{pid}\\n")
+
+
+def spawn():
+    _note(subprocess.Popen(["sleep", "60"]).pid)
+    while True:
+        time.sleep(0.05)
+
+
+def fork():
+    pid = os.fork()
+    if pid == 0:
+        time.sleep(60)
+        os._exit(0)
+    _note(pid)
+    while True:
+        time.sleep(0.05)
+"""
+
+
+def _spawned(root: Path, wait_s: float = 10.0) -> list[int]:
+    """The pids the target noted, once it has noted one."""
+    path = root / "spawned.pid"
+    deadline = time.monotonic() + wait_s
+    while not path.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return [int(line) for line in path.read_text(encoding="ascii").split()]
+
+
+def _running(pid: int) -> bool:
+    try:
+        with open(f"/proc/{pid}/stat", encoding="ascii", errors="replace") as f:
+            return f.read().rpartition(")")[2].split()[0] != "Z"
+    except (OSError, IndexError):
+        return False
+
+
+def _survivors(pids: list[int], wait_s: float = 5.0) -> list[int]:
+    """The pids still running after ``wait_s``; those are killed here."""
+    deadline = time.monotonic() + wait_s
+    while any(_running(pid) for pid in pids) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    left = [pid for pid in pids if _running(pid)]
+    for pid in left:
+        os.kill(pid, signal.SIGKILL)
+    return left
+
+
+@pytest.mark.parametrize("qualname", ["spawn", "fork"])
+def test_what_an_overrunning_request_started_ends_with_it(
+    root: Path, qualname: str
+) -> None:
+    (root / "spawner.py").write_text(textwrap.dedent(_SPAWNER), encoding="utf-8")
+    requests = [
+        (_cases(qualname, [{}], module_path="spawner"), 1.0),
+        (_cases("double", [{"args": [4]}]), 5.0),
+    ]
+
+    overran, doubled = run_forked(target_root=root, requests=requests, sandbox=_LIMITS)
+
+    assert overran is not None
+    assert overran.status == "timeout"
+    assert doubled is not None
+    assert doubled.status == "completed"
+    assert not _survivors(_spawned(root), wait_s=0.5)
+
+
+def _start_server(target_root: Path, entry: dict[str, Any]) -> subprocess.Popen:
+    """The forking interpreter for ``entry``, as the runner would start it."""
+    served = {"mode": "fork", "module_path": "", "requests": [entry], "cases": []}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PYTHON")}
+    with tempfile.TemporaryFile() as stdin:
+        stdin.write(json.dumps(served).encode("utf-8"))
+        stdin.seek(0)
+        return subprocess.Popen(  # pylint: disable=consider-using-with
+            [sys.executable, "-s", "-B", str(runner.PROBE_PATH)],
+            stdin=stdin,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=str(target_root),
+            env=env,
+            start_new_session=True,
+        )
+
+
+@pytest.mark.parametrize("qualname", ["spawn", "fork"])
+def test_what_a_request_started_dies_with_the_interpreter_that_forked_it(
+    root: Path, qualname: str
+) -> None:
+    (root / "spawner.py").write_text(textwrap.dedent(_SPAWNER), encoding="utf-8")
+    target_root, package = runner.import_target_spec(root)
+    request = _cases(qualname, [{}], module_path="spawner")
+    server = _start_server(
+        target_root,
+        {
+            "request": {**request, "target_root": str(target_root), "package": package},
+            "timeout_s": 60.0,
+            "cpu_s": 61,
+        },
+    )
+    spawned = _spawned(root)
+    os.killpg(server.pid, signal.SIGKILL)  # what the runner's overall timeout does
+    server.wait()
+
+    assert spawned
+    assert not _survivors(spawned)
+
+
+def test_a_combined_answer_over_the_file_size_limit_is_run_again_alone(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each answer fits under ``RLIMIT_FSIZE``, all of them together do not:
+    the forking interpreter cannot write its response, every request is left
+    unanswered, and each runs again in a probe of its own."""
+    for name in ("wordy", "verbose"):
+        (root / f"{name}.py").write_text(
+            "def say(n):\n    raise ValueError('x' * 400_000)\n", encoding="utf-8"
+        )
+    small = SandboxPolicy(mode="limits", file_size_mb=1)
+    answered: list[list[ProbeOutcome | None]] = []
+    original = batch.run_forked
+
+    def recording(**kwargs: Any) -> list[ProbeOutcome | None]:
+        answered.append(original(**kwargs))
+        return answered[-1]
+
+    monkeypatch.setattr(batch, "run_forked", recording)
+    ctx, rules = _ctx(root, {"wordy": ["say", "say#2"], "verbose": ["say"]})
+    ctx.sandbox = small
+
+    batch.prefetch(rules, ctx)
+
+    assert answered == [[None, None]]
+    key = ("DYN/runtime_calls/wordy.say", "s:wordy.say", "t:wordy.say")
+    jobs = ctx.dynamic_cache[key].cases
+    assert jobs[0]["raised"] == "ValueError: " + "x" * 400_000
+    alone = run_cases(
+        target_root=root,
+        module_path="verbose",
+        qualname="say",
+        kind="function",
+        cases=[{"args": [1]}],
+        init=None,
+        timeout_s=5.0,
+        sandbox=small,
+        observe={"calls": True},
+    )
+    assert alone.status == "completed"

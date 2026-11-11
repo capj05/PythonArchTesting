@@ -13,7 +13,10 @@ imports a target module performs while it is imported
 This file runs as a standalone script in a fresh interpreter, never as an
 import of the framework, so it uses the standard library only. It reads one JSON
 request from stdin and writes one JSON response to stdout. Anything the target
-prints while it runs is redirected to stderr, so it cannot corrupt the response.
+prints while it runs is redirected to stderr, so it cannot corrupt the response;
+so is what it writes to descriptor 1 itself (``os.write(1, ...)``, a process it
+starts): the response leaves through a copy of descriptor 1 taken before the
+target is imported (``_response_channel``).
 """
 
 from __future__ import annotations
@@ -2431,9 +2434,9 @@ def main() -> int:
     request = json.loads(sys.stdin.read())
     if request.get("mode") == "fork":
         return _serve(request)
+    channel = _response_channel()
     recorder = ImportRecorder(request["target_root"])
     recorder.install()
-    real_stdout = sys.stdout
     response: dict[str, Any]
     with contextlib.redirect_stdout(sys.stderr):
         try:
@@ -2482,9 +2485,38 @@ def main() -> int:
                     for index, case in enumerate(request["cases"])
                 ]
                 response = {"status": "completed", "cases": cases}
-    real_stdout.write(json.dumps(response))
-    real_stdout.flush()
+    try:
+        _write_all(channel, json.dumps(response).encode("utf-8"))
+    finally:
+        os.close(channel)
     return 0
+
+
+def _response_channel() -> int:
+    """A descriptor of its own for the response; descriptor 1 joins 2.
+
+    ``print`` is redirected to stderr while the target runs, but the target
+    can still reach descriptor 1 without ``sys.stdout``: ``os.write(1, ...)``,
+    a ``sys.stdout`` it opened on descriptor 1 itself (and whose closing
+    closes the descriptor), a process it starts. Whatever it writes there
+    goes to stderr as its printed output does, and the response leaves
+    through a copy taken first, which processes the target starts do not
+    inherit.
+    """
+    channel = os.dup(1)
+    os.dup2(2, 1)
+    return channel
+
+
+def _flush_standard_streams() -> None:
+    """Flush ``sys.stdout`` and ``sys.stderr`` as far as the target left them
+    open: the response is written by then, and a descriptor the target closed
+    must not turn a finished run into a failed one."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except (OSError, ValueError):
+            pass
 
 
 # A forked child that could not stand in for a probe of its own exits so; the
@@ -2502,10 +2534,11 @@ def _serve(request: dict[str, Any]) -> int:
 
     This interpreter imports nothing of the target. Each child answers its
     request as a probe started for it alone would (``main``), with its own
-    standard streams, session and CPU limit, and, with ``own_home``, an
-    empty ``HOME`` and ``TMPDIR`` of its own; what it writes and how it
-    ended goes back to the runner (``runner.run_forked``), ``retry`` when
-    it got no answer here.
+    standard streams and CPU limit, and, with ``own_home``, an empty
+    ``HOME`` and ``TMPDIR`` of its own; what it writes and how it ended goes
+    back to the runner (``runner.run_forked``), ``retry`` when it got no
+    answer here. It stays in this interpreter's process group, so the
+    runner's kill of that group ends it and what it started.
     """
     home = os.environ.get("HOME") if request.get("own_home") else None
     answers = {
@@ -2535,7 +2568,7 @@ def _answer_forked(
         if pid == 0:
             _forked_child(files, own_home, entry.get("cpu_s"), parent)
         status, timed_out = _await_child(pid, float(entry["timeout_s"]))
-        _kill_descendants()  # what the child left running
+        _kill_descendants()  # what the child left running, adopted on its death
         code = os.waitstatus_to_exitcode(status) if status is not None else 0
         if not timed_out and code == _RETRY_ALONE:
             return {"retry": True}
@@ -2574,17 +2607,21 @@ def _read_from(descriptor: int, offset: int) -> bytes:
 
 def _await_child(pid: int, timeout_s: float) -> tuple[int | None, bool]:
     """The wait status of child ``pid``, and whether it ran past ``timeout_s``
-    (it and its session are killed then).
+    (it is killed then; what it started is left to ``_kill_descendants``).
 
     The alarm only kills; it never interrupts the wait, so a status reaped
-    just as the alarm goes off is still kept.
+    just as the alarm goes off is still kept. It kills through a descriptor
+    of the process (``pidfd_open``), which never names another one: an
+    alarm that fires after the wait reaped the child cannot hit a process
+    that has since been given its pid.
     """
     state = {"done": False, "fired": False}
+    process = _process_descriptor(pid)
 
     def on_alarm(_signum: int, _frame: Any) -> None:
         if not state["done"]:
             state["fired"] = True
-            _kill_session(pid)
+            _kill_child(pid, process)
 
     previous = signal.signal(signal.SIGALRM, on_alarm)
     try:
@@ -2600,14 +2637,29 @@ def _await_child(pid: int, timeout_s: float) -> tuple[int | None, bool]:
         state["done"] = True
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)
+        if process is not None:
+            os.close(process)
     # A child that exited on its own just as the alarm fired did not overrun.
     timed_out = state["fired"] and (status is None or not os.WIFEXITED(status))
     return status, timed_out
 
 
-def _kill_session(pid: int) -> None:
+def _process_descriptor(pid: int) -> int | None:
+    """A descriptor of process ``pid`` (``None`` where the kernel has none)."""
     try:
-        os.killpg(pid, signal.SIGKILL)
+        return os.pidfd_open(pid)
+    except (AttributeError, OSError):
+        return None
+
+
+def _kill_child(pid: int, process: int | None) -> None:
+    """Kill child ``pid`` through its descriptor ``process`` where there is
+    one; without, by pid, which only ``_await_child``'s ``done`` guards."""
+    try:
+        if process is not None:
+            signal.pidfd_send_signal(process, signal.SIGKILL)
+        else:
+            os.kill(pid, signal.SIGKILL)
     except OSError:
         pass
 
@@ -2622,7 +2674,10 @@ def _forked_child(files: list[int], home: str | None, cpu_s: Any, parent: int) -
     """
     preloaded = set(sys.modules)
     try:
-        os.setsid()
+        # No session or process group of its own: the runner kills the
+        # forking interpreter's group when the whole run overruns, and so
+        # reaches this child and what the target started, as it reaches a
+        # probe of its own and what that started.
         _die_with_parent(parent)
         for descriptor, standard in zip(files, (0, 1, 2)):
             os.dup2(descriptor, standard)
@@ -2645,8 +2700,7 @@ def _forked_child(files: list[int], home: str | None, cpu_s: Any, parent: int) -
             del sys.modules[name]
         exit_code = main()
         _kill_descendants()
-        sys.stdout.flush()
-        sys.stderr.flush()
+        _flush_standard_streams()
     except BaseException:  # noqa: BLE001 - anything else: a probe of its own answers
         os._exit(_RETRY_ALONE)
     os._exit(exit_code)
@@ -2658,9 +2712,9 @@ _PR_SET_PDEATHSIG = 1
 def _die_with_parent(parent: int) -> None:
     """Have the kernel kill this child when ``parent`` dies.
 
-    The child has a session of its own, so the runner, which kills only the
-    forking interpreter's process group when the whole run overruns, would
-    not reach it. Linux only, as forking is.
+    The runner's kill of the whole group reaches the child anyway; this
+    covers a forking interpreter that dies any other way (the OOM killer),
+    whose child would run on unwatched. Linux only, as forking is.
     """
     import ctypes  # pylint: disable=import-outside-toplevel
 
@@ -2752,8 +2806,7 @@ if __name__ == "__main__":
     _become_subreaper()
     exit_code = main()
     _kill_descendants()
-    sys.stdout.flush()
-    sys.stderr.flush()
+    _flush_standard_streams()
     # The response is written; a non-daemon thread the target left running
     # would otherwise keep the interpreter alive until the runner's timeout,
     # which then discards the finished response.

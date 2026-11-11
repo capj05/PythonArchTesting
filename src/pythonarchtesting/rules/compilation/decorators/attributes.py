@@ -1,38 +1,21 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
+from ..common import (
+    bool_param,
+    declaration_evidence,
+    invalid_target_evidence,
+    marker_severity,
+    with_rule_id_suffix,
+)
 
 _VALID_STORAGE_VALUES = {"any", "instance", "class"}
 _VALID_DESCRIPTOR_KINDS = {"cached_property", "classproperty"}
-
-
-def _evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-    *,
-    evidence_type: str,
-    payload: dict[str, Any],
-) -> Evidence:
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id(evidence_type, payload),
-        type=evidence_type,
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
 
 
 def _invalid_declaration(
@@ -47,7 +30,7 @@ def _invalid_declaration(
         "issue": issue,
         **payload_extra,
     }
-    return _evidence(
+    return declaration_evidence(
         source_entity,
         declaration,
         evidence_type="compiler_invalid_attribute_declaration",
@@ -78,15 +61,6 @@ def _normalize_descriptor_kinds(
     return tuple(normalized), True
 
 
-def _bool_param(
-    params: dict[str, Any], name: str, *, default: bool
-) -> tuple[bool, bool]:
-    value = params.get(name, default)
-    if isinstance(value, bool):
-        return value, True
-    return default, False
-
-
 def compile_required_attribute(
     source_entity: Entity,
     declaration: DeclarationEntry,
@@ -101,18 +75,12 @@ def compile_required_attribute(
     compiler_evidence: list[Evidence] = []
 
     if source_entity.kind != "class":
-        payload = {
-            "declaration": "required_attribute",
-            "issue": "compiler_invalid_target",
-            "expected_kind": "class",
-            "found_kind": source_entity.kind,
-        }
         compiler_evidence.append(
-            _evidence(
+            invalid_target_evidence(
                 source_entity,
                 declaration,
-                evidence_type="compiler_invalid_target",
-                payload=payload,
+                decorator="required_attribute",
+                key="declaration",
             )
         )
         return [], compiler_evidence, []
@@ -125,7 +93,7 @@ def compile_required_attribute(
             "found_surface": declaration.surface,
         }
         compiler_evidence.append(
-            _evidence(
+            declaration_evidence(
                 source_entity,
                 declaration,
                 evidence_type="compiler_invalid_attribute_declaration",
@@ -142,7 +110,7 @@ def compile_required_attribute(
             "name": name,
         }
         compiler_evidence.append(
-            _evidence(
+            declaration_evidence(
                 source_entity,
                 declaration,
                 evidence_type="compiler_invalid_attribute_declaration",
@@ -166,7 +134,7 @@ def compile_required_attribute(
     allow_property = bool(params_kwargs.get("allow_property", False))
     require_writable = bool(params_kwargs.get("require_writable", False))
     declared_only = bool(params_kwargs.get("declared_only", False))
-    allow_missing, allow_missing_valid = _bool_param(
+    allow_missing, allow_missing_valid = bool_param(
         params_kwargs,
         "allow_missing",
         default=False,
@@ -211,7 +179,7 @@ def compile_required_attribute(
         )
         return [], compiler_evidence, []
 
-    include_dynamic_attributes, include_dynamic_attributes_valid = _bool_param(
+    include_dynamic_attributes, include_dynamic_attributes_valid = bool_param(
         params_kwargs,
         "include_dynamic_attributes",
         default=False,
@@ -229,7 +197,7 @@ def compile_required_attribute(
         )
         return [], compiler_evidence, []
 
-    interpret_dataclass_fields, interpret_dataclass_fields_valid = _bool_param(
+    interpret_dataclass_fields, interpret_dataclass_fields_valid = bool_param(
         params_kwargs,
         "interpret_dataclass_fields",
         default=False,
@@ -259,11 +227,7 @@ def compile_required_attribute(
         )
         return [], compiler_evidence, []
 
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
+    base_severity = marker_severity(params_kwargs)
 
     annotation = params_kwargs.get("annotation")
     if annotation is not None:

@@ -1,43 +1,19 @@
 from __future__ import annotations
 
 import re
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Literal, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
-
-
-def _invalid_required_method_declaration(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-    *,
-    reason: str,
-    params: dict[str, Any],
-) -> Evidence:
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    payload = {
-        "decorator": "required_method",
-        "issue": "compiler_invalid_declaration",
-        "reason": reason,
-        "params": params,
-    }
-    return Evidence(
-        evidence_id=evidence_id("compiler_invalid_declaration", payload),
-        type="compiler_invalid_declaration",
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
-
+from ..common import (
+    declaration_evidence,
+    invalid_declaration_evidence,
+    invalid_target_evidence,
+    marker_severity,
+    with_rule_id_suffix,
+)
 
 _VALID_RETURN_ANNOTATION = {"off", "ignore", "warning", "error"}
 
@@ -73,11 +49,6 @@ def compile_required_entity_signature(
         params_kwargs.get("return_annotation", "warning")
     ).lower()
     if return_annotation_raw not in _VALID_RETURN_ANNOTATION:
-        location = {
-            "filepath": source_entity.filepath_rel,
-            "lineno": declaration.lineno or source_entity.lineno,
-            "col": declaration.col,
-        }
         return_annotation_payload: dict[str, Any] = {
             "decorator": "required_entity_signature",
             "issue": "compiler_invalid_param",
@@ -86,16 +57,11 @@ def compile_required_entity_signature(
             "valid": sorted(_VALID_RETURN_ANNOTATION),
         }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id(
-                    "compiler_invalid_param", return_annotation_payload
-                ),
-                type="compiler_invalid_param",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(return_annotation_payload),
-                location=location,
+            declaration_evidence(
+                source_entity,
+                declaration,
+                evidence_type="compiler_invalid_param",
+                payload=return_annotation_payload,
             )
         )
         return [], compiler_evidence, []
@@ -105,11 +71,7 @@ def compile_required_entity_signature(
         "off" if return_annotation_raw == "ignore" else return_annotation_raw
     )
 
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
+    base_severity = marker_severity(params_kwargs)
 
     selector = RuleSelector(
         source_entity_id=source_entity.canonical_id,
@@ -213,43 +175,25 @@ def compile_required_method(
     aliases_raw = params_kwargs.get("aliases")
     pattern = params_kwargs.get("pattern")
 
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
-
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
+    base_severity = marker_severity(params_kwargs)
 
     if source_entity.kind != "method":
-        payload = {
-            "decorator": "required_method",
-            "issue": "compiler_invalid_target",
-            "expected_kind": "method",
-            "found_kind": source_entity.kind,
-        }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id("compiler_invalid_target", payload),
-                type="compiler_invalid_target",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(payload),
-                location=location,
+            invalid_target_evidence(
+                source_entity,
+                declaration,
+                decorator="required_method",
+                expected_kind="method",
             )
         )
         return [], compiler_evidence, []
 
     if name_match not in {"exact", "alias", "regex", "any"}:
         compiler_evidence.append(
-            _invalid_required_method_declaration(
+            invalid_declaration_evidence(
                 source_entity,
                 declaration,
+                decorator="required_method",
                 reason="name_match must be one of: exact, alias, regex, any",
                 params=params_kwargs,
             )
@@ -260,9 +204,10 @@ def compile_required_method(
     if aliases_raw is not None:
         if not isinstance(aliases_raw, list):
             compiler_evidence.append(
-                _invalid_required_method_declaration(
+                invalid_declaration_evidence(
                     source_entity,
                     declaration,
+                    decorator="required_method",
                     reason="aliases must be a list of non-empty strings",
                     params=params_kwargs,
                 )
@@ -271,9 +216,10 @@ def compile_required_method(
         aliases = [str(alias) for alias in aliases_raw]
         if any(not alias.strip() for alias in aliases):
             compiler_evidence.append(
-                _invalid_required_method_declaration(
+                invalid_declaration_evidence(
                     source_entity,
                     declaration,
+                    decorator="required_method",
                     reason="aliases must contain only non-empty strings",
                     params=params_kwargs,
                 )
@@ -282,9 +228,10 @@ def compile_required_method(
 
     if pattern is not None and not isinstance(pattern, str):
         compiler_evidence.append(
-            _invalid_required_method_declaration(
+            invalid_declaration_evidence(
                 source_entity,
                 declaration,
+                decorator="required_method",
                 reason="pattern must be a non-empty string",
                 params=params_kwargs,
             )
@@ -294,9 +241,10 @@ def compile_required_method(
     if name_match == "exact":
         if aliases not in (None, []) or pattern is not None:
             compiler_evidence.append(
-                _invalid_required_method_declaration(
+                invalid_declaration_evidence(
                     source_entity,
                     declaration,
+                    decorator="required_method",
                     reason="exact name matching does not accept aliases or pattern",
                     params=params_kwargs,
                 )
@@ -305,9 +253,10 @@ def compile_required_method(
     elif name_match == "alias":
         if not aliases:
             compiler_evidence.append(
-                _invalid_required_method_declaration(
+                invalid_declaration_evidence(
                     source_entity,
                     declaration,
+                    decorator="required_method",
                     reason="alias name matching requires a non-empty aliases list",
                     params=params_kwargs,
                 )
@@ -315,9 +264,10 @@ def compile_required_method(
             return [], compiler_evidence, []
         if pattern is not None:
             compiler_evidence.append(
-                _invalid_required_method_declaration(
+                invalid_declaration_evidence(
                     source_entity,
                     declaration,
+                    decorator="required_method",
                     reason="alias name matching does not accept pattern",
                     params=params_kwargs,
                 )
@@ -326,9 +276,10 @@ def compile_required_method(
     elif name_match == "regex":
         if aliases not in (None, []):
             compiler_evidence.append(
-                _invalid_required_method_declaration(
+                invalid_declaration_evidence(
                     source_entity,
                     declaration,
+                    decorator="required_method",
                     reason="regex name matching does not accept aliases",
                     params=params_kwargs,
                 )
@@ -336,9 +287,10 @@ def compile_required_method(
             return [], compiler_evidence, []
         if not isinstance(pattern, str) or not pattern.strip():
             compiler_evidence.append(
-                _invalid_required_method_declaration(
+                invalid_declaration_evidence(
                     source_entity,
                     declaration,
+                    decorator="required_method",
                     reason="regex name matching requires a non-empty pattern",
                     params=params_kwargs,
                 )
@@ -348,9 +300,10 @@ def compile_required_method(
             re.compile(pattern)
         except re.error as exc:
             compiler_evidence.append(
-                _invalid_required_method_declaration(
+                invalid_declaration_evidence(
                     source_entity,
                     declaration,
+                    decorator="required_method",
                     reason=f"invalid regex pattern: {exc}",
                     params=params_kwargs,
                 )
@@ -358,9 +311,10 @@ def compile_required_method(
             return [], compiler_evidence, []
     elif name_match == "any" and (aliases not in (None, []) or pattern is not None):
         compiler_evidence.append(
-            _invalid_required_method_declaration(
+            invalid_declaration_evidence(
                 source_entity,
                 declaration,
+                decorator="required_method",
                 reason="any name matching does not accept aliases or pattern",
                 params=params_kwargs,
             )

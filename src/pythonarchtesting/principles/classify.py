@@ -292,8 +292,12 @@ def not_judged_reason(result: Mapping[str, Any]) -> str:
 
 def mapping_name(entity_id: str) -> tuple[str, str]:
     """The name a mapping gives a canonical entity id (``shop.sell``; the
-    package itself is ``__init__``), and the entity's kind."""
+    package itself is ``__init__``), and the entity's kind. An id with fewer
+    than four ``:``-separated parts (a hand-edited report) raises
+    ``ValueError``."""
     parts = str(entity_id).split(":")
+    if len(parts) < 4:
+        raise ValueError(f"not a canonical entity id: {entity_id!r}")
     module, qualname, kind = parts[-4], parts[-3], parts[-2]
     if kind == "module":
         return module or "__init__", kind

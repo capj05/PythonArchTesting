@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Sequence, Tuple, cast
+from typing import Any, List, Sequence, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
@@ -9,74 +9,17 @@ from pythonarchtesting.execution.evaluators.construction_resolution import (
     resolve_source_constructor,
 )
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
+from ..common import (
+    bool_param,
+    invalid_declaration_evidence,
+    invalid_target_evidence,
+    marker_severity,
+    with_rule_id_suffix,
+)
 
+_DECORATOR = "required_constructor"
 _VALID_CONSTRUCTOR_KINDS = ("auto", "__init__", "__new__")
 _VALID_SIGNATURE_MODES = ("compatible", "exact", "any")
-
-
-def _invalid_declaration_evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-    *,
-    reason: str,
-    params: dict[str, Any],
-) -> Evidence:
-    payload = {
-        "decorator": "required_constructor",
-        "issue": "compiler_invalid_declaration",
-        "reason": reason,
-        "params": params,
-    }
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id("compiler_invalid_declaration", payload),
-        type="compiler_invalid_declaration",
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
-
-
-def _invalid_target_evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-) -> Evidence:
-    payload = {
-        "decorator": "required_constructor",
-        "issue": "compiler_invalid_target",
-        "expected_kind": "class",
-        "found_kind": source_entity.kind,
-    }
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id("compiler_invalid_target", payload),
-        type="compiler_invalid_target",
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
-
-
-def _bool_param(
-    params: dict[str, Any], name: str, *, default: bool
-) -> tuple[bool, bool]:
-    value = params.get(name, default)
-    if isinstance(value, bool):
-        return value, True
-    return default, False
 
 
 def compile_required_constructor(
@@ -95,15 +38,18 @@ def compile_required_constructor(
     compiler_evidence: List[Evidence] = []
 
     if source_entity.kind != "class":
-        compiler_evidence.append(_invalid_target_evidence(source_entity, declaration))
+        compiler_evidence.append(
+            invalid_target_evidence(source_entity, declaration, decorator=_DECORATOR)
+        )
         return [], compiler_evidence, []
 
     signature_mode = str(params_kwargs.get("signature_mode", "compatible")).lower()
     if signature_mode not in _VALID_SIGNATURE_MODES:
         compiler_evidence.append(
-            _invalid_declaration_evidence(
+            invalid_declaration_evidence(
                 source_entity,
                 declaration,
+                decorator=_DECORATOR,
                 reason="signature_mode must be one of: compatible, exact, any",
                 params=params_kwargs,
             )
@@ -113,9 +59,10 @@ def compile_required_constructor(
     constructor_kind = str(params_kwargs.get("constructor_kind", "auto")).lower()
     if constructor_kind not in _VALID_CONSTRUCTOR_KINDS:
         compiler_evidence.append(
-            _invalid_declaration_evidence(
+            invalid_declaration_evidence(
                 source_entity,
                 declaration,
+                decorator=_DECORATOR,
                 reason=("constructor_kind must be one of: auto, __init__, __new__"),
                 params=params_kwargs,
             )
@@ -123,27 +70,24 @@ def compile_required_constructor(
         return [], compiler_evidence, []
 
     allow_inherited = bool(params_kwargs.get("allow_inherited", True))
-    allow_missing, allow_missing_valid = _bool_param(
+    allow_missing, allow_missing_valid = bool_param(
         params_kwargs,
         "allow_missing",
         default=False,
     )
     if not allow_missing_valid:
         compiler_evidence.append(
-            _invalid_declaration_evidence(
+            invalid_declaration_evidence(
                 source_entity,
                 declaration,
+                decorator=_DECORATOR,
                 reason="allow_missing must be a boolean",
                 params=params_kwargs,
             )
         )
         return [], compiler_evidence, []
 
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
+    base_severity = marker_severity(params_kwargs)
 
     source_ctor = resolve_source_constructor(
         source_entity,
@@ -153,9 +97,10 @@ def compile_required_constructor(
 
     if source_ctor is None:
         compiler_evidence.append(
-            _invalid_declaration_evidence(
+            invalid_declaration_evidence(
                 source_entity,
                 declaration,
+                decorator=_DECORATOR,
                 reason=(
                     "source class has no declared constructor or dataclass-generated "
                     "__init__ matching "

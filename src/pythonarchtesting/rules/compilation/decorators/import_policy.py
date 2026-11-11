@@ -6,7 +6,11 @@ from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
+from ..common import (
+    declaration_evidence,
+    marker_severity,
+    with_rule_id_suffix,
+)
 
 _VALID_IMPORT_POLICY_MODES = {"reachable", "direct"}
 
@@ -33,18 +37,11 @@ def _invalid_mode_evidence(
         "message": "forbid_imports mode must be 'reachable' or 'direct'.",
         "severity": "error",
     }
-    return Evidence(
-        evidence_id=evidence_id("compiler_invalid_import_policy_mode", payload),
-        type="compiler_invalid_import_policy_mode",
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location={
-            "filepath": source_entity.filepath_rel,
-            "lineno": declaration.lineno or source_entity.lineno,
-            "col": declaration.col,
-        },
+    return declaration_evidence(
+        source_entity,
+        declaration,
+        evidence_type="compiler_invalid_import_policy_mode",
+        payload=payload,
     )
 
 
@@ -101,11 +98,7 @@ def compile_forbid_imports(
 
     ignore_type_checking = bool(params_kwargs.get("ignore_type_checking", True))
 
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
+    base_severity = marker_severity(params_kwargs)
 
     selector = RuleSelector(
         source_entity_id=source_entity.canonical_id,

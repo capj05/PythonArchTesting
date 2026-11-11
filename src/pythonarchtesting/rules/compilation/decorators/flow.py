@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Literal, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
+from ..common import (
+    declaration_evidence,
+    marker_severity,
+    with_rule_id_suffix,
+)
 from ..declarations import (
     is_invalid_annotation_declaration,
     normalize_declaration_entries,
@@ -19,18 +23,11 @@ def _evidence(
     *,
     payload: dict[str, Any],
 ) -> Evidence:
-    return Evidence(
-        evidence_id=evidence_id("compiler_invalid_flow_declaration", payload),
-        type="compiler_invalid_flow_declaration",
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location={
-            "filepath": source_entity.filepath_rel,
-            "lineno": declaration.lineno or source_entity.lineno,
-            "col": declaration.col,
-        },
+    return declaration_evidence(
+        source_entity,
+        declaration,
+        evidence_type="compiler_invalid_flow_declaration",
+        payload=payload,
     )
 
 
@@ -181,11 +178,7 @@ def compile_enforce_flow(
             )
             return [], compiler_evidence, []
 
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
+    base_severity = marker_severity(params_kwargs)
 
     source_flow_markers = [
         {

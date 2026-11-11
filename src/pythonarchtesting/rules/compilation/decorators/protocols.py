@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Literal, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
@@ -10,30 +10,11 @@ from pythonarchtesting.protocols.reference_resolution import (
     resolve_reference,
 )
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
-
-
-def _evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-    *,
-    evidence_type: str,
-    payload: dict[str, Any],
-) -> Evidence:
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id(evidence_type, payload),
-        type=evidence_type,
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
+from ..common import (
+    declaration_evidence,
+    marker_severity,
+    with_rule_id_suffix,
+)
 
 
 def _protocol_rule_options(
@@ -47,11 +28,7 @@ def _protocol_rule_options(
     if return_annotation not in {"off", "warning", "error"}:
         return_annotation = "warning"
 
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
+    base_severity = marker_severity(params_kwargs)
 
     return mode, return_annotation, base_severity
 
@@ -76,7 +53,7 @@ def resolve_protocol_entity(
             None,
             None,
             [
-                _evidence(
+                declaration_evidence(
                     source_entity,
                     declaration,
                     evidence_type="compiler_invalid_protocol_reference",
@@ -103,7 +80,7 @@ def resolve_protocol_entity(
             None,
             None,
             [
-                _evidence(
+                declaration_evidence(
                     source_entity,
                     declaration,
                     evidence_type="compiler_invalid_protocol_reference",
@@ -125,7 +102,7 @@ def resolve_protocol_entity(
             None,
             None,
             [
-                _evidence(
+                declaration_evidence(
                     source_entity,
                     declaration,
                     evidence_type="compiler_invalid_protocol_reference",
@@ -144,7 +121,7 @@ def _target_kind_error(
     payload: dict[str, Any],
 ) -> tuple[list[Any], list[Evidence], list[Any]]:
     compiler_evidence = [
-        _evidence(
+        declaration_evidence(
             source_entity,
             declaration,
             evidence_type="compiler_invalid_target",

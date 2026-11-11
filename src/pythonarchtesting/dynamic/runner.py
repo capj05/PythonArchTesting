@@ -460,14 +460,17 @@ def run_forked(
     Each ``(request, timeout_s)`` is what ``_run_probe`` would be given for
     a probe of its own (``batch_request``, ``cases_request``). The probe
     starts once, imports nothing of the target, and forks a child per
-    request; the child takes its own standard streams, session, CPU limit
-    and, under ``limits``, an empty ``HOME`` of its own, then answers the
+    request; the child takes its own standard streams, CPU limit and,
+    under ``limits``, an empty ``HOME`` of its own, then answers the
     request as a probe of its own would, so it sees the target as freshly
     imported, and it is killed with whatever it started when it overruns
-    ``timeout_s``. Each outcome is the one ``_run_probe`` makes of that
-    child's output. ``None`` in place of an outcome means the request got no
-    answer here (``can_fork`` false, or the forking interpreter itself
-    failed): its caller runs it on its own.
+    ``timeout_s``. The children stay in the forking interpreter's process
+    group, so overrunning ``_FORK_STARTUP_S`` plus the sum of the timeouts
+    kills them and what they started together with it. Each outcome is the
+    one ``_run_probe`` makes of that child's output. ``None`` in place of an
+    outcome means the request got no answer here (``can_fork`` false, or the
+    forking interpreter itself failed, say its combined response ran over
+    ``RLIMIT_FSIZE``): its caller runs it on its own.
     """
     if not requests or not can_fork(sandbox):
         return [None] * len(requests)

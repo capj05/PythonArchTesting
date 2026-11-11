@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Literal, Tuple
 
 from pythonarchtesting.config import Config
-from pythonarchtesting.core.models import Evidence, Rule, RuleSelector
+from pythonarchtesting.core.models import Rule, RuleSelector
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
 from ..common import (
     build_invalid_param_sentinel_rule,
-    canonicalize_payload,
-    evidence_id,
+    declaration_evidence,
+    invalid_target_evidence,
+    marker_severity,
     with_rule_id_suffix,
 )
 
@@ -44,36 +45,6 @@ _MODULE_LIST_MARKERS = {
         "argument) instead of creating it here.",
     ),
 }
-
-
-def _evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-    *,
-    evidence_type: str,
-    payload: dict[str, Any],
-) -> Evidence:
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id(evidence_type, payload),
-        type=evidence_type,
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
-
-
-def marker_severity(params: dict[str, Any]) -> Literal["error", "warning", "info"]:
-    raw = str(params.get("severity", "error")).lower()
-    if raw in {"error", "warning", "info"}:
-        return cast(Literal["error", "warning", "info"], raw)
-    return "error"
 
 
 def _transport_problem(value: Any) -> str | None:
@@ -218,20 +189,15 @@ def _module_names(value: Any) -> list[str] | None:
 def invalid_target(
     source_entity: Entity, declaration: DeclarationEntry, marker: str, expected: Any
 ) -> Tuple[List[Any], List[Any], List[Any]]:
-    payload = {
-        "declaration": marker,
-        "issue": "compiler_invalid_target",
-        "expected_kind": expected,
-        "found_kind": source_entity.kind,
-    }
     return (
         [],
         [
-            _evidence(
+            invalid_target_evidence(
                 source_entity,
                 declaration,
-                evidence_type="compiler_invalid_target",
-                payload=payload,
+                decorator=marker,
+                expected_kind=expected,
+                key="declaration",
             )
         ],
         [],
@@ -265,7 +231,7 @@ def invalid_param(
     return (
         [sentinel],
         [
-            _evidence(
+            declaration_evidence(
                 source_entity,
                 declaration,
                 evidence_type="compiler_invalid_param",

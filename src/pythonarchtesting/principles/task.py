@@ -497,28 +497,71 @@ def _not_classes(
                 )
 
 
+@dataclass
+class _Binding:
+    """What binding the checks of a task collects, entity by entity: the
+    problems found, the names whose ``cases``/``init`` a check covers, the
+    declarations per entity id and one ``TaskCheck`` per declaration."""
+
+    problems: list[str]
+    covered: set[str] = dataclasses.field(default_factory=set)
+    declarations: dict[str, list[Any]] = dataclasses.field(default_factory=dict)
+    checks: list[TaskCheck] = dataclasses.field(default_factory=list)
+
+
 def bind_task(
     task: Task, entities: Sequence[Entity]
 ) -> tuple[list[Entity], list[TaskCheck]]:
     """The reference's ``entities`` with the task's declarations attached, and
     one ``TaskCheck`` per declaration. Raises ``TaskError`` with every problem."""
     path = task.path / TASK_FILENAME
-    problems: list[str] = []
+    binding = _Binding(problems=_own_markers(entities))
+    bound, covering = _bind_roles(task, entities, binding.problems)
+    _not_classes(task, bound, binding.problems)
+    for check in task.principle.checks:
+        _bind_check(task, check, bound, entities, covering, binding)
+    for key, table in (("cases", task.cases), ("init", task.init)):
+        for name in sorted(set(table) - binding.covered):
+            binding.problems.append(f"[{key}] {name!r}: no check of the task covers it")
+    if binding.problems:
+        # A problem of one entity's cases is found once per check on it.
+        raise TaskError(path, list(dict.fromkeys(binding.problems)))
+    required = {e.canonical_id for found in bound.values() for e in found}
+    return [
+        _bound(e, binding.declarations.get(e.canonical_id), e.canonical_id in required)
+        for e in entities
+    ], binding.checks
+
+
+def _own_markers(entities: Sequence[Entity]) -> list[str]:
+    """The problem that the reference carries markers of its own, if it does:
+    a task's reference must be unannotated, so that what is checked is what
+    ``task.toml`` says."""
     annotated = sorted(
         {entity_name(e) or "<root>" for e in entities if e.annotation_declarations}
     )
-    if annotated:
-        problems.append(
-            "the reference carries markers of its own ("
-            + ", ".join(annotated)
-            + "); a task's reference must be unannotated: remove them, or "
-            "evaluate the reference without task.toml"
-        )
+    if not annotated:
+        return []
+    return [
+        "the reference carries markers of its own ("
+        + ", ".join(annotated)
+        + "); a task's reference must be unannotated: remove them, or "
+        "evaluate the reference without task.toml"
+    ]
+
+
+def _bind_roles(
+    task: Task, entities: Sequence[Entity], problems: list[str]
+) -> tuple[dict[str, list[Entity]], dict[str, set[str]]]:
+    """The entities each role binds, and per role the ids of the functions of
+    each module it binds as a whole; a name that cannot be resolved is added
+    to ``problems``.
+
+    The check of each function a module stands for also covers, statically,
+    what the target adds to the module (every one, so that a target renaming
+    one of them does not switch the scan off; the static facts merge per
+    place in classify)."""
     bound: dict[str, list[Entity]] = {}
-    # Per role, the functions of each module the role binds as a whole: the
-    # check of each also covers, statically, what the target adds to the
-    # module (every one, so that a target renaming one of them does not
-    # switch the scan off; the static facts merge per place in classify).
     covering: dict[str, set[str]] = {}
     class_roles = _class_roles(task)
     for role, names in task.roles.items():
@@ -533,97 +576,112 @@ def bind_task(
             if found and entity_name(found[0]) != name:
                 covering.setdefault(role, set()).update(e.canonical_id for e in found)
             bound[role].extend(e for e in found if e not in bound[role])
-    _not_classes(task, bound, problems)
-    covered: set[str] = set()
-    declarations: dict[str, list[Any]] = {}
-    checks: list[TaskCheck] = []
-    for check in task.principle.checks:
-        modules, problem = _marker_targets(check, bound, entities)
-        if problem is not None:
-            problems.append(problem)
-            continue
-        untargeted = (
-            f"role {check.target_role!r} binds no class, so {check.marker} "
-            f"(role {check.role!r}) has no object it could forbid building"
-            if not modules and check.marker in INSTANCE_TARGET_MARKERS
-            else None
-        )
-        for entity in bound.get(check.role, []):
-            name = entity_name(entity)
-            if untargeted is not None:
-                # Nothing to check: no declaration, but its cases are covered.
-                covered.add(name)
-                checks.append(
-                    TaskCheck(
-                        role=check.role,
-                        entity=name,
-                        entity_id=entity.canonical_id,
-                        marker=check.marker,
-                        params={"modules": [], "cases": None, "init": None},
-                        not_applicable=untargeted,
-                    )
-                )
-                continue
-            if check.marker in STATIC_MARKERS:
-                # Runs nothing: no cases, and it does not cover the entity's.
-                declarations.setdefault(entity.canonical_id, []).append(
-                    _declaration(check, modules, entity, None, None)
-                )
-                checks.append(
-                    TaskCheck(
-                        role=check.role,
-                        entity=name,
-                        entity_id=entity.canonical_id,
-                        marker=check.marker,
-                        params={"modules": modules, "cases": None, "init": None},
-                    )
-                )
-                continue
-            covered.add(name)
-            cases = task.cases.get(name)
-            if cases is None:
-                problems.append(
-                    f"[cases] {name!r} is missing: {check.marker} (role "
-                    f"{check.role!r}) runs it; the cases must be: {check.cases}"
-                )
-                continue
-            init = task.init.get(name)
-            problem = _cases_problem(check, entity, cases, init)
-            if problem is not None:
-                problems.append(f"[cases] {name!r}: {problem}")
-                continue
-            cover = (
-                check.marker in MODULE_COVER_MARKERS
-                and entity.canonical_id in covering.get(check.role, set())
-            )
-            declarations.setdefault(entity.canonical_id, []).append(
-                _declaration(check, modules, entity, cases, init, cover)
-            )
-            checks.append(
+    return bound, covering
+
+
+def _bind_check(
+    task: Task,
+    check: CheckTemplate,
+    bound: dict[str, list[Entity]],
+    entities: Sequence[Entity],
+    covering: dict[str, set[str]],
+    binding: _Binding,
+) -> None:
+    """Bind one check of the principle to every entity of its role, into
+    ``binding``. A check whose instance target binds no class declares
+    nothing but covers its entities' cases (``not_applicable``); a static
+    check declares without cases and covers none; any other check runs its
+    entities' cases (``_bind_cases``)."""
+    modules, problem = _marker_targets(check, bound, entities)
+    if problem is not None:
+        binding.problems.append(problem)
+        return
+    untargeted = (
+        f"role {check.target_role!r} binds no class, so {check.marker} "
+        f"(role {check.role!r}) has no object it could forbid building"
+        if not modules and check.marker in INSTANCE_TARGET_MARKERS
+        else None
+    )
+    for entity in bound.get(check.role, []):
+        name = entity_name(entity)
+        if untargeted is not None:
+            # Nothing to check: no declaration, but its cases are covered.
+            binding.covered.add(name)
+            binding.checks.append(
                 TaskCheck(
                     role=check.role,
                     entity=name,
                     entity_id=entity.canonical_id,
                     marker=check.marker,
-                    params={
-                        "modules": modules,
-                        "cases": cases,
-                        "init": init,
-                        **({"cover_module": True} if cover else {}),
-                    },
+                    params={"modules": [], "cases": None, "init": None},
+                    not_applicable=untargeted,
                 )
             )
-    for key, table in (("cases", task.cases), ("init", task.init)):
-        for name in sorted(set(table) - covered):
-            problems.append(f"[{key}] {name!r}: no check of the task covers it")
-    if problems:
-        # A problem of one entity's cases is found once per check on it.
-        raise TaskError(path, list(dict.fromkeys(problems)))
-    required = {e.canonical_id for found in bound.values() for e in found}
-    return [
-        _bound(e, declarations.get(e.canonical_id), e.canonical_id in required)
-        for e in entities
-    ], checks
+        elif check.marker in STATIC_MARKERS:
+            # Runs nothing: no cases, and it does not cover the entity's.
+            binding.declarations.setdefault(entity.canonical_id, []).append(
+                _declaration(check, modules, entity, None, None)
+            )
+            binding.checks.append(
+                TaskCheck(
+                    role=check.role,
+                    entity=name,
+                    entity_id=entity.canonical_id,
+                    marker=check.marker,
+                    params={"modules": modules, "cases": None, "init": None},
+                )
+            )
+        else:
+            binding.covered.add(name)
+            cover = (
+                check.marker in MODULE_COVER_MARKERS
+                and entity.canonical_id in covering.get(check.role, set())
+            )
+            _bind_cases(task, check, entity, modules, cover, binding)
+
+
+def _bind_cases(
+    task: Task,
+    check: CheckTemplate,
+    entity: Entity,
+    modules: list[str],
+    cover: bool,
+    binding: _Binding,
+) -> None:
+    """Declare a check that runs ``entity`` with its cases and init, into
+    ``binding``; missing cases, or cases the marker's compiler would refuse,
+    are a problem instead. ``cover`` adds ``cover_module`` (a function of a
+    module bound as a whole, ``MODULE_COVER_MARKERS``)."""
+    name = entity_name(entity)
+    cases = task.cases.get(name)
+    if cases is None:
+        binding.problems.append(
+            f"[cases] {name!r} is missing: {check.marker} (role "
+            f"{check.role!r}) runs it; the cases must be: {check.cases}"
+        )
+        return
+    init = task.init.get(name)
+    problem = _cases_problem(check, entity, cases, init)
+    if problem is not None:
+        binding.problems.append(f"[cases] {name!r}: {problem}")
+        return
+    binding.declarations.setdefault(entity.canonical_id, []).append(
+        _declaration(check, modules, entity, cases, init, cover)
+    )
+    binding.checks.append(
+        TaskCheck(
+            role=check.role,
+            entity=name,
+            entity_id=entity.canonical_id,
+            marker=check.marker,
+            params={
+                "modules": modules,
+                "cases": cases,
+                "init": init,
+                **({"cover_module": True} if cover else {}),
+            },
+        )
+    )
 
 
 def _bound(entity: Entity, declarations: Optional[list[Any]], required: bool) -> Entity:

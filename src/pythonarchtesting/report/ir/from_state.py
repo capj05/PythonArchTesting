@@ -2,7 +2,6 @@
 
 import importlib.metadata
 import json
-from collections import Counter
 from datetime import datetime, timezone
 from hashlib import sha1
 from pathlib import Path
@@ -28,19 +27,20 @@ from ..policy import (
 from ..schema_v2 import validate_report_schema_v2
 from .models import (
     AggregateSummary,
-    EntityRef,
-    EvidenceItem,
     MatchingSection,
-    MatchingSummary,
     ReportDocument,
-    ResultItem,
-    ResultsSummary,
     RunMeta,
     TargetReport,
 )
-from .order import sort_matches, sort_results, sort_targets
+from .normalize import (
+    matching_summary,
+    result_item,
+    results_summary,
+    split_qualname,
+)
+from .order import SEV_RANK, STAT_RANK, sort_matches, sort_results, sort_targets
 from .serialize import to_legacy_schema_v2
-from .summary import count_unverified
+from .summary import build_results_summary
 from .target_ids import normalize_target_ids
 
 _VALIDATIONRESULT_FIELD_MAP = {
@@ -50,8 +50,6 @@ _VALIDATIONRESULT_FIELD_MAP = {
     "src_lineno": "src_line_num",
 }
 
-SEV_RANK = {"error": 0, "warning": 1, "info": 2}
-STAT_RANK = {"FAILED": 0, "ERROR": 1, "SKIPPED": 2, "WARNING": 2, "OK": 3}
 _RESULT_TIMING_KEYS = (
     "duration",
     "elapsed",
@@ -61,7 +59,6 @@ _RESULT_TIMING_KEYS = (
 )
 STATIC_ANALYSIS_MODE = "static-only"
 # Statuses that count towards "Top Rules by Violation Count".
-_VIOLATION_STATUSES = frozenset({"FAILED", "ERROR"})
 
 
 def _analysis_mode(run_state: RunState) -> str:
@@ -267,20 +264,9 @@ def _timing_seconds_from_details(details: Dict[str, Any]) -> Optional[float]:
     return None
 
 
-def _split_qualname(qualname: Any) -> Tuple[Optional[str], Optional[str]]:
-    if not qualname:
-        return None, None
-    parts = [p for p in str(qualname).split(".") if p and p != "<locals>"]
-    if not parts:
-        return None, None
-    if len(parts) == 1:
-        return None, parts[0]
-    return parts[-2], parts[-1]
-
-
 def _entity_location(entity: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     src = entity or {}
-    class_name, function_name = _split_qualname(src.get("qualname"))
+    class_name, function_name = split_qualname(src.get("qualname"))
     return {
         "module": src.get("module"),
         "qualname": src.get("qualname"),
@@ -291,171 +277,6 @@ def _entity_location(entity: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _entity_ref(value: Optional[Dict[str, Any]]) -> EntityRef:
-    src = value or {}
-    class_name, function_name = _split_qualname(src.get("qualname"))
-    return EntityRef(
-        module=src.get("module"),
-        qualname=src.get("qualname"),
-        file=src.get("file"),
-        line=src.get("line"),
-        cls=class_name,
-        function=function_name,
-    )
-
-
-def _evidence_item(value: Dict[str, Any]) -> EvidenceItem:
-    location = value.get("location") or {}
-    payload = value.get("payload")
-    if not isinstance(payload, dict):
-        payload = {"value": payload}
-    evidence_id = payload.get("evidence_id")
-    return EvidenceItem(
-        type=str(value.get("type") or ""),
-        payload=dict(payload),
-        location_file=location.get("file"),
-        location_line=location.get("line"),
-        evidence_id=str(evidence_id) if evidence_id is not None else None,
-    )
-
-
-def _stable_key(item: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
-    return (
-        str(item.get("severity") or ""),
-        str(item.get("status") or ""),
-        str(item.get("rule_id") or ""),
-        str(item.get("source_entity_id") or ""),
-        str(item.get("target_entity_id") or ""),
-    )
-
-
-def _ordering_key(item: Dict[str, Any]) -> Tuple[Any, ...]:
-    source = item.get("source") or {}
-    target = item.get("target") or {}
-    return (
-        SEV_RANK.get(str(item.get("severity") or "").lower(), 9),
-        STAT_RANK.get(str(item.get("status") or ""), 9),
-        str(item.get("rule_id") or ""),
-        str(item.get("source_entity_id") or ""),
-        str(item.get("target_entity_id") or ""),
-        str(source.get("file") or ""),
-        -1 if source.get("line") is None else int(source.get("line") or 0),
-        str(target.get("file") or ""),
-        -1 if target.get("line") is None else int(target.get("line") or 0),
-        str(item.get("result_id") or ""),
-    )
-
-
-def _result_item(item: Dict[str, Any]) -> ResultItem:
-    known_keys = {
-        "result_id",
-        "project_id",
-        "rule_id",
-        "rule_type",
-        "category",
-        "status",
-        "severity",
-        "message",
-        "source_entity_id",
-        "target_entity_id",
-        "match_status",
-        "confidence",
-        "source",
-        "target",
-        "evidence",
-        "details",
-        "fix_hints",
-        "tags",
-        "timing_seconds",
-        "activation_source",
-    }
-    return ResultItem(
-        result_id=str(item.get("result_id") or ""),
-        project_id=str(item.get("project_id") or ""),
-        rule_id=str(item.get("rule_id") or ""),
-        rule_type=(
-            str(item["rule_type"]) if item.get("rule_type") is not None else None
-        ),
-        category=str(item.get("category") or ""),
-        status=str(item.get("status") or ""),
-        severity=str(item.get("severity") or ""),
-        message=str(item.get("message") or ""),
-        source_entity_id=(
-            str(item["source_entity_id"])
-            if item.get("source_entity_id") is not None
-            else None
-        ),
-        target_entity_id=(
-            str(item["target_entity_id"])
-            if item.get("target_entity_id") is not None
-            else None
-        ),
-        match_status=(
-            str(item["match_status"]) if item.get("match_status") is not None else None
-        ),
-        confidence=(
-            float(item["confidence"]) if item.get("confidence") is not None else None
-        ),
-        source=_entity_ref(item.get("source") or {}),
-        target=_entity_ref(item.get("target") or {}),
-        evidence=tuple(_evidence_item(ev) for ev in (item.get("evidence") or [])),
-        details=dict(item.get("details") or {}),
-        fix_hints=tuple(str(v) for v in (item.get("fix_hints") or [])),
-        tags=tuple(str(v) for v in (item.get("tags") or [])),
-        timing_seconds=(
-            float(item["timing_seconds"])
-            if item.get("timing_seconds") is not None
-            else None
-        ),
-        activation_source=(
-            str(item["activation_source"])
-            if item.get("activation_source") is not None
-            else None
-        ),
-        stable_key=_stable_key(item),
-        ordering_key=_ordering_key(item),
-        extras={k: v for k, v in item.items() if k not in known_keys},
-    )
-
-
-def _matching_summary(matches: Iterable[Dict[str, Any]]) -> MatchingSummary:
-    rows = list(matches)
-    summary = {
-        "total": len(rows),
-        "matched": 0,
-        "low_confidence": 0,
-        "ambiguous": 0,
-        "unmatched": 0,
-    }
-    for row in rows:
-        status = str(row.get("status") or "")
-        if status in summary:
-            summary[status] += 1
-    return MatchingSummary(
-        total=summary["total"],
-        matched=summary["matched"],
-        low_confidence=summary["low_confidence"],
-        ambiguous=summary["ambiguous"],
-        unmatched=summary["unmatched"],
-    )
-
-
-def _results_summary_ir(summary_payload: Optional[Dict[str, Any]]) -> ResultsSummary:
-    data = summary_payload or {}
-    return ResultsSummary(
-        results_total=int(data.get("results_total", 0)),
-        status_counts=dict(data.get("status_counts") or {}),
-        severity_counts=dict(data.get("severity_counts") or {}),
-        category_counts=dict(data.get("category_counts") or {}),
-        top_rules=tuple(dict(row) for row in (data.get("top_rules") or [])),
-        top_source_files=tuple(
-            dict(row) for row in (data.get("top_source_files") or [])
-        ),
-        timings=(dict(data["timings"]) if data.get("timings") is not None else None),
-        unverified_total=int(data.get("unverified_total", 0)),
-    )
-
-
 def _matching_section(
     matches: Iterable[Dict[str, Any]], config: Dict[str, Any]
 ) -> MatchingSection:
@@ -463,7 +284,7 @@ def _matching_section(
     return MatchingSection(
         matches=ordered_matches,
         matching_config=dict(config),
-        summary=_matching_summary(ordered_matches),
+        summary=matching_summary(ordered_matches),
     )
 
 
@@ -870,67 +691,6 @@ def _build_results_section_for_target(
     )
 
 
-def _top_counts(values: List[str], limit: int = 5) -> List[Dict[str, Any]]:
-    counter = Counter(values)
-    ranked = sorted(counter.items(), key=lambda item: (-item[1], item[0]))
-    return [{"name": name, "count": count} for name, count in ranked[:limit]]
-
-
-def _build_results_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
-    status_counts: Dict[str, int] = {}
-    severity_counts: Dict[str, int] = {}
-    for result in results:
-        status = str(result.get("status") or "")
-        severity = str(result.get("severity") or "")
-        status_counts[status] = status_counts.get(status, 0) + 1
-        severity_counts[severity] = severity_counts.get(severity, 0) + 1
-
-    status_counts = dict(sorted(status_counts.items(), key=lambda kv: kv[0]))
-    severity_counts = dict(sorted(severity_counts.items(), key=lambda kv: kv[0]))
-    timing_values = [
-        timing
-        for timing in (_as_float(item.get("timing_seconds")) for item in results)
-        if timing is not None
-    ]
-    timing_summary: Optional[Dict[str, Any]] = None
-    if timing_values:
-        timing_summary = {
-            "count": len(timing_values),
-            "total_seconds": round(sum(timing_values), 6),
-            "max_seconds": round(max(timing_values), 6),
-            "avg_seconds": round(sum(timing_values) / len(timing_values), 6),
-        }
-
-    return {
-        "results_total": len(results),
-        "unverified_total": count_unverified(results),
-        "status_counts": status_counts,
-        "severity_counts": severity_counts,
-        "category_counts": dict(
-            sorted(
-                Counter(
-                    str(item.get("category") or "unknown") for item in results
-                ).items(),
-                key=lambda kv: kv[0],
-            )
-        ),
-        "top_rules": _top_counts(
-            [
-                str(item.get("rule_id") or "")
-                for item in results
-                if item.get("status") in _VIOLATION_STATUSES
-            ]
-        ),
-        "top_source_files": _top_counts(
-            [
-                str((item.get("source") or {}).get("file") or "<unknown>")
-                for item in results
-            ]
-        ),
-        "timings": timing_summary,
-    }
-
-
 def _format_datetime_z(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -971,7 +731,7 @@ def _build_run_report_document(
         results_payload = _build_results_section_for_target(
             run_state, target_state, cfg
         )
-        target_summary_payload = _build_results_summary(results_payload)
+        target_summary_payload = build_results_summary(results_payload)
         exit_code = compute_target_exit_code(results_payload, cfg)
         target_state.exit_code = exit_code
         combined_results_payload.extend(results_payload)
@@ -994,9 +754,9 @@ def _build_run_report_document(
                     matching_payload.get("matching_config") or {},
                 ),
                 results=tuple(
-                    sort_results([_result_item(item) for item in results_payload])
+                    sort_results([result_item(item) for item in results_payload])
                 ),
-                summary=_results_summary_ir(target_summary_payload),
+                summary=results_summary(target_summary_payload),
                 artifacts=tuple(),
                 exit_code=exit_code,
             )
@@ -1015,9 +775,7 @@ def _build_run_report_document(
             targets_total=len(target_states),
             targets_failed=failed,
             targets_passed=len(target_states) - failed,
-            results=_results_summary_ir(
-                _build_results_summary(combined_results_payload)
-            ),
+            results=results_summary(build_results_summary(combined_results_payload)),
         ),
         exit_code=aggregate_exit_code,
         kind="run",

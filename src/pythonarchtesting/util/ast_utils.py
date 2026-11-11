@@ -11,10 +11,10 @@ Abstract methods, from the strictest rule to the loosest:
 
 - ``never_runs`` (mutation): an exact abstract decorator, or a body (past a
   docstring) of stub statements only, none at all included;
-- ``is_abstract_method`` (global mode): a decorator whose text contains
+- ``is_abstract_or_stub`` (global mode): a decorator whose text contains
   ``abstractmethod``, or a body (past a docstring) of exactly one stub
   statement;
-- ``declares_abstract`` (global mode's polymorphism): ``is_abstract_method``
+- ``declares_abstract`` (global mode's polymorphism): ``is_abstract_or_stub``
   without the one-statement ``pass`` body, which is a default that does
   nothing rather than a declaration.
 
@@ -122,7 +122,7 @@ def only_raises_not_implemented(node: ast.FunctionDef | ast.AsyncFunctionDef) ->
     return len(body) == 1 and raises_not_implemented(body[0])
 
 
-def is_abstract_method(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+def is_abstract_or_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """Whether the method is abstract: decorated with ``abstractmethod``
     (``mentions_abstractmethod``), or its body (past a docstring) is one
     statement that only raises ``NotImplementedError`` or is ``...`` or
@@ -136,11 +136,11 @@ def is_abstract_method(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def declares_abstract(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """``is_abstract_method`` but for an undecorated ``pass`` body: such a
+    """``is_abstract_or_stub`` but for an undecorated ``pass`` body: such a
     method is a default that does nothing, not a declaration."""
     if mentions_abstractmethod(node):
         return True
-    return is_abstract_method(node) and not isinstance(node.body[-1], ast.Pass)
+    return is_abstract_or_stub(node) and not isinstance(node.body[-1], ast.Pass)
 
 
 # --- abstract classes -----------------------------------------------------
@@ -301,7 +301,7 @@ __all__ = [
     "dotted",
     "has_abstract_decorator",
     "is_abstract_class",
-    "is_abstract_method",
+    "is_abstract_or_stub",
     "is_docstring",
     "is_ellipsis_statement",
     "is_interface",

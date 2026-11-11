@@ -1,48 +1,110 @@
 from __future__ import annotations
 
-import hashlib
-import json
-from typing import Any, Dict
+from typing import Any, Dict, Literal, cast
 
-from pythonarchtesting.entities import Entity
-
-
-def canonicalize_payload(value: Any) -> Any:
-    """Canonicalize a payload value for consistent hashing."""
-    if isinstance(value, dict):
-        return {k: canonicalize_payload(value[k]) for k in sorted(value.keys())}
-    if isinstance(value, (list, tuple)):
-        items = [canonicalize_payload(item) for item in value]
-
-        def _canonical_json(v: Any) -> str:
-            return json.dumps(
-                v, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-            )
-
-        return sorted(items, key=_canonical_json)
-
-    def _safe_json_value(raw: Any) -> Any:
-        try:
-            json.dumps(raw)
-            return raw
-        except TypeError:
-            return repr(raw)
-
-    return _safe_json_value(value)
+# The payload hashing is the one evidence collection uses: a compiler's
+# evidence and a collector's of the same payload get the same id.
+from pythonarchtesting.core.evidence import canonicalize_payload, evidence_id
+from pythonarchtesting.core.models import Evidence
+from pythonarchtesting.entities import DeclarationEntry, Entity
 
 
-def evidence_id(type_: str, payload: Dict[str, Any]) -> str:
-    """Generate evidence ID from type and payload."""
-
-    def _canonical_json(value: Any) -> str:
-        return json.dumps(
-            value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-        )
-
-    canonical = _canonical_json(
-        {"type": type_, "payload": canonicalize_payload(payload)}
+def declaration_evidence(
+    source_entity: Entity,
+    declaration: DeclarationEntry,
+    *,
+    evidence_type: str,
+    payload: Dict[str, Any],
+) -> Evidence:
+    """The compiler's evidence of type ``evidence_type`` about ``declaration``
+    on ``source_entity``, located at the declaration (at the entity when the
+    declaration has no line); every marker compiler reports the problems of a
+    declaration it drops this way."""
+    location = {
+        "filepath": source_entity.filepath_rel,
+        "lineno": declaration.lineno or source_entity.lineno,
+        "col": declaration.col,
+    }
+    return Evidence(
+        evidence_id=evidence_id(evidence_type, payload),
+        type=evidence_type,
+        source="compiler",
+        role="source",
+        entity_id=source_entity.canonical_id,
+        payload=canonicalize_payload(payload),
+        location=location,
     )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def invalid_declaration_evidence(
+    source_entity: Entity,
+    declaration: DeclarationEntry,
+    *,
+    decorator: str,
+    reason: str,
+    params: Dict[str, Any],
+) -> Evidence:
+    """The evidence that the ``decorator`` marker's ``declaration`` was
+    dropped: ``reason`` says which parameter is invalid, ``params`` are the
+    parameters as declared."""
+    payload = {
+        "decorator": decorator,
+        "issue": "compiler_invalid_declaration",
+        "reason": reason,
+        "params": params,
+    }
+    return declaration_evidence(
+        source_entity,
+        declaration,
+        evidence_type="compiler_invalid_declaration",
+        payload=payload,
+    )
+
+
+def invalid_target_evidence(
+    source_entity: Entity,
+    declaration: DeclarationEntry,
+    *,
+    decorator: str,
+    expected_kind: str = "class",
+    key: str = "decorator",
+) -> Evidence:
+    """The evidence that the ``decorator`` marker, which checks entities of
+    ``expected_kind``, was declared on ``source_entity``, which is of
+    another kind. ``key`` is the payload key that names the marker: some
+    compilers name it ``declaration``, and the payload is kept as it was."""
+    payload = {
+        key: decorator,
+        "issue": "compiler_invalid_target",
+        "expected_kind": expected_kind,
+        "found_kind": source_entity.kind,
+    }
+    return declaration_evidence(
+        source_entity,
+        declaration,
+        evidence_type="compiler_invalid_target",
+        payload=payload,
+    )
+
+
+def bool_param(
+    params: Dict[str, Any], name: str, *, default: bool
+) -> tuple[bool, bool]:
+    """The boolean parameter ``name`` (``default`` when absent) and whether it
+    is valid; a value that is no ``bool`` is invalid and gives ``default``."""
+    value = params.get(name, default)
+    if isinstance(value, bool):
+        return value, True
+    return default, False
+
+
+def marker_severity(params: Dict[str, Any]) -> Literal["error", "warning", "info"]:
+    """The severity a marker declares (``severity=``, any case); ``"error"``
+    when it declares none or one that is no severity."""
+    raw = str(params.get("severity", "error")).lower()
+    if raw in {"error", "warning", "info"}:
+        return cast(Literal["error", "warning", "info"], raw)
+    return "error"
 
 
 def with_rule_id_suffix(rule_id: str, suffix: str = "") -> str:
@@ -123,8 +185,13 @@ def build_invalid_param_sentinel_rule(
 
 
 __all__ = [
+    "bool_param",
     "build_invalid_param_sentinel_rule",
     "canonicalize_payload",
+    "declaration_evidence",
     "evidence_id",
+    "invalid_declaration_evidence",
+    "invalid_target_evidence",
+    "marker_severity",
     "with_rule_id_suffix",
 ]

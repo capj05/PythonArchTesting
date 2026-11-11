@@ -49,7 +49,9 @@ def _malformed_as_input_error(func: _F) -> _F:
     def wrapper(*args: Any, **kwargs: Any) -> dict[str, Any]:
         try:
             return func(*args, **kwargs)
-        except (KeyError, TypeError, AttributeError) as error:
+        except ToolInputError:
+            raise
+        except (KeyError, TypeError, AttributeError, ValueError) as error:
             raise ToolInputError(f"malformed report: {error!r}") from error
 
     return wrapper  # type: ignore[return-value]

@@ -7,9 +7,10 @@ from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
 from ..common import (
+    bool_param,
     build_invalid_param_sentinel_rule,
-    canonicalize_payload,
-    evidence_id,
+    declaration_evidence,
+    invalid_target_evidence,
     with_rule_id_suffix,
 )
 
@@ -30,15 +31,6 @@ def _is_factory_capable_method(entity: Entity) -> bool:
         return True
     method_kind = entity.surface_meta.get("method_kind")
     return method_kind in {"class", "static"}
-
-
-def _bool_param(
-    params: dict[str, Any], name: str, *, default: bool
-) -> tuple[bool, bool]:
-    value = params.get(name, default)
-    if isinstance(value, bool):
-        return value, True
-    return default, False
 
 
 def _invalid_param_sentinel_rule(
@@ -80,28 +72,13 @@ def compile_required_factory(
     params_kwargs = dict(declaration.params)
     compiler_evidence: List[Evidence] = []
 
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-
     if source_entity.kind != "method":
-        payload = {
-            "decorator": "required_factory",
-            "issue": "compiler_invalid_target",
-            "expected_kind": "method",
-            "found_kind": source_entity.kind,
-        }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id("compiler_invalid_target", payload),
-                type="compiler_invalid_target",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(payload),
-                location=location,
+            invalid_target_evidence(
+                source_entity,
+                declaration,
+                decorator="required_factory",
+                expected_kind="method",
             )
         )
         return [], compiler_evidence, []
@@ -114,14 +91,11 @@ def compile_required_factory(
             "entity_name": source_entity.name,
         }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id("compiler_invalid_source_method", payload),
-                type="compiler_invalid_source_method",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(payload),
-                location=location,
+            declaration_evidence(
+                source_entity,
+                declaration,
+                evidence_type="compiler_invalid_source_method",
+                payload=payload,
             )
         )
         return [], compiler_evidence, []
@@ -136,16 +110,11 @@ def compile_required_factory(
             "valid": sorted(_VALID_SIGNATURE_MODES),
         }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id(
-                    "compiler_invalid_param", signature_mode_payload
-                ),
-                type="compiler_invalid_param",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(signature_mode_payload),
-                location=location,
+            declaration_evidence(
+                source_entity,
+                declaration,
+                evidence_type="compiler_invalid_param",
+                payload=signature_mode_payload,
             )
         )
         sentinel = _invalid_param_sentinel_rule(
@@ -181,16 +150,11 @@ def compile_required_factory(
             "valid": sorted(_VALID_SATISFY_WITH),
         }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id(
-                    "compiler_invalid_param", invalid_param_payload
-                ),
-                type="compiler_invalid_param",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(invalid_param_payload),
-                location=location,
+            declaration_evidence(
+                source_entity,
+                declaration,
+                evidence_type="compiler_invalid_param",
+                payload=invalid_param_payload,
             )
         )
         sentinel = _invalid_param_sentinel_rule(
@@ -203,7 +167,7 @@ def compile_required_factory(
         return [sentinel], compiler_evidence, []
 
     allow_inherited = bool(params_kwargs.get("allow_inherited", True))
-    allow_missing, allow_missing_valid = _bool_param(
+    allow_missing, allow_missing_valid = bool_param(
         params_kwargs,
         "allow_missing",
         default=False,
@@ -216,14 +180,11 @@ def compile_required_factory(
             "reason": "allow_missing must be a boolean",
         }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id("compiler_invalid_param", payload),
-                type="compiler_invalid_param",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(payload),
-                location=location,
+            declaration_evidence(
+                source_entity,
+                declaration,
+                evidence_type="compiler_invalid_param",
+                payload=payload,
             )
         )
         sentinel = _invalid_param_sentinel_rule(
@@ -252,16 +213,11 @@ def compile_required_factory(
             "valid": sorted(_VALID_RETURN_ANNOTATION_MODE),
         }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id(
-                    "compiler_invalid_param", return_annotation_payload
-                ),
-                type="compiler_invalid_param",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(return_annotation_payload),
-                location=location,
+            declaration_evidence(
+                source_entity,
+                declaration,
+                evidence_type="compiler_invalid_param",
+                payload=return_annotation_payload,
             )
         )
         sentinel = _invalid_param_sentinel_rule(
@@ -288,16 +244,11 @@ def compile_required_factory(
             "valid": sorted(_VALID_DETECTION_MODE),
         }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id(
-                    "compiler_invalid_param", detection_mode_payload
-                ),
-                type="compiler_invalid_param",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(detection_mode_payload),
-                location=location,
+            declaration_evidence(
+                source_entity,
+                declaration,
+                evidence_type="compiler_invalid_param",
+                payload=detection_mode_payload,
             )
         )
         sentinel = _invalid_param_sentinel_rule(
@@ -317,14 +268,11 @@ def compile_required_factory(
             "reason": "name_match='alias' requires non-empty aliases list",
         }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id("compiler_invalid_param", payload),
-                type="compiler_invalid_param",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(payload),
-                location=location,
+            declaration_evidence(
+                source_entity,
+                declaration,
+                evidence_type="compiler_invalid_param",
+                payload=payload,
             )
         )
         sentinel = _invalid_param_sentinel_rule(
@@ -344,14 +292,11 @@ def compile_required_factory(
             "reason": "name_match='regex' requires a pattern",
         }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id("compiler_invalid_param", payload),
-                type="compiler_invalid_param",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(payload),
-                location=location,
+            declaration_evidence(
+                source_entity,
+                declaration,
+                evidence_type="compiler_invalid_param",
+                payload=payload,
             )
         )
         sentinel = _invalid_param_sentinel_rule(
@@ -376,14 +321,11 @@ def compile_required_factory(
             "valid": ["exact", "alias", "regex"],
         }
         compiler_evidence.append(
-            Evidence(
-                evidence_id=evidence_id("compiler_invalid_param", name_match_payload),
-                type="compiler_invalid_param",
-                source="compiler",
-                role="source",
-                entity_id=source_entity.canonical_id,
-                payload=canonicalize_payload(name_match_payload),
-                location=location,
+            declaration_evidence(
+                source_entity,
+                declaration,
+                evidence_type="compiler_invalid_param",
+                payload=name_match_payload,
             )
         )
         sentinel = _invalid_param_sentinel_rule(

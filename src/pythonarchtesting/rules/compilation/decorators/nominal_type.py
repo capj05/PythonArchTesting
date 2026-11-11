@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence, Rule, RuleSelector
@@ -10,8 +10,9 @@ from pythonarchtesting.protocols.reference_resolution import normalize_reference
 
 from ..common import (
     build_invalid_param_sentinel_rule,
-    canonicalize_payload,
-    evidence_id,
+    declaration_evidence,
+    invalid_target_evidence,
+    marker_severity,
     with_rule_id_suffix,
 )
 
@@ -38,29 +39,6 @@ def _sentinel(
     )
 
 
-def _evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-    *,
-    evidence_type: str,
-    payload: dict[str, Any],
-) -> Evidence:
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id(evidence_type, payload),
-        type=evidence_type,
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
-
-
 def _resolve_source_base_entity(
     source_entity: Entity,
     declaration: DeclarationEntry,
@@ -79,7 +57,7 @@ def _resolve_source_base_entity(
             None,
             None,
             [
-                _evidence(
+                declaration_evidence(
                     source_entity,
                     declaration,
                     evidence_type="compiler_invalid_base_reference",
@@ -117,7 +95,7 @@ def _resolve_source_base_entity(
                 None,
                 None,
                 [
-                    _evidence(
+                    declaration_evidence(
                         source_entity,
                         declaration,
                         evidence_type="compiler_invalid_base_reference",
@@ -138,7 +116,7 @@ def _resolve_source_base_entity(
         None,
         None,
         [
-            _evidence(
+            declaration_evidence(
                 source_entity,
                 declaration,
                 evidence_type="compiler_invalid_base_reference",
@@ -146,15 +124,6 @@ def _resolve_source_base_entity(
             )
         ],
     )
-
-
-def _resolve_rule_severity(
-    params_kwargs: dict[str, Any],
-) -> Literal["error", "warning", "info"]:
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        return cast(Literal["error", "warning", "info"], base_severity_raw)
-    return "error"
 
 
 def _compile_nominal_rule(
@@ -174,15 +143,9 @@ def _compile_nominal_rule(
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     _ = cfg
     params_kwargs = dict(declaration.params)
-    base_severity = _resolve_rule_severity(params_kwargs)
+    base_severity = marker_severity(params_kwargs)
 
     if source_entity.kind != "class":
-        payload = {
-            "declaration": declaration_name,
-            "issue": "compiler_invalid_target",
-            "expected_kind": "class",
-            "found_kind": source_entity.kind,
-        }
         sentinel = _sentinel(
             source_entity,
             declaration_name=declaration_name,
@@ -195,11 +158,11 @@ def _compile_nominal_rule(
         return (
             [sentinel],
             [
-                _evidence(
+                invalid_target_evidence(
                     source_entity,
                     declaration,
-                    evidence_type="compiler_invalid_target",
-                    payload=payload,
+                    decorator=declaration_name,
+                    key="declaration",
                 )
             ],
             [],

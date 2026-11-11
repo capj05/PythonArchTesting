@@ -18,12 +18,14 @@ from .models import (
     RunMeta,
     TargetReport,
 )
-from .order import sort_matches, sort_results, sort_targets
+from .order import SEV_RANK, STAT_RANK, sort_matches, sort_results, sort_targets
 from .summary import build_results_summary
 from .target_ids import normalize_target_ids, slugify_target_id
 
 
-def _split_qualname(qualname: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+def split_qualname(qualname: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    """The class and the function a qualified name ends with (``<locals>``
+    left out); ``None`` for a part it does not have."""
     if not qualname:
         return None, None
     parts = [p for p in str(qualname).split(".") if p and p != "<locals>"]
@@ -34,9 +36,11 @@ def _split_qualname(qualname: Optional[str]) -> Tuple[Optional[str], Optional[st
     return parts[-2], parts[-1]
 
 
-def _entity_ref(value: Optional[Dict[str, Any]]) -> EntityRef:
+def entity_ref(value: Optional[Dict[str, Any]]) -> EntityRef:
+    """The typed reference to the entity a serialized ``source``/``target``
+    describes."""
     src = value or {}
-    cls, function = _split_qualname(src.get("qualname"))
+    cls, function = split_qualname(src.get("qualname"))
     return EntityRef(
         module=src.get("module"),
         qualname=src.get("qualname"),
@@ -47,7 +51,9 @@ def _entity_ref(value: Optional[Dict[str, Any]]) -> EntityRef:
     )
 
 
-def _evidence_item(value: Dict[str, Any]) -> EvidenceItem:
+def evidence_item(value: Dict[str, Any]) -> EvidenceItem:
+    """One serialized evidence entry as typed IR; a payload that is no
+    mapping is kept under ``value``."""
     location = value.get("location") or {}
     payload = value.get("payload")
     if not isinstance(payload, dict):
@@ -75,11 +81,9 @@ def _stable_key(item: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
 def _ordering_key(item: Dict[str, Any]) -> Tuple[Any, ...]:
     source = item.get("source") or {}
     target = item.get("target") or {}
-    sev_rank = {"error": 0, "warning": 1, "info": 2}
-    stat_rank = {"FAILED": 0, "ERROR": 1, "SKIPPED": 2, "WARNING": 2, "OK": 3}
     return (
-        sev_rank.get(str(item.get("severity") or "").lower(), 9),
-        stat_rank.get(str(item.get("status") or ""), 9),
+        SEV_RANK.get(str(item.get("severity") or "").lower(), 9),
+        STAT_RANK.get(str(item.get("status") or ""), 9),
         str(item.get("rule_id") or ""),
         str(item.get("source_entity_id") or ""),
         str(item.get("target_entity_id") or ""),
@@ -103,7 +107,9 @@ def _config_fingerprint(config_snapshot: Optional[Dict[str, Any]]) -> Optional[s
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
-def _result_item(item: Dict[str, Any]) -> ResultItem:
+def result_item(item: Dict[str, Any]) -> ResultItem:
+    """One serialized result as typed IR, with its stable and ordering keys;
+    keys the IR has no field for are kept in ``extras``."""
     known_keys = {
         "result_id",
         "project_id",
@@ -153,9 +159,9 @@ def _result_item(item: Dict[str, Any]) -> ResultItem:
         confidence=(
             float(item["confidence"]) if item.get("confidence") is not None else None
         ),
-        source=_entity_ref(item.get("source") or {}),
-        target=_entity_ref(item.get("target") or {}),
-        evidence=tuple(_evidence_item(ev) for ev in (item.get("evidence") or [])),
+        source=entity_ref(item.get("source") or {}),
+        target=entity_ref(item.get("target") or {}),
+        evidence=tuple(evidence_item(ev) for ev in (item.get("evidence") or [])),
         details=dict(item.get("details") or {}),
         fix_hints=tuple(str(v) for v in (item.get("fix_hints") or [])),
         tags=tuple(str(v) for v in (item.get("tags") or [])),
@@ -175,7 +181,8 @@ def _result_item(item: Dict[str, Any]) -> ResultItem:
     )
 
 
-def _matching_summary(matches: Iterable[Dict[str, Any]]) -> MatchingSummary:
+def matching_summary(matches: Iterable[Dict[str, Any]]) -> MatchingSummary:
+    """How many matches there are in total and per status."""
     rows = list(matches)
     summary = {
         "total": len(rows),
@@ -197,7 +204,8 @@ def _matching_summary(matches: Iterable[Dict[str, Any]]) -> MatchingSummary:
     )
 
 
-def _results_summary(payload: Optional[Dict[str, Any]]) -> ResultsSummary:
+def results_summary(payload: Optional[Dict[str, Any]]) -> ResultsSummary:
+    """A serialized results summary (``build_results_summary``) as typed IR."""
     data = payload or {}
     return ResultsSummary(
         results_total=int(data.get("results_total", 0)),
@@ -260,7 +268,7 @@ def report_dict_to_ir(report: Dict[str, Any], kind: str) -> ReportDocument:
     targets: List[TargetReport] = []
     for target_payload in target_payloads:
         results_payload = [dict(v) for v in (target_payload.get("results") or [])]
-        results_ir = sort_results([_result_item(item) for item in results_payload])
+        results_ir = sort_results([result_item(item) for item in results_payload])
         matching_payload = dict(target_payload.get("matching") or {})
         matches = tuple(
             sort_matches(dict(v) for v in (matching_payload.get("matches") or []))
@@ -289,10 +297,10 @@ def report_dict_to_ir(report: Dict[str, Any], kind: str) -> ReportDocument:
                 matching=MatchingSection(
                     matches=matches,
                     matching_config=dict(matching_payload.get("matching_config") or {}),
-                    summary=_matching_summary(matches),
+                    summary=matching_summary(matches),
                 ),
                 results=tuple(results_ir),
-                summary=_results_summary(summary_payload),
+                summary=results_summary(summary_payload),
                 artifacts=tuple(
                     dict(v) for v in (target_payload.get("artifacts") or [])
                 ),
@@ -307,7 +315,7 @@ def report_dict_to_ir(report: Dict[str, Any], kind: str) -> ReportDocument:
         targets_total=int(summary_payload.get("targets_total", len(targets))),
         targets_failed=int(summary_payload.get("targets_failed", 0)),
         targets_passed=int(summary_payload.get("targets_passed", 0)),
-        results=_results_summary(results_summary_payload),
+        results=results_summary(results_summary_payload),
     )
 
     return ReportDocument(

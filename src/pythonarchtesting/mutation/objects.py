@@ -229,48 +229,92 @@ def object_class(
         a.arg: a for a in arguments.posonlyargs + arguments.args + arguments.kwonlyargs
     }
     called = called_on(function, obj)
-    annotation: Optional[ast.expr] = None
     if obj in parameters:
         if hints is not None:
             return owner_class(classes, None, called, hints, obj)
-        annotation = parameters[obj].annotation
-        if annotated_class(annotation) in ("Any", "object"):
-            annotation = None  # says no more than no annotation
-        found = owner_class(classes, annotation, called)
-        if found is not None or annotation is not None:
-            return found
+        decided, found = _parameter_class(classes, parameters[obj], called)
     else:
-        values: list[ast.expr] = []
-        for node in body_nodes(function):
-            if (
-                isinstance(node, ast.AnnAssign)
-                and isinstance(node.target, ast.Name)
-                and node.target.id == obj
-            ):
-                annotation = node.annotation
-            elif isinstance(node, ast.Assign) and any(
-                isinstance(t, ast.Name) and t.id == obj for t in node.targets
-            ):
-                values.append(node.value)
-        if annotation is not None:
-            named = classes.get(annotated_class(annotation) or "", [])
-            return named[0] if len(named) == 1 else None
-        values = [v for v in values if not _is_none(v)] or values
-        if any(isinstance(value, _BUILTIN_VALUES) for value in values):
-            return None  # a literal, a display, a computed value: no object
-        built = {
-            named[0].name: named[0]
-            for value in values
-            if isinstance(value, ast.Call)
-            for named in [classes.get(call_name(value.func) or "", [])]
-            if len(named) == 1
-        }
-        if len(built) > 1:
-            return None  # given objects of two classes
-        if built and all(
-            isinstance(v, ast.Call) and call_name(v.func) in built for v in values
+        decided, found = _local_class(classes, function, obj)
+    if decided:
+        return found
+    return _fitting_class(classes, called, reads)
+
+
+def _parameter_class(
+    classes: dict[str, list[ast.ClassDef]], parameter: ast.arg, called: set[str]
+) -> tuple[bool, Optional[ast.ClassDef]]:
+    """Whether the parameter's annotation or the methods called on it decide
+    its class (``owner_class``), and the class they decide. An annotation
+    ``Any`` or ``object`` says no more than none; an annotation decides even
+    when it names no project class, so only an unannotated parameter whose
+    class ``owner_class`` cannot tell is left to ``_fitting_class``."""
+    annotation = parameter.annotation
+    if annotated_class(annotation) in ("Any", "object"):
+        annotation = None  # says no more than no annotation
+    found = owner_class(classes, annotation, called)
+    return found is not None or annotation is not None, found
+
+
+def _local_class(
+    classes: dict[str, list[ast.ClassDef]],
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+    obj: str,
+) -> tuple[bool, Optional[ast.ClassDef]]:
+    """Whether the local ``obj``'s annotation or the assignments to it decide
+    its class, and the class they decide (as ``object_class`` describes).
+    An annotation always decides; the assignments decide
+    when one of them is a builtin value, when they build objects of two
+    classes, or when every one builds an object of the same class."""
+    annotation, values = _local_assignments(function, obj)
+    if annotation is not None:
+        named = classes.get(annotated_class(annotation) or "", [])
+        return True, named[0] if len(named) == 1 else None
+    values = [v for v in values if not _is_none(v)] or values
+    if any(isinstance(value, _BUILTIN_VALUES) for value in values):
+        return True, None  # a literal, a display, a computed value: no object
+    built = {
+        named[0].name: named[0]
+        for value in values
+        if isinstance(value, ast.Call)
+        for named in [classes.get(call_name(value.func) or "", [])]
+        if len(named) == 1
+    }
+    if len(built) > 1:
+        return True, None  # given objects of two classes
+    if built and all(
+        isinstance(v, ast.Call) and call_name(v.func) in built for v in values
+    ):
+        return True, next(iter(built.values()))
+    return False, None
+
+
+def _local_assignments(
+    function: ast.FunctionDef | ast.AsyncFunctionDef, obj: str
+) -> tuple[Optional[ast.expr], list[ast.expr]]:
+    """The annotation of the local ``obj`` (the last one given, if any) and
+    the values plainly assigned to it (``obj = ...``), in source order."""
+    annotation: Optional[ast.expr] = None
+    values: list[ast.expr] = []
+    for node in body_nodes(function):
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == obj
         ):
-            return next(iter(built.values()))
+            annotation = node.annotation
+        elif isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == obj for t in node.targets
+        ):
+            values.append(node.value)
+    return annotation, values
+
+
+def _fitting_class(
+    classes: dict[str, list[ast.ClassDef]], called: set[str], reads: Sequence[str]
+) -> Optional[ast.ClassDef]:
+    """The one project class that has every method in ``called`` and every
+    attribute in ``reads``; none when only a builtin container's methods
+    are called and nothing is read, since those tell no project class."""
     if not reads and (not called or called <= _BUILTIN_METHODS):
         return None  # a builtin container's methods tell no project class
     fitting = [

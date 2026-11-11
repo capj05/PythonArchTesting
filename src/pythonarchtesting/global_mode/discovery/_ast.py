@@ -10,7 +10,7 @@ from typing import Optional, Union
 
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.principles.task import entity_name
-from pythonarchtesting.util.ast_utils import is_abstract_method, is_interface
+from pythonarchtesting.util.ast_utils import is_abstract_or_stub, is_interface
 from pythonarchtesting.util.module_names import project_module_by_suffix
 
 FunctionNode = Union[ast.FunctionDef, ast.AsyncFunctionDef]
@@ -314,13 +314,13 @@ def interface_classes(entities: Sequence[Entity]) -> set[str]:
 
 def runnable_method(entity: Entity, node: FunctionNode, interfaces: set[str]) -> bool:
     """Whether a case can run the method on an object of its class: it is
-    not abstract (``is_abstract_method``) and its class is no interface, an
+    not abstract (``is_abstract_or_stub``) and its class is no interface, an
     object of which cannot be built."""
     owner = owner_class(entity)
     return (
         owner is not None
         and f"{owner[0]}.{owner[1]}" not in interfaces
-        and not is_abstract_method(node)
+        and not is_abstract_or_stub(node)
     )
 
 

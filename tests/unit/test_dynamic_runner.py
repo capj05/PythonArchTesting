@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from pythonarchtesting.dynamic.runner import import_target_spec, run_cases
+from pythonarchtesting.dynamic.runner import (
+    import_target_spec,
+    run_case_batch,
+    run_cases,
+)
 
 _SHOP = """
 from __future__ import annotations
@@ -309,6 +313,73 @@ def test_target_output_does_not_corrupt_the_response(package_root: Path):
     assert outcome.status == "completed"
     assert "noise printed at import time" in outcome.stderr
     assert "noise printed while running" in outcome.stderr
+
+
+_RAW_OUTPUT = """
+import os
+import subprocess
+import sys
+
+
+def raw():
+    os.write(1, b"raw to fd 1\\n")
+    os.write(2, b"raw to fd 2\\n")
+    return 1
+
+
+def reopened():
+    sys.stdout = os.fdopen(1, "w")
+    print("printed through a reopened stdout", flush=True)
+    return 1
+
+
+def child():
+    subprocess.run(["echo", "echoed by a child process"], check=True)
+    return 1
+"""
+
+
+@pytest.mark.parametrize(
+    ("qualname", "written"),
+    [
+        ("raw", ["raw to fd 1", "raw to fd 2"]),
+        ("reopened", ["printed through a reopened stdout"]),
+        ("child", ["echoed by a child process"]),
+    ],
+)
+def test_writes_to_the_standard_descriptors_do_not_corrupt_the_response(
+    package_root: Path, qualname: str, written: list[str]
+):
+    (package_root / "shop.py").write_text(textwrap.dedent(_RAW_OUTPUT))
+
+    outcome = _run(package_root, qualname, "function", [{}])
+
+    assert outcome.status == "completed", outcome.error
+    assert outcome.cases[0]["status"] == "passed"
+    assert all(text in outcome.stderr for text in written)
+
+
+@pytest.mark.parametrize("qualname", ["raw", "reopened", "child"])
+def test_a_batch_survives_writes_to_the_standard_descriptors(
+    package_root: Path, qualname: str
+):
+    (package_root / "shop.py").write_text(textwrap.dedent(_RAW_OUTPUT))
+    job = {
+        "id": "0",
+        "qualname": qualname,
+        "kind": "function",
+        "cases": [{}],
+        "init": None,
+        "timeout_s": 10.0,
+        "observe": {},
+    }
+
+    outcome = run_case_batch(
+        target_root=package_root, module_path="shop", jobs=[job, {**job, "id": "1"}]
+    )
+
+    assert outcome.status == "completed", outcome.error
+    assert [outcome.jobs[key]["status"] for key in ("0", "1")] == ["completed"] * 2
 
 
 def test_an_exception_from_the_call_is_reported_not_judged(package_root: Path):

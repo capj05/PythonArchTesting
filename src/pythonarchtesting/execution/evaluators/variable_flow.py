@@ -5,7 +5,7 @@ from typing import Any
 
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
 from pythonarchtesting.entities import Entity
-from pythonarchtesting.execution.flow_cfg import build_function_cfg
+from pythonarchtesting.execution import flow_cfg
 from pythonarchtesting.matching import MatchResult
 
 from .messages import build_rule_result
@@ -29,7 +29,7 @@ class VariableFlowEvaluator:
             if isinstance(item, str)
         ]
         variable = str(rule.params.get("variable", ""))
-        cfg = build_function_cfg(target, variable=variable)
+        cfg = flow_cfg.build_function_cfg(target, variable=variable)
         details: dict[str, Any] = {
             "variable": variable,
             "required_stages": required_stages,

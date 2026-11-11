@@ -8,6 +8,7 @@ from pythonarchtesting.matching import MatchResult
 from pythonarchtesting.protocols.attribute_introspection import (
     ResolvedAttribute,
     collect_attributes,
+    member_category_priority,
 )
 
 from .annotation_compatibility import compare_annotation_text
@@ -61,18 +62,10 @@ def _candidate_priority(
     return (
         0 if storage in {"class", "instance"} and member.storage == storage else 1,
         0 if not member.inherited else 1,
-        _member_category_priority(member),
+        member_category_priority(member),
         0 if member.annotation is not None else 1,
         member.lineno,
     )
-
-
-def _member_category_priority(member: ResolvedAttribute) -> int:
-    if member.origin in {"dynamic_setattr_instance", "dynamic_setattr_class"}:
-        return 2
-    if member.storage == "property" or member.descriptor_kind is not None:
-        return 1
-    return 0
 
 
 def _descriptor_matches(

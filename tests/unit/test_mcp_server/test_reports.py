@@ -13,6 +13,7 @@ from pythonarchtesting.mcp_server.errors import ToolInputError
 from pythonarchtesting.mcp_server.reports import (
     explain_rule,
     explain_target,
+    propose_mapping,
     summarize_report,
 )
 
@@ -146,3 +147,17 @@ def test_malformed_report_raises_tool_input_error(report_path: Path, tmp_path: P
         explain_target(str(path), target["target_id"])
     with pytest.raises(ToolInputError, match="malformed report"):
         explain_rule(str(path), "anything")
+
+
+def test_malformed_entity_id_raises_tool_input_error(report_path: Path, tmp_path: Path):
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    target = report["targets"][0]
+    match = target["matching"]["matches"][0]
+    match["status"], match["source_entity_id"] = "unmatched", "a:b"
+    path = tmp_path / "broken.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    with pytest.raises(ToolInputError, match="malformed report.*canonical entity id"):
+        propose_mapping(str(path), target["target_id"])
+    # the wrapper passes the tools' own refusals on unchanged
+    with pytest.raises(ToolInputError, match="^unknown target|2 targets"):
+        propose_mapping(str(path), "nope")

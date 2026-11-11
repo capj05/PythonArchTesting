@@ -711,14 +711,17 @@ def _skip_class_attribute_name(name: str) -> bool:
 def _attribute_priority(member: ResolvedAttribute) -> tuple[int, int, int, int, int]:
     return (
         0 if not member.inherited else 1,
-        _member_category_priority(member),
+        member_category_priority(member),
         0 if member.annotation is not None else 1,
         0 if member.storage != "property" else 1,
         member.lineno,
     )
 
 
-def _member_category_priority(member: ResolvedAttribute) -> int:
+def member_category_priority(member: ResolvedAttribute) -> int:
+    """How strongly ``member`` declares the attribute, lower first: a plain
+    attribute, then a property or descriptor, then one set dynamically
+    (``setattr``)."""
     if member.origin in {"dynamic_setattr_instance", "dynamic_setattr_class"}:
         return 2
     if member.storage == "property" or member.descriptor_kind is not None:
@@ -900,4 +903,5 @@ __all__ = [
     "direct_declared_dynamic_attributes",
     "direct_declared_instance_attributes",
     "direct_declared_property_attributes",
+    "member_category_priority",
 ]

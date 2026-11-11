@@ -19,7 +19,7 @@
   ``x.m(...)``, ``m`` a polymorphic method of a base or of a candidate
   below it, and ``x`` not ``self`` and no object that is obviously a
   builtin one (``_builtin_object``). A method is polymorphic when it is
-  abstract (``is_abstract_method``) or two classes of the hierarchy define
+  abstract (``is_abstract_or_stub``) or two classes of the hierarchy define
   it: calling a method of the base no variant overrides
   (``scores.update(extra)`` beside an ``Item.update``) is no use of the
   hierarchy. An obviously builtin object is a literal or a comprehension,

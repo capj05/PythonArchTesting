@@ -14,8 +14,8 @@ from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Rule, RuleSelector
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import with_rule_id_suffix
-from .runtime_structure import invalid_param, invalid_target, marker_severity
+from ..common import marker_severity, with_rule_id_suffix
+from .runtime_structure import invalid_param, invalid_target
 
 MARKER = "forbid_private_access"
 RULE_ID = "ENC001/forbid_private_access/v1"

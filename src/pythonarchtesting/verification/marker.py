@@ -385,36 +385,16 @@ def verify_marker(
     without ``files`` only the files of the entities the marker is declared
     on (every file for a marker on the root package). ``mutants`` lists
     every mutant tried, killed ones too."""
-    from pythonarchtesting.mutation.operators import (
-        DEFAULT_LIBRARIES,
-        generate_mutants,
-    )
-
     markers, marker_files, forbidden_by_file, aims = _scope(source_path, rule, config)
-    own_modules = _own_modules(source_path)
-    forbidden_libraries = sorted(
-        {
-            name
-            for names in forbidden_by_file.values()
-            for name in names
-            if name.split(".")[0] not in own_modules
-        }
-    )
+    forbidden_libraries = _forbidden_libraries(source_path, forbidden_by_file)
     runtime_only = _RUNTIME_ONLY in markers
     markers.discard(_RUNTIME_ONLY)
     chosen_by_marker = operators is None
     operators = _operators(markers, operators, runtime_only, dynamic)
-    chosen_libraries = tuple(libraries or forbidden_libraries or DEFAULT_LIBRARIES)
     skipped: list[tuple[str, str]] = []
-    try:
-        mutants = generate_mutants(
-            source_path,
-            operators,
-            libraries=chosen_libraries,
-            skipped=skipped,
-        )
-    except ValueError as exc:
-        raise InvalidInputError(str(exc)) from exc
+    mutants = _generate(
+        source_path, operators, libraries or forbidden_libraries, skipped
+    )
     wanted = _wanted_files(files, marker_files)
     mutants = _narrow(
         mutants,
@@ -430,60 +410,22 @@ def verify_marker(
         )
     total_generated = len(mutants)
     mutants = sample_by_operator(mutants, int(max_mutants))
-    truncated = total_generated > len(mutants)
     policy = sandbox_policy(dynamic, sandbox, sandbox_memory_mb)
-    try:
-        loaded, applied = resolve_config(source_path, config)
-    except (ConfigurationError, OSError) as exc:
-        raise InvalidInputError(str(exc)) from exc
+    loaded, applied = _resolve_config(source_path, config)
     base_results, results = _run(source_path, mutants, loaded, rule, dynamic, policy)
     if not any(rule_matches(str(r.rule_id), rule) for r in base_results):
         raise InvalidInputError(
             f"no rule {rule!r} in the reference; give a marker it declares "
             "or a rule id prefix"
         )
-    base_outcome, base_failing, base_why = mutant_outcome(base_results, rule)
     gaps = _case_gaps(base_results, rule)
     reported = [_mutant_entry(m, results[m.id], rule, gaps) for m in mutants]
-    counts = {
-        key: sum(1 for m in reported if m["outcome"] == key)
-        for key in ("killed", "survived", "not_run")
-    }
-    reference_passes = base_outcome == "survived"
     return {
         "rule": rule,
         "config": applied,
         "dynamic": dynamic,
-        "reference_passes": reference_passes,
-        "reference_failing": base_failing if not reference_passes else [],
-        "reference_why": base_why if not reference_passes else [],
-        # Not every mutant was tried when the sample was cut: no acceptance.
-        "accepted": reference_passes
-        and counts["survived"] == 0
-        and counts["not_run"] == 0
-        and not truncated,
-        "total": len(reported),
-        "generated": total_generated,
-        "truncated": truncated,
-        **counts,
-        "scope": {
-            "markers": sorted(markers),
-            "operators": sorted(set(operators)),
-            "files": sorted(wanted) if wanted is not None else "all",
-            **(
-                {
-                    "libraries": sorted(
-                        {
-                            m.imported
-                            for m in mutants
-                            if m.operator in ("add_library", "dynamic_import")
-                        }
-                    )
-                }
-                if {"add_library", "dynamic_import"} & set(operators)
-                else {}
-            ),
-        },
+        **_verdict(base_results, rule, reported, total_generated),
+        "scope": _scope_report(markers, operators, wanted, mutants),
         "by_operator": _by_operator(reported),
         # Files the operators could not read (no mutant was made in them).
         **(
@@ -497,6 +439,116 @@ def verify_marker(
             for gap in gaps
         ],
         "mutants": reported,
+    }
+
+
+def _forbidden_libraries(
+    source_path: Path, forbidden_by_file: dict[str, Any]
+) -> list[str]:
+    """The libraries outside the reference that the marker forbids: an
+    ``add_library`` mutant imports one of them, not a default library."""
+    own_modules = _own_modules(source_path)
+    return sorted(
+        {
+            name
+            for names in forbidden_by_file.values()
+            for name in names
+            if name.split(".")[0] not in own_modules
+        }
+    )
+
+
+def _generate(
+    source_path: Path,
+    operators: list[str],
+    libraries: list[str],
+    skipped: list[tuple[str, str]],
+) -> list[Any]:
+    """Every mutant the ``operators`` make in the reference, with the
+    ``libraries`` given (the default ones when none is); the files that could
+    not be read are added to ``skipped``. An operator that cannot be applied
+    is invalid input."""
+    from pythonarchtesting.mutation.operators import (
+        DEFAULT_LIBRARIES,
+        generate_mutants,
+    )
+
+    try:
+        return generate_mutants(
+            source_path,
+            operators,
+            libraries=tuple(libraries or DEFAULT_LIBRARIES),
+            skipped=skipped,
+        )
+    except ValueError as exc:
+        raise InvalidInputError(str(exc)) from exc
+
+
+def _resolve_config(source_path: Path, config: Optional[str]) -> tuple[Any, Any]:
+    """The loaded configuration the rules run with and the file it came from;
+    a configuration that cannot be read is invalid input."""
+    try:
+        return resolve_config(source_path, config)
+    except (ConfigurationError, OSError) as exc:
+        raise InvalidInputError(str(exc)) from exc
+
+
+def _verdict(
+    base_results: list[Any],
+    rule: str,
+    reported: list[dict[str, Any]],
+    total_generated: int,
+) -> dict[str, Any]:
+    """Whether the reference passes, whether the marker is accepted, and the
+    mutant counts behind it. A sample cut short (``truncated``) is never
+    accepted: not every mutant was tried."""
+    base_outcome, base_failing, base_why = mutant_outcome(base_results, rule)
+    counts = {
+        key: sum(1 for m in reported if m["outcome"] == key)
+        for key in ("killed", "survived", "not_run")
+    }
+    truncated = total_generated > len(reported)
+    reference_passes = base_outcome == "survived"
+    return {
+        "reference_passes": reference_passes,
+        "reference_failing": base_failing if not reference_passes else [],
+        "reference_why": base_why if not reference_passes else [],
+        "accepted": reference_passes
+        and counts["survived"] == 0
+        and counts["not_run"] == 0
+        and not truncated,
+        "total": len(reported),
+        "generated": total_generated,
+        "truncated": truncated,
+        **counts,
+    }
+
+
+def _scope_report(
+    markers: set[str],
+    operators: list[str],
+    wanted: Optional[set[str]],
+    mutants: list[Any],
+) -> dict[str, Any]:
+    """What the run covered: the markers, the operators, the files, and the
+    libraries the library operators imported when one of them ran."""
+    return {
+        "markers": sorted(markers),
+        "operators": sorted(set(operators)),
+        "files": sorted(wanted) if wanted is not None else "all",
+        **(
+            {
+                "libraries": sorted(
+                    {
+                        m.imported
+                        for m in mutants
+                        if m.operator in ("add_library", "dynamic_import")
+                    }
+                )
+            }
+            if {"add_library", "dynamic_import"} & set(operators)
+            else {}
+        ),
     }
 
 

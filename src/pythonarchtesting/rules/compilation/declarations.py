@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
-from pythonarchtesting.entities import DeclarationEntry
-from pythonarchtesting.rules.compilation.common import canonicalize_payload
+from pythonarchtesting.entities import DeclarationEntry, Entity
+from pythonarchtesting.rules.compilation.common import (
+    canonicalize_payload,
+    declaration_evidence,
+)
 
 _SUPPORTED_DECLARATION_KINDS = frozenset(
     {
@@ -239,7 +242,95 @@ def declaration_rule_id_suffixes(
     return suffixes
 
 
+def invalid_annotation_evidence(source_entity: Entity, entry: DeclarationEntry) -> Any:
+    """The evidence that ``entry``, a marker annotation the extractor could not
+    read as a declaration (``is_invalid_annotation_declaration``), was left
+    out of compilation."""
+    payload = {
+        "declaration": entry.kind,
+        "issue": "invalid_declaration",
+        "raw": entry.raw,
+        "unsupported": entry.unsupported,
+        "base_annotation": entry.base_annotation,
+        "container": entry.container,
+    }
+    return declaration_evidence(
+        source_entity,
+        entry,
+        evidence_type="compiler_invalid_declaration",
+        payload=payload,
+    )
+
+
+def compile_declarations(
+    source_entities: list[Entity],
+    cfg: Any,
+    compilers: Mapping[str, Any],
+    with_source_entities: Collection[str],
+) -> tuple[list[Any], list[Any], list[Any]]:
+    """The rules, compiler evidence and compiler results of every declaration
+    on ``source_entities`` that one of ``compilers`` (by declaration kind)
+    compiles, in entity order. An unreadable declaration gives evidence
+    instead; a kind no compiler handles is skipped. Compilers of the kinds in
+    ``with_source_entities`` also get every source entity."""
+    rules: list[Any] = []
+    compiler_evidence: list[Any] = []
+    compiler_results: list[Any] = []
+
+    for source_entity in source_entities:
+        declarations = normalize_declaration_entries(source_entity)
+        valid_declarations: list[DeclarationEntry] = []
+
+        for declaration in declarations:
+            compiler = compilers.get(declaration.kind)
+            if is_invalid_annotation_declaration(declaration):
+                compiler_evidence.append(
+                    invalid_annotation_evidence(source_entity, declaration)
+                )
+                continue
+            if compiler is None:
+                continue
+            valid_declarations.append(declaration)
+
+        for declaration, rule_id_suffix in zip(
+            valid_declarations,
+            declaration_rule_id_suffixes(valid_declarations),
+        ):
+            compiler = compilers[declaration.kind]
+            compiler_kwargs: dict[str, Any] = {"rule_id_suffix": rule_id_suffix}
+            if declaration.kind in with_source_entities:
+                compiler_kwargs["source_entities"] = source_entities
+            compiled_rules, evidence_items, results = compiler(
+                source_entity,
+                declaration,
+                cfg,
+                **compiler_kwargs,
+            )
+            rules.extend(compiled_rules)
+            compiler_evidence.extend(evidence_items)
+            compiler_results.extend(results)
+
+    return rules, compiler_evidence, compiler_results
+
+
+def in_rule_order(
+    rules: list[Any], compiler_evidence: list[Any], compiler_results: list[Any]
+) -> tuple[list[Any], list[Any], list[Any]]:
+    """The compiled rules and results sorted by rule id and source entity, so
+    that the output does not depend on the order entities were read in; the
+    evidence keeps its order."""
+    rules = sorted(rules, key=lambda r: (r.rule_id, r.selector.source_entity_id))
+    compiler_results = sorted(
+        compiler_results, key=lambda r: (r.rule_id, r.source_entity_id)
+    )
+    return rules, compiler_evidence, compiler_results
+
+
 __all__ = [
+    "compile_declarations",
+    "declaration_rule_id_suffixes",
+    "in_rule_order",
+    "invalid_annotation_evidence",
     "declaration_rule_id_suffixes",
     "is_invalid_annotation_declaration",
     "normalize_declaration_entries",

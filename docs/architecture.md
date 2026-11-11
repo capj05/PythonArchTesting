@@ -129,7 +129,10 @@ the output pipes open.
 variable but `PYTHONHASHSEED=0`, wall-clock timeout, working directory set to the target root) and hands the cases to
 `dynamic.probe` as JSON on stdin. The probe is a standard-library-only script:
 it imports the target, calls it once per case, and writes one JSON result to stdout
-while the target's own output is redirected to stderr. Import errors, timeouts,
+while the target's own output is redirected to stderr. The result goes out
+through a duplicate of descriptor 1 taken before the target is imported, and
+descriptor 1 itself is pointed at stderr, so not even a raw `os.write(1, ...)`
+or a process the target starts can corrupt it. Import errors, timeouts,
 and crashed interpreters come back as probe statuses rather than exceptions, so
 one broken target cannot abort a multi-target run.
 
