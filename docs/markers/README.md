@@ -7,6 +7,105 @@ see [../api-reference.md](../api-reference.md). For ready-made combinations see
 
 All markers are imported from `pythonarchtesting.rules`.
 
+## Severity
+
+Every marker except `flow` takes `severity`: `"error"` (the default),
+`"warning"` or `"info"`, in any case; `severity=None` is the default. Any other
+value (`"fatal"`, `"warn"`, `1`) makes the declaration invalid, like an invalid
+value of any other argument: the marker is not compiled with a guessed
+severity but dropped, with a `compiler_invalid_param` sentinel rule for the
+parameter `severity` (valid values `["error", "warning", "info"]`) and compiler
+evidence with the issue `invalid_severity`.
+
+## Logical And Enumerated Arguments
+
+The same rule holds for every logical argument (one typed `bool`:
+`declared_only`, `allow_missing`, `ignore_type_checking`, `transitive`, …) and
+every enumerated argument (one that takes a value from a fixed list:
+`signature_mode`, `mode`, `name_match`, `storage`, `scope`, `policy`, …) of
+every marker:
+
+- A logical argument takes only `True` or `False`. Any other value (`"no"`,
+  `"false"`, `1`, `0`) is not read for its truthiness but makes the
+  declaration invalid: a `compiler_invalid_param` sentinel rule for the
+  argument (valid values `[True, False]`) and compiler evidence with the issue
+  `invalid_<argument>`, for example `invalid_declared_only`.
+- An enumerated argument takes only the values its marker's page lists, in
+  any case where the marker reads it so (`signature_mode="Exact"` is
+  `"exact"`). Any other value makes the declaration invalid instead of being
+  replaced by the default. An argument that was already checked keeps the
+  report it always had (for example `forbid_imports(mode=…)` with the issue
+  `invalid_mode`); the others report it as a logical argument does: a
+  sentinel with the valid values and the issue `invalid_<argument>`, for
+  example `required_entity_signature(mode="strict")` with `invalid_mode`.
+- `None` declares the default of either kind, as if the argument were left
+  out. The same holds for every argument whose default is `None`
+  (`enforce_layers(closed=None)`, `forbid_private_access(allow=None)`,
+  `enforce_flow(cases=None)`, which is then no runtime check).
+
+The sentinel and the evidence are the ones the marker reports an invalid
+severity with.
+
+## Other Invalid Argument Values
+
+Any other declaration dropped for an argument value is reported the same way:
+a `compiler_invalid_param` sentinel rule for the argument at fault, under the
+marker's `…/invalid_declaration/<argument>` (`required_factory`:
+`…/invalid_param/<argument>`) rule id, so the dropped marker is a FAILED
+result rather than missing from the report. That covers a name, list or
+pattern that is not valid (`required_attribute("")`,
+`required_method(name_match="regex", pattern="(")`), arguments that do not
+combine (`required_attribute(allow_property=True, storage="class")`), a
+`protocol` that names no `typing.Protocol` class, an `enforce_flow` whose
+`variable` is missing or invalid, and a `flow` marker without a stage. The
+compiler evidence keeps the issue it always had (`invalid_storage`,
+`compiler_invalid_protocol_reference`, `ambiguous_variable`, …).
+
+A marker declared where it checks nothing is reported the same way, with a
+sentinel for the argument `target_kind` (its value is the kind of the entity
+the marker stands on, `valid` the kinds it checks): `is_enum` on a function,
+`required_method` on a class, `enforce_layers` or `forbid_cycles` outside the
+root module (`__init__.py`), as `architecture_entry`. Two more places count
+as such: a `required_factory` on a plain instance method (argument
+`method_kind`) and a `required_attribute` outside the class body (argument
+`declaration_surface`). The compiler evidence is the one reported before
+(`compiler_invalid_target`, `compiler_invalid_source_method`,
+`compiler_invalid_surface`).
+
+A declaration the reference code cannot back — an `enforce_flow` in a
+function without `flow` markers, a `required_constructor` on a class that
+declares no constructor — is reported by its compiler evidence only
+(`--validate-declarations` shows it).
+
+## Unknown Keywords
+
+A keyword a marker does not take — usually a misspelling such as
+`required_method(declard_only=True)` — makes the declaration invalid instead
+of leaving the option it meant at its default: a `compiler_invalid_param`
+sentinel rule for that keyword under the marker's
+`…/invalid_declaration/<keyword>` rule id (`required_factory`:
+`…/invalid_param/<keyword>`) and compiler evidence with the issue
+`unknown_param`, whose `valid` lists the keywords the marker takes. The
+keywords are the parameters on the marker's page. A declaration its compiler
+already refused for another reason keeps that report. `flow` compiles to no
+rule; its unknown keyword is a warning instead (see [flow](flow.md)).
+
+## Positional Arguments
+
+A marker whose page lists one argument as `(positional)` takes exactly that
+one positional argument; every other argument is a keyword. A positional
+argument beyond it — `implements_protocol(Seller, "x")`,
+`required_attribute("name", 4)`, or any positional argument of a marker
+without one, such as `required_method("x")` — is not used for anything: the
+declaration reports it as a warning, an `arg` issue with the argument's index
+and position (`--validate-declarations` shows it). Only the first argument is
+the value; a literal after a first argument that cannot be read does not take
+its place. A keyword naming that positional argument when it is given
+positionally as well — `implements_protocol(Seller, protocol=Other)`,
+`required_attribute("n", name="m")` — would make Python reject the call; it is
+reported as a `kw` issue with `duplicate: "positional"` and not used, so the
+positional argument stays the value.
+
 ## Signature And Shape
 
 - [required_entity_signature](required_entity_signature.md) — function or method signature contract

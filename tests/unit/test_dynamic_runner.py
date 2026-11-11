@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from pythonarchtesting.dynamic.runner import import_target_spec, run_cases
+from pythonarchtesting.dynamic.runner import (
+    import_target_spec,
+    run_case_batch,
+    run_cases,
+)
 
 _SHOP = """
 from __future__ import annotations
@@ -200,6 +204,34 @@ def test_a_relative_import_within_a_subpackage_says_nothing_of_the_root(
     assert import_target_spec(root)[1] is None
 
 
+@pytest.mark.parametrize("venv", ["venv", ".venv", "__pycache__"])
+def test_a_virtual_environment_in_the_root_says_nothing_of_it(
+    tmp_path: Path, venv: str
+):
+    """A library in a ``venv`` the student handed in imports relatively deep
+    inside its own package; the root is no package for it (audit E3)."""
+    root = tmp_path / "capj05_capsky"
+    library = root / venv / "lib" / "pygments"
+    library.mkdir(parents=True)
+    (root / "shop.py").write_text("import inventory\n", encoding="utf-8")
+    (library / "lexer.py").write_text("from .... import x\n", encoding="utf-8")
+
+    assert import_target_spec(root)[1] is None
+
+
+def test_a_rewritten_module_is_looked_at_again(tmp_path: Path):
+    """What a module imports is remembered only while the file stays as it
+    was: a mutant written over it is read again."""
+    root = tmp_path / "capj05_capsky"
+    root.mkdir()
+    (root / "shop.py").write_text("import inventory\n", encoding="utf-8")
+    assert import_target_spec(root)[1] is None
+
+    (root / "shop.py").write_text("from . import inventory\n", encoding="utf-8")
+
+    assert import_target_spec(root)[1] == "capj05_capsky"
+
+
 def test_a_call_through_an_injected_object_is_attributed_to_its_module(
     package_root: Path,
 ):
@@ -281,6 +313,73 @@ def test_target_output_does_not_corrupt_the_response(package_root: Path):
     assert outcome.status == "completed"
     assert "noise printed at import time" in outcome.stderr
     assert "noise printed while running" in outcome.stderr
+
+
+_RAW_OUTPUT = """
+import os
+import subprocess
+import sys
+
+
+def raw():
+    os.write(1, b"raw to fd 1\\n")
+    os.write(2, b"raw to fd 2\\n")
+    return 1
+
+
+def reopened():
+    sys.stdout = os.fdopen(1, "w")
+    print("printed through a reopened stdout", flush=True)
+    return 1
+
+
+def child():
+    subprocess.run(["echo", "echoed by a child process"], check=True)
+    return 1
+"""
+
+
+@pytest.mark.parametrize(
+    ("qualname", "written"),
+    [
+        ("raw", ["raw to fd 1", "raw to fd 2"]),
+        ("reopened", ["printed through a reopened stdout"]),
+        ("child", ["echoed by a child process"]),
+    ],
+)
+def test_writes_to_the_standard_descriptors_do_not_corrupt_the_response(
+    package_root: Path, qualname: str, written: list[str]
+):
+    (package_root / "shop.py").write_text(textwrap.dedent(_RAW_OUTPUT))
+
+    outcome = _run(package_root, qualname, "function", [{}])
+
+    assert outcome.status == "completed", outcome.error
+    assert outcome.cases[0]["status"] == "passed"
+    assert all(text in outcome.stderr for text in written)
+
+
+@pytest.mark.parametrize("qualname", ["raw", "reopened", "child"])
+def test_a_batch_survives_writes_to_the_standard_descriptors(
+    package_root: Path, qualname: str
+):
+    (package_root / "shop.py").write_text(textwrap.dedent(_RAW_OUTPUT))
+    job = {
+        "id": "0",
+        "qualname": qualname,
+        "kind": "function",
+        "cases": [{}],
+        "init": None,
+        "timeout_s": 10.0,
+        "observe": {},
+    }
+
+    outcome = run_case_batch(
+        target_root=package_root, module_path="shop", jobs=[job, {**job, "id": "1"}]
+    )
+
+    assert outcome.status == "completed", outcome.error
+    assert [outcome.jobs[key]["status"] for key in ("0", "1")] == ["completed"] * 2
 
 
 def test_an_exception_from_the_call_is_reported_not_judged(package_root: Path):
@@ -426,3 +525,14 @@ def test_a_target_that_kills_the_interpreter_is_reported_as_crashed(
 
     assert outcome.status == "crashed"
     assert "exited with code 3" in (outcome.error or "")
+
+
+def test_a_module_saved_with_a_byte_order_mark_is_read(tmp_path: Path):
+    """Notepad saves UTF-8 with a BOM: its relative import still makes the
+    root a package (audit E5)."""
+    root = tmp_path / "capj05_capsky"
+    root.mkdir()
+    (root / "inventory.py").write_text("class Inventory: ...\n", encoding="utf-8")
+    (root / "shop.py").write_bytes(b"\xef\xbb\xbffrom .inventory import Inventory\n")
+
+    assert import_target_spec(root)[1] == "capj05_capsky"

@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, replace
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional, cast
 
 from pythonarchtesting.principles.catalog import (
     Principle,
@@ -292,8 +292,12 @@ def not_judged_reason(result: Mapping[str, Any]) -> str:
 
 def mapping_name(entity_id: str) -> tuple[str, str]:
     """The name a mapping gives a canonical entity id (``shop.sell``; the
-    package itself is ``__init__``), and the entity's kind."""
+    package itself is ``__init__``), and the entity's kind. An id with fewer
+    than four ``:``-separated parts (a hand-edited report) raises
+    ``ValueError``."""
     parts = str(entity_id).split(":")
+    if len(parts) < 4:
+        raise ValueError(f"not a canonical entity id: {entity_id!r}")
     module, qualname, kind = parts[-4], parts[-3], parts[-2]
     if kind == "module":
         return module or "__init__", kind
@@ -587,8 +591,12 @@ def classify_target(
                 continue
             for name in ("rules", "required_by"):
                 for item in finding.facts.get(name) or []:
-                    if item not in first.facts[name]:
-                        first.facts[name].append(item)
+                    # The first may lack the fact (a missing entity has no
+                    # required_by; a case that cannot set it up has).
+                    # (Every finding's facts are built as a dict.)
+                    have = cast(dict, first.facts).setdefault(name, [])
+                    if item not in have:
+                        have.append(item)
     return _collapsed(
         _without_delegations_of_builders(_without_reads_of_writes(findings))
     )

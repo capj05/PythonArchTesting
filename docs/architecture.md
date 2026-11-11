@@ -8,7 +8,10 @@ This is the current high-level pipeline for PythonArchTesting.
 2. Source entities and declaration metadata are extracted from the reference
    project in `pythonarchtesting.entities_extraction`.
 3. Declaration entries are normalized and compiled into rules in
-   `pythonarchtesting.rules.compilation`.
+   `pythonarchtesting.rules.compilation`. A `--source` holding `task.toml` has
+   no markers: `pythonarchtesting.principles.task` turns the catalogue
+   principle's checks into the same declaration entries, compiled by the same
+   compilers.
 4. Source entities are matched to target entities in `pythonarchtesting.matching`.
 5. Compiled rules are evaluated in `pythonarchtesting.execution.evaluators`.
 6. Reports are built and rendered in `pythonarchtesting.report`.
@@ -45,6 +48,7 @@ normalizes them into shared declaration entries.
 
 - `pythonarchtesting.rules.compilation.orchestrator`
 - `pythonarchtesting.rules.compilation.decorators.api_signature`
+- `pythonarchtesting.rules.compilation.decorators.architecture`
 - `pythonarchtesting.rules.compilation.decorators.attributes`
 - `pythonarchtesting.rules.compilation.decorators.constructors`
 - `pythonarchtesting.rules.compilation.decorators.enum_type`
@@ -54,7 +58,10 @@ normalizes them into shared declaration entries.
 - `pythonarchtesting.rules.compilation.decorators.member_absence`
 - `pythonarchtesting.rules.compilation.decorators.member_set`
 - `pythonarchtesting.rules.compilation.decorators.method_set`
+- `pythonarchtesting.rules.compilation.decorators.module_interface`
+- `pythonarchtesting.rules.compilation.decorators.module_structure`
 - `pythonarchtesting.rules.compilation.decorators.nominal_type`
+- `pythonarchtesting.rules.compilation.decorators.private_access`
 - `pythonarchtesting.rules.compilation.decorators.protocols`
 - `pythonarchtesting.rules.compilation.decorators.python_modifiers`
 - `pythonarchtesting.rules.compilation.decorators.runtime_structure`
@@ -72,7 +79,9 @@ the orchestrator.
 - `pythonarchtesting.matching.models`
 
 Matching chooses the best target entity for each source entity and records
-confidence and candidate details for reporting.
+confidence and candidate details for reporting. `matching.assisted` applies a
+`--mapping` (each pair checked first), `matching.fallback` pairs by name what
+the scores leave unpaired (`[matching] name_fallback`).
 
 ### Evaluation
 
@@ -83,22 +92,28 @@ confidence and candidate details for reporting.
 - `pythonarchtesting.execution.evaluators.registry`
 
 Each evaluator owns one rule family and produces result rows with messages, fix
-hints, evidence, and status.
+hints, evidence, and status. `registry` maps every rule type (the report's
+`category`) to its evaluator; the list above is a sample.
 
 ### Dynamic Checks
 
 - `pythonarchtesting.execution.evaluators.runtime_structure`
 - `pythonarchtesting.execution.evaluators.runtime_imports`
 - `pythonarchtesting.execution.evaluators.runtime_flow`
+- `pythonarchtesting.execution.evaluators.module_structure` (runtime layers
+  and cycles), `.module_interface`, `.architecture` (their runtime parts)
 - `pythonarchtesting.dynamic.batch`
 - `pythonarchtesting.dynamic.sandbox`
 - `pythonarchtesting.dynamic.runner`
 - `pythonarchtesting.dynamic.probe`
+- `pythonarchtesting.dynamic.translation` (reference names in markers and
+  cases translated to the target's)
 
 `runtime_calls`, `runtime_reference_calls`, `runtime_writes`,
 `runtime_instances`, `runtime_members`, `runtime_class_kind`,
-`runtime_protocol`, `runtime_pattern`, `runtime_imports`, and `runtime_flow`
-are the only evaluators that execute target code, and only
+`runtime_protocol`, `runtime_pattern`, `runtime_imports`, `runtime_flow`,
+`runtime_layers`, `runtime_cycles`, `runtime_module_interface`, and
+`architecture_runtime` are the only evaluators that execute target code, and only
 when the run was started with `--dynamic`: `run_projects(dynamic=True)` sets
 `RunState.dynamic_enabled`, and `runner.target_eval` then passes the target root
 to evaluation as `EvalContext.target_root`. When it is `None`, the evaluator
@@ -109,7 +124,10 @@ matched call, write, instance, and class rules by target module and runs each gr
 more as one batch (`runner.run_case_batch`); the probe bounds each job with an
 interval timer. Outcomes land in `EvalContext.dynamic_cache`, which the
 evaluator reads first. A batch that times out or crashes as a whole is not
-cached, so its rules fall back to one interpreter each. `runtime_flow`
+cached, so its rules fall back to one interpreter each. Where the probe can
+fork (`runner.can_fork`: Linux, and never under `bwrap`), one interpreter
+serves the whole target: each module's batch, and a rule alone on its module,
+runs in a fork of its own (`runner.run_forked`). `runtime_flow`
 (`enforce_flow` with `cases`) and `runtime_reference_calls` run the reference
 from `EvalContext.source_root` first, to record each stage's calls or the
 module call graph, then the target.
@@ -129,7 +147,10 @@ the output pipes open.
 variable but `PYTHONHASHSEED=0`, wall-clock timeout, working directory set to the target root) and hands the cases to
 `dynamic.probe` as JSON on stdin. The probe is a standard-library-only script:
 it imports the target, calls it once per case, and writes one JSON result to stdout
-while the target's own output is redirected to stderr. Import errors, timeouts,
+while the target's own output is redirected to stderr. The result goes out
+through a duplicate of descriptor 1 taken before the target is imported, and
+descriptor 1 itself is pointed at stderr, so not even a raw `os.write(1, ...)`
+or a process the target starts can corrupt it. Import errors, timeouts,
 and crashed interpreters come back as probe statuses rather than exceptions, so
 one broken target cannot abort a multi-target run.
 
@@ -172,6 +193,45 @@ hook for one call and records the project functions called while each
 statement labelled by a `flow` marker runs (reference) or every project
 function called, in order (target). It records no values.
 
+### Architecture Model
+
+- `pythonarchtesting.architecture.model`
+- `pythonarchtesting.architecture.compare`
+- `pythonarchtesting.architecture.views`
+
+`architecture.model.describe` reads a reference into its architecture model
+(modules, imports, libraries, the `architecture_entry` declaration, and in
+`full` mode what its cases do): the JSON of `--write-model` and of the MCP
+tool `describe_architecture`, and what `architecture_entry` compares a target
+with.
+
+### Principles, Tasks And Mutation
+
+- `pythonarchtesting.principles.catalog`: the principle catalogue
+  (`catalog/<id>.toml`), loaded and validated
+- `pythonarchtesting.principles.task`: `task.toml` read and compiled into
+  declarations
+- `pythonarchtesting.principles.classify` and `.verdict`: failures classified
+  by typical error, and the verdict on one submission
+- `pythonarchtesting.principles.task_verification` and `.task_mutants`: a
+  task verified by its cases and by mutation
+- `pythonarchtesting.mutation` (`operators`, `ops/`): the named mutation
+  operators that seed violations into copies of a reference
+- `pythonarchtesting.verification`: cases judged and a marker verified by
+  mutation, shared by the MCP tools
+
+### Global Mode
+
+- `pythonarchtesting.global_mode.discovery`: per principle, the entities that
+  play its roles, by deterministic predicates over the AST
+- `pythonarchtesting.global_mode.selftask`: the submission written as its own
+  reference (`task.toml`, `selftask.json`)
+- `pythonarchtesting.global_mode.outcome`: one principle judged on one
+  submission
+- `pythonarchtesting.global_mode.summary`: several principles in one report
+- `pythonarchtesting.global_mode.source` and `.model`: the submission's
+  extracted source, and the data model
+
 ### Reporting
 
 - `pythonarchtesting.report.api`
@@ -188,9 +248,35 @@ or Markdown.
 - `pythonarchtesting.mcp_server.reports`
 - `pythonarchtesting.mcp_server.markers`
 - `pythonarchtesting.mcp_server.errors`
+- `pythonarchtesting.mcp_server.tasks`
+- `pythonarchtesting.mcp_server.authoring`
+- `pythonarchtesting.mcp_server.principles`
+- `pythonarchtesting.mcp_server.global_tools`
 
-`mcp_server.server` registers seven tools and serves them on stdio
-(`python-arch-test-mcp`). `.evaluation` runs `run_projects` and the report
+`mcp_server.server` registers nineteen tools and serves them on stdio
+(`python-arch-test-mcp`). The MCP modules check the client's arguments, call
+the core and shape its answer; what the core refuses
+(`pythonarchtesting.invalid_input.InvalidInputError`) they pass on as a
+`ToolInputError`. The core they call:
+
+- `pythonarchtesting.runner.settings`: the config of a source (`resolve_config`)
+  and the sandbox of a dynamic run (`sandbox_policy`);
+- `pythonarchtesting.runner.reported_run`: a run that writes its JSON and
+  Markdown reports (`run_and_report`);
+- `pythonarchtesting.report.load` and `pythonarchtesting.report.feedback`: a
+  saved report read back, and one result explained (`feedback`);
+- `pythonarchtesting.principles.verdict`: the verdict on a submission by a
+  principle;
+- `pythonarchtesting.principles.task_verification` and `.task_mutants`: a
+  task verified by its cases and by mutation (`verify_task`);
+- `pythonarchtesting.verification`: proposed cases judged (`cases`), a marker
+  verified by mutation (`marker`), and what both mutation checks share
+  (`mutant_runs`).
+
+Global mode (`pythonarchtesting.global_mode`) builds on the same core and
+never imports `mcp_server`; `mcp_server.global_tools` builds on it.
+
+`.evaluation` runs `run_projects` and the report
 generators exactly as the CLI does; `.reports` reads a saved `report.json`;
 `.markers` reads the marker pages from `docs/markers` in a checkout, otherwise
 from `share/pythonarchtesting/markers` (installed as data files, also looked up

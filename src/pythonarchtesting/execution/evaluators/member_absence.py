@@ -13,7 +13,7 @@ from pythonarchtesting.protocols.introspection import (
     declared_class_methods,
 )
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
 from .signature_comparison import evaluate_method_compatibility
 
 
@@ -144,6 +144,213 @@ def _resolve_signature_anchor(rule: Rule, ctx: EvalContext) -> Entity | None:
     return None
 
 
+@dataclass(frozen=True)
+class _AbsenceParams:
+    """The normalised parameters of one forbidden-member rule.
+
+    ``aliases`` and ``pattern`` stay ``None`` when the rule does not carry them
+    in the expected type, which also decides whether the report lists them.
+    """
+
+    name: str | None
+    member_kind: str
+    storage: str
+    declared_only: bool
+    name_match: str
+    aliases: list[str] | None
+    pattern: str | None
+    signature_mode: str
+    include_descriptors: bool
+    include_dynamic_attributes: bool
+
+    @classmethod
+    def from_rule(cls, rule: Rule) -> _AbsenceParams:
+        """Read the parameters from a compiled rule, applying their defaults."""
+        params = rule.params
+        name_raw = params.get("name")
+        aliases_raw = params.get("aliases")
+        pattern_raw = params.get("pattern")
+        return cls(
+            name=str(name_raw).strip() if isinstance(name_raw, str) else None,
+            member_kind=str(params.get("member_kind", "any")).lower(),
+            storage=str(params.get("storage", "any")).lower(),
+            declared_only=bool(params.get("declared_only", False)),
+            name_match=str(params.get("name_match", "exact")).lower(),
+            aliases=(
+                [str(alias) for alias in aliases_raw]
+                if isinstance(aliases_raw, list)
+                else None
+            ),
+            # Stripped as in ``api_signature``; the compiler checks it stripped.
+            pattern=pattern_raw.strip() if isinstance(pattern_raw, str) else None,
+            signature_mode=str(params.get("signature_mode", "any")).lower(),
+            include_descriptors=bool(params.get("include_descriptors", False)),
+            include_dynamic_attributes=bool(
+                params.get("include_dynamic_attributes", False)
+            ),
+        )
+
+    def name_matches(self, candidate_name: str) -> tuple[bool, str | None]:
+        """Match a member name under the rule's naming mode."""
+        return _name_matches(
+            candidate_name,
+            rule_name=self.name,
+            name_match=self.name_match,
+            aliases=self.aliases,
+            pattern=self.pattern,
+        )
+
+
+def _base_details(
+    params: _AbsenceParams,
+    match: MatchResult,
+    *,
+    reason: str,
+    hits: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build the details every result shares, in their established key order.
+
+    The early failures stop here; only the final result appends ``aliases``
+    and ``pattern``, so their position at the end is part of the report shape.
+    """
+    return {
+        "reason": reason,
+        "forbidden_member": {
+            "name": params.name,
+            "member_kind": params.member_kind,
+            "storage": params.storage,
+            "declared_only": params.declared_only,
+        },
+        "hits": hits,
+        "match_status": match.status.value,
+        "name_match": params.name_match,
+        "signature_mode": params.signature_mode,
+    }
+
+
+def _method_hits(
+    params: _AbsenceParams,
+    target: Entity,
+    entities: Any,
+    *,
+    signature_anchor: Entity | None,
+    ctx: EvalContext,
+) -> list[ForbiddenMemberHit]:
+    """Return the target's methods matching the forbidden name.
+
+    With a signature anchor a method only counts when its signature is also
+    compatible with the anchor's, so a same-named method of another shape
+    is allowed.
+    """
+    methods = (
+        declared_class_methods(target, entities)
+        if params.declared_only
+        else class_methods(target, entities)
+    )
+    hits: list[ForbiddenMemberHit] = []
+    for member in methods:
+        matched, matched_via = params.name_matches(member.name)
+        if not matched or matched_via is None:
+            continue
+        if signature_anchor is not None:
+            comparison = evaluate_method_compatibility(
+                signature_anchor,
+                member,
+                ctx=ctx,
+                mode=params.signature_mode,
+                enforce_method_kind=True,
+                check_return=False,
+            )
+            if comparison["errors"]:
+                continue
+        hits.append(_method_hit(member, target=target, matched_via=matched_via))
+    return hits
+
+
+def _accepts(hit: ForbiddenMemberHit, member_kind: str, storage: str) -> bool:
+    """Tell whether an attribute hit is of the forbidden kind and storage.
+
+    The storage filter applies to plain attributes only; a property has no
+    storage to compare.
+    """
+    if member_kind == "attribute" and hit.member_kind != "attribute":
+        return False
+    if member_kind == "property" and hit.member_kind != "property":
+        return False
+    return hit.member_kind != "attribute" or _storage_matches(storage, hit.storage)
+
+
+def _attribute_hits(
+    params: _AbsenceParams, target: Entity, entities: Any
+) -> list[ForbiddenMemberHit]:
+    """Return the target's attributes and properties matching the forbidden name."""
+    attribute_members = collect_attributes(
+        target,
+        entities,
+        include_inherited=not params.declared_only,
+        include_instance=True,
+        include_class=True,
+        include_properties=True,
+        include_descriptors=params.include_descriptors,
+        include_dynamic_attributes=params.include_dynamic_attributes,
+    )
+    hits: list[ForbiddenMemberHit] = []
+    for members in attribute_members.values():
+        for attribute_member in members:
+            matched, matched_via = params.name_matches(
+                str(getattr(attribute_member, "name", ""))
+            )
+            if not matched or matched_via is None:
+                continue
+            hit = _attribute_hit(attribute_member, matched_via=matched_via)
+            if _accepts(hit, params.member_kind, params.storage):
+                hits.append(hit)
+    return hits
+
+
+def _collect_hits(
+    params: _AbsenceParams,
+    target: Entity,
+    entities: Any,
+    *,
+    signature_anchor: Entity | None,
+    ctx: EvalContext,
+) -> list[ForbiddenMemberHit]:
+    """Gather the forbidden members of the requested kinds, best hit first.
+
+    Methods are collected before attributes; the stable sort keeps that order
+    for hits whose sort keys tie.
+    """
+    hits: list[ForbiddenMemberHit] = []
+    if params.member_kind in {"any", "method"}:
+        hits.extend(
+            _method_hits(
+                params, target, entities, signature_anchor=signature_anchor, ctx=ctx
+            )
+        )
+    if params.member_kind in {"any", "attribute", "property"}:
+        hits.extend(_attribute_hits(params, target, entities))
+    hits.sort(key=_hit_sort_key)
+    return hits
+
+
+def _final_details(
+    params: _AbsenceParams, match: MatchResult, hits: list[ForbiddenMemberHit]
+) -> dict[str, Any]:
+    """Build the details of a completed check, naming aliases and pattern last."""
+    details = _base_details(
+        params,
+        match,
+        reason="forbidden member absent" if not hits else _reason(hits),
+        hits=[_hit_payload(hit) for hit in hits],
+    )
+    if params.aliases is not None:
+        details["aliases"] = params.aliases
+    if params.pattern is not None:
+        details["pattern"] = params.pattern
+    return details
+
+
 class MemberAbsenceEvaluator:
     """Evaluator for forbidden class-member declarations."""
 
@@ -155,163 +362,48 @@ class MemberAbsenceEvaluator:
         match: MatchResult,
         ctx: EvalContext,
     ) -> RuleResult:
-        name_raw = rule.params.get("name")
-        name = str(name_raw).strip() if isinstance(name_raw, str) else None
-        member_kind = str(rule.params.get("member_kind", "any")).lower()
-        storage = str(rule.params.get("storage", "any")).lower()
-        declared_only = bool(rule.params.get("declared_only", False))
-        name_match = str(rule.params.get("name_match", "exact")).lower()
-        aliases_raw = rule.params.get("aliases")
-        aliases = (
-            [str(alias) for alias in aliases_raw]
-            if isinstance(aliases_raw, list)
-            else None
-        )
-        pattern = (
-            str(rule.params.get("pattern")).strip()
-            if isinstance(rule.params.get("pattern"), str)
-            else None
-        )
-        signature_mode = str(rule.params.get("signature_mode", "any")).lower()
-        include_descriptors = bool(rule.params.get("include_descriptors", False))
-        include_dynamic_attributes = bool(
-            rule.params.get("include_dynamic_attributes", False)
-        )
+        """Report every member of the target class that the rule forbids."""
+        params = _AbsenceParams.from_rule(rule)
 
         if target.kind != "class":
-            invalid_target_details: dict[str, Any] = {
-                "reason": (
+            invalid_target_details = _base_details(
+                params,
+                match,
+                reason=(
                     f"matched target kind '{target.kind}' "
                     "does not support member absence checks"
                 ),
-                "forbidden_member": {
-                    "name": name,
-                    "member_kind": member_kind,
-                    "storage": storage,
-                    "declared_only": declared_only,
-                },
-                "hits": [],
-                "match_status": match.status.value,
-                "name_match": name_match,
-                "signature_mode": signature_mode,
-            }
-            return _build_rule_result(
+                hits=[],
+            )
+            return build_rule_result(
                 rule, source, target, match, "FAILED", invalid_target_details, ()
             )
 
+        needs_anchor = params.signature_mode in {"compatible", "exact"}
         signature_anchor = (
-            _resolve_signature_anchor(rule, ctx)
-            if signature_mode in {"compatible", "exact"}
-            else None
+            _resolve_signature_anchor(rule, ctx) if needs_anchor else None
         )
-        if signature_mode in {"compatible", "exact"} and signature_anchor is None:
-            return _build_rule_result(
-                rule,
-                source,
-                target,
+        if needs_anchor and signature_anchor is None:
+            missing_anchor_details = _base_details(
+                params,
                 match,
-                "FAILED",
-                {
-                    "reason": "missing source signature anchor for forbidden method check",
-                    "forbidden_member": {
-                        "name": name,
-                        "member_kind": member_kind,
-                        "storage": storage,
-                        "declared_only": declared_only,
-                    },
-                    "hits": [],
-                    "match_status": match.status.value,
-                    "name_match": name_match,
-                    "signature_mode": signature_mode,
-                },
-                (),
+                reason="missing source signature anchor for forbidden method check",
+                hits=[],
+            )
+            return build_rule_result(
+                rule, source, target, match, "FAILED", missing_anchor_details, ()
             )
 
-        hits: list[ForbiddenMemberHit] = []
-        entities = ctx.target_index.all_sorted
-
-        if member_kind in {"any", "method"}:
-            methods = (
-                declared_class_methods(target, entities)
-                if declared_only
-                else class_methods(target, entities)
-            )
-            for member in methods:
-                matched, matched_via = _name_matches(
-                    member.name,
-                    rule_name=name,
-                    name_match=name_match,
-                    aliases=aliases,
-                    pattern=pattern,
-                )
-                if not matched or matched_via is None:
-                    continue
-                if signature_anchor is not None:
-                    comparison = evaluate_method_compatibility(
-                        signature_anchor,
-                        member,
-                        ctx=ctx,
-                        mode=signature_mode,
-                        enforce_method_kind=True,
-                        check_return=False,
-                    )
-                    if comparison["errors"]:
-                        continue
-                hits.append(_method_hit(member, target=target, matched_via=matched_via))
-
-        if member_kind in {"any", "attribute", "property"}:
-            attribute_members = collect_attributes(
-                target,
-                entities,
-                include_inherited=not declared_only,
-                include_instance=True,
-                include_class=True,
-                include_properties=True,
-                include_descriptors=include_descriptors,
-                include_dynamic_attributes=include_dynamic_attributes,
-            )
-            for members in attribute_members.values():
-                for attribute_member in members:
-                    matched, matched_via = _name_matches(
-                        str(getattr(attribute_member, "name", "")),
-                        rule_name=name,
-                        name_match=name_match,
-                        aliases=aliases,
-                        pattern=pattern,
-                    )
-                    if not matched or matched_via is None:
-                        continue
-                    hit = _attribute_hit(attribute_member, matched_via=matched_via)
-                    if member_kind == "attribute" and hit.member_kind != "attribute":
-                        continue
-                    if member_kind == "property" and hit.member_kind != "property":
-                        continue
-                    if hit.member_kind == "attribute" and not _storage_matches(
-                        storage, hit.storage
-                    ):
-                        continue
-                    hits.append(hit)
-
-        hits.sort(key=_hit_sort_key)
-        details: dict[str, Any] = {
-            "reason": ("forbidden member absent" if not hits else _reason(hits)),
-            "forbidden_member": {
-                "name": name,
-                "member_kind": member_kind,
-                "storage": storage,
-                "declared_only": declared_only,
-            },
-            "hits": [_hit_payload(hit) for hit in hits],
-            "match_status": match.status.value,
-            "name_match": name_match,
-            "signature_mode": signature_mode,
-        }
-        if aliases is not None:
-            details["aliases"] = aliases
-        if pattern is not None:
-            details["pattern"] = pattern
+        hits = _collect_hits(
+            params,
+            target,
+            ctx.target_index.all_sorted,
+            signature_anchor=signature_anchor,
+            ctx=ctx,
+        )
+        details = _final_details(params, match, hits)
         status: RuleStatus = "OK" if not hits else "FAILED"
-        return _build_rule_result(rule, source, target, match, status, details, ())
+        return build_rule_result(rule, source, target, match, status, details, ())
 
 
 __all__ = ["ForbiddenMemberHit", "MemberAbsenceEvaluator"]

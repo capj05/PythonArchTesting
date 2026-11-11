@@ -392,13 +392,6 @@ def test_run_case_setup_errors() -> None:
     assert "cannot resolve 'Nowhere' in the target module" in no_package["failures"][0]
 
 
-def test_short_repr_truncates() -> None:
-    text = probe._short_repr("x" * 500)
-
-    assert len(text) == 200
-    assert text.endswith("...")
-
-
 def test_importing_package_falls_back_to_the_spec_parent() -> None:
     spec = types.SimpleNamespace(parent="pkg.sub")
 

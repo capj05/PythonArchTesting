@@ -1,8 +1,9 @@
 # Validation Run Report
 
-**Generated:** 2026-09-15T13:40:45.361642Z
+**Generated:** 2026-11-10T20:09:53.104551Z
 **Framework:** 0.1.0
 **Source:** example/checkout_assignment/reference
+**Mode:** static-only
 **Exit Code:** 1
 
 ## Run Summary
@@ -22,11 +23,11 @@
 
 | Rule | Violations |
 |---|---|
-| API003/required_attribute/v1/d0 | 10 |
-| API003/required_attribute/v1/d1 | 10 |
-| API003/required_attribute/v1/d2 | 10 |
-| API004/required_factory/v1 | 10 |
-| API001/required_entity_signature/v1 | 5 |
+| PRO001/implements_protocol/v1 | 3 |
+| API001/required_entity_signature/v1 | 2 |
+| API002/required_method/v1 | 2 |
+| API001/required_entity_signature_return/v1 | 1 |
+| API003/required_attribute/v1/d2 | 1 |
 
 ## Top Source Files
 

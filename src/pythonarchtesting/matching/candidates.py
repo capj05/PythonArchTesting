@@ -44,7 +44,7 @@ def _apply_cap(items: list[Any], cap: int) -> list[Any]:
     return items[:cap]
 
 
-def _explicit_target_match(
+def explicit_target_match(
     source: Entity, target_index: EntityIndex
 ) -> tuple[Optional[Entity], Optional[Dict[str, Any]]]:
     explicit = source.surface_meta.get("explicit_target")
@@ -86,7 +86,7 @@ def _explicit_target_match(
     return None, reason
 
 
-def _stage2_candidates(
+def rank_stage2_candidates(
     source: Entity,
     target_index: EntityIndex,
     *,
@@ -136,7 +136,7 @@ def _stage2_candidates(
     return _sort_candidates(candidates)
 
 
-def _stage3_candidates(
+def rank_stage3_candidates(
     source: Entity,
     target_index: EntityIndex,
     seed_candidates: List[Candidate],
@@ -212,4 +212,4 @@ def _stage3_candidates(
     return _sort_candidates(candidates)
 
 
-__all__ = ["_explicit_target_match", "_stage2_candidates", "_stage3_candidates"]
+__all__ = ["explicit_target_match", "rank_stage2_candidates", "rank_stage3_candidates"]

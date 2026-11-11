@@ -58,9 +58,11 @@ Companion changes:
   `assignment_wrapped_by`, since assignment-wrapped factories are
   inherently an extended-detection pattern.
 - `execution.evaluators.api_signature` filters candidates against
-  `effective_source_name = source.extras.get("assignment_wrapped_by") or source.name`
+  `factory_name = source.extras.get("assignment_wrapped_by") or source.name`
   so `name_match="exact"` compares against the public alias (`make`)
-  rather than the underlying function (`_make_impl`).
+  rather than the underlying function (`_make_impl`). Static attribute
+  candidates (`satisfy_with` with `"static_attribute"`) are matched by the
+  same name; until 2026-11-10 they used `_make_impl`.
 
 ### LIMITATION-2 — default `satisfy_with` admitted `__init__` as a candidate (fixed)
 

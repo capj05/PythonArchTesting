@@ -22,6 +22,12 @@ analysis); pass `mode="direct"` for an AST-only direct-import check.
 |----------|------|---------|-------------|
 | `*forbidden` (positional) | `str` | — | One or more dotted module or package names to forbid (e.g. `"requests"`, `"sqlalchemy"`). |
 
+A `forbid_imports()` without a module would forbid nothing and always pass; it
+is invalid instead: a `compiler_invalid_param` sentinel rule for `forbidden`
+and compiler evidence with the issue `invalid_forbidden` ("give at least one
+module name to forbid"), as [forbid_runtime_imports](forbid_runtime_imports.md)
+reports it.
+
 **Optional:**
 
 | Argument | Type | Default | Description |

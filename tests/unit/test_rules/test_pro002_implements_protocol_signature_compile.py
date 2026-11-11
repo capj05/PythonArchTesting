@@ -65,7 +65,7 @@ def process(repo: Annotated[object, implements_protocol(Repository)]) -> None:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_protocol_reference"]
     assert evidence[0].payload["reason"] == "not_typing_protocol"

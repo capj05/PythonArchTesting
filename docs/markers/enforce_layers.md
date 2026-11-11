@@ -5,7 +5,8 @@ lower one, never the reverse.
 
 - **Category:** Imports
 - **Placement:** the reference's root `__init__.py`, module-level
-  `__archtest__: Annotated[...]`
+  `__archtest__: Annotated[...]`; anywhere else the declaration is invalid
+  (see [Other Invalid Argument Values](README.md#other-invalid-argument-values))
 - **Runs:** the static check always; the runtime check (with `entry` and
   `cases`) only with `python-arch-test --dynamic`, otherwise it is `SKIPPED`.
 

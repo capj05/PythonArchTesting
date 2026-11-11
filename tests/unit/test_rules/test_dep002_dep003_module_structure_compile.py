@@ -113,5 +113,38 @@ def test_the_markers_belong_on_a_module(tmp_path: Path):
     state = prepare_source(config=load_config(), source_path=root)
     rules, evidence, _ = compile_rules(list(state.source_by_id.values()), load_config())
 
-    assert not [rule for rule in rules if "cycles" in rule.rule_id]
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [
+        (rule.rule_type, rule.params["param"], rule.params["valid"])
+        for rule in rules
+        if rule.name == "forbid_cycles"
+    ] == [("compiler_invalid_param", "target_kind", ["root module"])]
+    assert [item.type for item in evidence] == ["compiler_invalid_target"]
+
+
+@pytest.mark.parametrize(
+    "marker", ['enforce_layers("controller", "models")', "forbid_cycles()"]
+)
+def test_the_markers_belong_on_the_root_module(tmp_path: Path, marker: str):
+    root = tmp_path / "reference"
+    root.mkdir()
+    (root / "__init__.py").write_text("", encoding="utf-8")
+    (root / "models.py").write_text("", encoding="utf-8")
+    name = marker.split("(")[0]
+    (root / "controller.py").write_text(
+        "from typing import Annotated\n"
+        f"from pythonarchtesting.rules import {name}\n\n"
+        f"__archtest__: Annotated[None, {marker}]\n",
+        encoding="utf-8",
+    )
+
+    state = prepare_source(config=load_config(), source_path=root)
+    rules, evidence, _ = compile_rules(list(state.source_by_id.values()), load_config())
+
+    assert [(rule.rule_type, rule.params["compiler_reason"]) for rule in rules] == [
+        (
+            "compiler_invalid_param",
+            f"{name} must be declared on the root module (__init__.py)",
+        )
+    ]
     assert [item.type for item in evidence] == ["compiler_invalid_target"]

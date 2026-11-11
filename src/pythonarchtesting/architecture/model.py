@@ -78,8 +78,8 @@ def describe_static(
 ) -> dict[str, Any]:
     """The reference's modules, imports and libraries, and its declaration."""
     from pythonarchtesting.execution.evaluators.architecture import (
-        _import_edges,
         module_name,
+        static_import_edges,
     )
     from pythonarchtesting.execution.import_edges import (
         collect_canonical_module_entities,
@@ -89,7 +89,7 @@ def describe_static(
     static, runtime = _rule(rules, _STATIC_RULE), _rule(rules, _RUNTIME_RULE)
     declaration = _declaration(static, runtime)
     ignore_tc = bool(declaration.get("ignore_type_checking", True))
-    graph, libraries, _ = _import_edges(entities, ignore_tc, package)
+    graph, libraries, _ = static_import_edges(entities, ignore_tc, package)
     modules = sorted(
         (
             {"name": module_name(e.module_path), "file": str(e.filepath_rel)}
@@ -141,22 +141,22 @@ def describe_runtime(
     the cases called and every one the reference imports (``imported``).
     """
     from pythonarchtesting.execution.evaluators.architecture import (
-        _calls,
-        _instances,
+        case_calls,
+        case_instances,
     )
-    from pythonarchtesting.execution.evaluators.runtime_structure import _coverage
+    from pythonarchtesting.execution.evaluators.runtime_structure import case_coverage
 
     calls: dict[Edge, Mapping[str, Any]] = {}
     libraries: dict[Edge, Mapping[str, Any]] = {}
     instances: dict[Edge, Mapping[str, Any]] = {}
     cases = list(outcome.cases)
     for case in cases:
-        internal, outward = _calls(case, None)
+        internal, outward = case_calls(case, None)
         for pair, call in internal.items():
             calls.setdefault(pair, call)
         for pair, call in outward.items():
             libraries.setdefault(pair, call)
-        named, _ = _instances(case, None)
+        named, _ = case_instances(case, None)
         for pair, item in named.items():
             instances.setdefault(pair, item)
     ignore = list(ignore)
@@ -187,7 +187,7 @@ def describe_runtime(
             }
         ),
     }
-    coverage = _coverage(cases)
+    coverage = case_coverage(cases)
     if coverage is not None:
         found["coverage"] = coverage
     if outcome.status != "completed" and getattr(outcome, "error", None):
@@ -275,7 +275,7 @@ def describe(
         raise ValueError("mode='full' needs the reference's directory (source_root)")
     entity = state.source_by_id.get(runtime_rule.selector.source_entity_id)
     from pythonarchtesting.dynamic.runner import run_cases
-    from pythonarchtesting.execution.evaluators.architecture import _OBSERVE
+    from pythonarchtesting.execution.evaluators.architecture import OBSERVE
 
     outcome = run_cases(
         target_root=Path(run_root),
@@ -286,7 +286,7 @@ def describe(
         init=runtime_rule.params.get("init"),
         timeout_s=float(runtime_rule.params.get("timeout_s", 5.0)),
         sandbox=sandbox,
-        observe=_OBSERVE,
+        observe=OBSERVE,
     )
     model["runtime"] = describe_runtime(
         outcome,

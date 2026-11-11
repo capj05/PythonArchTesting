@@ -22,14 +22,26 @@ from pythonarchtesting.core.models import Rule, RuleSelector
 from pythonarchtesting.entities import DeclarationEntry, Entity
 from pythonarchtesting.execution.module_structure import in_module
 
-from ..common import with_rule_id_suffix
+from ..common import (
+    InvalidParam,
+    bool_param,
+    options_problem,
+    with_rule_id_suffix,
+    without_none,
+)
 from .module_structure import entry_problem
-from .runtime_structure import _case_params, _invalid_param, _invalid_target, _severity
+from .runtime_structure import (
+    case_params,
+    invalid_target,
+    marker_severity,
+    rejected_declaration,
+)
 
 MARKER = "architecture_entry"
 STATIC_RULE_ID = "DEP004/architecture_entry/v1"
 RUNTIME_RULE_ID = "DYN011/architecture_entry/v1"
 _INVALID_PREFIX = f"DEP004/{MARKER}/invalid_declaration"
+_BOOLS = ("ignore_type_checking", "require_all")
 
 _HINTS = (
     "Follow the module dependencies of the reference, or declare an "
@@ -63,14 +75,13 @@ def _exceptions_problem(
 
 def _problem(
     params: dict[str, Any], source_entities: List[Entity]
-) -> tuple[str, str] | None:
+) -> tuple[str, str] | InvalidParam | None:
     policy = params.get("policy", "allow_new_modules")
     if policy not in POLICIES:
         return "policy", f"unknown policy {policy!r}; use one of {', '.join(POLICIES)}"
-    if not isinstance(params.get("ignore_type_checking", True), bool):
-        return "ignore_type_checking", "ignore_type_checking must be True or False"
-    if not isinstance(params.get("require_all", False), bool):
-        return "require_all", "require_all must be True or False"
+    bools = options_problem(params, bools=_BOOLS)
+    if bools is not None:
+        return bools
     if params.get("require_all") and not params.get("entry"):
         return "require_all", "require_all judges calls at run time: it needs an entry"
     ignore = params.get("ignore_external")
@@ -95,7 +106,9 @@ def _model_params(params: dict[str, Any]) -> dict[str, Any]:
         "allow": [format_edge(parse_edge(i)) for i in params.get("allow") or []],
         "forbid": [format_edge(parse_edge(i)) for i in params.get("forbid") or []],
         "ignore_external": list(DEFAULT_IGNORE_EXTERNAL if ignore is None else ignore),
-        "ignore_type_checking": bool(params.get("ignore_type_checking", True)),
+        "ignore_type_checking": bool_param(
+            params, "ignore_type_checking", default=True
+        ),
     }
 
 
@@ -109,23 +122,32 @@ def compile_architecture_entry(
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     _ = cfg
     entities = list(source_entities or [])
-    params = dict(declaration.params)
+    params = without_none(declaration.params, ("policy", *_BOOLS))
     if source_entity.kind != "module" or source_entity.module_path:
-        return _invalid_target(source_entity, declaration, MARKER, ["root module"])
+        return invalid_target(
+            source_entity,
+            declaration,
+            MARKER,
+            ["root module"],
+            rule_id_prefix=_INVALID_PREFIX,
+            rule_id_suffix=rule_id_suffix,
+            reason=f"{MARKER} must be declared on the root module (__init__.py)",
+        )
 
-    problem = _problem(params, entities)
+    problem: tuple[str, str] | InvalidParam | None = _problem(params, entities)
     entry_entity: Entity | None = None
     if problem is None:
         problem, entry_entity = entry_problem(params, entities, MARKER)
-    if problem is not None:
-        return _invalid_param(
-            source_entity,
-            declaration,
-            marker=MARKER,
-            rule_id_prefix=_INVALID_PREFIX,
-            problem=problem,
-            rule_id_suffix=rule_id_suffix,
-        )
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=MARKER,
+        rule_id_prefix=_INVALID_PREFIX,
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
 
     model = _model_params(params)
     rules = [
@@ -133,7 +155,7 @@ def compile_architecture_entry(
             rule_id=with_rule_id_suffix(STATIC_RULE_ID, rule_id_suffix),
             rule_type="architecture_static",
             name=MARKER,
-            severity=_severity(params),
+            severity=marker_severity(params),
             scope=source_entity.kind,
             evidence_type="static",
             selector=RuleSelector(
@@ -151,17 +173,17 @@ def compile_architecture_entry(
                 rule_id=with_rule_id_suffix(RUNTIME_RULE_ID, rule_id_suffix),
                 rule_type="architecture_runtime",
                 name=MARKER,
-                severity=_severity(params),
+                severity=marker_severity(params),
                 scope=entry_entity.kind,
                 evidence_type="runtime",
                 selector=RuleSelector(
                     source_entity_id=entry_entity.canonical_id, explicit_target=None
                 ),
                 params={
-                    **_case_params(params),
+                    **case_params(params),
                     **model,
                     "entry": params["entry"],
-                    "require_all": bool(params.get("require_all", False)),
+                    "require_all": bool_param(params, "require_all", default=False),
                 },
                 message_template=(
                     f"{MARKER} while "

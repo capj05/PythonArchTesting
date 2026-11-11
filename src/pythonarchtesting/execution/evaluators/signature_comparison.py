@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import ast
-from typing import Any
+from typing import Any, Literal
 
 from pythonarchtesting.core.models import EvalContext
 from pythonarchtesting.entities import Entity
 
 from .annotation_compatibility import compare_annotation_text
+
+_FEWER_POSITIONAL = "target has fewer positional-compatible parameters than required"
+_FEWER_KWONLY = "target has fewer keyword-only parameters than required"
+_OPTIONAL_BECAME_REQUIRED = "optional parameter became required"
 
 
 def function_node(entity: Entity) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
@@ -188,6 +192,38 @@ def method_nonparam_errors(
     return errors
 
 
+def _annotation_error(
+    subject: str,
+    expected: str | None,
+    found: str | None,
+    *,
+    variance: Literal["invariant", "covariant", "contravariant"],
+    source: Entity,
+    target: Entity,
+    ctx: EvalContext,
+) -> str | None:
+    """Compare one expected annotation with the found one and describe a mismatch.
+
+    The ``subject`` opens the message (for example ``"return annotation
+    mismatch"``), so every caller keeps its own wording while the comparison
+    and the ``expected …, found …`` tail are written once. An expected
+    annotation of ``None`` places no requirement and yields no error.
+    """
+    if expected is None:
+        return None
+    comparison = compare_annotation_text(
+        expected=expected,
+        found=found,
+        expected_entity=source,
+        found_entity=target,
+        ctx=ctx,
+        variance=variance,
+    )
+    if comparison.compatible:
+        return None
+    return f"{subject}: expected {comparison.expected}, found {comparison.found}"
+
+
 def return_errors(
     source_model: dict[str, Any],
     target_model: dict[str, Any],
@@ -197,22 +233,18 @@ def return_errors(
     ctx: EvalContext,
 ) -> list[str]:
     expected_return = source_model.get("return_annotation")
-    found_return = target_model.get("return_annotation")
-    if expected_return:
-        comparison = compare_annotation_text(
-            expected=expected_return,
-            found=found_return,
-            expected_entity=source,
-            found_entity=target,
-            ctx=ctx,
-            variance="covariant",
-        )
-        if not comparison.compatible:
-            return [
-                "return annotation mismatch: "
-                f"expected {comparison.expected}, found {comparison.found}"
-            ]
-    return []
+    if not expected_return:
+        return []
+    error = _annotation_error(
+        "return annotation mismatch",
+        expected_return,
+        target_model.get("return_annotation"),
+        variance="covariant",
+        source=source,
+        target=target,
+        ctx=ctx,
+    )
+    return [error] if error else []
 
 
 def exact_compare(
@@ -244,22 +276,209 @@ def exact_compare(
             errors.append(
                 f"parameter required/optional mismatch for '{exp.get('name')}'"
             )
-        if exp.get("annotation") is not None:
-            comparison = compare_annotation_text(
-                expected=exp.get("annotation"),
-                found=got.get("annotation"),
-                expected_entity=source,
-                found_entity=target,
-                ctx=ctx,
-                variance="invariant",
-            )
-            if not comparison.compatible:
-                errors.append(
-                    "parameter annotation mismatch for "
-                    f"'{exp.get('name')}': expected {comparison.expected}, "
-                    f"found {comparison.found}"
-                )
+        error = _annotation_error(
+            f"parameter annotation mismatch for '{exp.get('name')}'",
+            exp.get("annotation"),
+            got.get("annotation"),
+            variance="invariant",
+            source=source,
+            target=target,
+            ctx=ctx,
+        )
+        if error:
+            errors.append(error)
     return errors
+
+
+def _compare_positional(
+    expected: list[dict[str, Any]],
+    found: list[dict[str, Any]],
+    *,
+    fewer_message: str,
+    source: Entity,
+    target: Entity,
+    ctx: EvalContext,
+) -> list[str]:
+    """Pair parameters by position and report mismatches within each pair.
+
+    Names are not compared, which is what lets a target rename a parameter.
+    For each pair the kind, a change from optional to required, and the
+    annotation are checked, in that order, as in ``_compare_by_name``. When
+    the target has fewer parameters, only ``fewer_message`` is reported and
+    no pair is checked. Surplus target parameters are left to
+    ``_extra_param_errors``. The messages carry no parameter name, because
+    the names of the pair may differ.
+    """
+    if len(found) < len(expected):
+        return [fewer_message]
+    errors: list[str] = []
+    for exp, got in zip(expected, found):
+        if exp.get("kind") != got.get("kind"):
+            errors.append(
+                f"parameter kind mismatch: expected {exp.get('kind')}, "
+                f"found {got.get('kind')}"
+            )
+        if not exp.get("required") and got.get("required"):
+            errors.append(_OPTIONAL_BECAME_REQUIRED)
+        error = _annotation_error(
+            "parameter annotation mismatch",
+            exp.get("annotation"),
+            got.get("annotation"),
+            variance="contravariant",
+            source=source,
+            target=target,
+            ctx=ctx,
+        )
+        if error:
+            errors.append(error)
+    return errors
+
+
+def _split_kwonly(
+    params: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split parameters into positional-compatible and keyword-only ones.
+
+    Both parts keep the declaration order. A parameter without a ``kind`` counts
+    as positional-compatible.
+    """
+    non_kw: list[dict[str, Any]] = []
+    kw: list[dict[str, Any]] = []
+    for param in params:
+        if param.get("kind") == "kwonly":
+            kw.append(param)
+        else:
+            non_kw.append(param)
+    return non_kw, kw
+
+
+def _compare_by_position(
+    expected: list[dict[str, Any]],
+    found: list[dict[str, Any]],
+    *,
+    source: Entity,
+    target: Entity,
+    ctx: EvalContext,
+) -> list[str]:
+    """Compare positional and keyword-only parameters separately, by position.
+
+    Positional-compatible parameters are compared first, then the keyword-only
+    ones, each group in its declaration order. The kind check inside
+    ``_compare_positional`` cannot fire for the keyword-only group, since both
+    sides of it hold only ``kwonly`` parameters.
+    """
+    expected_non_kw, expected_kw = _split_kwonly(expected)
+    found_non_kw, found_kw = _split_kwonly(found)
+    return _compare_positional(
+        expected_non_kw,
+        found_non_kw,
+        fewer_message=_FEWER_POSITIONAL,
+        source=source,
+        target=target,
+        ctx=ctx,
+    ) + _compare_positional(
+        expected_kw,
+        found_kw,
+        fewer_message=_FEWER_KWONLY,
+        source=source,
+        target=target,
+        ctx=ctx,
+    )
+
+
+def _compare_by_name(
+    expected: list[dict[str, Any]],
+    found: list[dict[str, Any]],
+    *,
+    source: Entity,
+    target: Entity,
+    ctx: EvalContext,
+) -> list[str]:
+    """Pair every expected parameter with the target parameter of its name.
+
+    For each pair the kind, a change from optional to required, and the
+    annotation are checked, in that order. A missing parameter is reported
+    once and its other checks are skipped. When the target repeats a name,
+    the last parameter of that name is used.
+    """
+    found_by_name = {str(param.get("name")): param for param in found}
+    errors: list[str] = []
+    for exp in expected:
+        name = str(exp.get("name"))
+        got = found_by_name.get(name)
+        if got is None:
+            errors.append(f"missing parameter '{name}'")
+            continue
+        if exp.get("kind") != got.get("kind"):
+            errors.append(
+                f"parameter kind mismatch for '{name}': "
+                f"expected {exp.get('kind')}, found {got.get('kind')}"
+            )
+        if not exp.get("required") and got.get("required"):
+            errors.append(f"{_OPTIONAL_BECAME_REQUIRED}: '{name}'")
+        error = _annotation_error(
+            f"parameter annotation mismatch for '{name}'",
+            exp.get("annotation"),
+            got.get("annotation"),
+            variance="contravariant",
+            source=source,
+            target=target,
+            ctx=ctx,
+        )
+        if error:
+            errors.append(error)
+    return errors
+
+
+def _extra_by_name(
+    expected: list[dict[str, Any]],
+    found: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return the target parameters whose names the reference does not have."""
+    expected_names = {str(param.get("name")) for param in expected}
+    return [param for param in found if str(param.get("name")) not in expected_names]
+
+
+def _extra_by_position(
+    expected: list[dict[str, Any]],
+    found: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return the target parameters beyond the expected count of their group.
+
+    The groups are the ones ``_compare_by_position`` pairs: positional-compatible
+    and keyword-only parameters. A group with fewer target parameters than
+    expected has no surplus.
+    """
+    expected_non_kw, expected_kw = _split_kwonly(expected)
+    found_non_kw, found_kw = _split_kwonly(found)
+    return found_non_kw[len(expected_non_kw) :] + found_kw[len(expected_kw) :]
+
+
+def _extra_param_errors(
+    extra: list[dict[str, Any]],
+    *,
+    allow_extra_params: bool,
+) -> list[str]:
+    """Judge the target parameters that have no counterpart in the reference.
+
+    Without ``allow_extra_params`` every extra parameter is an error. With it,
+    only the required ones are, since callers of the reference's signature do
+    not pass them. Either way all offending names go into one message, sorted.
+    """
+    if not allow_extra_params:
+        if not extra:
+            return []
+        names = sorted(str(param.get("name")) for param in extra)
+        return [f"extra parameters not allowed: {', '.join(names)}"]
+    required = sorted(
+        str(param.get("name")) for param in extra if param.get("required")
+    )
+    if not required:
+        return []
+    return [
+        f"extra required parameter(s) {', '.join(required)}: "
+        "callers of the reference's signature do not pass them"
+    ]
 
 
 def compatible_compare(
@@ -272,106 +491,32 @@ def compatible_compare(
     target: Entity,
     ctx: EvalContext,
 ) -> list[str]:
-    errors: list[str] = []
+    """Check that a target's parameters can stand in for the expected ones.
 
+    With ``allow_param_rename`` the parameters are paired by position (the
+    positional-compatible and the keyword-only ones separately), so names are
+    free to differ; otherwise they are paired by name. Both strategies apply
+    the same rules: each pair is checked for its kind, for an optional
+    parameter that became required, and for its annotation; the target
+    parameters left without a counterpart (by position: those beyond the
+    expected count of their group; by name: those with a name the reference
+    lacks) are judged against ``allow_extra_params``.
+
+    The errors come in this order: the pairs' errors in the order of the
+    expected parameters (by position: all positional pairs, then all
+    keyword-only ones), then at most one message about extra parameters.
+    """
     if allow_param_rename:
-        expected_non_kw = [param for param in expected if param.get("kind") != "kwonly"]
-        found_non_kw = [param for param in found if param.get("kind") != "kwonly"]
-        if len(found_non_kw) < len(expected_non_kw):
-            errors.append(
-                "target has fewer positional-compatible parameters than required"
-            )
-        else:
-            for exp, got in zip(expected_non_kw, found_non_kw):
-                if exp.get("kind") != got.get("kind"):
-                    errors.append(
-                        f"parameter kind mismatch: expected {exp.get('kind')}, "
-                        f"found {got.get('kind')}"
-                    )
-                if exp.get("annotation") is not None:
-                    comparison = compare_annotation_text(
-                        expected=exp.get("annotation"),
-                        found=got.get("annotation"),
-                        expected_entity=source,
-                        found_entity=target,
-                        ctx=ctx,
-                        variance="contravariant",
-                    )
-                    if not comparison.compatible:
-                        errors.append(
-                            "parameter annotation mismatch: "
-                            f"expected {comparison.expected}, found {comparison.found}"
-                        )
-
-        expected_kw = [param for param in expected if param.get("kind") == "kwonly"]
-        found_kw = [param for param in found if param.get("kind") == "kwonly"]
-        if len(found_kw) < len(expected_kw):
-            errors.append("target has fewer keyword-only parameters than required")
-        else:
-            for exp, got in zip(expected_kw, found_kw):
-                if exp.get("annotation") is not None:
-                    comparison = compare_annotation_text(
-                        expected=exp.get("annotation"),
-                        found=got.get("annotation"),
-                        expected_entity=source,
-                        found_entity=target,
-                        ctx=ctx,
-                        variance="contravariant",
-                    )
-                    if not comparison.compatible:
-                        errors.append(
-                            "parameter annotation mismatch: "
-                            f"expected {comparison.expected}, found {comparison.found}"
-                        )
-        return errors
-
-    found_by_name = {str(param.get("name")): param for param in found}
-    for exp in expected:
-        name = str(exp.get("name"))
-        found_param = found_by_name.get(name)
-        if found_param is None:
-            errors.append(f"missing parameter '{name}'")
-            continue
-        if exp.get("kind") != found_param.get("kind"):
-            errors.append(
-                f"parameter kind mismatch for '{name}': "
-                f"expected {exp.get('kind')}, found {found_param.get('kind')}"
-            )
-        if not exp.get("required") and found_param.get("required"):
-            errors.append(f"optional parameter became required: '{name}'")
-        if exp.get("annotation") is not None:
-            comparison = compare_annotation_text(
-                expected=exp.get("annotation"),
-                found=found_param.get("annotation"),
-                expected_entity=source,
-                found_entity=target,
-                ctx=ctx,
-                variance="contravariant",
-            )
-            if not comparison.compatible:
-                errors.append(
-                    f"parameter annotation mismatch for '{name}': "
-                    f"expected {comparison.expected}, found {comparison.found}"
-                )
-
-    expected_names = {str(param.get("name")) for param in expected}
-    extra = [param for param in found if str(param.get("name")) not in expected_names]
-    if not allow_extra_params:
-        if extra:
-            names = sorted(str(param.get("name")) for param in extra)
-            errors.append(f"extra parameters not allowed: {', '.join(names)}")
-    else:
-        # An extra parameter is compatible only if callers may leave it out.
-        required = sorted(
-            str(param.get("name")) for param in extra if param.get("required")
+        errors = _compare_by_position(
+            expected, found, source=source, target=target, ctx=ctx
         )
-        if required:
-            errors.append(
-                f"extra required parameter(s) {', '.join(required)}: "
-                "callers of the reference's signature do not pass them"
-            )
-
-    return errors
+        extra = _extra_by_position(expected, found)
+    else:
+        errors = _compare_by_name(
+            expected, found, source=source, target=target, ctx=ctx
+        )
+        extra = _extra_by_name(expected, found)
+    return errors + _extra_param_errors(extra, allow_extra_params=allow_extra_params)
 
 
 def evaluate_method_compatibility(

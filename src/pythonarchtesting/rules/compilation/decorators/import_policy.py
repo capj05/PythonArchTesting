@@ -6,18 +6,33 @@ from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
+from ..common import (
+    InvalidParam,
+    bool_param,
+    bool_problem,
+    choice_problem,
+    declaration_evidence,
+    drop_with_sentinel,
+    marker_severity,
+    reject_invalid_param,
+    reject_invalid_severity,
+    with_rule_id_suffix,
+    without_none,
+)
 
 _VALID_IMPORT_POLICY_MODES = {"reachable", "direct"}
+# "entity" is the legacy name of "module".
+_VALID_SCOPES = ("package", "module", "entity")
+_OPTIONS = ("scope", "mode", "ignore_type_checking")
+_INVALID_PREFIX = "DEP001/forbid_imports/invalid_declaration"
 
 
 def _normalize_import_policy_scope(raw_scope: Any) -> Literal["module", "package"]:
+    """The scope of a declaration whose ``scope`` is valid, in any case."""
     scope = str(raw_scope).lower()
     if scope == "entity":
         return "module"
-    if scope in {"module", "package"}:
-        return cast(Literal["module", "package"], scope)
-    return "package"
+    return cast(Literal["module", "package"], scope)
 
 
 def _invalid_mode_evidence(
@@ -33,18 +48,25 @@ def _invalid_mode_evidence(
         "message": "forbid_imports mode must be 'reachable' or 'direct'.",
         "severity": "error",
     }
-    return Evidence(
-        evidence_id=evidence_id("compiler_invalid_import_policy_mode", payload),
-        type="compiler_invalid_import_policy_mode",
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location={
-            "filepath": source_entity.filepath_rel,
-            "lineno": declaration.lineno or source_entity.lineno,
-            "col": declaration.col,
-        },
+    return declaration_evidence(
+        source_entity,
+        declaration,
+        evidence_type="compiler_invalid_import_policy_mode",
+        payload=payload,
+    )
+
+
+def _forbidden_problem(raw: Any, forbidden: list[str]) -> InvalidParam | None:
+    """Why the declaration forbids nothing, ``None`` when it names a module:
+    a ``forbid_imports()`` without modules would compile to a rule that
+    always passes."""
+    if forbidden:
+        return None
+    return InvalidParam(
+        param="forbidden",
+        value=raw,
+        valid=None,
+        reason="give at least one module name to forbid",
     )
 
 
@@ -60,7 +82,7 @@ def compile_forbid_imports(
 
     _ = cfg
     compiler_evidence: List[Evidence] = []
-    params_kwargs = dict(declaration.params)
+    params_kwargs = without_none(declaration.params, _OPTIONS)
 
     forbidden_raw = params_kwargs.get("forbidden", [])
     if isinstance(forbidden_raw, str):
@@ -86,6 +108,18 @@ def compile_forbid_imports(
     else:
         ignore_globs = []
 
+    rejected = reject_invalid_param(
+        source_entity,
+        declaration,
+        _forbidden_problem(forbidden_raw, forbidden)
+        or choice_problem(params_kwargs, "scope", _VALID_SCOPES),
+        marker="forbid_imports",
+        rule_id_prefix=_INVALID_PREFIX,
+        rule_id_suffix=rule_id_suffix,
+        key="declaration",
+    )
+    if rejected is not None:
+        return rejected
     scope = _normalize_import_policy_scope(params_kwargs.get("scope", "package"))
 
     package = params_kwargs.get("package")
@@ -97,15 +131,38 @@ def compile_forbid_imports(
         compiler_evidence.append(
             _invalid_mode_evidence(source_entity, declaration, mode)
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            marker="forbid_imports",
+            rule_id_prefix=_INVALID_PREFIX,
+            rule_id_suffix=rule_id_suffix,
+            param="mode",
+            value=mode,
+            valid=_VALID_IMPORT_POLICY_MODES,
+            reason="forbid_imports mode must be 'reachable' or 'direct'.",
+        )
 
-    ignore_type_checking = bool(params_kwargs.get("ignore_type_checking", True))
+    reject: dict[str, Any] = {
+        "marker": "forbid_imports",
+        "rule_id_prefix": _INVALID_PREFIX,
+        "rule_id_suffix": rule_id_suffix,
+        "key": "declaration",
+        "compiler_evidence": compiler_evidence,
+    }
+    rejected = reject_invalid_param(
+        source_entity,
+        declaration,
+        bool_problem(params_kwargs, "ignore_type_checking"),
+        **reject,
+    ) or reject_invalid_severity(source_entity, declaration, **reject)
+    if rejected is not None:
+        return rejected
+    ignore_type_checking = bool_param(
+        params_kwargs, "ignore_type_checking", default=True
+    )
 
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
+    base_severity = marker_severity(params_kwargs)
 
     selector = RuleSelector(
         source_entity_id=source_entity.canonical_id,

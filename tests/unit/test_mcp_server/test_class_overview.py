@@ -435,6 +435,32 @@ def test_unknown_principle_is_a_tool_input_error(report_path: Path):
         explain_target(str(report_path), "xxxx01_novak", principle="nope")
 
 
+def test_a_principle_other_than_the_recorded_one_is_a_tool_input_error(
+    report_path: Path,
+):
+    """Audit K4: a report that records its principle (a run whose source was
+    a task) is not read by another one, as run_evaluation refuses it too."""
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["run"]["principle"] = "encapsulation"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    path = str(report_path)
+
+    with pytest.raises(ToolInputError, match="records the principle 'encapsulation'"):
+        class_overview(path, "polymorphism")
+    with pytest.raises(ToolInputError, match="records the principle 'encapsulation'"):
+        explain_target(path, "xxxx01_novak", principle="polymorphism")
+    with pytest.raises(ToolInputError, match="records the principle 'encapsulation'"):
+        summarize_report(path, principle="polymorphism")
+    # The recorded one, given or implied, still reads the report.
+    assert class_overview(path)["principle"] == "encapsulation"
+    assert class_overview(path, "encapsulation")["principle"] == "encapsulation"
+    found = explain_target(path, "xxxx01_novak", principle="encapsulation")
+    assert found["principle"] == "encapsulation"
+    assert summarize_report(path, principle="encapsulation")["principle"] == (
+        "encapsulation"
+    )
+
+
 def _student(index: int) -> dict[str, Any]:
     """Submission ``index`` of a realistic class: three rules with up to three
     facts each, mixing typical errors, unclassified violations, an unmatched

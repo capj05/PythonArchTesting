@@ -69,7 +69,10 @@ def build() -> None:
 
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [(rule.rule_type, rule.params["param"]) for rule in rules] == [
+        ("compiler_invalid_param", "target_kind")
+    ]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
 
@@ -85,7 +88,7 @@ class SqlRepository:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_protocol_reference"]
 
@@ -107,7 +110,7 @@ class SqlRepository:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_protocol_reference"]
     assert evidence[0].payload["reason"] == "not_typing_protocol"

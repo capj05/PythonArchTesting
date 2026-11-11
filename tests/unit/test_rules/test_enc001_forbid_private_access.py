@@ -571,3 +571,214 @@ def test_a_receiver_says_which_change_its_write_makes(
     )
 
     assert [(ast.unparse(r.value), r.change) for r in reads] == changes
+
+
+_TWO_ITEMS = (
+    "class Inventory:\n"
+    "    def __init__(self):\n"
+    "        self._items = {}\n\n\n"
+    "class Cart:\n"
+    "    def __init__(self):\n"
+    "        self._items = []\n\n"
+    "    def checkout(self, inv):\n"
+    "        {marker}\n"
+    "        return inv._items\n\n"
+    '    def __eq__(self, other: "Cart"):\n'
+    "        {marker}\n"
+    "        return self._items == other._items\n\n"
+    '    def merged(self, other: "Cart"):\n'
+    "        {marker}\n"
+    "        fresh = type(self)()\n"
+    "        copy: Cart = Cart()\n"
+    "        return fresh._items + copy._items + other._items + Cart()._items\n\n"
+    "    @classmethod\n"
+    '    def joined(cls, a: "Cart", b: "model.Cart"):\n'
+    "        {marker}\n"
+    "        return cls()._items + a._items + b._items\n"
+)
+
+
+def test_forbid_private_access_a_shared_name_is_not_the_own_attribute(
+    tmp_path: Path,
+) -> None:
+    """``inv._items`` in ``Cart.checkout`` reads the inventory's attribute,
+    though ``Cart`` has an ``_items`` of its own: only a receiver known to be
+    a ``Cart`` (annotated so, built by ``Cart()`` or ``type(self)()``, or
+    ``cls``) reads the class's own business (audit E1)."""
+    results = _owned(tmp_path, _TWO_ITEMS)
+
+    by_target = {r["target"]["qualname"]: r for r in results}
+    assert by_target["Cart.checkout"]["status"] == "FAILED"
+    [fact] = by_target["Cart.checkout"]["details"]["facts"]
+    assert (fact["attribute"], fact["reader"]) == ("_items", "model:Cart.checkout")
+    for name in ("Cart.__eq__", "Cart.merged", "Cart.joined"):
+        assert by_target[name]["status"] == "OK", by_target[name]
+
+
+def test_forbid_private_access_a_name_only_the_family_defines_stays_own(
+    tmp_path: Path,
+) -> None:
+    """An unannotated ``other`` still reads the class's own attribute when no
+    project class outside the class's family defines that name: a subclass
+    assigning it too does not make it foreign."""
+    text = (
+        "class Cart:\n"
+        "    def __init__(self):\n"
+        "        self._items = []\n\n"
+        "    @classmethod\n"
+        "    def copied(cls, other):\n"
+        "        {marker}\n"
+        "        return cls(other._items)\n\n\n"
+        "class BigCart(Cart):\n"
+        "    def __init__(self):\n"
+        "        self._items = [1]\n"
+    )
+
+    results = _owned(tmp_path, text)
+
+    assert [r["status"] for r in results] == ["OK"], results
+
+
+def test_forbid_private_access_builds_the_class_lookup_once_per_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two marked methods of one target share one ``ProtocolEntityLookup``;
+    each target gets its own."""
+    from pythonarchtesting.protocols.entity_lookup import ProtocolEntityLookup
+
+    built: list[int] = []
+    original = ProtocolEntityLookup.from_entities.__func__  # type: ignore[attr-defined]
+
+    def counting(cls: type, entities: Any) -> Any:
+        built.append(len(entities))
+        return original(cls, entities)
+
+    monkeypatch.setattr(ProtocolEntityLookup, "from_entities", classmethod(counting))
+    shop = (
+        "from .inventory import Inventory\n\n\n"
+        "class Shelf(Inventory):\n"
+        "    def __eq__(self, other):\n"
+        "        {marker}\n"
+        "        return self._stock == other._stock\n\n"
+        "    def same(self, other):\n"
+        "        {marker}\n"
+        "        return self._stock is other._stock\n"
+    )
+    reference = {"inventory.py": _INVENTORY, "shop.py": _marked(shop)}
+    target = {"inventory.py": _INVENTORY, "shop.py": _plain(shop)}
+
+    results = _run(tmp_path, reference, target)
+
+    assert [result["status"] for result in results] == ["OK", "OK"]
+    assert len(built) == 1
+
+
+_ROOMS = (
+    "class Player:\n"
+    "    def __init__(self, name):\n"
+    "        self._name = name\n"
+    "{player_exits}\n\n"
+    "class Room:\n"
+    "    def __init__(self, name):\n"
+    "        self._name = name\n"
+    "        self._exits = []\n\n"
+    "    def __eq__(self, other):\n"
+    "        {marker}\n"
+    "        return isinstance(other, Room) and self._name == other._name\n\n"
+    "    def __lt__(self, other):\n"
+    "        {marker}\n"
+    "        return self._name < other._name\n\n"
+    "    def same(self, other):\n"
+    "        {marker}\n"
+    "        if not isinstance(other, Room):\n"
+    "            return False\n"
+    "        return self._name == other._name\n\n"
+    "    def either(self, other):\n"
+    "        {marker}\n"
+    "        if isinstance(other, (Room, Player)):\n"
+    "            return other._name\n"
+    "        return None\n\n"
+    "    def guessed(self, other):\n"
+    "        {marker}\n"
+    "        return other._name if isinstance(other, Room) else ''\n\n"
+    "    def too_early(self, other):\n"
+    "        {marker}\n"
+    "        name = other._name\n"
+    "        return isinstance(other, Room) and name == self._name\n\n"
+    "    def wrong_class(self, other):\n"
+    "        {marker}\n"
+    "        return isinstance(other, Player) and other._name == self._name\n\n"
+    "    def __ne__(self, other: Player):\n"
+    "        {marker}\n"
+    "        return other._name\n\n"
+    "    def connect(self, other):\n"
+    "        {marker}\n"
+    "        other._exits.append(self)\n"
+)
+
+
+@pytest.mark.parametrize("player_has_exits", [False, True])
+def test_forbid_private_access_an_isinstance_check_or_a_dunder_knows_the_class(
+    tmp_path: Path, player_has_exits: bool
+) -> None:
+    """``other`` is known to be a ``Room`` behind ``isinstance(other, Room)``
+    (an ``if``, an ``and``, an early ``return``, a conditional expression) and
+    as the other operand of a comparison or arithmetic dunder; elsewhere an
+    unannotated ``other`` passes only while no class outside the family
+    defines the name (``connect``)."""
+    exits = "        self._exits = []\n" if player_has_exits else ""
+    results = _owned(tmp_path, _ROOMS.replace("{player_exits}\n", exits))
+
+    status = {r["target"]["qualname"]: r["status"] for r in results}
+    assert status == {
+        "Room.__eq__": "OK",
+        "Room.__lt__": "OK",
+        "Room.same": "OK",
+        "Room.either": "OK",
+        "Room.guessed": "OK",
+        "Room.too_early": "FAILED",
+        "Room.wrong_class": "FAILED",
+        "Room.__ne__": "FAILED",
+        "Room.connect": "FAILED" if player_has_exits else "OK",
+    }
+
+
+def test_forbid_private_access_a_class_of_another_module_is_not_the_own_one(
+    tmp_path: Path,
+) -> None:
+    """``views.Item`` is not ``models.Item`` though both are called ``Item``:
+    an annotation or a call naming a class through an import is resolved
+    to that class; only a name that cannot be resolved is taken by its
+    simple name."""
+    models = (
+        "from . import views\n"
+        "from .views import Item as ViewItem\n\n\n"
+        "class Item:\n"
+        "    def __init__(self):\n"
+        "        self._price = 1\n\n"
+        '    def by_view(self, other: "views.Item"):\n'
+        "        {marker}\n"
+        "        return other._price\n\n"
+        "    def by_alias(self, other: ViewItem):\n"
+        "        {marker}\n"
+        "        return other._price\n\n"
+        "    def built(self):\n"
+        "        {marker}\n"
+        "        return views.Item()._price\n\n"
+        "    def own(self, other: Item, third: 'models.Item'):\n"
+        "        {marker}\n"
+        "        return other._price + Item()._price + third._price\n"
+    )
+    views = "class Item:\n    def __init__(self):\n        self._price = 2\n"
+    reference = {"models.py": _marked(models), "views.py": views}
+    target = {"models.py": _plain(models), "views.py": views}
+
+    results = _run(tmp_path, reference, target)
+
+    status = {r["target"]["qualname"]: r["status"] for r in results}
+    assert status == {
+        "Item.by_view": "FAILED",
+        "Item.by_alias": "FAILED",
+        "Item.built": "FAILED",
+        "Item.own": "OK",
+    }

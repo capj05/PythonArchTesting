@@ -7,7 +7,7 @@ from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 from pythonarchtesting.protocols.entity_lookup import ProtocolEntityLookup
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 _STDLIB_ENUM_FAMILIES = frozenset(
     {
@@ -92,7 +92,7 @@ class EnumTypeEvaluator:
 
         if target.kind != "class":
             details["reason"] = "target_entity_is_not_class"
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -111,7 +111,7 @@ class EnumTypeEvaluator:
         details["enum_family"] = enum_family
         details["detection_origin"] = detection_origin
 
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target,

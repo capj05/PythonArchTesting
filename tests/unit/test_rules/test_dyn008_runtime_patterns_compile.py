@@ -203,7 +203,10 @@ def test_a_spy_in_a_case_init_counts() -> None:
 def test_a_wrong_kind_is_an_invalid_target(marker: str, on: str) -> None:
     rules, evidence, _ = _compile(marker, on=on)
 
-    assert rules == []
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [(rule.rule_type, rule.params["param"]) for rule in rules] == [
+        ("compiler_invalid_param", "target_kind")
+    ]
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
 
 

@@ -13,7 +13,10 @@ imports a target module performs while it is imported
 This file runs as a standalone script in a fresh interpreter, never as an
 import of the framework, so it uses the standard library only. It reads one JSON
 request from stdin and writes one JSON response to stdout. Anything the target
-prints while it runs is redirected to stderr, so it cannot corrupt the response.
+prints while it runs is redirected to stderr, so it cannot corrupt the response;
+so is what it writes to descriptor 1 itself (``os.write(1, ...)``, a process it
+starts): the response leaves through a copy of descriptor 1 taken before the
+target is imported (``_response_channel``).
 """
 
 from __future__ import annotations
@@ -41,7 +44,6 @@ import traceback
 import types
 from typing import Any, Iterable, Iterator
 
-_REPR_LIMIT = 200
 _MISSING = object()
 # Frames running this file's own code (the write recorder's __setattr__
 # wrapper, the case runner) are not target code and not a layer.
@@ -80,16 +82,6 @@ class JobTimeout(BaseException):
     It derives from ``BaseException`` so ordinary ``except Exception`` blocks
     in target code do not swallow it; the probe's own broad handlers re-raise it.
     """
-
-
-def _short_repr(value: Any) -> str:
-    try:
-        text = repr(value)
-    except Exception as exc:  # pragma: no cover - defensive, repr rarely raises
-        text = f"<unrepresentable {type(value).__name__}: {exc}>"
-    if len(text) > _REPR_LIMIT:
-        return text[: _REPR_LIMIT - 3] + "..."
-    return text
 
 
 def _describe_exception(exc: BaseException) -> str:
@@ -1920,6 +1912,121 @@ def _run_case(
         return _observe_case(index, case, request, module, package, writes, instances)
 
 
+def _case_call(
+    case: dict[str, Any],
+    request: dict[str, Any],
+    module: Any,
+    package: str | None,
+    instances: InstanceRecorder | None,
+) -> tuple[Any, Any, list[Any], dict[str, Any]]:
+    """The instance (``None`` for a function or a static or class method),
+    the callable and the arguments of one case, its ``steps`` run on the
+    instance; ``CaseSetupError`` when they cannot be built."""
+    namespace = vars(module)
+    qualname: str = request["qualname"]
+    owner_name, _, member_name = qualname.rpartition(".")
+    owner = (
+        _resolve_name(owner_name, namespace, package)
+        if request["kind"] == "method"
+        else None
+    )
+    if owner is not None and isinstance(
+        inspect.getattr_static(owner, member_name, None),
+        (staticmethod, classmethod),
+    ):
+        # Static and class methods need no instance; building one would
+        # demand constructor arguments the call never uses.
+        subject = None
+        func = getattr(owner, member_name)
+    elif owner is not None:
+        init = case.get("init", request.get("init")) or {}
+        init_args = [_build_value(v, namespace, package) for v in init.get("args", [])]
+        init_kwargs = {
+            k: _build_value(v, namespace, package)
+            for k, v in (init.get("kwargs") or {}).items()
+        }
+        try:
+            subject = owner(*init_args, **init_kwargs)
+        except JobTimeout:
+            raise
+        except BaseException as exc:
+            raise CaseSetupError(
+                f"constructing {owner_name!r} raised {_describe_exception(exc)}"
+            ) from exc
+        func = getattr(subject, member_name)
+    else:
+        subject = None
+        func = _resolve_name(qualname, namespace, package)
+    if case.get("steps"):
+        if subject is None:
+            raise CaseSetupError("steps need an instance to call methods on")
+        # The steps prepare the instance; what they do is not observed.
+        recording = instances is not None and instances.active
+        if instances is not None:
+            instances.active = False
+        _run_steps(subject, list(case["steps"]), namespace, package)
+        if instances is not None:
+            instances.active = recording
+        _SPY_CALLS.clear()
+    args = [_build_value(v, namespace, package) for v in case.get("args", [])]
+    kwargs = {
+        k: _build_value(v, namespace, package)
+        for k, v in (case.get("kwargs") or {}).items()
+    }
+    if instances is not None and instances.active:
+        # Building the arguments may have imported more of the project.
+        instances.wrap_loaded()
+    return subject, func, args, kwargs
+
+
+def _call_recorder(
+    observe: dict[str, Any], module: Any, package: str | None, project: Any
+) -> CallRecorder | None:
+    """The recorder of the calls ``observe.calls`` asks for, if any."""
+    if observe.get("calls") == "edges":
+        return CallRecorder(
+            None, package, project, external=bool(observe.get("external"))
+        )
+    if observe.get("calls") == "transitive":
+        return CallRecorder(
+            module.__name__,
+            package,
+            project,
+            transitive=True,
+            builtins=observe.get("builtins") or (),
+        )
+    if observe.get("calls"):
+        # The project only names the file of each call here.
+        return CallRecorder(
+            module.__name__, package, project, builtins=observe.get("builtins") or ()
+        )
+    return None
+
+
+def _report_observations(
+    outcome: dict[str, Any],
+    observe: dict[str, Any],
+    lines: LineRecorder | None,
+    calls: CallRecorder | None,
+    writes: WriteRecorder | None,
+    instances: InstanceRecorder | None,
+) -> None:
+    """Add to ``outcome`` what the recorders of one case saw."""
+    coverage = lines.report() if lines is not None else None
+    if coverage is not None:
+        outcome["lines"] = coverage
+    if calls is not None:
+        outcome["calls"] = calls.calls
+        if calls.unobserved:
+            outcome["unobserved"] = dict(calls.unobserved)
+    if writes is not None and observe.get("writes"):
+        outcome["writes"] = list(writes.writes)
+    if instances is not None and observe.get("instances"):
+        outcome["instances"] = list(instances.instances)
+    if observe.get("spies"):
+        outcome["spy_calls"] = list(_SPY_CALLS)
+
+
 def _observe_case(
     index: int,
     case: dict[str, Any],
@@ -1952,66 +2059,13 @@ def _observe_case(
     if instances is not None and observe.get("instances"):
         transitive = observe.get("instances") == "transitive"
         instances.start(module.__name__ if transitive else None)
-    namespace = vars(module)
-    qualname: str = request["qualname"]
-    owner_name, _, member_name = qualname.rpartition(".")
     outcome: dict[str, Any] = {"index": index, "status": "passed", "failures": []}
     failures: list[str] = outcome["failures"]
 
     try:
-        owner = (
-            _resolve_name(owner_name, namespace, package)
-            if request["kind"] == "method"
-            else None
+        subject, func, args, kwargs = _case_call(
+            case, request, module, package, instances
         )
-        if owner is not None and isinstance(
-            inspect.getattr_static(owner, member_name, None),
-            (staticmethod, classmethod),
-        ):
-            # Static and class methods need no instance; building one would
-            # demand constructor arguments the call never uses.
-            subject = None
-            func = getattr(owner, member_name)
-        elif owner is not None:
-            init = case.get("init", request.get("init")) or {}
-            init_args = [
-                _build_value(v, namespace, package) for v in init.get("args", [])
-            ]
-            init_kwargs = {
-                k: _build_value(v, namespace, package)
-                for k, v in (init.get("kwargs") or {}).items()
-            }
-            try:
-                subject = owner(*init_args, **init_kwargs)
-            except JobTimeout:
-                raise
-            except BaseException as exc:
-                raise CaseSetupError(
-                    f"constructing {owner_name!r} raised {_describe_exception(exc)}"
-                ) from exc
-            func = getattr(subject, member_name)
-        else:
-            subject = None
-            func = _resolve_name(qualname, namespace, package)
-        if case.get("steps"):
-            if subject is None:
-                raise CaseSetupError("steps need an instance to call methods on")
-            # The steps prepare the instance; what they do is not observed.
-            recording = instances is not None and instances.active
-            if instances is not None:
-                instances.active = False
-            _run_steps(subject, list(case["steps"]), namespace, package)
-            if instances is not None:
-                instances.active = recording
-            _SPY_CALLS.clear()
-        args = [_build_value(v, namespace, package) for v in case.get("args", [])]
-        kwargs = {
-            k: _build_value(v, namespace, package)
-            for k, v in (case.get("kwargs") or {}).items()
-        }
-        if instances is not None and instances.active:
-            # Building the arguments may have imported more of the project.
-            instances.wrap_loaded()
     except CaseSetupError as exc:
         if instances is not None:
             instances.stop()
@@ -2024,26 +2078,9 @@ def _observe_case(
     flow_calls = bool(case.get("flow_calls"))
     stages: list[list[Any]] = []
     called: list[dict[str, str]] = []
-    calls: CallRecorder | None = None
     root = request.get("target_root")
     project = _Project(str(root), package) if root else None
-    if observe.get("calls") == "edges":
-        calls = CallRecorder(
-            None, package, project, external=bool(observe.get("external"))
-        )
-    elif observe.get("calls") == "transitive":
-        calls = CallRecorder(
-            module.__name__,
-            package,
-            project,
-            transitive=True,
-            builtins=observe.get("builtins") or (),
-        )
-    elif observe.get("calls"):
-        # The project only names the file of each call here.
-        calls = CallRecorder(
-            module.__name__, package, project, builtins=observe.get("builtins") or ()
-        )
+    calls = _call_recorder(observe, module, package, project)
     tracing = bool(capture or flow_calls)
     if tracing and project is None:
         project = _Project(os.path.dirname(str(module.__file__)), package)
@@ -2091,19 +2128,7 @@ def _observe_case(
         if instances is not None:
             instances.stop()
 
-    coverage = lines.report() if lines is not None else None
-    if coverage is not None:
-        outcome["lines"] = coverage
-    if calls is not None:
-        outcome["calls"] = calls.calls
-        if calls.unobserved:
-            outcome["unobserved"] = dict(calls.unobserved)
-    if writes is not None and observe.get("writes"):
-        outcome["writes"] = list(writes.writes)
-    if instances is not None and observe.get("instances"):
-        outcome["instances"] = list(instances.instances)
-    if observe.get("spies"):
-        outcome["spy_calls"] = list(_SPY_CALLS)
+    _report_observations(outcome, observe, lines, calls, writes, instances)
 
     if capture:
         outcome["stages"] = stages
@@ -2115,15 +2140,39 @@ def _observe_case(
     return outcome
 
 
-class _Captured(io.StringIO):
-    """A job's output buffer; target code that closes ``sys.stdout`` keeps it."""
+_RETRIGGER_S = 0.1
+_STDERR_TAIL = 2000
+
+
+class _Captured(io.TextIOBase):
+    """A job's output buffer, which keeps only the last ``_STDERR_TAIL``
+    characters: a job that prints in an endless loop runs into its own
+    timeout, not out of the memory the whole batch shares. Target code that
+    closes ``sys.stdout`` keeps it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []
+        self._size = 0
+
+    def writable(self) -> bool:
+        return True
+
+    def write(self, text: str) -> int:
+        if not isinstance(text, str):
+            raise TypeError(f"write() argument must be str, not {type(text).__name__}")
+        self._parts.append(text[-_STDERR_TAIL:])
+        self._size += len(self._parts[-1])
+        if self._size > 2 * _STDERR_TAIL:
+            kept = "".join(self._parts)[-_STDERR_TAIL:]
+            self._parts, self._size = [kept], len(kept)
+        return len(text)
+
+    def getvalue(self) -> str:
+        return "".join(self._parts)[-_STDERR_TAIL:]
 
     def close(self) -> None:
         pass
-
-
-_RETRIGGER_S = 0.1
-_STDERR_TAIL = 2000
 
 
 @contextlib.contextmanager
@@ -2211,7 +2260,7 @@ def _run_job(
     result: dict[str, Any] = {
         "status": "timeout" if timed_out else "completed",
         "cases": cases,
-        "stderr": captured.getvalue()[-_STDERR_TAIL:],
+        "stderr": captured.getvalue(),
     }
     if timed_out:
         result["error"] = f"target did not finish within {timeout_s:g} s"
@@ -2383,9 +2432,11 @@ def main() -> int:
     sys.path[:] = [p for p in sys.path if os.path.abspath(p or ".") != here]
 
     request = json.loads(sys.stdin.read())
+    if request.get("mode") == "fork":
+        return _serve(request)
+    channel = _response_channel()
     recorder = ImportRecorder(request["target_root"])
     recorder.install()
-    real_stdout = sys.stdout
     response: dict[str, Any]
     with contextlib.redirect_stdout(sys.stderr):
         try:
@@ -2434,9 +2485,261 @@ def main() -> int:
                     for index, case in enumerate(request["cases"])
                 ]
                 response = {"status": "completed", "cases": cases}
-    real_stdout.write(json.dumps(response))
-    real_stdout.flush()
+    try:
+        _write_all(channel, json.dumps(response).encode("utf-8"))
+    finally:
+        os.close(channel)
     return 0
+
+
+def _response_channel() -> int:
+    """A descriptor of its own for the response; descriptor 1 joins 2.
+
+    ``print`` is redirected to stderr while the target runs, but the target
+    can still reach descriptor 1 without ``sys.stdout``: ``os.write(1, ...)``,
+    a ``sys.stdout`` it opened on descriptor 1 itself (and whose closing
+    closes the descriptor), a process it starts. Whatever it writes there
+    goes to stderr as its printed output does, and the response leaves
+    through a copy taken first, which processes the target starts do not
+    inherit.
+    """
+    channel = os.dup(1)
+    os.dup2(2, 1)
+    return channel
+
+
+def _flush_standard_streams() -> None:
+    """Flush ``sys.stdout`` and ``sys.stderr`` as far as the target left them
+    open: the response is written by then, and a descriptor the target closed
+    must not turn a finished run into a failed one."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except (OSError, ValueError):
+            pass
+
+
+# A forked child that could not stand in for a probe of its own exits so; the
+# runner then runs its request in an interpreter of its own. A target that
+# exits with this code itself only costs that second run.
+_RETRY_ALONE = 117
+
+
+class _Overrun(Exception):
+    """A forked child ran past its time."""
+
+
+def _serve(request: dict[str, Any]) -> int:
+    """Answer each of ``request["requests"]`` in a forked child of its own.
+
+    This interpreter imports nothing of the target. Each child answers its
+    request as a probe started for it alone would (``main``), with its own
+    standard streams and CPU limit, and, with ``own_home``, an empty
+    ``HOME`` and ``TMPDIR`` of its own; what it writes and how it ended goes
+    back to the runner (``runner.run_forked``), ``retry`` when it got no
+    answer here. It stays in this interpreter's process group, so the
+    runner's kill of that group ends it and what it started.
+    """
+    home = os.environ.get("HOME") if request.get("own_home") else None
+    answers = {
+        str(index): _answer_forked(entry, index, home)
+        for index, entry in enumerate(request.get("requests") or [])
+    }
+    sys.stdout.write(json.dumps({"status": "completed", "cases": [], "jobs": answers}))
+    sys.stdout.flush()
+    return 0
+
+
+def _answer_forked(
+    entry: dict[str, Any], index: int, home: str | None
+) -> dict[str, Any]:
+    files: list[int] = []
+    own_home = None
+    try:
+        files = [os.memfd_create(f"probe-{name}") for name in ("in", "out", "err")]
+        _write_all(files[0], json.dumps(entry["request"]).encode("utf-8"))
+        if home:
+            own_home = os.path.join(home, f"probe-{index}")
+            os.mkdir(own_home)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        parent = os.getpid()
+        pid = os.fork()
+        if pid == 0:
+            _forked_child(files, own_home, entry.get("cpu_s"), parent)
+        status, timed_out = _await_child(pid, float(entry["timeout_s"]))
+        _kill_descendants()  # what the child left running, adopted on its death
+        code = os.waitstatus_to_exitcode(status) if status is not None else 0
+        if not timed_out and code == _RETRY_ALONE:
+            return {"retry": True}
+        return {
+            "stdout": _read_from(files[1], 0).decode("utf-8", errors="replace"),
+            "stderr": _read_from(files[2], -_STDERR_TAIL).decode(
+                "utf-8", errors="replace"
+            ),
+            "timed_out": timed_out,
+            "returncode": code,
+        }
+    except OSError:
+        return {"retry": True}
+    finally:
+        for descriptor in files:
+            os.close(descriptor)
+        if own_home is not None:
+            _remove_tree(own_home)
+
+
+def _write_all(descriptor: int, data: bytes) -> None:
+    view = memoryview(data)
+    while view:
+        view = view[os.write(descriptor, view) :]
+
+
+def _read_from(descriptor: int, offset: int) -> bytes:
+    """The file's bytes from ``offset``; a negative one counts from the end."""
+    size = os.lseek(descriptor, 0, os.SEEK_END)
+    os.lseek(descriptor, max(0, size + offset) if offset < 0 else offset, os.SEEK_SET)
+    parts = []
+    while chunk := os.read(descriptor, 1 << 20):
+        parts.append(chunk)
+    return b"".join(parts)
+
+
+def _await_child(pid: int, timeout_s: float) -> tuple[int | None, bool]:
+    """The wait status of child ``pid``, and whether it ran past ``timeout_s``
+    (it is killed then; what it started is left to ``_kill_descendants``).
+
+    The alarm only kills; it never interrupts the wait, so a status reaped
+    just as the alarm goes off is still kept. It kills through a descriptor
+    of the process (``pidfd_open``), which never names another one: an
+    alarm that fires after the wait reaped the child cannot hit a process
+    that has since been given its pid.
+    """
+    state = {"done": False, "fired": False}
+    process = _process_descriptor(pid)
+
+    def on_alarm(_signum: int, _frame: Any) -> None:
+        if not state["done"]:
+            state["fired"] = True
+            _kill_child(pid, process)
+
+    previous = signal.signal(signal.SIGALRM, on_alarm)
+    try:
+        if timeout_s > 0:
+            signal.setitimer(signal.ITIMER_REAL, timeout_s)
+        else:
+            on_alarm(signal.SIGALRM, None)
+        try:
+            status: int | None = os.waitpid(pid, 0)[1]
+        except ChildProcessError:
+            status = None
+    finally:
+        state["done"] = True
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+        if process is not None:
+            os.close(process)
+    # A child that exited on its own just as the alarm fired did not overrun.
+    timed_out = state["fired"] and (status is None or not os.WIFEXITED(status))
+    return status, timed_out
+
+
+def _process_descriptor(pid: int) -> int | None:
+    """A descriptor of process ``pid`` (``None`` where the kernel has none)."""
+    try:
+        return os.pidfd_open(pid)
+    except (AttributeError, OSError):
+        return None
+
+
+def _kill_child(pid: int, process: int | None) -> None:
+    """Kill child ``pid`` through its descriptor ``process`` where there is
+    one; without, by pid, which only ``_await_child``'s ``done`` guards."""
+    try:
+        if process is not None:
+            signal.pidfd_send_signal(process, signal.SIGKILL)
+        else:
+            os.kill(pid, signal.SIGKILL)
+    except OSError:
+        pass
+
+
+def _forked_child(files: list[int], home: str | None, cpu_s: Any, parent: int) -> None:
+    """Become a probe of its own for the request in ``files[0]``; never returns.
+
+    Modules imported here to set the child up are dropped again before the
+    target is imported, so the target finds the same modules cached as a
+    probe of its own would: a target's ``resource.py`` is not shadowed by the
+    standard ``resource`` used for the CPU limit.
+    """
+    preloaded = set(sys.modules)
+    try:
+        # No session or process group of its own: the runner kills the
+        # forking interpreter's group when the whole run overruns, and so
+        # reaches this child and what the target started, as it reaches a
+        # probe of its own and what that started.
+        _die_with_parent(parent)
+        for descriptor, standard in zip(files, (0, 1, 2)):
+            os.dup2(descriptor, standard)
+        for descriptor in files:
+            os.close(descriptor)
+        if home is not None:
+            os.environ["HOME"] = home
+            os.environ["TMPDIR"] = home
+        if cpu_s is not None:
+            import resource  # pylint: disable=import-outside-toplevel
+
+            _, hard = resource.getrlimit(resource.RLIMIT_CPU)
+            value = (
+                int(cpu_s) if hard == resource.RLIM_INFINITY else min(int(cpu_s), hard)
+            )
+            resource.setrlimit(resource.RLIMIT_CPU, (value, value))
+        sys.stdin.seek(0)
+        _become_subreaper()
+        for name in set(sys.modules) - preloaded:
+            del sys.modules[name]
+        exit_code = main()
+        _kill_descendants()
+        _flush_standard_streams()
+    except BaseException:  # noqa: BLE001 - anything else: a probe of its own answers
+        os._exit(_RETRY_ALONE)
+    os._exit(exit_code)
+
+
+_PR_SET_PDEATHSIG = 1
+
+
+def _die_with_parent(parent: int) -> None:
+    """Have the kernel kill this child when ``parent`` dies.
+
+    The runner's kill of the whole group reaches the child anyway; this
+    covers a forking interpreter that dies any other way (the OOM killer),
+    whose child would run on unwatched. Linux only, as forking is.
+    """
+    import ctypes  # pylint: disable=import-outside-toplevel
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
+    if os.getppid() != parent:  # the parent died before the signal was set
+        os._exit(_RETRY_ALONE)
+
+
+def _remove_tree(top: str) -> None:
+    """Remove ``top`` and what is in it, as far as it goes; symlinks are not followed."""
+    for directory, subdirectories, names in os.walk(top, topdown=False):
+        for name in names + subdirectories:
+            path = os.path.join(directory, name)
+            try:
+                if os.path.isdir(path) and not os.path.islink(path):
+                    os.rmdir(path)
+                else:
+                    os.unlink(path)
+            except OSError:
+                pass
+    try:
+        os.rmdir(top)
+    except OSError:
+        pass
 
 
 _PR_SET_CHILD_SUBREAPER = 36
@@ -2503,8 +2806,7 @@ if __name__ == "__main__":
     _become_subreaper()
     exit_code = main()
     _kill_descendants()
-    sys.stdout.flush()
-    sys.stderr.flush()
+    _flush_standard_streams()
     # The response is written; a non-daemon thread the target left running
     # would otherwise keep the interpreter alive until the runner's timeout,
     # which then discards the finished response.

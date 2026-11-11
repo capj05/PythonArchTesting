@@ -6,15 +6,10 @@ import logging
 from typing import Any, List, Tuple
 
 from pythonarchtesting.config import Config
-from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
-from pythonarchtesting.rules.compilation.common import (
-    canonicalize_payload,
-    evidence_id,
-)
 from pythonarchtesting.rules.compilation.declarations import (
-    declaration_rule_id_suffixes,
-    is_invalid_annotation_declaration,
+    compile_declarations,
+    in_rule_order,
     normalize_declaration_entries,
 )
 from pythonarchtesting.rules.compilation.decorators.api_signature import (
@@ -95,33 +90,23 @@ from pythonarchtesting.rules.compilation.decorators.runtime_structure import (
 
 logger = logging.getLogger(__name__)
 
-
-def _invalid_declaration_evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-) -> Evidence:
-    payload = {
-        "declaration": declaration.kind,
-        "issue": "invalid_declaration",
-        "raw": declaration.raw,
-        "unsupported": declaration.unsupported,
-        "base_annotation": declaration.base_annotation,
-        "container": declaration.container,
+# The declaration kinds whose compiler also gets every source entity: it
+# resolves a class, a base or a module the declaration names.
+_WITH_SOURCE_ENTITIES = frozenset(
+    {
+        "implements_protocol",
+        "implements_runtime_protocol",
+        "subclass_of",
+        "exact_type",
+        "not_subclass_of",
+        "inherits_directly_from",
+        "required_constructor",
+        "enforce_layers",
+        "forbid_cycles",
+        "architecture_entry",
+        "module_interface",
     }
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id("compiler_invalid_declaration", payload),
-        type="compiler_invalid_declaration",
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
+)
 
 
 def compile_rules(
@@ -182,63 +167,12 @@ def compile_rules(
         "forbid_runtime_imports": compile_forbid_runtime_imports,
     }
 
-    rules: List[Any] = []
-    compiler_evidence: List[Any] = []
-    compiler_results: List[Any] = []
-
-    for source_entity in source_entities:
-        declarations = normalize_declaration_entries(source_entity)
-        valid_declarations: list[DeclarationEntry] = []
-
-        for declaration in declarations:
-            compiler = declaration_compilers.get(declaration.kind)
-            if is_invalid_annotation_declaration(declaration):
-                compiler_evidence.append(
-                    _invalid_declaration_evidence(source_entity, declaration)
-                )
-                continue
-            if compiler is None:
-                continue
-            valid_declarations.append(declaration)
-
-        for declaration, rule_id_suffix in zip(
-            valid_declarations,
-            declaration_rule_id_suffixes(valid_declarations),
-        ):
-            compiler = declaration_compilers[declaration.kind]
-            compiler_kwargs: dict[str, Any] = {"rule_id_suffix": rule_id_suffix}
-            if declaration.kind in {
-                "implements_protocol",
-                "implements_runtime_protocol",
-                "subclass_of",
-                "exact_type",
-                "not_subclass_of",
-                "inherits_directly_from",
-                "required_constructor",
-                "enforce_layers",
-                "forbid_cycles",
-                "architecture_entry",
-                "module_interface",
-            }:
-                compiler_kwargs["source_entities"] = source_entities
-            compiled_rules, evidence_items, results = compiler(
-                source_entity,
-                declaration,
-                cfg,
-                **compiler_kwargs,
-            )
-            rules.extend(compiled_rules)
-            compiler_evidence.extend(evidence_items)
-            compiler_results.extend(results)
-
+    rules, compiler_evidence, compiler_results = compile_declarations(
+        source_entities, cfg, declaration_compilers, _WITH_SOURCE_ENTITIES
+    )
     if architecture:
         rules.extend(_implicit_architecture(source_entities, cfg))
-
-    rules = sorted(rules, key=lambda r: (r.rule_id, r.selector.source_entity_id))
-    compiler_results = sorted(
-        compiler_results, key=lambda r: (r.rule_id, r.source_entity_id)
-    )
-    return rules, compiler_evidence, compiler_results
+    return in_rule_order(rules, compiler_evidence, compiler_results)
 
 
 def _implicit_architecture(source_entities: List[Entity], cfg: Config) -> List[Any]:

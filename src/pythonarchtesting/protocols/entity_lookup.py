@@ -130,12 +130,12 @@ __all__ = ["ProtocolEntityLookup"]
 def _relative_base(
     module_entity: Entity | None, module_path: str, stmt: ast.ImportFrom
 ) -> str:
-    from pythonarchtesting.execution.import_edges import _resolve_relative_module
+    from pythonarchtesting.execution.import_edges import resolve_relative_module
 
     filepath = str(getattr(module_entity, "filepath_rel", "") or "")
     if filepath == "__init__.py":
         filepath = "/__init__.py"  # the root package is a package too
-    return _resolve_relative_module(
+    return resolve_relative_module(
         importer_module=module_path,
         filepath_rel=filepath,
         level=stmt.level,

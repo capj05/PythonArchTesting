@@ -31,7 +31,7 @@ optional annotation, storage, and descriptor constraints.
 | `require_writable` | `bool` | `False` | Require the attribute (or property) to be writable; properties must declare a setter. |
 | `declared_only` | `bool` | `False` | Restrict the search to attributes declared on the target class itself, ignoring inherited attributes. |
 | `allow_missing` | `bool` | `False` | Pass when no candidate attribute exists on the target instead of failing. |
-| `descriptor_kinds` | `tuple[str, ...] \| None` | `None` | Descriptor families to accept (e.g. `"cached_property"`, `"classproperty"`). |
+| `descriptor_kinds` | `tuple[str, ...] \| None` | `None` | Descriptor families to accept, any of `"cached_property"` and `"classproperty"`. |
 | `include_dynamic_attributes` | `bool` | `False` | Include attributes assigned at runtime via `setattr` or wrappers. |
 | `interpret_dataclass_fields` | `bool` | `False` | Treat dataclass fields as instance attributes for matching. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |

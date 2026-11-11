@@ -24,8 +24,8 @@ from .annotations import (
 from .fingerprint import ast_fingerprint_from_body, source_hash_from_segment
 from .paths import module_path_from_file
 from .signature import (
-    _annotation_strings,
-    _line_text_from_source,
+    annotation_strings,
+    line_text_from_source,
     signature_info_from_ast,
 )
 
@@ -235,7 +235,7 @@ class _EntityExtractor(ast.NodeVisitor):
         doc_hash = hash_text(docstring) if docstring else None
         fingerprint, bag = ast_fingerprint_from_body(node.body)
         source_hash = source_hash_from_segment(self.file_text)
-        line_text = _line_text_from_source(self.file_text, 1)
+        line_text = line_text_from_source(self.file_text, 1)
         module_name = self.module_path.rsplit(".", 1)[-1] if self.module_path else ""
         if not module_name:
             module_name = Path(self.filepath_rel).stem or "<module>"
@@ -295,7 +295,7 @@ class _EntityExtractor(ast.NodeVisitor):
             "class",
             signature_key,
         )
-        line_text = _line_text_from_source(self.file_text, getattr(node, "lineno", 0))
+        line_text = line_text_from_source(self.file_text, getattr(node, "lineno", 0))
         entity = Entity(
             role=self.role,
             kind="class",
@@ -376,8 +376,8 @@ class _EntityExtractor(ast.NodeVisitor):
         decorators_meta = self._build_entity_meta(node.decorator_list)
         if nested:
             decorators_meta["nested"] = True
-        annotations = _annotation_strings(node, skip_first_arg=(kind == "method"))
-        line_text = _line_text_from_source(self.file_text, getattr(node, "lineno", 0))
+        annotations = annotation_strings(node, skip_first_arg=(kind == "method"))
+        line_text = line_text_from_source(self.file_text, getattr(node, "lineno", 0))
         canonical_id = build_canonical_id(
             self.role,
             self.root_label,

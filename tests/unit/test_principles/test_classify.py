@@ -498,6 +498,33 @@ def test_an_unresolvable_case_reference_is_one_missing_required_entity():
     assert missing.what is not None and "`inventory.Inventory`" in missing.what
 
 
+def test_a_missing_entity_merges_a_setup_failure_that_comes_after_it():
+    """Audit K2: the missing entity of a rule comes first and has no
+    ``required_by``; a case that cannot set the entity up comes after it and
+    adds one, instead of a ``KeyError``."""
+    principle = get_principle("encapsulation")
+    missing = _result(_CALLS, reason="required_target_missing")
+    missing["source_entity_id"] = "pkg:inventory:Inventory:class:x"
+    missing["locations"] = {
+        "source": {
+            "module": "inventory",
+            "qualname": "Inventory",
+            "file": "inventory.py",
+            "line": 3,
+        }
+    }
+    missing["details"]["match_status"] = "unmatched"
+
+    findings = classify_target(
+        principle, [missing, _setup_failed("shop:sell", "inventory.Inventory")]
+    )
+
+    [found] = [f for f in findings if f.error_id == MISSING_REQUIRED_ENTITY]
+    assert found.facts["entity"] == "inventory.Inventory"
+    assert found.facts["rules"] == [_CALLS, _WRITES]
+    assert found.facts["required_by"] == ["shop:sell"]
+
+
 def test_a_syntax_error_of_the_reference_is_no_syntax_error_finding():
     principle = get_principle("encapsulation")
 

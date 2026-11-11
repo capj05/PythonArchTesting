@@ -16,7 +16,9 @@ explicit `config`, else `.pythonarchtesting` in `source` or its parent, and
 never `PYTHON_ARCH_TARGET_PATH`.
 
 CLI arguments remain the highest-priority overrides after file loading.
-Environment-variable overlays are not supported by `load_config()`.
+Environment-variable overlays are not supported by `load_config()`. The one
+environment variable the CLI reads is `PYTHON_ARCH_TARGET_PATH`: a single
+target, used only when neither the flags nor `[projects]` name any.
 
 Point the CLI at a custom file when you need an explicit override:
 
@@ -53,6 +55,8 @@ Common fields:
 - `include_init_files`
 - `excluded_dirs`
 - `follow_symlinks`
+- `exclude_hidden_dirs` (default `true`): skip directories starting with `.`
+- `max_discovery_depth` (default `-1`, unlimited)
 
 Stub-only reference projects can opt into `.pyi` discovery:
 
@@ -75,6 +79,9 @@ Common fields:
 - `max_fuzzy_candidates`
 - `name_fallback` (default `true`): pair by name what the scores leave
   unpaired, see [reporting.md](reporting.md#pairing-by-name)
+- `max_stage2_candidates`, `max_stage3_candidates` (default `0`)
+- `include_nested_functions` (default `false`): also extract functions
+  nested in other functions
 
 Most users should keep the defaults unless matching is too strict or too loose
 for their project layout.
@@ -90,6 +97,10 @@ Common fields:
 - `fail_threshold`
 - `include_config_snapshot`
 - `validate_schema_v2`
+- `schema_version` (only `2`)
+- `max_evidence_items_text` (default `3`)
+- `markdown_detail` (`summary`, `verbose` default, `debug`; see
+  [reporting.md](reporting.md#detail-level))
 
 `run_exit_policy` supports:
 
@@ -124,7 +135,9 @@ include_config_snapshot = false
 This section is part of the supported schema but is usually secondary for
 user onboarding:
 
-- `[logging]`
+- `[logging]`: `level` (default `WARNING`), `file` (default `false`: also log
+  to a file), `filename` (default `log.txt`), `output_file` (deprecated alias
+  of `filename`)
 
 ## Removed Sections
 

@@ -39,3 +39,17 @@ def test_rules_module_import_performance() -> None:
     import pythonarchtesting.rules  # noqa: F401
 
     assert time.time() - start < 0.1
+
+
+def test_flow_cfg_imports_on_its_own() -> None:
+    """flow_cfg -> rules.compilation -> evaluators -> variable_flow -> flow_cfg
+    is a cycle; it must not break when flow_cfg is the first module imported."""
+    import subprocess
+
+    result = subprocess.run(  # nosec B603
+        [sys.executable, "-c", "import pythonarchtesting.execution.flow_cfg"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

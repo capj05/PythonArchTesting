@@ -33,7 +33,8 @@
 `does_not_have` accepts `name_match="alias"` (singular); the
 positive-set rules (`require_method_set`, `require_member_set`) accept
 `name_match="names"` (plural). Mixing them up emits
-`compiler_invalid_declaration` and silently drops the rule.
+invalid-declaration evidence and drops the rule; a
+`compiler_invalid_param` sentinel reports it as FAILED.
 
 ## Validation declaration check
 

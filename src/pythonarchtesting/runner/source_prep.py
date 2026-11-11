@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import importlib.metadata
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
@@ -260,3 +261,53 @@ def prepare_source(
         validation_scope=validation_scope,
         principle=task.principle.id if task is not None else None,
     )
+
+
+SYNTAX_CHECK = "extraction/syntax_error"
+
+
+@dataclass(frozen=True)
+class Scan:
+    """One extraction of ``path``: its ``entities`` and the core's
+    ``validations`` (a file that does not parse is one), under the config file
+    ``applied`` (``"defaults"`` without one, as ``resolve_config`` names it).
+
+    A caller that needs a submission's entities in several steps reads them
+    once (``extract``) and hands the ``Scan`` on; ``entities_of`` reads the
+    source again only when a step would apply another config file."""
+
+    path: Path
+    applied: str
+    entities: Tuple[Entity, ...]
+    validations: Tuple[Any, ...]
+
+    def syntax_errors(self) -> List[Any]:
+        """The validations of the files that do not parse."""
+        return [v for v in self.validations if v.check_type == SYNTAX_CHECK]
+
+
+def extract(path: Path, loaded: Config, applied: str) -> Scan:
+    """The extraction of ``path`` under the config ``loaded`` (the file
+    ``applied``)."""
+    state = prepare_source(config=loaded, source_path=Path(path))
+    return Scan(
+        Path(path),
+        applied,
+        tuple(state.source_entities),
+        tuple(state.compiler_validations),
+    )
+
+
+def entities_of(
+    path: Path, loaded: Config, applied: str, scanned: Optional[Scan]
+) -> List[Entity]:
+    """The entities of ``path`` under ``loaded`` (the file ``applied``):
+    those of ``scanned`` when it is the same extraction (the same path, as
+    given, and config file), else read now."""
+    if (
+        scanned is not None
+        and scanned.applied == applied
+        and scanned.path == Path(path)
+    ):
+        return list(scanned.entities)
+    return list(extract(path, loaded, applied).entities)

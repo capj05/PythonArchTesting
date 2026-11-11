@@ -398,6 +398,11 @@ def noisy(tag):
     print("out", tag)
     print("err", tag, file=sys.stderr)
     return tag
+
+
+def flood():
+    while True:
+        print("x" * 1000)
 """
 
 
@@ -571,3 +576,31 @@ def test_prefetch_batches_pattern_rules(root: Path) -> None:
     assert singleton["same"] is True
     observer = cached["DYN/runtime_pattern/Bus"].cases[0]["observer"]
     assert observer == {"notified": 1}
+
+
+@pytest.mark.skipif(not hasattr(signal, "setitimer"), reason="needs an interval timer")
+def test_a_job_that_floods_its_output_times_out_alone(tmp_path: Path) -> None:
+    """A job printing in an endless loop keeps only the tail of its output:
+    it ends as its own timeout, under the memory limit, and the other jobs
+    of the batch keep their results (audit E4)."""
+    from pythonarchtesting.dynamic.sandbox import SandboxPolicy
+
+    root = _tricky_root(tmp_path, 0)
+
+    outcome = run_case_batch(
+        target_root=root,
+        module_path="calc",
+        sandbox=SandboxPolicy(mode="limits"),
+        jobs=[
+            _job("0", "noisy", [{"args": ["A"]}]),
+            _job("1", "flood", [{}], timeout_s=3),
+            _job("2", "noisy", [{"args": ["B"]}]),
+        ],
+    )
+
+    assert outcome.status == "completed", outcome.error
+    assert outcome.jobs["1"]["status"] == "timeout"
+    flooded = outcome.jobs["1"]["stderr"]
+    assert 0 < len(flooded) <= 2000 and set(flooded) <= {"x", "\n"}
+    assert outcome.jobs["0"]["status"] == outcome.jobs["2"]["status"] == "completed"
+    assert "err B" in outcome.jobs["2"]["stderr"]

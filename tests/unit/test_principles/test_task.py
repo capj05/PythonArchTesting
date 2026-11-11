@@ -235,6 +235,24 @@ def test_malformed_task_toml_is_a_clear_error(
     assert "task.toml" in str(raised.value)
 
 
+def test_a_task_toml_not_in_utf8_is_a_clear_error(tmp_path: Path) -> None:
+    """Audit K5: a ``task.toml`` saved in cp1250 is a TaskError that says so,
+    not a UnicodeDecodeError the MCP client never sees the text of; one saved
+    with a byte order mark (Notepad's UTF-8) is read."""
+    task_dir = _task(tmp_path, "# Úloha: oddělit výpočet od vstupu\n" + _TASK)
+    toml = task_dir / "task.toml"
+    text = toml.read_text(encoding="utf-8")
+
+    toml.write_bytes(text.encode("cp1250"))
+    with pytest.raises(TaskError) as raised:
+        load_task(task_dir)
+    assert "UTF-8" in _problems(raised)
+    assert "task.toml" in str(raised.value)
+
+    toml.write_bytes(text.encode("utf-8-sig"))
+    assert load_task(task_dir).principle.id == "io_separation"
+
+
 def test_a_module_without_public_functions_is_an_error(tmp_path: Path) -> None:
     task_dir = _task(tmp_path, _TASK.replace('io = ["app.main"]', 'io = ["empty"]'))
     (task_dir / "reference" / "empty.py").write_text("X = 1\n", encoding="utf-8")

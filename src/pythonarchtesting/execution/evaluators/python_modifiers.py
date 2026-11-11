@@ -9,7 +9,7 @@ from pythonarchtesting.matching import MatchResult
 from pythonarchtesting.protocols.entity_lookup import ProtocolEntityLookup
 from pythonarchtesting.protocols.reference_resolution import normalize_reference
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 _ABSTRACT_DECORATORS = frozenset(
     {
@@ -316,7 +316,7 @@ class PythonModifierEvaluator:
                 if modifier_kind in _NEGATIVE_MODIFIER_KINDS:
                     details["modifier_polarity"] = "negative"
                     details["failure_reason"] = "invalid_target_kind"
-                return _build_rule_result(
+                return build_rule_result(
                     rule,
                     source,
                     target,
@@ -341,7 +341,7 @@ class PythonModifierEvaluator:
                     "recognized_abstract_decorator": recognized_abstract_decorator,
                     "target_method": _method_payload(target),
                 }
-                return _build_rule_result(
+                return build_rule_result(
                     rule,
                     source,
                     target,
@@ -366,7 +366,7 @@ class PythonModifierEvaluator:
                     target_payload_field="target_method",
                     target_subject="method",
                 )
-                return _build_rule_result(
+                return build_rule_result(
                     rule,
                     source,
                     target,
@@ -391,7 +391,7 @@ class PythonModifierEvaluator:
                     target_payload_field="target_method",
                     target_subject="method",
                 )
-                return _build_rule_result(
+                return build_rule_result(
                     rule,
                     source,
                     target,
@@ -415,7 +415,7 @@ class PythonModifierEvaluator:
                 "recognized_final_decorator": recognized_final_decorator,
                 "target_method": _method_payload(target),
             }
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -436,7 +436,7 @@ class PythonModifierEvaluator:
             if modifier_kind in _NEGATIVE_MODIFIER_KINDS:
                 details["modifier_polarity"] = "negative"
                 details["failure_reason"] = "invalid_target_kind"
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -471,7 +471,7 @@ class PythonModifierEvaluator:
                     else "target class has unresolved abstract members"
                 )
                 status = "OK" if not is_abstract else "FAILED"
-            return _build_rule_result(rule, source, target, match, status, details, ())
+            return build_rule_result(rule, source, target, match, status, details, ())
 
         if modifier_kind == "final_class":
             is_final, recognized_final_decorator, normalized_decorators = (
@@ -488,7 +488,7 @@ class PythonModifierEvaluator:
                 "recognized_final_decorator": recognized_final_decorator,
                 "target_class": _class_payload(target),
             }
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -513,7 +513,7 @@ class PythonModifierEvaluator:
                 target_payload_field="target_class",
                 target_subject="class",
             )
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,

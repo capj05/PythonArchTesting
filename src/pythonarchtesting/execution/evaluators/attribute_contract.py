@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, cast
 
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
 from pythonarchtesting.entities import Entity
@@ -8,10 +9,11 @@ from pythonarchtesting.matching import MatchResult
 from pythonarchtesting.protocols.attribute_introspection import (
     ResolvedAttribute,
     collect_attributes,
+    member_category_priority,
 )
 
 from .annotation_compatibility import compare_annotation_text
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 
 def _skip_optional_attribute(
@@ -22,7 +24,7 @@ def _skip_optional_attribute(
     *,
     details: dict[str, Any],
 ) -> RuleResult:
-    return _build_rule_result(
+    return build_rule_result(
         rule,
         source,
         target,
@@ -61,18 +63,10 @@ def _candidate_priority(
     return (
         0 if storage in {"class", "instance"} and member.storage == storage else 1,
         0 if not member.inherited else 1,
-        _member_category_priority(member),
+        member_category_priority(member),
         0 if member.annotation is not None else 1,
         member.lineno,
     )
-
-
-def _member_category_priority(member: ResolvedAttribute) -> int:
-    if member.origin in {"dynamic_setattr_instance", "dynamic_setattr_class"}:
-        return 2
-    if member.storage == "property" or member.descriptor_kind is not None:
-        return 1
-    return 0
 
 
 def _descriptor_matches(
@@ -86,29 +80,6 @@ def _descriptor_matches(
     if member.descriptor_kind is None:
         return allow_property
     return member.descriptor_kind in descriptor_kinds
-
-
-def _descriptor_rejection(
-    member: ResolvedAttribute,
-    *,
-    name: str,
-) -> tuple[str, str]:
-    if member.descriptor_kind == "cached_property":
-        return (
-            f"descriptor '{name}' found, but cached_property does not satisfy "
-            "required_attribute without descriptor_kinds=('cached_property',)",
-            "descriptor_present_but_not_enabled",
-        )
-    if member.descriptor_kind == "classproperty":
-        return (
-            f"descriptor '{name}' found, but classproperty does not satisfy "
-            "required_attribute without descriptor_kinds=('classproperty',)",
-            "descriptor_present_but_not_enabled",
-        )
-    return (
-        f"property '{name}' found, but properties do not satisfy required_attribute",
-        "property_present_but_not_allowed",
-    )
 
 
 def _read_only_message(member: ResolvedAttribute, *, name: str) -> str:
@@ -128,6 +99,190 @@ def _read_only_message(member: ResolvedAttribute, *, name: str) -> str:
     )
 
 
+@dataclass(frozen=True)
+class _AttributeParams:
+    """The normalised parameters of one required-attribute rule.
+
+    Parsing them once keeps the evaluator free of parameter handling and gives
+    the report payload and the candidate filters one shared reading of them.
+    """
+
+    name: str
+    storage: str
+    annotation: str | None
+    allow_property: bool
+    require_writable: bool
+    declared_only: bool
+    allow_missing: bool
+    descriptor_kinds: frozenset[str]
+    include_dynamic_attributes: bool
+    interpret_dataclass_fields: bool
+
+    @classmethod
+    def from_rule(cls, rule: Rule) -> _AttributeParams:
+        """Read the parameters from a compiled rule, applying their defaults."""
+        params = rule.params
+        annotation = params.get("annotation")
+        return cls(
+            name=str(params.get("name", "")).strip(),
+            storage=str(params.get("storage", "any")).lower(),
+            annotation=str(annotation) if annotation is not None else None,
+            allow_property=bool(params.get("allow_property", False)),
+            require_writable=bool(params.get("require_writable", False)),
+            declared_only=bool(params.get("declared_only", False)),
+            allow_missing=bool(params.get("allow_missing", False)),
+            descriptor_kinds=frozenset(
+                str(kind).strip().lower()
+                for kind in params.get("descriptor_kinds", ())
+                if str(kind).strip()
+            ),
+            include_dynamic_attributes=bool(
+                params.get("include_dynamic_attributes", False)
+            ),
+            interpret_dataclass_fields=bool(
+                params.get("interpret_dataclass_fields", False)
+            ),
+        )
+
+    def payload(self) -> dict[str, Any]:
+        """Describe the requirement for the report, in its established key order."""
+        return {
+            "name": self.name,
+            "annotation": self.annotation,
+            "storage": self.storage,
+            "allow_property": self.allow_property,
+            "require_writable": self.require_writable,
+            "declared_only": self.declared_only,
+            "allow_missing": self.allow_missing,
+            "descriptor_kinds": sorted(self.descriptor_kinds),
+            "include_dynamic_attributes": self.include_dynamic_attributes,
+            "interpret_dataclass_fields": self.interpret_dataclass_fields,
+        }
+
+
+def _select_candidates(
+    members: list[ResolvedAttribute], params: _AttributeParams
+) -> tuple[list[ResolvedAttribute], list[ResolvedAttribute], list[ResolvedAttribute]]:
+    """Narrow the members of the required name in three steps.
+
+    The intermediate lists are returned as well, because the failure
+    classification names the step at which the last candidate dropped out.
+    The accepted candidates come back sorted by preference.
+    """
+    all_candidates = members
+    if params.declared_only:
+        all_candidates = [m for m in all_candidates if not m.inherited]
+
+    storage_candidates = [
+        member for member in all_candidates if _storage_matches(member, params.storage)
+    ]
+    matching_candidates = [
+        member
+        for member in storage_candidates
+        if _descriptor_matches(
+            member,
+            allow_property=params.allow_property,
+            descriptor_kinds=set(params.descriptor_kinds),
+        )
+    ]
+    matching_candidates.sort(
+        key=lambda member: _candidate_priority(member, storage=params.storage)
+    )
+    return all_candidates, storage_candidates, matching_candidates
+
+
+def _first_passing(
+    candidates: list[ResolvedAttribute],
+    params: _AttributeParams,
+    *,
+    source: Entity,
+    target: Entity,
+    ctx: EvalContext,
+) -> tuple[ResolvedAttribute | None, tuple[str, str] | None]:
+    """Return the first candidate meeting the annotation and writability checks.
+
+    The requirement is existential, so the search stops at the first passing
+    candidate.  When none passes, the failure of the first rejected candidate
+    is returned as a reason and its matching code; the report has always
+    described that candidate, and the code has to name the same check.
+    """
+    first_failure: tuple[str, str] | None = None
+    for member in candidates:
+        if params.annotation is not None:
+            comparison = compare_annotation_text(
+                expected=params.annotation,
+                found=member.annotation,
+                expected_entity=source,
+                found_entity=target,
+                ctx=ctx,
+                variance="invariant",
+            )
+            if not comparison.compatible:
+                if first_failure is None:
+                    first_failure = (
+                        f"attribute annotation mismatch: "
+                        f"expected {comparison.expected}, found {comparison.found}",
+                        "attribute_present_but_annotation_mismatch",
+                    )
+                continue
+
+        if params.require_writable and not member.is_writable:
+            if first_failure is None:
+                first_failure = (
+                    _read_only_message(member, name=params.name),
+                    "attribute_present_but_read_only",
+                )
+            continue
+
+        return member, first_failure
+    return None, first_failure
+
+
+def _classify_failure(
+    params: _AttributeParams,
+    all_candidates: list[ResolvedAttribute],
+    storage_candidates: list[ResolvedAttribute],
+    matching_candidates: list[ResolvedAttribute],
+    first_failure: tuple[str, str] | None,
+) -> tuple[str, str]:
+    """Name why no candidate satisfied the requirement, as a reason and a code.
+
+    The cascade follows the narrowing of ``_select_candidates``: nothing of
+    that name, nothing of the required storage, nothing of an accepted kind,
+    and finally candidates that failed the annotation or writability check.
+    """
+    name = params.name
+    if not all_candidates:
+        return f"missing required attribute '{name}'", "missing_attribute_or_property"
+    if not storage_candidates:
+        found_storage = ", ".join(sorted({member.storage for member in all_candidates}))
+        return (
+            f"attribute storage mismatch for '{name}': "
+            f"required {params.storage}, found {found_storage}",
+            "storage_mismatch",
+        )
+    if not matching_candidates:
+        # Only a plain property can fail ``_descriptor_matches``:
+        # ``collect_attributes`` returns a cached_property or classproperty
+        # only when its kind is among ``descriptor_kinds``, and such a member
+        # is then accepted.  So every storage candidate is a property, and
+        # ``allow_property`` is off.
+        return (
+            f"property '{name}' found, but properties do not satisfy "
+            "required_attribute",
+            "property_present_but_not_allowed",
+        )
+    if params.require_writable and all(
+        not member.is_writable for member in matching_candidates
+    ):
+        return (
+            _read_only_message(matching_candidates[0], name=name),
+            "attribute_present_but_read_only",
+        )
+    # Every candidate failed a check, so a first failure has been recorded.
+    return cast(tuple[str, str], first_failure)
+
+
 class AttributeContractEvaluator:
     """Evaluator for required class and instance attributes."""
 
@@ -139,28 +294,9 @@ class AttributeContractEvaluator:
         match: MatchResult,
         ctx: EvalContext,
     ) -> RuleResult:
+        """Check that the target class has an attribute meeting the requirement."""
         entities = ctx.target_index.all_sorted
-        name = str(rule.params.get("name", "")).strip()
-        storage = str(rule.params.get("storage", "any")).lower()
-        expected_annotation = rule.params.get("annotation")
-        if expected_annotation is not None:
-            expected_annotation = str(expected_annotation)
-
-        allow_property = bool(rule.params.get("allow_property", False))
-        require_writable = bool(rule.params.get("require_writable", False))
-        declared_only = bool(rule.params.get("declared_only", False))
-        allow_missing = bool(rule.params.get("allow_missing", False))
-        descriptor_kinds = {
-            str(kind).strip().lower()
-            for kind in rule.params.get("descriptor_kinds", ())
-            if str(kind).strip()
-        }
-        include_dynamic_attributes = bool(
-            rule.params.get("include_dynamic_attributes", False)
-        )
-        interpret_dataclass_fields = bool(
-            rule.params.get("interpret_dataclass_fields", False)
-        )
+        params = _AttributeParams.from_rule(rule)
 
         by_name = collect_attributes(
             target,
@@ -169,47 +305,20 @@ class AttributeContractEvaluator:
             include_instance=True,
             include_class=True,
             include_properties=True,
-            include_dynamic_attributes=include_dynamic_attributes,
-            descriptor_kinds=descriptor_kinds,
-            interpret_dataclass_fields=interpret_dataclass_fields,
+            include_dynamic_attributes=params.include_dynamic_attributes,
+            descriptor_kinds=set(params.descriptor_kinds),
+            interpret_dataclass_fields=params.interpret_dataclass_fields,
         )
-        all_candidates = by_name.get(name, [])
-
-        if declared_only:
-            all_candidates = [m for m in all_candidates if not m.inherited]
-
-        storage_candidates = [
-            member for member in all_candidates if _storage_matches(member, storage)
-        ]
-        matching_candidates = [
-            member
-            for member in storage_candidates
-            if _descriptor_matches(
-                member,
-                allow_property=allow_property,
-                descriptor_kinds=descriptor_kinds,
-            )
-        ]
-        matching_candidates.sort(
-            key=lambda member: _candidate_priority(member, storage=storage)
+        all_candidates, storage_candidates, matching_candidates = _select_candidates(
+            by_name.get(params.name, []), params
         )
+        required_attribute_payload = params.payload()
 
-        required_attribute_payload = {
-            "name": name,
-            "annotation": expected_annotation,
-            "storage": storage,
-            "allow_property": allow_property,
-            "require_writable": require_writable,
-            "declared_only": declared_only,
-            "allow_missing": allow_missing,
-            "descriptor_kinds": sorted(descriptor_kinds),
-            "include_dynamic_attributes": include_dynamic_attributes,
-            "interpret_dataclass_fields": interpret_dataclass_fields,
-        }
-
-        if not all_candidates and allow_missing:
+        if not all_candidates and params.allow_missing:
             skip_details = {
-                "reason": f"Optional attribute '{name}' is not present on target class",
+                "reason": (
+                    f"Optional attribute '{params.name}' is not present on target class"
+                ),
                 "failure_reason": "optional_member_absent",
                 "allow_missing": True,
                 "required_attribute": required_attribute_payload,
@@ -224,107 +333,38 @@ class AttributeContractEvaluator:
                 details=skip_details,
             )
 
-        # Existential evaluation: return OK at the first passing candidate.
-        last_fail_reason: str | None = None
-        passing_candidate: ResolvedAttribute | None = None
-
-        for member in matching_candidates:
-            # Check annotation compatibility
-            if expected_annotation is not None:
-                comparison = compare_annotation_text(
-                    expected=expected_annotation,
-                    found=member.annotation,
-                    expected_entity=source,
-                    found_entity=target,
-                    ctx=ctx,
-                    variance="invariant",
-                )
-                if not comparison.compatible:
-                    if last_fail_reason is None:
-                        last_fail_reason = (
-                            f"attribute annotation mismatch: "
-                            f"expected {comparison.expected}, found {comparison.found}"
-                        )
-                    continue
-
-            # Check require_writable (only meaningful for properties)
-            if require_writable and not member.is_writable:
-                if last_fail_reason is None:
-                    last_fail_reason = _read_only_message(member, name=name)
-                continue
-
-            # This candidate passes all checks
-            passing_candidate = member
-            break
+        passing_candidate, first_failure = _first_passing(
+            matching_candidates, params, source=source, target=target, ctx=ctx
+        )
+        candidate_payloads = [_attribute_payload(member) for member in all_candidates]
 
         if passing_candidate is not None:
             success_details: dict[str, Any] = {
                 "reason": "attribute requirement satisfied",
                 "required_attribute": required_attribute_payload,
                 "matched_attribute": _attribute_payload(passing_candidate),
-                "candidate_attributes": [
-                    _attribute_payload(member) for member in all_candidates
-                ],
+                "candidate_attributes": candidate_payloads,
             }
-            return _build_rule_result(
+            return build_rule_result(
                 rule, source, target, match, "OK", success_details, ()
             )
 
-        # Build failure reason
-        if not all_candidates:
-            reason = f"missing required attribute '{name}'"
-            fail_code = "missing_attribute_or_property"
-        elif not storage_candidates:
-            found_storage = ", ".join(
-                sorted({member.storage for member in all_candidates})
-            )
-            reason = (
-                f"attribute storage mismatch for '{name}': "
-                f"required {storage}, found {found_storage}"
-            )
-            fail_code = "storage_mismatch"
-        elif not matching_candidates:
-            best_descriptor_candidate = sorted(
-                storage_candidates,
-                key=lambda member: _candidate_priority(member, storage=storage),
-            )[0]
-            if not _descriptor_matches(
-                best_descriptor_candidate,
-                allow_property=allow_property,
-                descriptor_kinds=descriptor_kinds,
-            ):
-                reason, fail_code = _descriptor_rejection(
-                    best_descriptor_candidate,
-                    name=name,
-                )
-            else:
-                reason = last_fail_reason or f"missing required attribute '{name}'"
-                fail_code = "attribute_present_but_not_accepted"
-        else:
-            # matching_candidates exist but all failed checks
-            # Distinguish annotation mismatch vs writable mismatch
-            if (
-                require_writable
-                and matching_candidates
-                and all(not m.is_writable for m in matching_candidates)
-            ):
-                reason = _read_only_message(matching_candidates[0], name=name)
-                fail_code = "attribute_present_but_read_only"
-            else:
-                reason = last_fail_reason  # type: ignore[assignment]
-                fail_code = "attribute_present_but_annotation_mismatch"
-
+        reason, fail_code = _classify_failure(
+            params,
+            all_candidates,
+            storage_candidates,
+            matching_candidates,
+            first_failure,
+        )
         details: dict[str, Any] = {
             "reason": reason,
             "fail_code": fail_code,
             "required_attribute": required_attribute_payload,
             "matched_attribute": None,
-            "candidate_attributes": [
-                _attribute_payload(member) for member in all_candidates
-            ],
-            "allow_missing": allow_missing,
+            "candidate_attributes": candidate_payloads,
+            "allow_missing": params.allow_missing,
         }
-        return _build_rule_result(rule, source, target, match, "FAILED", details, ())
+        return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
 
 __all__ = ["AttributeContractEvaluator"]

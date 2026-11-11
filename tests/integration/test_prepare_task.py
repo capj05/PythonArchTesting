@@ -527,3 +527,145 @@ def test_a_mutant_is_never_killed_by_a_check_the_reference_fails(
     [entry] = [e for e in result["errors"] if e["error"] == "hardcoded_strategy"]
     assert entry["status"] == "reference_fails", entry
     assert entry["killed"] == 0, entry
+
+
+_LOOSE_SHAPES = """\
+class Shape:
+    def area(self) -> float: return 0.0
+
+
+class Circle:
+    def __init__(self, r: float) -> None: self.r = r
+    def area(self) -> float: return 3.14 * self.r * self.r
+
+
+class Square:
+    def __init__(self, s: float) -> None: self.s = s
+    def area(self) -> float: return self.s * self.s
+"""
+
+
+def test_a_reference_no_operator_can_change_still_runs_its_checks(
+    tmp_path: Path,
+) -> None:
+    """Audit K1: no operator finds anything to change (no class names a base,
+    no abstract class, one-line functions), so no mutant is made; the
+    unchanged reference is still run, and its failed subclass_of and
+    is_abstract_class reject the task instead of an ``accepted: true``."""
+    task = tmp_path / "poly0"
+    (task / "reference").mkdir(parents=True)
+    (task / "reference" / "__init__.py").write_text("", encoding="utf-8")
+    (task / "reference" / "shapes.py").write_text(_LOOSE_SHAPES, encoding="utf-8")
+    (task / "reference" / "report.py").write_text(
+        "def total_area(shapes): return sum(s.area() for s in shapes)\n",
+        encoding="utf-8",
+    )
+    (task / "task.toml").write_text(
+        'principle = "polymorphism"\n'
+        "[roles]\n"
+        'base = ["shapes.Shape"]\n'
+        'variant = ["shapes.Circle", "shapes.Square"]\n'
+        'client = ["report"]\n'
+        "[cases]\n"
+        '"report.total_area" = [{ args = [[{ "$new" = "shapes.Circle", '
+        'args = [1.0] }, { "$new" = "shapes.Square", args = [2.0] }]] }, '
+        "{ args = [[]] }]\n",
+        encoding="utf-8",
+    )
+
+    result = prepare_task(str(task), sandbox="limits")
+
+    assert result["accepted"] is False, result
+    assert result["reference_passes"] is False, result
+    assert any(
+        p.startswith("subclass_of fails on the reference") for p in result["problems"]
+    ), result["problems"]
+    assert any(
+        p.startswith("is_abstract_class fails on the reference")
+        for p in result["problems"]
+    ), result["problems"]
+    statuses = {e["error"]: e["status"] for e in result["errors"]}
+    assert statuses["not_a_subclass"] == "reference_fails", result["errors"]
+    assert statuses["concrete_base"] == "reference_fails", result["errors"]
+
+
+def test_max_mutants_keeps_a_mutant_of_every_error_it_can(tmp_path: Path) -> None:
+    """Audit K3: ``max_mutants`` takes the mutants in turn from each error, so
+    an error loses all of them only when there are more errors than
+    ``max_mutants``; such an error is ``truncated``, never ``no_mutants``
+    with a false "found nothing to change"."""
+    task = _EXAMPLES / "io_separation"
+
+    two = prepare_task(str(task), max_mutants=2, sandbox="limits")
+
+    assert two["truncated"] is True and two["accepted"] is False, two
+    statuses = [e["status"] for e in two["errors"]]
+    assert "no_mutants" not in statuses, two["errors"]
+    tested = [e for e in two["errors"] if e["status"] != "truncated"]
+    assert len(tested) == 2 and all(e["mutants"] == 1 for e in tested), two["errors"]
+    for entry in two["errors"]:
+        if entry["status"] == "truncated":
+            assert "max_mutants" in entry["why"], entry
+            assert entry["mutants"] == 0, entry
+
+    every = prepare_task(
+        str(task), max_mutants=len(_COVERAGE["io_separation"]), sandbox="limits"
+    )
+    assert every["truncated"] is True, every
+    assert all(e["status"] == "killed" for e in every["errors"]), every["errors"]
+
+
+def test_a_reference_file_not_in_utf8_is_a_tool_input_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Audit K5/E5: a reference file in cp1250 (valid Python by its coding
+    line) that a step reads as UTF-8 is a tool input error naming the file,
+    not a raw UnicodeDecodeError whose text the MCP client never sees. The
+    step is stood in for, so the test holds whichever step reads it."""
+    from pythonarchtesting.mcp_server.errors import ToolInputError
+    from pythonarchtesting.mutation import operators
+
+    task = _variant(tmp_path, "io_separation", [])
+    grades = task / "reference" / "grades.py"
+    grades.write_bytes(
+        (
+            "# -*- coding: cp1250 -*-\n# Výpočet známek\n"
+            + grades.read_text(encoding="utf-8")
+        ).encode("cp1250")
+    )
+
+    def read_as_utf8(root: Path, *args: Any, **kwargs: Any) -> list[Any]:
+        for path in sorted(Path(root).rglob("*.py")):
+            path.read_text(encoding="utf-8")
+        return []
+
+    monkeypatch.setattr(operators, "generate_mutants", read_as_utf8)
+
+    with pytest.raises(ToolInputError, match="grades.py") as raised:
+        prepare_task(str(task), sandbox="limits")
+    assert "UTF-8" in str(raised.value)
+
+
+def test_file_the_operators_cannot_read_is_named_in_the_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Audit 2026-11-08 § 2: a reference file the mutation operators cannot
+    read gets no mutant. An error that then finds nothing to seed names the
+    file instead of a silent not_applicable."""
+    from pythonarchtesting.mutation import operators
+
+    task = _variant(tmp_path, "io_separation", [])
+
+    def unreadable(root: Path, *args: Any, **kwargs: Any) -> list[Any]:
+        kwargs["skipped"].append(("grades.py", "invalid start byte"))
+        return []
+
+    monkeypatch.setattr(operators, "generate_mutants", unreadable)
+
+    result = prepare_task(str(task), sandbox="limits")
+
+    unseeded = [
+        e for e in result["errors"] if "the reference contains no" in e.get("why", "")
+    ]
+    assert unseeded and all(e["status"] == "not_applicable" for e in unseeded)
+    assert all("grades.py (invalid start byte)" in e["why"] for e in unseeded)

@@ -28,12 +28,12 @@ _None — the marker takes only optional arguments._
 | `signature_mode` | `str` | `"compatible"` | Signature matching mode for the factory: `"compatible"`, `"exact"`, or `"any"`. |
 | `satisfy_with` | `tuple[str, ...]` | `("constructor", "classmethod", "staticmethod")`; `("classmethod", "staticmethod")` when `aliases`, `pattern`, or a `name_match` other than `"any"` is given | Accepted candidate kinds; may also include `"static_attribute"`, which requires `name_match` `"exact"`, `"alias"`, or `"regex"`. |
 | `allow_inherited` | `bool` | `True` | Accept a factory inherited from a base class as a satisfying candidate. |
-| `name_match` | `str` | `"any"` | Name selector: `"exact"`, `"alias"`, `"regex"`, or `"any"`. An unknown value is treated as `"any"`. |
-| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"`. |
-| `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"`. |
+| `name_match` | `str` | `"any"` | Name selector: `"exact"`, `"alias"`, `"regex"`, or `"any"`. Any other value makes the declaration invalid (see [Logical And Enumerated Arguments](README.md#logical-and-enumerated-arguments)). |
+| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"`; whitespace around each alias is stripped. |
+| `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"`; whitespace around it is stripped before matching. |
 | `allow_missing` | `bool` | `False` | Pass when no candidate factory exists on the target instead of failing. |
 | `return_annotation_mode` | `str` | `"ignore"` | Return-annotation matching: `"ignore"`, `"compatible"`, or `"exact"`. |
-| `detection_mode` | `str` | `"strict"` | How factories are detected: `"strict"` or `"extended"`. |
+| `detection_mode` | `str` | `"strict"`; `"extended"` when the source factory is assigned through a wrapper (`create = staticmethod(_make)`) | How factories are detected: `"strict"` or `"extended"`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 
@@ -54,6 +54,7 @@ class UserService:
 ## What it checks
 
 - Presence of an accepted factory candidate (constructor, classmethod, staticmethod, or static attribute) under the configured `satisfy_with` and `name_match`.
+- The name a candidate is matched by: the reference method's own name, or, for a factory assigned as `create = staticmethod(_make)`, its public name `create`. Methods and static attributes are matched by the same name.
 - Parameter compatibility under `signature_mode`.
 - Optional return-annotation matching when `return_annotation_mode != "ignore"`.
 - Inherited target candidates when `allow_inherited=True`.

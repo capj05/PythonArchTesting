@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import json
 import textwrap
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
 from pythonarchtesting.cli import main
+from pythonarchtesting.matching import MatchStatus
 
 _STEPS = """
 def parse(line):
@@ -313,3 +317,202 @@ def test_init_builds_the_instance_for_a_method_in_both_runs(
 
     assert exit_code == 0
     assert [row["status"] for row in rows] == ["OK"]
+
+
+def _fake_probe(
+    monkeypatch: pytest.MonkeyPatch, *, target: bool, outcome: object
+) -> None:
+    """Replace one of the two runs with ``outcome`` and let the other run.
+
+    The target run is the one that asks for ``flow_calls``; the reference run
+    asks for ``capture_stages``. Both go through ``runner.run_cases``.
+    """
+    from pythonarchtesting.dynamic import runner
+
+    real = runner.run_cases
+
+    def run_cases(**kwargs: Any) -> Any:
+        cases = kwargs.get("cases") or []
+        is_target = any("flow_calls" in case for case in cases)
+        if is_target == target:
+            return outcome
+        return real(**kwargs)
+
+    monkeypatch.setattr(runner, "run_cases", run_cases)
+
+
+@pytest.mark.parametrize(
+    ("status", "error", "shown"),
+    [("timeout", "exceeded 5.0s", "exceeded 5.0s"), ("crashed", None, "no detail")],
+)
+def test_a_target_probe_that_does_not_complete_fails(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+    error: str | None,
+    shown: str,
+) -> None:
+    from pythonarchtesting.dynamic.runner import ProbeOutcome
+
+    outcome = ProbeOutcome(status=status, error=error, stderr="target tail")
+    _fake_probe(monkeypatch, target=True, outcome=outcome)
+
+    exit_code, rows = _check(tmp_path, capsys, _IN_ORDER)
+
+    assert exit_code == 1
+    assert [row["status"] for row in rows] == ["FAILED"]
+    details = rows[0]["details"]
+    assert details["reason"] == f"probe_{status}"
+    assert details["summary"] == f"{status}: {shown}"
+    assert details["probe_status"] == status
+    assert details["cases"] == []
+    assert details["stderr_tail"] == "target tail"
+    assert "stages_reached" not in details
+
+
+@pytest.mark.parametrize(
+    ("failures", "shown"),
+    [(["init raised TypeError"], "init raised TypeError"), ([], "no detail")],
+)
+def test_a_case_the_target_could_not_set_up_fails(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    failures: list[str],
+    shown: str,
+) -> None:
+    from pythonarchtesting.dynamic.runner import ProbeOutcome
+
+    cases = [{"index": 0, "status": "error", "failures": failures}]
+    _fake_probe(
+        monkeypatch,
+        target=True,
+        outcome=ProbeOutcome(status="completed", cases=cases),
+    )
+
+    exit_code, rows = _check(tmp_path, capsys, _IN_ORDER)
+
+    assert exit_code == 1
+    assert [row["status"] for row in rows] == ["FAILED"]
+    details = rows[0]["details"]
+    assert details["reason"] == "case_setup_failed"
+    assert details["summary"] == f"case 0 could not run: {shown}"
+    assert details["probe_status"] == "completed"
+    assert "stderr_tail" not in details
+    assert "stages_reached" not in details
+
+
+def test_a_reference_probe_that_does_not_complete_is_an_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pythonarchtesting.dynamic.runner import ProbeOutcome
+
+    outcome = ProbeOutcome(status="crashed", stderr="reference tail")
+    _fake_probe(monkeypatch, target=False, outcome=outcome)
+
+    exit_code, rows = _check(tmp_path, capsys, _IN_ORDER)
+
+    assert exit_code == 1
+    assert [row["status"] for row in rows] == ["ERROR"]
+    details = rows[0]["details"]
+    assert details["reason"] == "reference_failed"
+    assert details["summary"] == (
+        "the reference itself did not run: crashed: no detail"
+    )
+    assert details["reference_stderr_tail"] == "reference tail"
+    # The reference stopped before its stages were read or the target ran.
+    assert "reference_stages" not in details
+    assert "probe_status" not in details
+
+
+def test_the_stage_order_failure_keeps_the_stages_reached_so_far(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = _target("""
+        fields = steps.parse(line)
+        steps.store(fields, sink)
+        return fields
+        """)
+
+    exit_code, rows = _check(tmp_path, capsys, target)
+
+    assert exit_code == 1
+    details = rows[0]["details"]
+    assert details["reason"] == "stage_order_mismatch"
+    assert details["stages_reached"] == ["parsed"]
+    assert details["unchecked_stages"] == ["received"]
+
+
+_MATCHED = SimpleNamespace(status=MatchStatus.MATCHED, confidence=1.0)
+
+
+def _flow_rule_and_function() -> tuple[object, object]:
+    """The compiled ``enforce_flow`` rule of ``_REFERENCE`` and its subject."""
+    from unittest.mock import Mock
+
+    from pythonarchtesting.entities_extraction import extract_entities_from_source
+    from pythonarchtesting.rules.compilation import compile_rules
+
+    entities = extract_entities_from_source(
+        source_text=textwrap.dedent(_REFERENCE),
+        file_path=Path("pipeline.py"),
+        root_path=Path("."),
+        target_module_name=None,
+        role="source",
+        include_nested_functions=False,
+        root_label="source",
+    )
+    rules, _, _ = compile_rules(entities, Mock())
+    rule = next(rule for rule in rules if rule.rule_id.startswith("FLW002/"))
+    function = next(entity for entity in entities if entity.name == "run")
+    return rule, function
+
+
+@pytest.mark.parametrize(
+    ("target_root", "source_root"),
+    [(None, None), (Path("."), None), (None, Path("."))],
+)
+def test_without_dynamic_checks_the_rule_is_skipped(
+    target_root: Path | None, source_root: Path | None
+) -> None:
+    from pythonarchtesting.execution.evaluators.runtime_flow import (
+        RuntimeFlowEvaluator,
+    )
+
+    rule, function = _flow_rule_and_function()
+    ctx = SimpleNamespace(target_root=target_root, source_root=source_root)
+
+    result = RuntimeFlowEvaluator().evaluate(rule, function, function, _MATCHED, ctx)
+
+    assert result.status == "SKIPPED"
+    assert result.details == {
+        "reason": "dynamic_checks_disabled",
+        "summary": "dynamic checks are off; run with --dynamic",
+        "variable": "record",
+        "stages": ["received", "parsed", "validated", "stored"],
+    }
+
+
+@pytest.mark.parametrize("target_kind", ["class", "method"])
+def test_a_target_of_another_kind_fails_before_anything_runs(
+    target_kind: str,
+) -> None:
+    from pythonarchtesting.execution.evaluators.runtime_flow import (
+        RuntimeFlowEvaluator,
+    )
+
+    rule, function = _flow_rule_and_function()
+    target = replace(function, kind=target_kind)
+    ctx = SimpleNamespace(target_root=Path("."), source_root=Path("."))
+
+    result = RuntimeFlowEvaluator().evaluate(rule, function, target, _MATCHED, ctx)
+
+    assert result.status == "FAILED"
+    assert result.details["reason"] == "target_kind_mismatch"
+    assert result.details["summary"] == (
+        f"expected a function, matched a {target_kind}"
+    )
+    assert list(result.details) == ["reason", "summary", "variable", "stages"]

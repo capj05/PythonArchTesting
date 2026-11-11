@@ -19,7 +19,7 @@ They still never compare results ([dynamic-checks.md](dynamic-checks.md)).
 
 ## Supported Checks
 
-All markers are imported from `pythonarchtesting.rules`. They group into six
+All markers are imported from `pythonarchtesting.rules`. They group into seven
 categories. See [api-reference.md](api-reference.md) for every option and
 [pattern-recipes.md](pattern-recipes.md) for ready-to-use combinations.
 
@@ -30,10 +30,15 @@ of a class:
   `require_member_set`, `required_constructor`, `required_factory`,
   `required_attribute`, `does_not_have`
 
-**Imports** — module-scoped or package-scoped import policy, in either direct
-AST mode or graph (reachable-import) mode:
+**Imports and architecture** — module-scoped or package-scoped import policy,
+in either direct AST mode or graph (reachable-import) mode, and the structure
+of the whole program (checked on imports, and with `--dynamic` also on the
+calls between modules):
 
 - `forbid_imports`
+- `enforce_layers`, `forbid_cycles` (one layer order, no dependency cycles),
+  `module_interface` (a module used only through its interface),
+  `architecture_entry` (the reference's module dependencies as the model)
 
 **Type identity and inheritance** — structural conformance, inheritance, and
 identity checks:
@@ -51,6 +56,10 @@ identity checks:
 
 - `flow`, `enforce_flow`
 
+**Encapsulation** — static:
+
+- `forbid_private_access` (no reads of another object's `_` attributes)
+
 **Runtime structure** — opt-in with `--dynamic`; executes the target, never
 compares its results:
 
@@ -67,14 +76,18 @@ compares its results:
 
 At report level, results are grouped by evaluator family
 (`results[*].category`). Static results use `api_signature`, `attribute_contract`, `enum_type`, `import_policy`,
-`member_absence`, `member_set`, `method_set`, `nominal_type_relationship`,
-`protocol_conformance`, `python_modifier`, and `variable_flow`.
+`member_absence`, `member_set`, `method_set`, `module_layers`,
+`module_cycles`, `module_interface`, `architecture_static`,
+`nominal_type_relationship`, `private_access`, `protocol_conformance`,
+`python_modifier`, and `variable_flow`; a marker argument the compiler refuses
+is reported under `compiler_invalid_param`.
 
-With `--dynamic`, runtime results form ten more families,
+With `--dynamic`, runtime results form fourteen more families,
 `runtime_calls`, `runtime_reference_calls`, `runtime_writes`,
 `runtime_instances`, `runtime_members`, `runtime_class_kind`,
-`runtime_protocol`, `runtime_pattern`, `runtime_imports`, and
-`runtime_flow`.
+`runtime_protocol`, `runtime_pattern`, `runtime_imports`, `runtime_flow`,
+`runtime_layers`, `runtime_cycles`, `runtime_module_interface`, and
+`architecture_runtime`.
 
 ## Declaration Placement
 

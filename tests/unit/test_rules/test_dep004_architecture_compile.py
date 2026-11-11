@@ -131,7 +131,12 @@ def test_declaration_outside_the_root_module_is_an_invalid_target(tmp_path: Path
     state = prepare_source(config=load_config(), source_path=root)
     rules, evidence, _ = compile_rules(list(state.source_by_id.values()), load_config())
 
-    assert not [rule for rule in rules if "architecture" in rule.rule_id]
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [
+        (rule.rule_type, rule.params["param"], rule.params["valid"])
+        for rule in rules
+        if rule.name == "architecture_entry"
+    ] == [("compiler_invalid_param", "target_kind", ["root module"])]
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
 
 

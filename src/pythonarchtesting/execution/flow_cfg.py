@@ -33,8 +33,17 @@ class CfgNode:
 
 @dataclass(frozen=True)
 class FunctionCfg:
+    """Control-flow graph of one function body.
+
+    ``exit_node_ids`` are the nodes after which control can leave the
+    function: every ``return`` and every node whose fall-through reaches the
+    end of the body (e.g. an ``if`` without ``else`` or a loop header that is
+    the last statement). Such a node may still have successors.
+    """
+
     entry_node_id: int | None
     nodes: dict[int, CfgNode]
+    exit_node_ids: frozenset[int] = frozenset()
 
 
 def flow_declarations_for_entity(
@@ -80,15 +89,82 @@ def build_function_cfg(entity: Entity, *, variable: str | None = None) -> Functi
         )
 
     builder = _CfgBuilder(flow_by_anchor)
-    entry_id, _ = builder.build_block(node.body)
-    return FunctionCfg(entry_node_id=entry_id, nodes=builder.nodes)
+    entry_id, exits = builder.build_block(node.body)
+    returns = (
+        node_id
+        for node_id, cfg_node in builder.nodes.items()
+        if cfg_node.kind == "Return"
+    )
+    return FunctionCfg(
+        entry_node_id=entry_id,
+        nodes=builder.nodes,
+        exit_node_ids=frozenset([*exits, *returns]),
+    )
+
+
+@dataclass
+class _LoopContext:
+    header_id: int
+    break_ids: list[int] = field(default_factory=list)
+
+
+def _is_always_true(test: ast.expr) -> bool:
+    return isinstance(test, ast.Constant) and bool(test.value)
+
+
+def _is_irrefutable_pattern(pattern: ast.pattern) -> bool:
+    """Return whether ``pattern`` matches every subject (PEP 634).
+
+    Irrefutable are the wildcard ``_`` and a capture ``name`` (``MatchAs``
+    without a sub-pattern), ``P as name`` with an irrefutable ``P``, and an
+    or-pattern with an irrefutable alternative such as ``1 | _``.
+    """
+    if isinstance(pattern, ast.MatchAs):
+        return pattern.pattern is None or _is_irrefutable_pattern(pattern.pattern)
+    if isinstance(pattern, ast.MatchOr):
+        return any(_is_irrefutable_pattern(item) for item in pattern.patterns)
+    return False
+
+
+def _is_irrefutable_case(case: ast.match_case) -> bool:
+    """Return whether ``case`` is taken for every subject: no guard, irrefutable pattern."""
+    return case.guard is None and _is_irrefutable_pattern(case.pattern)
 
 
 class _CfgBuilder:
+    """Build a statement-level CFG.
+
+    Each statement is one node; compound statements contribute a header node
+    and their nested blocks. ``build_stmt`` returns ``(entry, exits)`` where
+    ``exits`` are the nodes whose fall-through continues with the next
+    statement. ``return`` nodes are listed among the exits but never get a
+    successor.
+
+    Loops: ``break`` leads past the loop (skipping its ``else``), ``continue``
+    leads back to the header, and ``else`` runs only after the header's normal
+    termination. ``while`` with a constant true test has no normal
+    termination, so it is left only through ``break`` (or ``return``).
+    ``break``/``continue`` belong to the innermost enclosing loop; a loop's
+    ``else`` block belongs to the enclosing loop.
+
+    Simplifications:
+
+    - ``try``: handlers are entered from the ``try`` header, i.e. as if the
+      exception were raised before the body ran; ``raise`` is an ordinary
+      statement that continues with the next one.
+    - ``return``, ``break`` and ``continue`` jump straight to their target; a
+      surrounding ``finally`` block is not inserted on that path.
+    - ``match``: without an irrefutable case (see :func:`_is_irrefutable_case`)
+      the ``match`` node also falls through past the statement, the path of a
+      subject that matches no case. Irrefutability is decided from the pattern
+      alone, so a case whose guard is always true still counts as refutable.
+    """
+
     def __init__(self, flow_by_anchor: dict[tuple[int, int], list[FlowMarker]]) -> None:
         self.flow_by_anchor = flow_by_anchor
         self.nodes: dict[int, CfgNode] = {}
         self.next_node_id = 0
+        self.loops: list[_LoopContext] = []
 
     def _new_node(self, stmt: ast.stmt, kind: str) -> int:
         node_id = self.next_node_id
@@ -113,6 +189,12 @@ class _CfgBuilder:
         )
         return node_id
 
+    def _link(self, exits: Iterable[int], target: int) -> None:
+        for exit_id in exits:
+            if self.nodes[exit_id].kind == "Return":
+                continue
+            self.nodes[exit_id].successors.append(target)
+
     def build_block(
         self, statements: Iterable[ast.stmt]
     ) -> tuple[int | None, list[int]]:
@@ -124,98 +206,109 @@ class _CfgBuilder:
                 continue
             if entry_id is None:
                 entry_id = stmt_entry
-            for node_id in pending:
-                if self.nodes[node_id].kind == "Return":
-                    continue
-                self.nodes[node_id].successors.append(stmt_entry)
+            self._link(pending, stmt_entry)
             pending = stmt_exits
         return entry_id, pending
 
     def build_stmt(self, stmt: ast.stmt) -> tuple[int | None, list[int]]:
-        if isinstance(stmt, ast.Return):
-            node_id = self._new_node(stmt, "Return")
-            return node_id, [node_id]
-
         if isinstance(stmt, ast.If):
-            node_id = self._new_node(stmt, "If")
-            body_entry, body_exits = self.build_block(stmt.body)
-            else_entry, else_exits = self.build_block(stmt.orelse)
-            if body_entry is not None:
-                self.nodes[node_id].successors.append(body_entry)
-            if else_entry is not None:
-                self.nodes[node_id].successors.append(else_entry)
-            if_exits: list[int] = []
-            if_exits.extend(body_exits or ([node_id] if body_entry is None else []))
-            if_exits.extend(else_exits or ([node_id] if else_entry is None else []))
-            if else_entry is None and not stmt.orelse:
-                if_exits.append(node_id)
-            return node_id, if_exits
-
+            return self._build_if(stmt)
         if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
-            node_id = self._new_node(stmt, type(stmt).__name__)
-            body_entry, body_exits = self.build_block(stmt.body)
-            orelse_entry, orelse_exits = self.build_block(stmt.orelse)
-            if body_entry is not None:
-                self.nodes[node_id].successors.append(body_entry)
-                for exit_id in body_exits:
-                    if self.nodes[exit_id].kind == "Return":
-                        continue
-                    self.nodes[exit_id].successors.append(node_id)
-            if orelse_entry is not None:
-                self.nodes[node_id].successors.append(orelse_entry)
-                return node_id, orelse_exits
-            return node_id, [node_id]
-
+            return self._build_loop(stmt)
+        if isinstance(stmt, (ast.Break, ast.Continue)) and self.loops:
+            return self._build_jump(stmt)
         if isinstance(stmt, ast.Try):
-            node_id = self._new_node(stmt, "Try")
-            body_entry, body_exits = self.build_block(stmt.body)
-            if body_entry is not None:
-                self.nodes[node_id].successors.append(body_entry)
-            handler_exits: list[int] = []
-            for handler in stmt.handlers:
-                handler_entry, current_handler_exits = self.build_block(handler.body)
-                if handler_entry is not None:
-                    self.nodes[node_id].successors.append(handler_entry)
-                handler_exits.extend(current_handler_exits)
-            orelse_entry, orelse_exits = self.build_block(stmt.orelse)
-            if orelse_entry is not None:
-                for exit_id in body_exits:
-                    if self.nodes[exit_id].kind == "Return":
-                        continue
-                    self.nodes[exit_id].successors.append(orelse_entry)
-                normal_exits = orelse_exits
-            else:
-                normal_exits = body_exits
-            combined_exits = [*normal_exits, *handler_exits]
-            if stmt.finalbody:
-                finally_entry, finally_exits = self.build_block(stmt.finalbody)
-                if finally_entry is not None:
-                    for exit_id in combined_exits:
-                        if self.nodes[exit_id].kind == "Return":
-                            continue
-                        self.nodes[exit_id].successors.append(finally_entry)
-                    return node_id, finally_exits
-            return node_id, combined_exits or [node_id]
-
+            return self._build_try(stmt)
         if isinstance(stmt, ast.Match):
-            node_id = self._new_node(stmt, "Match")
-            match_exits: list[int] = []
-            for case in stmt.cases:
-                case_entry, case_exits = self.build_block(case.body)
-                if case_entry is not None:
-                    self.nodes[node_id].successors.append(case_entry)
-                match_exits.extend(case_exits)
-            return node_id, match_exits or [node_id]
-
+            return self._build_match(stmt)
         if isinstance(stmt, (ast.With, ast.AsyncWith)):
-            node_id = self._new_node(stmt, type(stmt).__name__)
-            body_entry, body_exits = self.build_block(stmt.body)
-            if body_entry is not None:
-                self.nodes[node_id].successors.append(body_entry)
-                return node_id, body_exits
-            return node_id, [node_id]
-
+            return self._build_with(stmt)
         node_id = self._new_node(stmt, type(stmt).__name__)
+        return node_id, [node_id]
+
+    def _build_if(self, stmt: ast.If) -> tuple[int, list[int]]:
+        node_id = self._new_node(stmt, "If")
+        body_entry, body_exits = self.build_block(stmt.body)
+        else_entry, else_exits = self.build_block(stmt.orelse)
+        if body_entry is not None:
+            self.nodes[node_id].successors.append(body_entry)
+        if else_entry is not None:
+            self.nodes[node_id].successors.append(else_entry)
+        if_exits = list(body_exits if body_entry is not None else [node_id])
+        if_exits.extend(else_exits if else_entry is not None else [node_id])
+        return node_id, if_exits
+
+    def _build_loop(
+        self, stmt: ast.For | ast.AsyncFor | ast.While
+    ) -> tuple[int, list[int]]:
+        node_id = self._new_node(stmt, type(stmt).__name__)
+        loop = _LoopContext(header_id=node_id)
+        self.loops.append(loop)
+        body_entry, body_exits = self.build_block(stmt.body)
+        self.loops.pop()
+        if body_entry is not None:
+            self.nodes[node_id].successors.append(body_entry)
+            self._link(body_exits, node_id)
+        orelse_entry, orelse_exits = self.build_block(stmt.orelse)
+        if isinstance(stmt, ast.While) and _is_always_true(stmt.test):
+            return node_id, loop.break_ids
+        if orelse_entry is None:
+            return node_id, [node_id, *loop.break_ids]
+        self.nodes[node_id].successors.append(orelse_entry)
+        return node_id, [*orelse_exits, *loop.break_ids]
+
+    def _build_jump(self, stmt: ast.Break | ast.Continue) -> tuple[int, list[int]]:
+        node_id = self._new_node(stmt, type(stmt).__name__)
+        loop = self.loops[-1]
+        if isinstance(stmt, ast.Break):
+            loop.break_ids.append(node_id)
+        else:
+            self.nodes[node_id].successors.append(loop.header_id)
+        return node_id, []
+
+    def _build_try(self, stmt: ast.Try) -> tuple[int, list[int]]:
+        node_id = self._new_node(stmt, "Try")
+        body_entry, body_exits = self.build_block(stmt.body)
+        if body_entry is not None:
+            self.nodes[node_id].successors.append(body_entry)
+        handler_exits: list[int] = []
+        for handler in stmt.handlers:
+            handler_entry, current_handler_exits = self.build_block(handler.body)
+            if handler_entry is not None:
+                self.nodes[node_id].successors.append(handler_entry)
+            handler_exits.extend(current_handler_exits)
+        orelse_entry, orelse_exits = self.build_block(stmt.orelse)
+        if orelse_entry is not None:
+            self._link(body_exits, orelse_entry)
+            normal_exits = orelse_exits
+        else:
+            normal_exits = body_exits
+        combined_exits = [*normal_exits, *handler_exits]
+        if stmt.finalbody:
+            finally_entry, finally_exits = self.build_block(stmt.finalbody)
+            if finally_entry is not None:
+                self._link(combined_exits, finally_entry)
+                return node_id, finally_exits
+        return node_id, combined_exits
+
+    def _build_match(self, stmt: ast.Match) -> tuple[int, list[int]]:
+        node_id = self._new_node(stmt, "Match")
+        match_exits: list[int] = []
+        for case in stmt.cases:
+            case_entry, case_exits = self.build_block(case.body)
+            if case_entry is not None:
+                self.nodes[node_id].successors.append(case_entry)
+            match_exits.extend(case_exits)
+        if not any(_is_irrefutable_case(case) for case in stmt.cases):
+            match_exits.append(node_id)
+        return node_id, match_exits or [node_id]
+
+    def _build_with(self, stmt: ast.With | ast.AsyncWith) -> tuple[int, list[int]]:
+        node_id = self._new_node(stmt, type(stmt).__name__)
+        body_entry, body_exits = self.build_block(stmt.body)
+        if body_entry is not None:
+            self.nodes[node_id].successors.append(body_entry)
+            return node_id, body_exits
         return node_id, [node_id]
 
 

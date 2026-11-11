@@ -10,7 +10,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from pythonarchtesting.config import Config, load_config, resolve_projects_config
 from pythonarchtesting.exceptions import ConfigurationError, MappingError
@@ -283,10 +283,37 @@ def main(argv: Optional[List[str]] = None) -> int:
         return USAGE_ERROR_EXIT_CODE
 
 
-def _run(argv: Optional[List[str]] = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
+def _names_targets(args: argparse.Namespace) -> Any:
+    """Whether any of --target, --targets or --targets-dir was given."""
+    return args.target or args.targets or args.targets_dir
 
+
+# Flags --write-model ignores, each with the test for whether it was given.
+_WRITE_MODEL_IGNORED_FLAGS: Tuple[
+    Tuple[str, Callable[[argparse.Namespace], Any]], ...
+] = (
+    ("--target/--targets/--targets-dir", _names_targets),
+    ("--project-pattern", lambda args: args.project_pattern),
+    ("--exclude-patterns", lambda args: args.exclude_patterns),
+    ("--validate-declarations", lambda args: args.validate_declarations),
+    ("--architecture", lambda args: args.architecture),
+    ("--mapping", lambda args: args.mapping),
+    ("--output", lambda args: args.output),
+    ("--format", lambda args: args.format != "json"),
+)
+
+
+def _configured_source(config: Config) -> Any:
+    """The ``[projects].source_path`` of the configuration, or ``None``."""
+    return getattr(getattr(config, "projects", None), "source_path", None)
+
+
+def _load_cli_config(args: argparse.Namespace) -> Config:
+    """Load the configuration, set up logging, then log the loader's warnings.
+
+    The warnings are buffered until logging is configured, so they reach the
+    handlers the configuration asks for.
+    """
     config_warnings: List[Any] = []
     config = load_config(
         config_path=args.config,
@@ -298,91 +325,160 @@ def _run(argv: Optional[List[str]] = None) -> int:
     configure_logging(config)
     for warning in config_warnings:
         logging.warning("%s: %s", warning.code, warning.message)
+    return config
 
-    explicit_targets: List[str] = []
-    if args.target:
-        explicit_targets.extend(args.target)
-    explicit_targets.extend(_parse_csv(args.targets))
 
-    reference_modules = _parse_csv(args.reference_modules)
-    project_pattern = args.project_pattern
-    exclude_patterns = _parse_csv(args.exclude_patterns) or None
+def _run_write_model(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, config: Config
+) -> int:
+    """Check the flags of a --write-model run, then write the model.
+
+    Flags it would ignore are rejected first, then a missing source, and only
+    then the sandbox, so the user sees the cheapest fix first.
+    """
+    ignored = [flag for flag, given in _WRITE_MODEL_IGNORED_FLAGS if given(args)]
+    if ignored:
+        parser.error(
+            "--write-model describes the reference only and writes FILE; "
+            f"drop {', '.join(ignored)}."
+        )
+    source = args.source or _configured_source(config)
+    if source in (None, "", Path(".")):
+        parser.error(
+            "--write-model requires --source or a configured [projects].source_path."
+        )
+    return _write_model(config, args, str(source), _sandbox_policy(parser, args))
+
+
+def _declaration_source(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    config: Config,
+    reference_modules: List[str],
+) -> str:
+    """The source a --validate-declarations run reads, or a usage error.
+
+    Reference modules alone are enough, and the source then defaults to the
+    current directory; without them the run needs --source or a configured one.
+    """
+    config_source_path = _configured_source(config)
+    has_config_source = config_source_path not in (None, "", Path("."))
+    if not args.source and not reference_modules and not has_config_source:
+        parser.error(
+            "--validate-declarations requires --source, --reference-modules, "
+            "or a configured [projects].source_path."
+        )
+    return str(args.source or config_source_path or Path("."))
+
+
+def _run_declaration_mode(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    config: Config,
+    reference_modules: List[str],
+) -> int:
+    """Check the flags of a --validate-declarations run, then validate.
+
+    The checks run in a fixed order: --dynamic, the format, target selection
+    and last the source, which may also come from the configuration.
+    """
+    if args.dynamic:
+        parser.error("--validate-declarations runs no target code; drop --dynamic.")
+    if args.format != "json":
+        parser.error("Declaration validation supports only --format json.")
+    if _names_targets(args) or args.project_pattern or args.exclude_patterns:
+        parser.error(
+            "--validate-declarations is source-only and does not accept target "
+            "selection flags."
+        )
+    return _run_declaration_validation(
+        config=config,
+        source_path=_declaration_source(parser, args, config, reference_modules),
+        reference_modules=reference_modules,
+        output_file=args.output,
+        output_format=args.format,
+        validation_scope=args.validation_scope,
+    )
+
+
+def _warn_unchecked(target_states: List[Any]) -> None:
+    """Warn on stderr about results that passed without being fully checked.
+
+    The counters are imported here, not at the top, so importing the CLI does
+    not pull in the runner.
+    """
+    from pythonarchtesting.runner.skips import (
+        count_results_undecided,
+        count_runtime_results_unverified,
+        count_runtime_rules_skipped,
+    )
+
+    unchecked = (
+        (
+            # Otherwise a run without --dynamic reads as a pass for every target.
+            count_runtime_rules_skipped,
+            "runtime rule result(s) were SKIPPED because --dynamic was not "
+            "given; their targets are not checked by them",
+        ),
+        (
+            # A runtime pass holds only for the code its cases ran.
+            count_runtime_results_unverified,
+            "runtime rule result(s) passed with code or cases left unchecked; "
+            "see details.unverified",
+        ),
+        (
+            # The policy could not judge these changes; a person has to.
+            count_results_undecided,
+            "result(s) passed with undecided architecture changes; "
+            "see details.undecided",
+        ),
+    )
+    for counter, text in unchecked:
+        count = counter(target_states)
+        if count:
+            print(f"warning: {count} {text}", file=sys.stderr)
+
+
+def _explicit_targets(args: argparse.Namespace) -> Optional[List[str]]:
+    """The targets named by --target and --targets, or ``None`` for none.
+
+    ``None`` rather than an empty list lets the configuration supply targets.
+    """
+    return (list(args.target or []) + _parse_csv(args.targets)) or None
+
+
+def _print_report(report: str, args: argparse.Namespace) -> None:
+    """Print the report, or where it was written when an output was given."""
+    if args.output and args.format == "json":
+        # generate_run_report already wrote the file when given an output path.
+        print(f"Report written to {args.output}")
+    elif args.output and args.format == "markdown":
+        print(f"Report written to {report}")
+    else:
+        print(report)
+
+
+def _run(argv: Optional[List[str]] = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    config = _load_cli_config(args)
 
     if args.write_model:
-        ignored = [
-            flag
-            for flag, given in (
-                (
-                    "--target/--targets/--targets-dir",
-                    args.target or args.targets or args.targets_dir,
-                ),
-                ("--project-pattern", args.project_pattern),
-                ("--exclude-patterns", args.exclude_patterns),
-                ("--validate-declarations", args.validate_declarations),
-                ("--architecture", args.architecture),
-                ("--mapping", args.mapping),
-                ("--output", args.output),
-                ("--format", args.format != "json"),
-            )
-            if given
-        ]
-        if ignored:
-            parser.error(
-                "--write-model describes the reference only and writes FILE; "
-                f"drop {', '.join(ignored)}."
-            )
-        source = args.source or getattr(
-            getattr(config, "projects", None), "source_path", None
-        )
-        if source in (None, "", Path(".")):
-            parser.error(
-                "--write-model requires --source or a configured [projects].source_path."
-            )
-        return _write_model(config, args, str(source), _sandbox_policy(parser, args))
+        # --write-model wins over every other mode, including validation.
+        return _run_write_model(parser, args, config)
 
+    reference_modules = _parse_csv(args.reference_modules)
     if args.validate_declarations:
-        if args.dynamic:
-            parser.error("--validate-declarations runs no target code; drop --dynamic.")
-        if args.format != "json":
-            parser.error("Declaration validation supports only --format json.")
-        if (
-            args.target
-            or args.targets
-            or args.targets_dir
-            or args.project_pattern
-            or args.exclude_patterns
-        ):
-            parser.error(
-                "--validate-declarations is source-only and does not accept target "
-                "selection flags."
-            )
+        return _run_declaration_mode(parser, args, config, reference_modules)
 
-        config_source_path = getattr(
-            getattr(config, "projects", None), "source_path", None
-        )
-        has_config_source = config_source_path not in (None, "", Path("."))
-        if not args.source and not reference_modules and not has_config_source:
-            parser.error(
-                "--validate-declarations requires --source, --reference-modules, "
-                "or a configured [projects].source_path."
-            )
-
-        resolved_source_path = str(args.source or config_source_path or Path("."))
-        return _run_declaration_validation(
-            config=config,
-            source_path=resolved_source_path,
-            reference_modules=reference_modules,
-            output_file=args.output,
-            output_format=args.format,
-            validation_scope=args.validation_scope,
-        )
-
+    explicit_targets = _explicit_targets(args)
+    exclude_patterns = _parse_csv(args.exclude_patterns) or None
     projects_cfg = resolve_projects_config(
         config=config,
         source_path=args.source,
-        targets=explicit_targets or None,
+        targets=explicit_targets,
         targets_dir=args.targets_dir,
-        project_pattern=project_pattern,
+        project_pattern=args.project_pattern,
         exclude_patterns=exclude_patterns,
         env_target_path=os.environ.get("PYTHON_ARCH_TARGET_PATH"),
     )
@@ -394,10 +490,10 @@ def _run(argv: Optional[List[str]] = None) -> int:
             config=config,
             projects=projects_cfg,
             source_path=args.source,
-            targets=explicit_targets or None,
+            targets=explicit_targets,
             targets_dir=args.targets_dir,
             reference_modules=reference_modules or None,
-            project_pattern=project_pattern,
+            project_pattern=args.project_pattern,
             exclude_patterns=exclude_patterns,
             validation_scope=args.validation_scope,
             load_config_first=False,
@@ -408,46 +504,11 @@ def _run(argv: Optional[List[str]] = None) -> int:
         )
     except MappingError as exc:
         parser.error(str(exc))
-    from pythonarchtesting.runner.skips import (
-        count_results_undecided,
-        count_runtime_results_unverified,
-        count_runtime_rules_skipped,
-    )
-
-    skipped = count_runtime_rules_skipped(target_states)
-    if skipped:
-        # Otherwise a run without --dynamic reads as a pass for every target.
-        print(
-            f"warning: {skipped} runtime rule result(s) were SKIPPED because "
-            "--dynamic was not given; their targets are not checked by them",
-            file=sys.stderr,
-        )
-    unverified = count_runtime_results_unverified(target_states)
-    if unverified:
-        # A runtime pass holds only for the code its cases ran.
-        print(
-            f"warning: {unverified} runtime rule result(s) passed with code or "
-            "cases left unchecked; see details.unverified",
-            file=sys.stderr,
-        )
-    undecided = count_results_undecided(target_states)
-    if undecided:
-        # The policy could not judge these changes; a person has to.
-        print(
-            f"warning: {undecided} result(s) passed with undecided architecture "
-            "changes; see details.undecided",
-            file=sys.stderr,
-        )
+    _warn_unchecked(target_states)
     report = generate_run_report(
         run_state, target_states, args.format, config, args.output
     )
-    if args.output and args.format == "json":
-        # generate_run_report already wrote the file when given an output path.
-        print(f"Report written to {args.output}")
-    elif args.output and args.format == "markdown":
-        print(f"Report written to {report}")
-    else:
-        print(report)
+    _print_report(report, args)
     return get_run_exit_code(run_state, target_states, config)
 
 

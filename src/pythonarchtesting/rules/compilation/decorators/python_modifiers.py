@@ -1,44 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Tuple
 
 from pythonarchtesting.config import Config
-from pythonarchtesting.core.models import Evidence, Rule, RuleSelector
+from pythonarchtesting.core.models import Rule, RuleSelector
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
-
-
-def _evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-    *,
-    evidence_type: str,
-    payload: dict[str, Any],
-) -> Evidence:
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id(evidence_type, payload),
-        type=evidence_type,
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
-
-
-def _resolve_severity(
-    params_kwargs: dict[str, Any],
-) -> Literal["error", "warning", "info"]:
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        return cast(Literal["error", "warning", "info"], base_severity_raw)
-    return "error"
+from ..common import (
+    invalid_target_evidence,
+    marker_severity,
+    reject_invalid_severity,
+    reject_misplaced,
+    with_rule_id_suffix,
+)
 
 
 def _compile_python_modifier_rule(
@@ -56,27 +30,34 @@ def _compile_python_modifier_rule(
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     _ = cfg
     params_kwargs = dict(declaration.params)
-    base_severity = _resolve_severity(params_kwargs)
-
     if source_entity.kind != expected_kind:
-        payload = {
-            "decorator": declaration_name,
-            "issue": "compiler_invalid_target",
-            "expected_kind": expected_kind,
-            "found_kind": source_entity.kind,
-        }
-        return (
-            [],
-            [
-                _evidence(
-                    source_entity,
-                    declaration,
-                    evidence_type="compiler_invalid_target",
-                    payload=payload,
-                )
-            ],
-            [],
+        return reject_misplaced(
+            source_entity,
+            invalid_target_evidence(
+                source_entity,
+                declaration,
+                decorator=declaration_name,
+                expected_kind=expected_kind,
+            ),
+            marker=declaration_name,
+            rule_id_prefix=(
+                f"{rule_id.split('/')[0]}/{declaration_name}/invalid_declaration"
+            ),
+            rule_id_suffix=rule_id_suffix,
+            valid=[expected_kind],
         )
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker=declaration_name,
+        rule_id_prefix=f"{rule_id.split('/')[0]}/{declaration_name}/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
+
+    base_severity = marker_severity(params_kwargs)
 
     rule = Rule(
         rule_id=with_rule_id_suffix(rule_id, rule_id_suffix),

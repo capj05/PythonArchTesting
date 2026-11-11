@@ -8,7 +8,7 @@ from pythonarchtesting.protocols.signature_slots import signature_slots
 from pythonarchtesting.protocols.type_expr import unwrap_annotated_annotation_text
 
 
-def _annotation_strings(
+def annotation_strings(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
     *,
     skip_first_arg: bool = False,
@@ -43,7 +43,7 @@ def _annotation_strings(
     return {"args": entries, "return": return_annotation, "has_all": has_all}
 
 
-def _line_text_from_source(file_text: str, lineno: int) -> Optional[str]:
+def line_text_from_source(file_text: str, lineno: int) -> Optional[str]:
     if lineno <= 0:
         return None
     lines = file_text.splitlines()
@@ -73,4 +73,8 @@ def signature_info_from_ast(
     )
 
 
-__all__ = ["signature_info_from_ast"]
+__all__ = [
+    "signature_info_from_ast",
+    "annotation_strings",
+    "line_text_from_source",
+]

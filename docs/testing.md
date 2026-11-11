@@ -15,7 +15,6 @@ tests/
 ├── performance/
 ├── import_safety/
 ├── fixtures/
-├── files/
 └── utils/
 ```
 

@@ -11,8 +11,8 @@ from pythonarchtesting.rules import implements_protocol
 ```
 
 Use to require a target class (or callable parameter) to satisfy a Protocol's
-methods structurally. Resolution is by dotted name relative to the reference
-project.
+methods and attributes structurally. Resolution is by dotted name relative to
+the reference root, without the reference's own package name.
 
 ## Arguments
 
@@ -20,7 +20,7 @@ project.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `protocol` (positional) | `str \| Protocol class` | — | The source Protocol to satisfy, as a reference to its class or its dotted name (e.g. `"reference.Repository"`). |
+| `protocol` (positional) | `str \| Protocol class` | — | The source Protocol to satisfy, as a reference to its class or its dotted name (e.g. `"repositories.Repository"` for a Protocol in `reference/repositories.py`). A second positional argument is a warning and is not used (see [Positional Arguments](README.md#positional-arguments)). |
 
 **Optional:**
 
@@ -28,24 +28,35 @@ project.
 |----------|------|---------|-------------|
 | `signature_mode` | `str` | `"compatible"` | Signature matching mode for protocol methods: `"compatible"`, `"exact"`, or `"any"`. |
 | `enforce_method_kind` | `bool` | `True` | Require method-kind parity (instance / classmethod / staticmethod) between Protocol and target. |
-| `return_annotation` | `str` | `"warning"` | Return-type checking level: `"warning"`, `"error"`, or `"off"`; any other value is treated as `"warning"`. |
+| `return_annotation` | `str` | `"warning"` | Return-type checking level: `"warning"`, `"error"`, or `"off"`; any other value makes the declaration invalid (see [Logical And Enumerated Arguments](README.md#logical-and-enumerated-arguments)). |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 
 ## Example
 
 ```python
-from typing import Annotated
+# reference/repositories.py
+from typing import Annotated, Protocol
 from pythonarchtesting.rules import implements_protocol
 
 
+class Repository(Protocol):
+    def get(self, key: str) -> str: ...
+
+
 class RepositoryAdapter:
-    __archtest__: Annotated[None, implements_protocol("reference.Repository")]
+    __archtest__: Annotated[None, implements_protocol("repositories.Repository")]
 ```
 
 ## What it checks
 
 - Presence of every Protocol method on the matched target class.
+- Presence of every Protocol attribute (an annotated name, a constant, or a
+  property) on the matched target class, its annotation compatible with the
+  Protocol's, and writable where the Protocol's is (a read-only property does
+  not satisfy a plain attribute). Failures read `missing protocol
+  attributes: ...`, `attribute annotation mismatch: ...` or `attribute
+  mutability mismatch: ...`; `details.required_attributes` lists them.
 - Parameter compatibility under `signature_mode`. Under `"compatible"` the
   target may add parameters only if callers can leave them out (a default,
   or `*args` / `**kwargs`); an extra required parameter fails, since a
@@ -58,7 +69,6 @@ class RepositoryAdapter:
 
 ## What it does not check
 
-- Protocol attributes that are pure data (no methods).
 - Runtime registration via `@runtime_checkable` or `isinstance` checks.
 - Behavioral correctness of the methods.
 

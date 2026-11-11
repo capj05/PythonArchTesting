@@ -117,20 +117,22 @@ def _methods(index: EntityIndex, module: str, owner: str) -> list[Entity]:
     ]
 
 
-def pair_by_name(
-    results: List[MatchResult],
-    by_source: Dict[str, MatchResult],
-    source_index: EntityIndex,
-    target_index: EntityIndex,
-) -> tuple[List[MatchResult], Dict[str, MatchResult]]:
-    """``results`` with the unpaired entities the two rules can pair, paired."""
-    # Targets the scores give to someone: matches, and for an entity left
-    # without one, its best candidate (the highest-scoring claim wins).
-    taken = {
+def _taken(results: List[MatchResult]) -> set[str]:
+    """The targets the scores matched, which no rule here may take again."""
+    return {
         m.target_id
         for m in results
         if m.status == MatchStatus.MATCHED and m.target_id is not None
     }
+
+
+def _claims(results: List[MatchResult]) -> dict[str, tuple[float, str]]:
+    """For each target, the unpaired entity that scores best for it.
+
+    An entity left without a match claims its best candidate. When several
+    claim one target, the higher ``(confidence, source_id)`` wins, so a tie in
+    confidence goes to the larger source id whatever the order of ``results``.
+    """
     claims: dict[str, tuple[float, str]] = {}
     for m in results:
         if m.status == MatchStatus.MATCHED or not m.candidates:
@@ -139,60 +141,110 @@ def pair_by_name(
         held = claims.get(best.target_id)
         if held is None or (best.confidence, m.source_id) > held:
             claims[best.target_id] = (best.confidence, m.source_id)
-    by_source = dict(by_source)
-    targets = {e.canonical_id: e for e in target_index.all_sorted}
+    return claims
 
-    def free(target: Entity, match: MatchResult) -> bool:
-        if not _open_for(match, target) or target.canonical_id in taken:
+
+def _free(
+    target: Entity,
+    match: MatchResult,
+    taken: set[str],
+    claims: dict[str, tuple[float, str]],
+) -> bool:
+    """Whether rule 1 may give ``target`` to ``match``.
+
+    The scores keep the last word: the target must be open for the match, not
+    yet taken, and claimed by nobody else.
+    """
+    if not _open_for(match, target) or target.canonical_id in taken:
+        return False
+    claim = claims.get(target.canonical_id)
+    return claim is None or claim[1] == match.source_id
+
+
+def _class_fits(
+    source: Entity,
+    target: Entity,
+    indexes: tuple[EntityIndex, EntityIndex],
+    by_source: Dict[str, MatchResult],
+    targets: Dict[str, Entity],
+) -> bool:
+    """Whether the target class has every ordinary method of the reference's.
+
+    Special methods may be generated (a dataclass's ``__init__``, ``__eq__``),
+    so only the ordinary ones are required. A required method already paired
+    with a method of another class rules the target class out.
+    """
+    source_index, target_index = indexes
+    wanted = [
+        m
+        for m in _methods(source_index, source.module_path, source.qualname)
+        if not _dunder(m.qualname.rpartition(".")[2])
+    ]
+    offered = {
+        e.qualname.rpartition(".")[2]
+        for e in _methods(target_index, target.module_path, target.qualname)
+    }
+    if any(m.qualname.rpartition(".")[2] not in offered for m in wanted):
+        return False
+    for method in wanted:
+        paired = by_source.get(method.canonical_id)
+        if paired is None or paired.status != MatchStatus.MATCHED:
+            continue
+        owner = targets.get(paired.target_id or "")
+        if owner is not None and (
+            owner.module_path != target.module_path
+            or owner.qualname.rpartition(".")[0] != target.qualname
+        ):
             return False
-        claim = claims.get(target.canonical_id)
-        return claim is None or claim[1] == match.source_id
+    return True
 
-    def class_fits(source: Entity, target: Entity) -> bool:
-        # Special methods may be generated (a dataclass's __init__, __eq__),
-        # so only the ordinary ones are required.
-        wanted = [
-            m
-            for m in _methods(source_index, source.module_path, source.qualname)
-            if not _dunder(m.qualname.rpartition(".")[2])
-        ]
-        offered = {
-            e.qualname.rpartition(".")[2]
-            for e in _methods(target_index, target.module_path, target.qualname)
-        }
-        if any(m.qualname.rpartition(".")[2] not in offered for m in wanted):
-            return False
-        for method in wanted:
-            paired = by_source.get(method.canonical_id)
-            if paired is None or paired.status != MatchStatus.MATCHED:
-                continue
-            owner = targets.get(paired.target_id or "")
-            if owner is not None and (
-                owner.module_path != target.module_path
-                or owner.qualname.rpartition(".")[0] != target.qualname
-            ):
-                return False
-        return True
 
+def _unique_target(
+    source: Entity, source_index: EntityIndex, target_index: EntityIndex
+) -> Optional[Entity]:
+    """The only top-level target of the source's kind and name, if any.
+
+    ``None`` as well when the reference has another entity of that kind and
+    name, since the name then no longer identifies the source.
+    """
+    if len(source_index.by_name.get((source.kind, source.name), [])) != 1:
+        return None
+    pool = [
+        e
+        for e in target_index.by_name.get((source.kind, source.name), [])
+        if _top_level(e)
+    ]
+    return pool[0] if len(pool) == 1 else None
+
+
+def _pair_unique_names(
+    by_source: Dict[str, MatchResult],
+    indexes: tuple[EntityIndex, EntityIndex],
+    taken: set[str],
+    claims: dict[str, tuple[float, str]],
+    targets: Dict[str, Entity],
+) -> None:
+    """Apply rule 1 (*unique name*) to ``by_source`` in place.
+
+    Sources are visited in the order of ``all_sorted`` and every pair made
+    adds its target to ``taken``, so an earlier source wins a target that a
+    later one could also take.
+    """
+    source_index, target_index = indexes
     for source in source_index.all_sorted:
         if source.kind not in ("class", "function") or not _top_level(source):
             continue
         match = by_source.get(source.canonical_id)
         if match is None:
             continue
-        if len(source_index.by_name.get((source.kind, source.name), [])) != 1:
+        target = _unique_target(source, source_index, target_index)
+        if target is None:
             continue
-        pool = [
-            e
-            for e in target_index.by_name.get((source.kind, source.name), [])
-            if _top_level(e)
-        ]
-        if len(pool) != 1:
+        if not _free(target, match, taken, claims) or not _accepts(source, target):
             continue
-        target = pool[0]
-        if not free(target, match) or not _accepts(source, target):
-            continue
-        if source.kind == "class" and not class_fits(source, target):
+        if source.kind == "class" and not _class_fits(
+            source, target, indexes, by_source, targets
+        ):
             continue
         by_source[source.canonical_id] = _paired(
             match,
@@ -202,6 +254,17 @@ def pair_by_name(
         )
         taken.add(target.canonical_id)
 
+
+def _class_pairs(
+    by_source: Dict[str, MatchResult],
+    source_index: EntityIndex,
+    targets: Dict[str, Entity],
+) -> dict[tuple[str, str], Entity]:
+    """The target class each matched reference class is paired with.
+
+    Keyed by the reference class's module and qualname, which is how a method
+    finds its class.
+    """
     class_pairs: dict[tuple[str, str], Entity] = {}
     for source in source_index.all_sorted:
         match = by_source.get(source.canonical_id)
@@ -211,6 +274,47 @@ def pair_by_name(
             class_pairs[(source.module_path, source.qualname)] = targets[
                 match.target_id
             ]
+    return class_pairs
+
+
+def _member(
+    source: Entity,
+    name: str,
+    paired_class: Entity,
+    target_index: EntityIndex,
+    taken: set[str],
+) -> Optional[Entity]:
+    """The first free method ``name`` of ``paired_class`` the source fits.
+
+    Every method of that name is considered, because a property's getter and
+    setter share it.
+    """
+    return next(
+        (
+            e
+            for e in target_index.all_sorted
+            if e.kind == "method"
+            and e.module_path == paired_class.module_path
+            and e.qualname == f"{paired_class.qualname}.{name}"
+            and e.canonical_id not in taken
+            and _accepts(source, e)
+        ),
+        None,
+    )
+
+
+def _pair_members(
+    by_source: Dict[str, MatchResult],
+    indexes: tuple[EntityIndex, EntityIndex],
+    taken: set[str],
+    class_pairs: dict[tuple[str, str], Entity],
+) -> None:
+    """Apply rule 2 (*member of a paired class*) to ``by_source`` in place.
+
+    Every pair made adds its target to ``taken``, so two reference methods
+    never share one target method.
+    """
+    source_index, target_index = indexes
     for source in source_index.all_sorted:
         if source.kind != "method":
             continue
@@ -221,19 +325,7 @@ def pair_by_name(
         paired_class = class_pairs.get((source.module_path, owner))
         if paired_class is None:
             continue
-        # Every method of that name (a property's getter and setter share it).
-        member: Optional[Entity] = next(
-            (
-                e
-                for e in target_index.all_sorted
-                if e.kind == "method"
-                and e.module_path == paired_class.module_path
-                and e.qualname == f"{paired_class.qualname}.{name}"
-                and e.canonical_id not in taken
-                and _accepts(source, e)
-            ),
-            None,
-        )
+        member = _member(source, name, paired_class, target_index, taken)
         if member is None:
             continue
         by_source[source.canonical_id] = _paired(
@@ -244,6 +336,29 @@ def pair_by_name(
         )
         taken.add(member.canonical_id)
 
+
+def pair_by_name(
+    results: List[MatchResult],
+    by_source: Dict[str, MatchResult],
+    source_index: EntityIndex,
+    target_index: EntityIndex,
+) -> tuple[List[MatchResult], Dict[str, MatchResult]]:
+    """``results`` with the unpaired entities the two rules can pair, paired.
+
+    The rules run in order on one copy of ``by_source`` and one set of taken
+    targets, so rule 2 sees the classes rule 1 paired and neither rule hands
+    out a target twice.
+    """
+    # Targets the scores give to someone: matches, and for an entity left
+    # without one, its best candidate (the highest-scoring claim wins).
+    taken = _taken(results)
+    claims = _claims(results)
+    by_source = dict(by_source)
+    targets = {e.canonical_id: e for e in target_index.all_sorted}
+    indexes = (source_index, target_index)
+    _pair_unique_names(by_source, indexes, taken, claims, targets)
+    class_pairs = _class_pairs(by_source, source_index, targets)
+    _pair_members(by_source, indexes, taken, class_pairs)
     paired = [by_source.get(m.source_id, m) for m in results]
     return paired, {m.source_id: m for m in paired}
 

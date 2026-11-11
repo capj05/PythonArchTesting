@@ -112,7 +112,10 @@ class Processor:
     assert rules[0].params["mode"] == "any"
 
 
-def test_api002_compile_unknown_signature_mode_defaults_to_compatible() -> None:
+def test_api002_compile_unknown_signature_mode_drops_the_declaration() -> None:
+    """An unknown signature mode is no longer replaced by ``"compatible"``:
+    it makes the declaration invalid, as every invalid enumerated argument
+    does."""
     source = """
 from typing import Annotated
 from pythonarchtesting.rules import required_method
@@ -126,9 +129,11 @@ class Processor:
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
     assert compiler_results == []
-    assert evidence == []
-    assert [rule.rule_id for rule in rules] == ["API002/required_method/v1"]
-    assert rules[0].params["mode"] == "compatible"
+    assert [rule.rule_id for rule in rules] == [
+        "API002/required_method/invalid_declaration/signature_mode"
+    ]
+    assert rules[0].params["valid"] == ["any", "compatible", "exact"]
+    assert [item.payload["issue"] for item in evidence] == ["invalid_signature_mode"]
 
 
 def test_api002_compile_threads_allow_missing_flag() -> None:
@@ -655,7 +660,10 @@ def run(data: int) -> int:
     source_entity = _extract_entity(source, role="source", kind="function", name="run")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [(rule.rule_type, rule.params["param"]) for rule in rules] == [
+        ("compiler_invalid_param", "target_kind")
+    ]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
 

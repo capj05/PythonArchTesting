@@ -31,7 +31,8 @@ cases and no `--dynamic`. Its runtime companion for writes is
 
 Any other argument, and any positional one, makes the declaration invalid
 (`ENC001/forbid_private_access/invalid_declaration`): a misspelt `alow=[...]`
-would otherwise silently allow nothing.
+would otherwise silently allow nothing. A misspelt keyword is refused as by
+every marker (see [Unknown Keywords](README.md#unknown-keywords)).
 
 ## Example
 
@@ -65,15 +66,16 @@ A target whose `report` reads `inventory._stock.items()` fails with
 - Each violation has a fact in `details.facts`, aligned 1:1 with
   `details.violations`: `kind` (`read`), `attribute`, `class` (the class the
   annotation of the parameter read through names, else `null`), `file`,
-  `line`, `reader` (`module:qualname`), and `receiver` (`true`, present
-  only when the attribute is read to call a method on it that changes a
-  container in place, `obj._x.append(v)` (`append`, `extend`, `insert`,
-  `update`, `pop`, `popitem`, `remove`, `clear`, `setdefault`, `add`,
-  `discard`, `sort`, `reverse`): a principle's findings count such a read on
-  the line of a write of the same attribute as part of that write; so is a
-  read in a statement that assigns that very attribute of the same object,
-  `obj._x = {k: v for k, v in obj._x.items() if ...}`; `a._x = b._x.copy()`
-  is a read of its own).
+  `line`, `reader` (`module:qualname`), and `receiver`, present only when
+  the read is part of a write of the same attribute: `"mutated"` when the
+  attribute is read to call a method on it that changes a container in
+  place, `obj._x.append(v)` (`append`, `extend`, `insert`, `update`, `pop`,
+  `popitem`, `remove`, `clear`, `setdefault`, `add`, `discard`, `sort`,
+  `reverse`), `"assigned"` when it is read in a statement that assigns that
+  very attribute of the same object, `obj._x = {k: v for k, v in
+  obj._x.items() if ...}` (`a._x = b._x.copy()` is a read of its own). A
+  principle's findings count such a read on the line of a write of the same
+  attribute as part of that write.
 
 These are no violation:
 
@@ -82,10 +84,38 @@ These are no violation:
   `self.__class__`;
 - in a method of the class that defines `_x`, or of a subclass of a project
   class that does (a class-level name, a method, or what its methods assign
-  to their `self`, also by unpacking: `self._x, self._y = x, y`), any object:
-  another instance of the same class (`other._x` in `__eq__`) is the class's
-  own business. The check does not know `other`'s type, so in such a method
-  an object of another class with an attribute of the same name passes too;
+  to their `self`, also by unpacking: `self._x, self._y = x, y`), an object
+  known to be of that class: another instance of the same class (`other._x`
+  in `__eq__`) is the class's own business. An object is known to be of the
+  class when
+  - it is annotated with the class or one of its bases (also as a string,
+    `other: "Cart"`, or through a module, `other: "models.Cart"`);
+  - it is built by `Cart()`, `cls()`, `type(self)()` or `self.__class__()`;
+  - an `isinstance(other, Cart)` check (the class, a base, or a tuple holding
+    one) proves it: in the body of `if isinstance(...)`, after
+    `isinstance(...) and`, in the branch of `... if isinstance(...) else ...`,
+    and after `assert isinstance(...)` or an `if not isinstance(...):` whose
+    body ends in `return`, `raise`, `continue` or `break`, in the same block.
+    A read before the check, `name = other._name` above
+    `return isinstance(other, Room) and ...`, is not covered;
+  - it is the unannotated `other` operand of a comparison or binary-operator
+    dunder: `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__`, and
+    `__add__`, `__sub__`, `__mul__`, `__matmul__`, `__truediv__`,
+    `__floordiv__`, `__mod__`, `__divmod__`, `__pow__`, `__lshift__`,
+    `__rshift__`, `__and__`, `__xor__`, `__or__` with their reflected
+    (`__radd__`) and in-place (`__iadd__`) forms; an `other` annotated with
+    another class (`def __eq__(self, other: Player)`) is that class.
+
+  A class is told by what the module binds its name to: `views.Item` (after
+  `from . import views`) or a `ViewItem` imported from `views` is not the
+  `Item` of `models`, though both are called `Item`. Only a name the module
+  binds by no import or class statement is taken by its simple name.
+
+  An object of unknown type passes only while no project class outside the
+  class's family (its bases and subclasses) defines `_x`: `inv._items` in
+  `Cart` fails when `Inventory` has `_items` too, and `other._exits` in
+  `Room.connect(self, other)` passes unless another class, a `Player`,
+  defines `_exits` as well;
 - `module._helper` on a name an import binds to a module (`import tools`,
   `from . import tools`): a module's private names are
   [module_interface](module_interface.md)'s concern, not an object's. A name

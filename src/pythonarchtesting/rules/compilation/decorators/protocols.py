@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Literal, Tuple
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Evidence
@@ -10,53 +10,39 @@ from pythonarchtesting.protocols.reference_resolution import (
     resolve_reference,
 )
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
+from ..common import (
+    bool_param,
+    declaration_evidence,
+    drop_with_sentinel,
+    marker_severity,
+    options_problem,
+    reject_invalid_param,
+    reject_invalid_severity,
+    reject_misplaced,
+    with_rule_id_suffix,
+    without_none,
+)
 
-
-def _evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-    *,
-    evidence_type: str,
-    payload: dict[str, Any],
-) -> Evidence:
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id(evidence_type, payload),
-        type=evidence_type,
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
+# The evaluator compares signatures in each of these modes, as
+# required_method does; "any" checks only that the members exist.
+_SIGNATURE_MODES = ("compatible", "exact", "any")
+_RETURN_ANNOTATIONS = ("off", "warning", "error")
+_OPTIONS = ("signature_mode", "return_annotation", "enforce_method_kind")
 
 
 def _protocol_rule_options(
     params_kwargs: dict[str, Any],
 ) -> tuple[str, str, Literal["error", "warning", "info"]]:
+    """The signature mode, return annotation level and severity of a
+    declaration whose parameters are valid."""
     mode = str(params_kwargs.get("signature_mode", "compatible")).lower()
-    if mode not in {"compatible", "exact"}:
-        mode = "compatible"
-
     return_annotation = str(params_kwargs.get("return_annotation", "warning")).lower()
-    if return_annotation not in {"off", "warning", "error"}:
-        return_annotation = "warning"
-
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
+    base_severity = marker_severity(params_kwargs)
 
     return mode, return_annotation, base_severity
 
 
-def _resolve_protocol_entity(
+def resolve_protocol_entity(
     source_entity: Entity,
     declaration: DeclarationEntry,
     *,
@@ -76,7 +62,7 @@ def _resolve_protocol_entity(
             None,
             None,
             [
-                _evidence(
+                declaration_evidence(
                     source_entity,
                     declaration,
                     evidence_type="compiler_invalid_protocol_reference",
@@ -103,7 +89,7 @@ def _resolve_protocol_entity(
             None,
             None,
             [
-                _evidence(
+                declaration_evidence(
                     source_entity,
                     declaration,
                     evidence_type="compiler_invalid_protocol_reference",
@@ -125,7 +111,7 @@ def _resolve_protocol_entity(
             None,
             None,
             [
-                _evidence(
+                declaration_evidence(
                     source_entity,
                     declaration,
                     evidence_type="compiler_invalid_protocol_reference",
@@ -137,21 +123,53 @@ def _resolve_protocol_entity(
     return resolution.entity, resolution.normalized, []
 
 
+def unresolved_protocol(
+    source_entity: Entity,
+    evidence: list[Evidence],
+    *,
+    marker: str,
+    rule_id_prefix: str,
+    rule_id_suffix: str,
+) -> Tuple[List[Any], List[Any], List[Any]]:
+    """The declaration dropped because its ``protocol`` argument names no
+    ``typing.Protocol`` class: :func:`resolve_protocol_entity` gave
+    ``evidence``, which says why."""
+    payload = evidence[-1].payload if evidence else {}
+    why = str(payload.get("reason", "ambiguous_or_missing")).replace("_", " ")
+    return drop_with_sentinel(
+        source_entity,
+        evidence,
+        marker=marker,
+        rule_id_prefix=rule_id_prefix,
+        rule_id_suffix=rule_id_suffix,
+        param="protocol",
+        value=payload.get("protocol"),
+        reason=f"protocol must name a typing.Protocol class ({why})",
+    )
+
+
 def _target_kind_error(
     source_entity: Entity,
     declaration: DeclarationEntry,
     *,
     payload: dict[str, Any],
+    rule_id: str,
+    rule_id_suffix: str,
+    valid: list[str],
 ) -> tuple[list[Any], list[Evidence], list[Any]]:
-    compiler_evidence = [
-        _evidence(
+    return reject_misplaced(
+        source_entity,
+        declaration_evidence(
             source_entity,
             declaration,
             evidence_type="compiler_invalid_target",
             payload=payload,
-        )
-    ]
-    return [], compiler_evidence, []
+        ),
+        marker=declaration.kind or "implements_protocol",
+        rule_id_prefix=f"{rule_id.rsplit('/', 1)[0]}/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        valid=valid,
+    )
 
 
 def _protocol_rule_metadata(
@@ -218,6 +236,9 @@ def _compile_protocol_rule(
             source_entity,
             declaration,
             payload=payload,
+            rule_id=rule_id,
+            rule_id_suffix=rule_id_suffix,
+            valid=["class"],
         )
     if expected_kind == "function_or_method" and source_entity.kind not in {
         "function",
@@ -234,24 +255,53 @@ def _compile_protocol_rule(
             source_entity,
             declaration,
             payload=payload,
+            rule_id=rule_id,
+            rule_id_suffix=rule_id_suffix,
+            valid=["function", "method"],
         )
 
     compiler_evidence: List[Evidence] = []
-    protocol_entity, protocol_ref, evidence_items = _resolve_protocol_entity(
+    protocol_entity, protocol_ref, evidence_items = resolve_protocol_entity(
         source_entity, declaration, source_entities=source_entities
     )
     compiler_evidence.extend(evidence_items)
+    drop: dict[str, Any] = {
+        "marker": declaration.kind or "implements_protocol",
+        "rule_id_prefix": f"{rule_id.rsplit('/', 1)[0]}/invalid_declaration",
+        "rule_id_suffix": rule_id_suffix,
+    }
     if protocol_entity is None or protocol_ref is None:
-        return [], compiler_evidence, []
+        return unresolved_protocol(source_entity, compiler_evidence, **drop)
 
-    params_kwargs = dict(declaration.params)
+    params_kwargs = without_none(declaration.params, _OPTIONS)
+    reject: dict[str, Any] = {
+        **drop,
+        "key": "declaration",
+        "compiler_evidence": compiler_evidence,
+    }
+    problem = options_problem(
+        params_kwargs,
+        choices={
+            "signature_mode": _SIGNATURE_MODES,
+            "return_annotation": _RETURN_ANNOTATIONS,
+        },
+        bools=("enforce_method_kind",),
+    )
+    rejected = reject_invalid_param(
+        source_entity, declaration, problem, **reject
+    ) or reject_invalid_severity(source_entity, declaration, **reject)
+    if rejected is not None:
+        return rejected
+
     mode, return_annotation, base_severity = _protocol_rule_options(params_kwargs)
 
     params = {
         "protocol": protocol_ref,
         "protocol_entity_id": protocol_entity.canonical_id,
         "signature_mode": mode,
-        "enforce_method_kind": bool(params_kwargs.get("enforce_method_kind", True)),
+        "enforce_method_kind": bool_param(
+            params_kwargs, "enforce_method_kind", default=True
+        ),
         "return_annotation": return_annotation,
         "fail_on_unmatched": True,
     }
@@ -293,4 +343,8 @@ def compile_implements_protocol(
     )
 
 
-__all__ = ["compile_implements_protocol"]
+__all__ = [
+    "compile_implements_protocol",
+    "resolve_protocol_entity",
+    "unresolved_protocol",
+]

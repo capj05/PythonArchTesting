@@ -14,14 +14,13 @@ from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Rule, RuleSelector
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import with_rule_id_suffix
-from .runtime_structure import _invalid_param, _invalid_target, _severity
+from ..common import marker_severity, with_rule_id_suffix
+from .runtime_structure import invalid_target, rejected_declaration
 
 MARKER = "forbid_private_access"
 RULE_ID = "ENC001/forbid_private_access/v1"
 _INVALID_PREFIX = f"ENC001/{MARKER}/invalid_declaration"
 _SUPPORTED_KINDS = ("function", "method")
-_PARAMS = ("allow", "severity", "message")
 
 
 def _positional_count(raw: str) -> int:
@@ -37,13 +36,7 @@ def _problem(params: dict[str, Any], raw: str) -> Optional[tuple[str, str]]:
     """What is wrong with the marker's arguments, as ``(param, reason)``."""
     if _positional_count(raw):
         return ("args", f"{MARKER} takes no positional arguments; use allow=[...]")
-    unknown = sorted(key for key in params if key not in _PARAMS)
-    if unknown:
-        return (
-            unknown[0],
-            f"unknown parameter {unknown[0]!r}; {MARKER} takes " + ", ".join(_PARAMS),
-        )
-    allow = params.get("allow", [])
+    allow = [] if params.get("allow") is None else params["allow"]
     if not isinstance(allow, list) or not all(
         isinstance(name, str) and name.isidentifier() for name in allow
     ):
@@ -61,25 +54,31 @@ def compile_forbid_private_access(
     _ = cfg
     params = dict(declaration.params)
     if source_entity.kind not in _SUPPORTED_KINDS:
-        return _invalid_target(
-            source_entity, declaration, MARKER, list(_SUPPORTED_KINDS)
-        )
-    problem = _problem(params, declaration.raw)
-    if problem is not None:
-        return _invalid_param(
+        return invalid_target(
             source_entity,
             declaration,
-            marker=MARKER,
+            MARKER,
+            list(_SUPPORTED_KINDS),
             rule_id_prefix=_INVALID_PREFIX,
-            problem=problem,
             rule_id_suffix=rule_id_suffix,
         )
-    allow = params.get("allow", [])
+    problem = _problem(params, declaration.raw)
+    rejected = rejected_declaration(
+        source_entity,
+        declaration,
+        marker=MARKER,
+        rule_id_prefix=_INVALID_PREFIX,
+        problem=problem,
+        rule_id_suffix=rule_id_suffix,
+    )
+    if rejected is not None:
+        return rejected
+    allow = [] if params.get("allow") is None else params["allow"]
     rule = Rule(
         rule_id=with_rule_id_suffix(RULE_ID, rule_id_suffix),
         rule_type="private_access",
         name=MARKER,
-        severity=_severity(params),
+        severity=marker_severity(params),
         scope=source_entity.kind,
         evidence_type="static",
         selector=RuleSelector(

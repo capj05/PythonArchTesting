@@ -39,6 +39,9 @@ import numbers
 from pathlib import Path
 from typing import Optional
 
+from pythonarchtesting.constants import FileConstants
+from pythonarchtesting.util import ast_utils
+
 TYPE_TEST_CALLEES = frozenset({"builtins:isinstance", "builtins:type"})
 _COMPARING = (ast.Eq, ast.NotEq, ast.Is, ast.IsNot, ast.In, ast.NotIn)
 _NAME_ATTRIBUTES = frozenset({"__name__", "__qualname__"})
@@ -75,6 +78,19 @@ _STDLIB_TYPES: dict[str, frozenset[str]] = {
 _STDLIB_TYPES["abc"] = _STDLIB_TYPES["collections.abc"]
 
 
+def _python_files(root: Path) -> list[Path]:
+    """The ``.py`` files under ``root``, sorted, none in a hidden directory,
+    ``__pycache__`` or a virtual environment (``FileConstants.EXCLUDED_DIRS``)."""
+    return [
+        path
+        for path in sorted(root.rglob("*.py"))
+        if not any(
+            part.startswith(".") or part in FileConstants.EXCLUDED_DIRS
+            for part in path.relative_to(root).parts[:-1]
+        )
+    ]
+
+
 class TypeTests:
     """Reads the target's code once per file; one instance per evaluation."""
 
@@ -83,13 +99,19 @@ class TypeTests:
         self._trees: dict[str, Optional[ast.Module]] = {}
         self._classes: Optional[frozenset[str]] = None
         self._exceptions: Optional[frozenset[str]] = None
+        # Per file: each node's parent, the calls of a plain name in the
+        # order ``ast.walk`` meets them, and what the file imports.
+        self._parents: dict[str, dict[ast.AST, ast.AST]] = {}
+        self._calls: dict[str, dict[str, list[ast.Call]]] = {}
+        self._imports: dict[str, dict[str, str]] = {}
+        self._answers: dict[tuple[str, str, int], bool] = {}
 
     def project_classes(self) -> frozenset[str]:
         """The names of every class the target's code defines."""
         if self._classes is None:
             names: set[str] = set()
             if self._root is not None:
-                for path in sorted(Path(self._root).rglob("*.py")):
+                for path in _python_files(Path(self._root)):
                     tree = self._parse(path)
                     if tree is not None:
                         names.update(
@@ -106,12 +128,12 @@ class TypeTests:
         if self._exceptions is None:
             bases: dict[str, set[str]] = {}
             if self._root is not None:
-                for path in sorted(Path(self._root).rglob("*.py")):
+                for path in _python_files(Path(self._root)):
                     tree = self._parse(path)
                     for node in ast.walk(tree) if tree is not None else ():
                         if isinstance(node, ast.ClassDef):
                             bases.setdefault(node.name, set()).update(
-                                (_dotted(b) or "").rpartition(".")[2]
+                                (ast_utils.dotted(b) or "").rpartition(".")[2]
                                 for b in node.bases
                             )
             found = {
@@ -132,8 +154,10 @@ class TypeTests:
         key = str(path)
         if key not in self._trees:
             try:
-                self._trees[key] = ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+                # From bytes, as Python reads a module: a BOM or a coding
+                # line holds; a file that does not decode is a SyntaxError.
+                self._trees[key] = ast.parse(path.read_bytes())
+            except (OSError, SyntaxError, ValueError):
                 self._trees[key] = None
         return self._trees[key]
 
@@ -144,28 +168,43 @@ class TypeTests:
             return True
         if not isinstance(file, str) or not isinstance(line, int):
             return True
-        tree = self._parse(Path(self._root) / file)
+        key = (callee, file, line)
+        if key not in self._answers:
+            self._answers[key] = self._reads_as_type_test(callee, file, line)
+        return self._answers[key]
+
+    def _reads_as_type_test(self, callee: str, file: str, line: int) -> bool:
+        path = Path(str(self._root)) / file
+        tree = self._parse(path)
         if tree is None:
             return True
         name = callee.partition(":")[2]
-        parents = {
-            child: node
-            for node in ast.walk(tree)
-            for child in ast.iter_child_nodes(node)
-        }
+        key = str(path)
+        if key not in self._calls:
+            named: dict[str, list[ast.Call]] = {}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                    named.setdefault(node.func.id, []).append(node)
+            self._calls[key] = named
         calls = [
             node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == name
-            and node.lineno <= line <= int(node.end_lineno or node.lineno)
+            for node in self._calls[key].get(name, [])
+            if node.lineno <= line <= int(node.end_lineno or node.lineno)
         ]
         if not calls:
             return True
         if name == "isinstance":
-            imported = _imported(tree)
+            if key not in self._imports:
+                self._imports[key] = _imported(tree)
+            imported = self._imports[key]
             return any(self._tests_project_class(call, imported) for call in calls)
+        if key not in self._parents:
+            self._parents[key] = {
+                child: node
+                for node in ast.walk(tree)
+                for child in ast.iter_child_nodes(node)
+            }
+        parents = self._parents[key]
         return any(
             not (_no_test_of_its_own(call, parents) or _displayed(call, parents))
             for call in calls
@@ -186,7 +225,7 @@ class TypeTests:
             )  # int | float
         if isinstance(node, ast.Call):
             return _none_type(node)  # type(None)
-        dotted = _dotted(node)
+        dotted = ast_utils.dotted(node)
         if dotted is None:
             return False
         if dotted.rpartition(".")[2] in self.project_exceptions() or dotted.endswith(
@@ -236,16 +275,6 @@ def _no_test_of_its_own(call: ast.Call, parents: dict[ast.AST, ast.AST]) -> bool
         and parent.func.id in _CLASS_TAKING
         and call in parent.args
     )
-
-
-def _dotted(node: ast.expr) -> Optional[str]:
-    """``a.b.c`` for a chain of plain names, else ``None``."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        base = _dotted(node.value)
-        return f"{base}.{node.attr}" if base is not None else None
-    return None
 
 
 def _imported(tree: ast.Module) -> dict[str, str]:
@@ -358,7 +387,7 @@ def _logged(parent: Optional[ast.AST], node: ast.AST) -> bool:
         isinstance(parent, ast.Call)
         and isinstance(parent.func, ast.Attribute)
         and parent.func.attr in _LOGGING
-        and _dotted(parent.func.value) is not None
+        and ast_utils.dotted(parent.func.value) is not None
         and node in parent.args
     )
 

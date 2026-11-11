@@ -5,10 +5,22 @@ from typing import Any
 
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
 from pythonarchtesting.entities import Entity
-from pythonarchtesting.execution.flow_cfg import build_function_cfg
+from pythonarchtesting.execution import flow_cfg
 from pythonarchtesting.matching import MatchResult
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
+
+
+def _flow_locations(cfg: flow_cfg.FunctionCfg) -> list[dict[str, Any]]:
+    return [
+        {
+            "lineno": node.lineno,
+            "col": node.col,
+            "stages": [marker.stage for marker in node.flow_markers],
+        }
+        for node in cfg.nodes.values()
+        if node.flow_markers
+    ]
 
 
 class VariableFlowEvaluator:
@@ -29,7 +41,7 @@ class VariableFlowEvaluator:
             if isinstance(item, str)
         ]
         variable = str(rule.params.get("variable", ""))
-        cfg = build_function_cfg(target, variable=variable)
+        cfg = flow_cfg.build_function_cfg(target, variable=variable)
         details: dict[str, Any] = {
             "variable": variable,
             "required_stages": required_stages,
@@ -40,7 +52,7 @@ class VariableFlowEvaluator:
                 "target entity does not expose a function body for CFG evaluation"
             )
             details["failure_reason"] = "missing_cfg"
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -89,7 +101,7 @@ class VariableFlowEvaluator:
             if current_progress < 0:
                 continue
 
-            if not node.successors:
+            if node_id in cfg.exit_node_ids or not node.successors:
                 missing = required_stages[current_progress:]
                 exit_record = {
                     "exit_lineno": node.lineno,
@@ -107,7 +119,6 @@ class VariableFlowEvaluator:
                             "missing_stages": missing,
                         }
                     )
-                continue
 
             for successor in node.successors:
                 queue.append((successor, current_progress, current_observed))
@@ -124,18 +135,10 @@ class VariableFlowEvaluator:
                     "missing_stages": first_failure.get("missing_stages", []),
                     "first_failing_path_exit_line": first_failure.get("lineno", 0),
                     "observed_path_sequences": exit_sequences,
-                    "target_flow_locations": [
-                        {
-                            "lineno": node.lineno,
-                            "col": node.col,
-                            "stages": [marker.stage for marker in node.flow_markers],
-                        }
-                        for node in cfg.nodes.values()
-                        if node.flow_markers
-                    ],
+                    "target_flow_locations": _flow_locations(cfg),
                 }
             )
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -152,18 +155,10 @@ class VariableFlowEvaluator:
                 "missing_stages": [],
                 "first_failing_path_exit_line": None,
                 "observed_path_sequences": exit_sequences,
-                "target_flow_locations": [
-                    {
-                        "lineno": node.lineno,
-                        "col": node.col,
-                        "stages": [marker.stage for marker in node.flow_markers],
-                    }
-                    for node in cfg.nodes.values()
-                    if node.flow_markers
-                ],
+                "target_flow_locations": _flow_locations(cfg),
             }
         )
-        return _build_rule_result(rule, source, target, match, "OK", details, ())
+        return build_rule_result(rule, source, target, match, "OK", details, ())
 
 
 __all__ = ["VariableFlowEvaluator"]

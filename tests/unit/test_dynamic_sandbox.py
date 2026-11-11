@@ -298,3 +298,54 @@ def test_bwrap_tmp_is_bounded(root: Path) -> None:
     case, _ = _call(root, "fill_tmp", [100], "bwrap")
 
     assert "No space left on device" in case["raised"]
+
+
+def _binds(command: list[str]) -> list[tuple[str, str]]:
+    return [
+        (command[index + 1], command[index + 2])
+        for index, arg in enumerate(command)
+        if arg == "--ro-bind"
+    ]
+
+
+@posix_only
+def test_bwrap_binds_a_path_reached_through_a_symlink_where_it_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A venv reached through a symlinked directory is started by its
+    unresolved path, so the real directory is also bound under that path."""
+    from pythonarchtesting.dynamic import sandbox
+
+    monkeypatch.setattr(sandbox, "_bwrap_path", lambda: "bwrap")
+    real = tmp_path / "real_venv" / "bin"
+    real.mkdir(parents=True)
+    link = tmp_path / "venv"
+    link.symlink_to(tmp_path / "real_venv")
+
+    command = SandboxPolicy(mode="bwrap").wrap(
+        ["python"], visible=[link / "bin"], cwd=Path("/")
+    )
+
+    assert (str(real), str(real)) in _binds(command)
+    assert (str(real), str(link / "bin")) in _binds(command)
+
+
+@posix_only
+def test_bwrap_binds_a_resolved_path_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pythonarchtesting.dynamic import sandbox
+
+    monkeypatch.setattr(sandbox, "_bwrap_path", lambda: "bwrap")
+    (tmp_path / "project" / "pkg").mkdir(parents=True)
+
+    command = SandboxPolicy(mode="bwrap").wrap(
+        ["python"],
+        visible=[tmp_path / "project", tmp_path / "project" / "pkg"],
+        cwd=Path("/"),
+    )
+
+    project = str(tmp_path / "project")
+    assert [bind for bind in _binds(command) if tmp_path.name in bind[1]] == [
+        (project, project)
+    ]

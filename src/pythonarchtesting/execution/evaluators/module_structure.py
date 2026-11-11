@@ -32,12 +32,12 @@ from pythonarchtesting.execution.module_structure import (
 )
 from pythonarchtesting.matching import MatchResult
 
-from .messages import MAX_REPORTED, _build_rule_result, finish_violations
+from .messages import MAX_REPORTED, build_rule_result, finish_violations
 from .runtime_structure import (
-    _coverage,
-    _coverage_note,
-    _describe_call,
-    _edges,
+    case_coverage,
+    case_edges,
+    coverage_note,
+    describe_call,
     run_edges,
 )
 
@@ -184,7 +184,7 @@ def _target_edges(
     case: dict[str, Any], names: NameTranslation, known: set[str]
 ) -> dict[Edge, dict[str, Any]]:
     """The case's module edges in reference names, new modules folded in."""
-    return fold_new_modules(_edges(case, names), known)[0]
+    return fold_new_modules(case_edges(case, names), known)[0]
 
 
 class _RuntimeStructureEvaluator:
@@ -217,9 +217,7 @@ class _RuntimeStructureEvaluator:
         }
         observed = run_edges(rule, source, target, ctx, details)
         if isinstance(observed, str):
-            return _build_rule_result(
-                rule, source, target, match, observed, details, ()
-            )
+            return build_rule_result(rule, source, target, match, observed, details, ())
         reference_cases, target_cases, names = observed
         known = _reference_modules(ctx)
         target_edges = [
@@ -227,7 +225,7 @@ class _RuntimeStructureEvaluator:
             for case in target_cases
         ]
         violations = self._judge(rule, reference_cases, target_edges, details)
-        coverage = _coverage(target_cases)
+        coverage = case_coverage(target_cases)
         if coverage is not None:
             details["coverage"] = coverage
         return finish_violations(
@@ -237,12 +235,12 @@ class _RuntimeStructureEvaluator:
             match,
             details,
             violations,
-            self._passed(rule, len(cases)) + _coverage_note(coverage),
+            self._passed(rule, len(cases)) + coverage_note(coverage),
         )
 
 
 def _reference_edges(reference: list[dict[str, Any]]) -> set[Edge]:
-    return {pair for case in reference for pair in _edges(case)}
+    return {pair for case in reference for pair in case_edges(case)}
 
 
 class RuntimeLayersEvaluator(_RuntimeStructureEvaluator):
@@ -274,7 +272,7 @@ class RuntimeLayersEvaluator(_RuntimeStructureEvaluator):
                     continue  # the reference makes this call too
                 violations.append(
                     f"case {case['index']}: {describe_violation(item)} "
-                    f"({_describe_call(edges[pair])})"
+                    f"({describe_call(edges[pair])})"
                 )
         return violations
 
@@ -304,7 +302,7 @@ class RuntimeCyclesEvaluator(_RuntimeStructureEvaluator):
                 continue
             path = cycle_path(component, calls)
             steps = "; ".join(
-                _describe_call(calls[(origin, target)])
+                describe_call(calls[(origin, target)])
                 for origin, target in zip(path, path[1:])
             )
             violations.append(f"call cycle {' -> '.join(path)} ({steps})")

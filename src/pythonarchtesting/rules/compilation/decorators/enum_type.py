@@ -1,35 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Tuple, cast
+from typing import Any, List, Tuple
 
 from pythonarchtesting.config import Config
-from pythonarchtesting.core.models import Evidence, Rule, RuleSelector
+from pythonarchtesting.core.models import Rule, RuleSelector
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
-from ..common import canonicalize_payload, evidence_id, with_rule_id_suffix
-
-
-def _evidence(
-    source_entity: Entity,
-    declaration: DeclarationEntry,
-    *,
-    evidence_type: str,
-    payload: dict[str, Any],
-) -> Evidence:
-    location = {
-        "filepath": source_entity.filepath_rel,
-        "lineno": declaration.lineno or source_entity.lineno,
-        "col": declaration.col,
-    }
-    return Evidence(
-        evidence_id=evidence_id(evidence_type, payload),
-        type=evidence_type,
-        source="compiler",
-        role="source",
-        entity_id=source_entity.canonical_id,
-        payload=canonicalize_payload(payload),
-        location=location,
-    )
+from ..common import (
+    invalid_target_evidence,
+    marker_severity,
+    reject_invalid_severity,
+    reject_misplaced,
+    with_rule_id_suffix,
+)
 
 
 def compile_is_enum(
@@ -41,31 +24,30 @@ def compile_is_enum(
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     _ = cfg
     params_kwargs = dict(declaration.params)
-    base_severity_raw = str(params_kwargs.get("severity", "error")).lower()
-    if base_severity_raw in {"error", "warning", "info"}:
-        base_severity = cast(Literal["error", "warning", "info"], base_severity_raw)
-    else:
-        base_severity = "error"
-
     if source_entity.kind != "class":
-        payload = {
-            "declaration": "is_enum",
-            "issue": "compiler_invalid_target",
-            "expected_kind": "class",
-            "found_kind": source_entity.kind,
-        }
-        return (
-            [],
-            [
-                _evidence(
-                    source_entity,
-                    declaration,
-                    evidence_type="compiler_invalid_target",
-                    payload=payload,
-                )
-            ],
-            [],
+        return reject_misplaced(
+            source_entity,
+            invalid_target_evidence(
+                source_entity, declaration, decorator="is_enum", key="declaration"
+            ),
+            marker="is_enum",
+            rule_id_prefix="ENUM001/is_enum/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+            valid=["class"],
         )
+
+    rejected = reject_invalid_severity(
+        source_entity,
+        declaration,
+        marker="is_enum",
+        rule_id_prefix="ENUM001/is_enum/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        key="declaration",
+    )
+    if rejected is not None:
+        return rejected
+
+    base_severity = marker_severity(params_kwargs)
 
     rule = Rule(
         rule_id=with_rule_id_suffix("ENUM001/is_enum/v1", rule_id_suffix),

@@ -45,8 +45,8 @@ from pythonarchtesting.execution.module_structure import (
 )
 from pythonarchtesting.matching import MatchResult
 
-from .messages import MAX_REPORTED, _build_rule_result, finish_violations
-from .runtime_structure import _coverage, _coverage_note, _describe_call, run_edges
+from .messages import MAX_REPORTED, build_rule_result, finish_violations
+from .runtime_structure import case_coverage, coverage_note, describe_call, run_edges
 
 ROOT = "__init__"
 
@@ -60,7 +60,7 @@ def exceptions(rule: Rule, name: str) -> list[Edge]:
     return [parse_edge(item) for item in rule.params.get(name) or []]
 
 
-def _import_edges(
+def static_import_edges(
     entities: list[Entity], ignore_type_checking: bool, package: Packages = None
 ) -> tuple[
     dict[Edge, NormalizedImportEdge], dict[Edge, NormalizedImportEdge], set[str]
@@ -107,7 +107,7 @@ def _reference_import_edges(
 ) -> tuple[
     dict[Edge, NormalizedImportEdge], dict[Edge, NormalizedImportEdge], set[str]
 ]:
-    """``_import_edges`` of the reference, built once per run.
+    """``static_import_edges`` of the reference, built once per run.
 
     The reference is the same for every target, so the result is kept in
     ``ctx.reference_runs``, which the run shares among its targets. Callers
@@ -116,7 +116,7 @@ def _reference_import_edges(
     key = f"architecture.import_edges:{ignore_type_checking}"
     cache = ctx.reference_runs
     if key not in cache:
-        cache[key] = _import_edges(
+        cache[key] = static_import_edges(
             list(ctx.source_by_id.values()), ignore_type_checking, ctx.source_package
         )
     edges: tuple[
@@ -304,7 +304,7 @@ class ArchitectureStaticEvaluator:
     ) -> RuleResult:
         ignore_tc = bool(rule.params.get("ignore_type_checking", True))
         ref_graph, ref_libraries, ref_modules = _reference_import_edges(ctx, ignore_tc)
-        target_graph, target_libraries, _ = _import_edges(
+        target_graph, target_libraries, _ = static_import_edges(
             list(ctx.target_index.all_sorted),
             ignore_tc,
             # A submission may import itself under the reference's name.
@@ -398,10 +398,10 @@ class ArchitectureStaticEvaluator:
         )
 
 
-_OBSERVE = {"calls": "edges", "external": True, "instances": True}
+OBSERVE = {"calls": "edges", "external": True, "instances": True}
 
 
-def _calls(
+def case_calls(
     case: dict[str, Any], names: NameTranslation | None
 ) -> tuple[dict[Edge, dict[str, Any]], dict[Edge, dict[str, Any]]]:
     """A case's calls between modules and into libraries, in reference names."""
@@ -435,7 +435,7 @@ def _creator(instance: dict[str, Any]) -> str:
     return str(instance.get("creator", "")).partition(":")[2]
 
 
-def _instances(
+def case_instances(
     case: dict[str, Any], names: NameTranslation | None
 ) -> tuple[dict[Edge, dict[str, Any]], dict[Edge, dict[str, Any]]]:
     """Who created which object, in reference names, and what has no reference name."""
@@ -514,11 +514,9 @@ class ArchitectureRuntimeEvaluator:
             "case_count": len(cases),
             "entry": rule.params.get("entry"),
         }
-        observed = run_edges(rule, source, target, ctx, details, observe=_OBSERVE)
+        observed = run_edges(rule, source, target, ctx, details, observe=OBSERVE)
         if isinstance(observed, str):
-            return _build_rule_result(
-                rule, source, target, match, observed, details, ()
-            )
+            return build_rule_result(rule, source, target, match, observed, details, ())
         reference_cases, target_cases, names = observed
         policy = str(rule.params.get("policy", "allow_new_modules"))
         known = {module_name(e.module_path) for e in ctx.source_by_id.values()}
@@ -528,10 +526,10 @@ class ArchitectureRuntimeEvaluator:
         ref_libraries: set[str] = set()
         ref_instances: dict[Edge, Any] = {}
         for case in reference_cases:
-            internal, used = _calls(case, None)
+            internal, used = case_calls(case, None)
             ref_calls.update({k: v for k, v in internal.items() if k not in ref_calls})
             ref_libraries |= {package for _, package in used}
-            named, _ = _instances(case, None)
+            named, _ = case_instances(case, None)
             ref_instances.update(named)
         static_graph, static_libraries, _ = _reference_import_edges(
             ctx, bool(rule.params.get("ignore_type_checking", True))
@@ -547,12 +545,12 @@ class ArchitectureRuntimeEvaluator:
         instances: dict[Edge, Any] = {}
         unnamed: dict[Edge, Any] = {}
         for case in target_cases:
-            internal, outward = _calls(case, names)
+            internal, outward = case_calls(case, names)
             for pair, call in internal.items():
                 calls.setdefault(pair, call)
             for pair, call in outward.items():
                 libraries.setdefault(pair, call)
-            named, other = _instances(case, names)
+            named, other = case_instances(case, names)
             for pair, item in named.items():
                 instances.setdefault(pair, item)
             for pair, item in other.items():
@@ -617,7 +615,7 @@ class ArchitectureRuntimeEvaluator:
                     if forbidden(edge, forbid)
                     else "is not in the reference"
                 )
-                + f" ({_describe_call(located[edge]) if edge in located else '?'})"
+                + f" ({describe_call(located[edge]) if edge in located else '?'})"
                 for edge in call_diff.divergent
             ]
             + [
@@ -638,7 +636,7 @@ class ArchitectureRuntimeEvaluator:
                     if forbidden(edge, forbid)
                     else "which the reference never uses"
                 )
-                + f" ({_describe_call(libraries[edge])})"
+                + f" ({describe_call(libraries[edge])})"
                 for edge in library_diff.divergent
             ]
         )
@@ -646,7 +644,7 @@ class ArchitectureRuntimeEvaluator:
             # A step the target skips: the reference's call never happened.
             violations += [
                 f"the reference's call {format_edge(edge)} never happened "
-                f"({_describe_call(ref_calls[edge])} in the reference)"
+                f"({describe_call(ref_calls[edge])} in the reference)"
                 for edge in call_diff.absent
             ]
         files = _target_files(list(ctx.target_index.all_sorted))
@@ -674,7 +672,7 @@ class ArchitectureRuntimeEvaluator:
                 else []
             )
         )
-        coverage = _coverage(target_cases)
+        coverage = case_coverage(target_cases)
         if coverage is not None:
             details["coverage"] = coverage
         return finish_architecture(
@@ -686,7 +684,7 @@ class ArchitectureRuntimeEvaluator:
             {"calls": call_diff, "instances": instance_diff, "external": library_diff},
             violations,
             f"{len(cases)} case(s) used only the reference's dependencies"
-            + _coverage_note(coverage),
+            + coverage_note(coverage),
         )
 
 
@@ -696,4 +694,8 @@ __all__ = [
     "exceptions",
     "finish_architecture",
     "module_name",
+    "static_import_edges",
+    "case_calls",
+    "case_instances",
+    "OBSERVE",
 ]

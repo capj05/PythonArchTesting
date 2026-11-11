@@ -178,6 +178,11 @@ class Processor:
             "invalid regex pattern",
         ),
         (
+            # valid as written, but the evaluator strips it to the bad "run\\"
+            'required_method(name_match="regex", pattern="run\\\\ ")',
+            "invalid regex pattern",
+        ),
+        (
             'required_method(name_match="any", pattern="run")',
             "any name matching does not accept aliases or pattern",
         ),
@@ -198,7 +203,7 @@ class Processor:
 """
     rules, evidence, compiler_results = _compile(source)
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
     assert reason_fragment in evidence[0].payload["reason"]
@@ -420,3 +425,44 @@ class Processor(BaseProcessor):
     assert result.status == "OK"
     assert result.details["member_origin"] == "inherited"
     assert result.details["resolved_candidate"] == "execute"
+
+
+@pytest.mark.parametrize(
+    ("name_match_args", "resolution_mode"),
+    [
+        ('name_match="regex", pattern=" fetch_[a-z]+ "', "regex"),
+        ('name_match="alias", aliases=["fetch_data "]', "alias"),
+    ],
+)
+def test_api002_flexible_name_matching_strips_pattern_and_aliases(
+    name_match_args: str, resolution_mode: str
+) -> None:
+    """Whitespace around a pattern or an alias is dropped, as does_not_have does.
+
+    A method name never contains whitespace, so before the strip such a
+    pattern or alias matched nothing and the rule failed on a class that has
+    the method.
+    """
+    source = f"""
+from typing import Annotated
+from pythonarchtesting.rules import required_method
+
+class Processor:
+    def run(self, data: int) -> int:
+        __archtest__: Annotated[
+            None,
+            required_method({name_match_args}),
+        ]
+        return data
+"""
+    target = """
+class Processor:
+    def fetch_data(self, data: int) -> int:
+        return data
+"""
+    result, errors = _evaluate(source, target)
+
+    assert errors == []
+    assert result.status == "OK"
+    assert result.details["resolved_candidate"] == "fetch_data"
+    assert result.details["resolution_mode"] == resolution_mode

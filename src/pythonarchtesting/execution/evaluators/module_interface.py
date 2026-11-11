@@ -21,18 +21,20 @@ from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
 from pythonarchtesting.dynamic.translation import NameTranslation
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.execution.import_edges import (
-    _is_type_checking_test,
-    _resolve_relative_module,
     collect_canonical_module_entities,
+    is_type_checking_test,
+    resolve_relative_module,
 )
 from pythonarchtesting.matching import MatchResult
+from pythonarchtesting.util.ast_utils import is_private
 
-from .messages import _build_rule_result, finish_violations
-from .runtime_structure import _coverage, _coverage_note, _describe_call, run_edges
+from .messages import build_rule_result, finish_violations
+from .runtime_structure import case_coverage, coverage_note, describe_call, run_edges
 
 
 def _public(name: str) -> bool:
-    return not name.startswith("_") or (name.startswith("__") and name.endswith("__"))
+    """A name with no leading ``_``, or a dunder: not ``is_private``."""
+    return not is_private(name)
 
 
 def _allowed(rule: Rule, names: NameTranslation) -> set[str] | None:
@@ -56,7 +58,7 @@ def _permits(name: str, allowed: set[str] | None) -> bool:
 def _type_checking_lines(tree: ast.AST) -> set[int]:
     lines: set[int] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.If) and _is_type_checking_test(node.test):
+        if isinstance(node, ast.If) and is_type_checking_test(node.test):
             for child in node.body:
                 for inner in ast.walk(child):
                     if hasattr(inner, "lineno"):
@@ -118,7 +120,7 @@ def _uses(
             continue
         if isinstance(node, ast.ImportFrom):
             base = (
-                _resolve_relative_module(
+                resolve_relative_module(
                     importer_module=entity.module_path,
                     filepath_rel=entity.filepath_rel,
                     level=node.level,
@@ -290,9 +292,7 @@ class RuntimeModuleInterfaceEvaluator:
         }
         observed = run_edges(rule, source, target, ctx, details)
         if isinstance(observed, str):
-            return _build_rule_result(
-                rule, source, target, match, observed, details, ()
-            )
+            return build_rule_result(rule, source, target, match, observed, details, ())
         _, target_cases, names = observed
         module = str(rule.params.get("module", ""))
         listed = set(rule.params.get("names") or [])
@@ -324,14 +324,14 @@ class RuntimeModuleInterfaceEvaluator:
                 seen.add((origin, name))
                 violations.append(
                     f"case {case.get('index')}: {origin} calls {name} of {module or '__init__'}, "
-                    f"which is not in its interface ({_describe_call(call)})"
+                    f"which is not in its interface ({describe_call(call)})"
                 )
-        coverage = _coverage(target_cases)
+        coverage = case_coverage(target_cases)
         if coverage is not None:
             details["coverage"] = coverage
         details["summary"] = (
             f"{len(cases)} case(s) called {module} only through its interface"
-            + _coverage_note(coverage)
+            + coverage_note(coverage)
         )
         return _finish(rule, source, target, match, details, violations, module)
 

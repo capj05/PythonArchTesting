@@ -33,6 +33,7 @@ either.
 ## Example
 
 ```python
+# reference/repositories.py
 from typing import Annotated
 from pythonarchtesting.rules import inherits_directly_from
 
@@ -44,7 +45,7 @@ class BaseRepository:
 class CsvRepository(BaseRepository):
     __archtest__: Annotated[
         None,
-        inherits_directly_from("reference.BaseRepository"),
+        inherits_directly_from("repositories.BaseRepository"),
     ]
 ```
 

@@ -183,7 +183,8 @@ that the rule cannot express in v1; it is not a bug.
 **Gotchas**
 - `name_match="alias"` (singular) is correct here; the positive-set
   rules use `name_match="names"` (plural). Mixing them up emits
-  `compiler_invalid_declaration` and silently drops the rule.
+  invalid-declaration evidence and drops the rule; a
+  `compiler_invalid_param` sentinel reports it as FAILED.
 
 ---
 
@@ -425,8 +426,8 @@ before treating a green run as conclusive. The showcase's
 | `require_method_set`   | `"names"`         |
 | `require_member_set`   | `"names"`         |
 
-Mixing them emits `compiler_invalid_declaration` and silently drops the
-rule.
+Mixing them emits invalid-declaration evidence and drops the rule; a
+`compiler_invalid_param` sentinel reports it as FAILED.
 
 ### Compatible-mode parameter widening interacts with the matcher
 

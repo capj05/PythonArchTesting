@@ -1,6 +1,6 @@
 """Target: ``CheckedReturnAnnotation.create`` returns ``dict``. Expected verdict: FAIL.
 
-The reference marker sets ``return_annotation_mode='check'`` so the
+The reference marker sets ``return_annotation_mode="exact"`` so the
 factory must declare its owning class as the return type. Returning
 ``dict`` triggers the failure.
 """

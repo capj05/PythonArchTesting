@@ -444,3 +444,55 @@ class User:
 
     assert errors == []
     assert [r.status for r in results] == ["FAILED"]
+
+
+def test_neg001_pattern_invalid_once_stripped_is_dropped_by_the_compiler() -> None:
+    """The pattern "a\\ " compiles, but the rule keeps it stripped to "a\\",
+    which does not; the compiler must drop it rather than leave the rule to
+    raise ``re.error`` (an ERROR result) when it is evaluated."""
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import does_not_have
+
+class User:
+    __archtest__: Annotated[
+        None,
+        does_not_have(name_match="regex", pattern="a\\\\ "),
+    ]
+"""
+    target = """
+class User:
+    def dump(self) -> None:
+        return None
+"""
+    source_entities = extract_entities(source, role="source")
+    target_entities = extract_entities(target, role="target")
+    source_class = next(e for e in source_entities if e.kind == "class")
+    target_class = next(e for e in target_entities if e.kind == "class")
+
+    rules, evidence, _ = compile_rules(source_entities, Mock())
+
+    assert [r.rule_type for r in rules] == ["compiler_invalid_param"]
+    assert [item.payload["issue"] for item in evidence] == ["invalid_pattern"]
+
+    results, errors = evaluate_rules_for_target(
+        rules=rules,
+        source_index=build_entity_index(source_entities),
+        target_index=build_entity_index(target_entities),
+        matches={
+            source_class.canonical_id: MatchResult(
+                source_id=source_class.canonical_id,
+                status=MatchStatus.MATCHED,
+                target_id=target_class.canonical_id,
+                confidence=1.0,
+                reasons=[],
+                candidates=[],
+            ),
+        },
+        config=Mock(),
+        source_by_id={e.canonical_id: e for e in source_entities},
+        target_by_id={e.canonical_id: e for e in target_entities},
+    )
+
+    assert errors == []
+    assert [r.status for r in results] == ["FAILED"]

@@ -137,7 +137,10 @@ failure by itself: whatever the code did before raising is still judged.
    crashes, every rule is re-run in its own interpreter.
 4. The child imports the target module, runs the cases with the requested
    observers, and returns one JSON result. Anything the target prints goes to
-   stderr and is kept as `details.stderr_tail`.
+   stderr and is kept as `details.stderr_tail`; so does what it writes to
+   descriptor 1 itself (`os.write(1, ...)`, a `sys.stdout` it reopened on it, a
+   process it started), since the result leaves through a copy of that
+   descriptor taken before the target is imported.
 5. A rule is `FAILED` with `details.reason` set to `violation`,
    `case_setup_failed` (an argument or the instance could not be built),
    `probe_import_error`, `probe_timeout`, or `probe_crashed`. When a case

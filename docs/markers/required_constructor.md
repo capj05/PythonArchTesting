@@ -12,7 +12,11 @@ from pythonarchtesting.rules import required_constructor
 
 Use when constructor shape is part of the API contract. By default the marker
 prefers `__init__`, falls back to `__new__`, accepts inherited constructors,
-and infers a dataclass-generated `__init__` on both source and target.
+and infers a dataclass-generated `__init__` on both source and target. The
+source class itself must declare a constructor of the chosen
+`constructor_kind` (or be a recognizable dataclass): otherwise the
+declaration is dropped with `compiler_invalid_declaration` evidence and no
+rule is compiled.
 
 ## Arguments
 

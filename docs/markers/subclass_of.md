@@ -32,6 +32,7 @@ itself does not satisfy the rule — there must be a strict subclass relation.
 ## Example
 
 ```python
+# reference/repositories.py
 from typing import Annotated
 from pythonarchtesting.rules import subclass_of
 
@@ -41,8 +42,11 @@ class BaseRepository:
 
 
 class CsvRepository(BaseRepository):
-    __archtest__: Annotated[None, subclass_of("reference.BaseRepository")]
+    __archtest__: Annotated[None, subclass_of("repositories.BaseRepository")]
 ```
+
+The base is named by its module within the reference (without the
+reference's own package name) and its class.
 
 ## What it checks
 
@@ -52,7 +56,8 @@ class CsvRepository(BaseRepository):
   `expected_base` (both `module:Class`, the submission's names), `file`,
   `line` (where the class is defined). When the base itself has no
   counterpart in the submission the result has no fact: that is no verdict
-  on the class.
+  on the class. Nor has a target that is the base itself: its violation
+  says the rule is aimed at the base, not at a class derived from it.
 
 ## What it does not check
 

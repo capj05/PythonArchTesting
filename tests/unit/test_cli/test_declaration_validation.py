@@ -460,3 +460,41 @@ def test_validate_declarations_returns_payload_with_exit_code():
     assert (
         json.loads(build_declaration_validation_report(run_state)) == without_exit_code
     )
+
+
+def test_cli_validate_declarations_warns_about_a_surplus_protocol_argument(
+    tmp_path, capsys, monkeypatch
+):
+    """A string after the protocol was once stored silently and then ignored."""
+    monkeypatch.chdir(Path(__file__).resolve().parents[3])
+    source_dir = tmp_path / "source"
+    _write_source_file(
+        source_dir,
+        """
+        from typing import Annotated, Protocol
+        from pythonarchtesting.rules import implements_protocol
+
+        class Seller(Protocol):
+            def sell(self) -> int: ...
+
+        class Shop:
+            __archtest__: Annotated[None, implements_protocol(Seller, "x")]
+
+            def sell(self) -> int:
+                return 1
+        """,
+    )
+
+    exit_code = cli.main(
+        ["--validate-declarations", "--source", str(source_dir), "--format", "json"]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["summary"]["warning_declarations"] == 1
+    (diagnostic,) = payload["diagnostics"]
+    assert diagnostic["check_type"] == "annotation_declaration_warning"
+    assert [
+        (issue["kind"], issue["expr"], issue["index"], issue["lineno"], issue["col"])
+        for issue in diagnostic["issues"]
+    ] == [("arg", "'x'", 1, 8, 62)]
