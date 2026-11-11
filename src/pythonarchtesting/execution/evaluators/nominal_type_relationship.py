@@ -121,8 +121,30 @@ def _relationship_holds(
     )
 
 
+def _not_subclass_fact(target: Entity, expected_base: Entity) -> dict[str, Any]:
+    """The fact of a ``subclass_of`` that fails: the class, the base it should
+    derive from (the submission's counterpart of the reference's base), where
+    the class is defined."""
+    return {
+        "kind": "not_subclass",
+        "class": f"{target.module_path}:{target.qualname}",
+        "expected_base": f"{expected_base.module_path}:{expected_base.qualname}",
+        "file": str(target.filepath_rel),
+        "line": target.lineno,
+    }
+
+
 class NominalTypeRelationshipEvaluator:
-    """Evaluator for nominal class inheritance rules."""
+    """Evaluator for nominal class inheritance rules.
+
+    A failed ``subclass_of`` (relationship ``subclass``, not negated) whose
+    base has a counterpart has one violation with its fact in
+    ``details.facts`` (aligned 1:1 with ``details.violations``): ``kind``
+    ``not_subclass``, ``class`` and ``expected_base`` (``module:qualname``),
+    ``file``, ``line``. A class that is the base itself fails with a
+    violation that says so and no fact: it is no class missing its base.
+    Without a counterpart of the base the result has no fact: the base itself
+    is missing, which is no verdict on the class."""
 
     def evaluate(
         self,
@@ -199,6 +221,26 @@ class NominalTypeRelationshipEvaluator:
             negated=negated,
         )
         details["reason"] = reason
+        if (
+            not relationship_holds
+            and relationship_mode == "subclass"
+            and not negated
+            and details["self_matches_required_base"]
+        ):
+            # The class bound is the base itself: no class fails to derive
+            # from the base, the rule is aimed at the wrong class.
+            name = f"{target.module_path}:{target.qualname}"
+            details["violations"] = [
+                f"{name} is the base class itself; subclass_of needs a class "
+                "derived from it, not the base"
+            ]
+        elif not relationship_holds and relationship_mode == "subclass" and not negated:
+            fact = _not_subclass_fact(target, expected_target_base)
+            details["violations"] = [
+                f"{fact['class']} is not a subclass of {fact['expected_base']} "
+                f"({fact['file']}:{fact['line']})"
+            ]
+            details["facts"] = [fact]
 
         return _build_rule_result(
             rule,

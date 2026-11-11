@@ -122,6 +122,8 @@ class RunMeta:
     config_fingerprint: Optional[str]
     tool_version: Optional[str]
     mode: str
+    # The catalogue principle of a task source (``principles.task``).
+    principle: Optional[str] = None
 
 
 @dataclass(frozen=True, slots=True)

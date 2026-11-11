@@ -9,6 +9,7 @@ it is confined depends on the ``SandboxPolicy`` (see ``dynamic.sandbox``).
 
 from __future__ import annotations
 
+import ast
 import copy
 import json
 import os
@@ -45,15 +46,55 @@ class ProbeOutcome:
     stderr: str = ""
 
 
+def _imports_relatively(root: Path) -> bool:
+    """Whether a module under ``root`` imports relatively up to ``root``.
+
+    ``from .x`` directly in ``root``, or ``from ..x`` in ``root/domain/``:
+    such a module only runs inside a package, so a beginner who left out the
+    ``__init__.py`` still meant the directory as one. A relative import that
+    stays inside a subpackage (``from .x`` in ``domain/``) needs only the
+    subpackage. Hidden directories and ``__pycache__`` are not looked into;
+    a file that does not parse says nothing either way.
+    """
+    for directory, subdirectories, files in os.walk(root):
+        subdirectories[:] = sorted(
+            name
+            for name in subdirectories
+            if not name.startswith(".") and name != "__pycache__"
+        )
+        depth = len(Path(directory).relative_to(root).parts)
+        for name in sorted(files):
+            if not name.endswith(".py"):
+                continue
+            path = Path(directory) / name
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+            except (SyntaxError, ValueError, OSError):
+                continue
+            if any(
+                isinstance(node, ast.ImportFrom) and node.level > depth
+                for node in ast.walk(tree)
+            ):
+                return True
+    return False
+
+
 def import_target_spec(target_root: Path) -> tuple[Path, str | None]:
     """Return the resolved root and the package name it is imported under.
 
     A root with an ``__init__.py`` is itself a package and is imported by name,
-    so its relative imports work; any other root is put on ``sys.path`` as is.
+    so its relative imports work. So is a root without one whose modules
+    import relatively up to it (a package whose ``__init__.py`` was left
+    out); the probe then stands in an empty package for it. Its name need not
+    be an identifier (``05capj_capsky``, ``capj05-capsky``): the import
+    system finds the directory by name all the same, and the static side
+    judges such a root as a package too. Any other root is put on
+    ``sys.path`` as is.
     """
     root = target_root.resolve()
-    package = root.name if (root / "__init__.py").is_file() else None
-    return root, package
+    if (root / "__init__.py").is_file() or _imports_relatively(root):
+        return root, root.name
+    return root, None
 
 
 _NO_SANDBOX = SandboxPolicy(mode="none")

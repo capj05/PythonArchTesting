@@ -1,0 +1,1 @@
+[{"id":"kucm12_kucera","violates":false,"reason":"All functions in grades.py take parameters and return values; input() and print() occur only in main.","explanation":""}]

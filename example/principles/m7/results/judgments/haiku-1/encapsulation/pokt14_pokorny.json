@@ -1,0 +1,8 @@
+[
+  {
+    "id": "pokt14_pokorny",
+    "violates": false,
+    "reason": "The stock lives in the private attribute _stock, shop.py touches the Inventory only through add, remove, quantity and items, and items returns a copy, so the state is not exposed.",
+    "explanation": ""
+  }
+]

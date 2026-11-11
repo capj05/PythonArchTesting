@@ -1,0 +1,8 @@
+[
+  {
+    "id": "marp15_marek",
+    "violates": false,
+    "reason": "Stav je uložen v privátním atributu _stock, items() vrací kopii a shop.py pracuje se skladem jen přes add, remove, quantity a items.",
+    "explanation": ""
+  }
+]

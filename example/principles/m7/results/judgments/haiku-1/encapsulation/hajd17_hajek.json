@@ -1,0 +1,8 @@
+[
+  {
+    "id": "hajd17_hajek",
+    "violates": true,
+    "reason": "Stav skladu je uložen v veřejném atributu self.data bez podtržítka, takže ho lze přímo číst i měnit mimo třídu a pravidla skladu tak obejít.",
+    "explanation": "Třída Inventory ukládá stav do atributu self.data, který má veřejné jméno, a zadání přitom požaduje, aby stav byl skrytý uvnitř třídy a žádná funkce nemohla pravidla obejít. Kód v shop.py se k self.data sám nedotýká a pracuje jen přes add, remove, quantity a items, takže konkrétní funkce pravidla neporušuje. Kdokoli ale může napsat inv.data[\"jablka\"] = -5 nebo inv.data[\"banany\"] = 0 a sklad tím obejít, aniž by to vyvolalo výjimku. Přístup přes podtržítko (self._data) by tuto možnost vyloučil, a proto je zde princip porušen."
+  }
+]

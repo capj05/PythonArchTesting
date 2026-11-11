@@ -1,0 +1,257 @@
+{
+ "w001": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "3d9b5e59d23dc9923b4e053ee27f70193662c0b88c18d439f5fac04a62c2962b"
+ },
+ "w002": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "53e0fb8cb1ab9acc3b892a5beefbbca0eecb2f927170fc061d0255ca30b40971"
+ },
+ "w003": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "65da6962fa92690adc91db8b0fa87cee712c8165e3e4ddd0814645818c380e36"
+ },
+ "w004": {
+  "verdict": "FAIL",
+  "rules": [
+   "DYN001/forbid_runtime_calls/v1"
+  ],
+  "explanations": [
+   "**Co:** Funkce `format_summary` (grades.py:30) vypisuje na obrazovku: na řádku 31 souboru `grades.py` volá `print()`.\n\n**Proč:** Funkce má výsledek vrátit (`return`), ne vypsat. Kdo ji zavolá, pak sám rozhodne, co s výsledkem udělá; vypsaný text už program dál použít nemůže.\n\n**Jak opravit:** Nahraď `print(...)` příkazem `return ...` a vypiš výsledek až v `main`."
+  ],
+  "not_run": [],
+  "sha256": "813685ed151c1f6ff3c8ae9574de49a64dfc36d56ce657b6070f338284dec522"
+ },
+ "w005": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "dd660ea66f3a71a867fa01bb8cd2c869b7a7948ef6fd7085e60d7cbe026dd27e"
+ },
+ "w006": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "8bb02e9471ede64115443d47bd460999eb478c3777bcb9d177e0c683818c8050"
+ },
+ "w007": {
+  "verdict": "FAIL",
+  "rules": [
+   "DYN001/forbid_runtime_calls/v1"
+  ],
+  "explanations": [
+   "**Co:** Funkce `parse_grades` (grades.py:19) čte z klávesnice: na řádku 21 souboru `grades.py` volá `input()`.\n\n**Proč:** Funkce dostává data parametrem, a přesto se ptá uživatele. Nedá se tak zavolat s jinými daty (ze souboru, v testu) a parametr ztrácí smysl.\n\n**Jak opravit:** Čti vstup v `main` a funkci ho předej parametrem."
+  ],
+  "not_run": [],
+  "sha256": "577423d573494b6133fc1aba5ba82d837b6f953dbdfecbdb0742b3b993aac59f"
+ },
+ "w008": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "8f60d6060674ae20361fa2c2fd276d428c056a610fcbfa66e1802ef0bbb7a5da"
+ },
+ "w009": {
+  "verdict": "FAIL",
+  "rules": [
+   "DYN001/forbid_runtime_calls/v1"
+  ],
+  "explanations": [
+   "**Co:** Funkce `format_summary` (grades.py:27) vypisuje na obrazovku: na řádku 28 souboru `grades.py` volá `print()`.\n\n**Proč:** Funkce má výsledek vrátit (`return`), ne vypsat. Kdo ji zavolá, pak sám rozhodne, co s výsledkem udělá; vypsaný text už program dál použít nemůže.\n\n**Jak opravit:** Nahraď `print(...)` příkazem `return ...` a vypiš výsledek až v `main`."
+  ],
+  "not_run": [],
+  "sha256": "fa984f5fd054867d83dd71485e92e6fbd5b6c3b30d977d2f58fc486cc9c17409"
+ },
+ "w010": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "62cc91add4a050a04b7d5d9a69d7bec39236e5d36baf383b58548cb979f41799"
+ },
+ "w011": {
+  "verdict": "FAIL",
+  "rules": [
+   "DYN001/forbid_runtime_calls/v1"
+  ],
+  "explanations": [
+   "**Co:** Funkce `format_summary` (grades.py:32) vypisuje na obrazovku: na řádku 33 souboru `grades.py` volá `print()`.\n\n**Proč:** Funkce má výsledek vrátit (`return`), ne vypsat. Kdo ji zavolá, pak sám rozhodne, co s výsledkem udělá; vypsaný text už program dál použít nemůže.\n\n**Jak opravit:** Nahraď `print(...)` příkazem `return ...` a vypiš výsledek až v `main`."
+  ],
+  "not_run": [],
+  "sha256": "47d995aa3d19b8af531ea8d647655691b8bab2793510c99d22e4c3f5cfcd7ccc"
+ },
+ "w012": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "c41c5c0a1e58139aed1efeb0a7be76b4d8691119d8da8c7e266d61e76025fd26"
+ },
+ "w013": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "eb3e2cb3be61568c9175fc9af0db3098875bd022c00664d57a07f4df547d9f56"
+ },
+ "w014": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "6718d3de046d179155c43384a4639d1ee1a758bd190f0495ab9eab18d39c809c"
+ },
+ "w015": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "1f590c7de7472fbfe880fc31c0bbf2f0848816a8cb80cce2447c517659e4df32"
+ },
+ "w016": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "965e61617ea8cf70fbe3555632d301ca950dd66a041760ef10af1d4703e9d222"
+ },
+ "w017": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "c7efcee7e43294721d65fa51cca9cc6496e1a63753cf071e8f7414a54c9dd12e"
+ },
+ "w018": {
+  "verdict": "FAIL",
+  "rules": [
+   "DYN001/forbid_runtime_calls/v1"
+  ],
+  "explanations": [
+   "**Co:** Funkce `parse_grades` (grades.py:8) čte z klávesnice: na řádku 9 souboru `grades.py` volá `input()`.\n\n**Proč:** Funkce dostává data parametrem, a přesto se ptá uživatele. Nedá se tak zavolat s jinými daty (ze souboru, v testu) a parametr ztrácí smysl.\n\n**Jak opravit:** Čti vstup v `main` a funkci ho předej parametrem."
+  ],
+  "not_run": [],
+  "sha256": "163ff4b03013fa526509ceb70f7b2d00f3f5d38744d8f1080e79355a88c678e9"
+ },
+ "w019": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "704d25da549fec167ea23f1409409580458ace74bbf6e3163d37909c408dd056"
+ },
+ "w020": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "fa8e84f851bbfdb0cc5ca24722a027ba4b0d5a1c9e6285451304340a4ba612b8"
+ },
+ "w021": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "142a5f45649e2aa6e2ae2d62711330824642849ce1bf0a2c5147aade40bd6e97"
+ },
+ "w022": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "a9e6aa15fe4aaf55e4c4f29983476810e122f112759cd429338b1716f0e529ae"
+ },
+ "w023": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "02da51f0fdfd68a1462cbe29cc1ad8aa44b90ea01786aa92d1078871d7960a7b"
+ },
+ "w024": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "7f44b41566e72709990b2713ee0e27835eb0bc4a77d84bf14a152f8ef0024fa2"
+ },
+ "w025": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "eb10a7942dccde5abe5b1275756af9f54f633834aa2e02f89217b94b48d50187"
+ },
+ "w026": {
+  "verdict": "FAIL",
+  "rules": [
+   "DYN001/forbid_runtime_calls/v1"
+  ],
+  "explanations": [
+   "**Co:** Funkce `parse_grades` (grades.py:8) čte z klávesnice: na řádku 9 souboru `grades.py` volá `input()`.\n\n**Proč:** Funkce dostává data parametrem, a přesto se ptá uživatele. Nedá se tak zavolat s jinými daty (ze souboru, v testu) a parametr ztrácí smysl.\n\n**Jak opravit:** Čti vstup v `main` a funkci ho předej parametrem."
+  ],
+  "not_run": [],
+  "sha256": "a7c86e2ba5dd7651a1f4743346a5d534db5ff8d6cd05e036b32ebf3d44e5d56b"
+ },
+ "w027": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "a14d8f2994e43686f2030ffbb814095589a77eadcf20c5998fbe572562c3a7f1"
+ },
+ "w028": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "c2f894140173199d369f7347297283c5493b6f21eb97e27a4d213d0aef46653d"
+ },
+ "w029": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "2ac281f148729e939a5742d682e945af47bfff5bdd0d6f47dac7ef0a76891490"
+ },
+ "w030": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "2c0aec3e811d612dee23da798aed985ac60c600069c82d7c56d0921d51b02f36"
+ },
+ "w031": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "bc6fddb8bcfe4647e755121356c2100dd9cdffdee237a05258ecfc23c5da1213"
+ },
+ "w032": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "9e5c56e62a755c47b5184f42b44723c252ac455a3f943e2da0ff9e05bf877d1e"
+ },
+ "w033": {
+  "verdict": "PASS",
+  "rules": [],
+  "explanations": [],
+  "not_run": [],
+  "sha256": "8004b2c47206d427c9be710bdc849385b4f7a750ee178d64798c434f751a6b3d"
+ }
+}

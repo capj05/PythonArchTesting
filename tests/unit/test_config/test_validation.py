@@ -96,81 +96,76 @@ def test_load_config_rejects_removed_sections(tmp_path, config_text: str) -> Non
     config_path.write_text(config_text, encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match="Unknown configuration section"):
-        load_config(config_path=str(config_path), cli_args={})
+        load_config(config_path=str(config_path))
 
 
-def test_load_config_rejects_removed_runtime_cli_args() -> None:
-    with pytest.raises(
-        ConfigurationError, match="Runtime options are no longer supported"
-    ):
-        load_config(cli_args={"runtime_fast": True})
-
-
-def test_parallel_performance_keys_now_warn_as_unknown() -> None:
+def test_removed_sections_now_warn_as_unknown() -> None:
     result = validate_configuration(
         {
-            "performance": {
-                "parallel_processing": True,
-                "max_workers": 4,
-                "min_parallel_items": 2,
-                "parallel_imports": True,
-                "parallel_validation": True,
-            }
+            "performance": {"default_timeout": 30, "max_workers": 4},
+            "import": {"max_modules": 100},
         }
     )
     assert result.is_valid
-    for key in (
-        "parallel_processing",
-        "max_workers",
-        "min_parallel_items",
-        "parallel_imports",
-        "parallel_validation",
-    ):
-        assert any(
-            f"performance.{key}: Unknown configuration key" in warning
-            for warning in result.warnings
-        )
+    assert "Unknown configuration section: performance" in result.warnings
+    assert "Unknown configuration section: import" in result.warnings
 
 
-def test_load_config_no_longer_exposes_parallel_performance_fields(tmp_path) -> None:
+def test_load_config_ignores_removed_keys_with_a_warning(tmp_path) -> None:
+    """A config written for an older release still loads; dead keys only warn."""
     config_path = tmp_path / "config.ini"
-    config_path.write_text("[performance]\ndefault_timeout = 45\n", encoding="utf-8")
+    config_path.write_text(
+        "[discovery]\n"
+        "auto_discover = true\n"
+        "max_discovery_depth = 4\n"
+        "[import]\nmax_modules = 100\nimport_timeout = 10\n"
+        "[error_handling]\ncontinue_on_error = true\n"
+        "[files]\npython_extension = .py\n"
+        "[performance]\ndefault_timeout = 45\n"
+        "[memory]\ncleanup_enabled = true\nlazy_loading = false\n"
+        "[reporting]\noutput_formats = json, markdown\n"
+        "[projects]\nrequired_modules = a, b\n",
+        encoding="utf-8",
+    )
+    captured = []
 
-    config = load_config(config_path=str(config_path), cli_args={})
+    config = load_config(config_path=str(config_path), warning_sink=captured.append)
 
-    assert config.performance.default_timeout == 45
-    for attr in (
-        "parallel_processing",
-        "max_workers",
-        "min_parallel_items",
-        "parallel_imports",
-        "parallel_validation",
-    ):
-        assert not hasattr(config.performance, attr)
+    assert config.discovery.max_discovery_depth == 4
+    for attr in ("performance", "import_config", "files", "reporting", "memory"):
+        assert not hasattr(config, attr)
+    assert not hasattr(config.discovery, "auto_discover")
+    assert not hasattr(config.projects, "required_modules")
+    messages = {warning.message for warning in captured}
+    assert "Unknown configuration section: import" in messages
+    assert "Unknown configuration section: reporting" in messages
+    assert "discovery.auto_discover: Unknown configuration key" in messages
+    assert "Unknown configuration section: memory" in messages
+    assert "projects.required_modules: Unknown configuration key" in messages
 
 
 def test_load_config_does_not_autodiscover_dotfile_by_default(
     tmp_path, monkeypatch
 ) -> None:
     config_path = tmp_path / ".pythonarchtesting"
-    config_path.write_text("[performance]\ndefault_timeout = 45\n", encoding="utf-8")
+    config_path.write_text("[matching]\ntop_n = 45\n", encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
 
     config = load_config()
 
-    assert config.performance.default_timeout == 30
+    assert config.matching.top_n == 5
 
 
 def test_load_config_can_autodiscover_dotfile_when_enabled(
     tmp_path,
 ) -> None:
     config_path = tmp_path / ".pythonarchtesting"
-    config_path.write_text("[performance]\ndefault_timeout = 45\n", encoding="utf-8")
+    config_path.write_text("[matching]\ntop_n = 45\n", encoding="utf-8")
 
     config = load_config(discover_from_cwd=True, cwd=tmp_path)
 
-    assert config.performance.default_timeout == 45
+    assert config.matching.top_n == 45
 
 
 def test_load_config_uses_explicit_config_over_autodiscovery(
@@ -178,8 +173,8 @@ def test_load_config_uses_explicit_config_over_autodiscovery(
 ) -> None:
     autodiscovered = tmp_path / ".pythonarchtesting"
     explicit = tmp_path / "explicit.conf"
-    autodiscovered.write_text("[performance]\ndefault_timeout = 11\n", encoding="utf-8")
-    explicit.write_text("[performance]\ndefault_timeout = 62\n", encoding="utf-8")
+    autodiscovered.write_text("[matching]\ntop_n = 11\n", encoding="utf-8")
+    explicit.write_text("[matching]\ntop_n = 62\n", encoding="utf-8")
 
     config = load_config(
         config_path=str(explicit),
@@ -187,20 +182,20 @@ def test_load_config_uses_explicit_config_over_autodiscovery(
         cwd=tmp_path,
     )
 
-    assert config.performance.default_timeout == 62
+    assert config.matching.top_n == 62
 
 
 def test_load_config_does_not_autodiscover_legacy_config_filenames(tmp_path) -> None:
     (tmp_path / "python_arch_testing.conf").write_text(
-        "[performance]\ndefault_timeout = 31\n", encoding="utf-8"
+        "[matching]\ntop_n = 31\n", encoding="utf-8"
     )
     (tmp_path / "custom_config.conf").write_text(
-        "[performance]\ndefault_timeout = 99\n", encoding="utf-8"
+        "[matching]\ntop_n = 99\n", encoding="utf-8"
     )
 
     config = load_config(discover_from_cwd=True, cwd=tmp_path)
 
-    assert config.performance.default_timeout == 30
+    assert config.matching.top_n == 5
 
 
 def test_load_config_signature_no_longer_accepts_env() -> None:
@@ -321,7 +316,7 @@ def test_load_config_missing_default_config_uses_warning_sink_not_print(
     assert str(missing_default) in captured_warnings[0].message
 
 
-def test_files_section_config_filename_keys_now_warn_as_unknown() -> None:
+def test_files_section_now_warns_as_unknown() -> None:
     result = validate_configuration(
         {
             "files": {
@@ -332,17 +327,16 @@ def test_files_section_config_filename_keys_now_warn_as_unknown() -> None:
     )
 
     assert result.is_valid
-    assert "files.config_default: Unknown configuration key" in result.warnings
-    assert "files.config_custom: Unknown configuration key" in result.warnings
+    assert "Unknown configuration section: files" in result.warnings
 
 
 def test_load_config_no_longer_exposes_removed_type_check_section(tmp_path) -> None:
     config_path = tmp_path / "config.ini"
-    config_path.write_text("[import]\nmax_modules = 77\n", encoding="utf-8")
+    config_path.write_text("[matching]\ntop_n = 77\n", encoding="utf-8")
 
     config = load_config(config_path=str(config_path))
 
-    assert config.import_config.max_modules == 77
+    assert config.matching.top_n == 77
     assert not hasattr(config, "type_check")
 
 
@@ -432,7 +426,7 @@ class TestConfigurationValidator:
                 "max_discovery_depth": 5,
                 "invalid_key": "invalid_value",
             },
-            "import": {"max_modules": 50, "show_import_warnings": "invalid_boolean"},
+            "matching": {"top_n": 50, "name_fallback": "invalid_boolean"},
             "unknown_section": {"unknown_key": "value"},
         }
 
@@ -447,7 +441,7 @@ class TestConfigurationValidator:
         is_valid, error = validate_value("discovery", "max_discovery_depth", 1000)
         assert is_valid, f"Valid value should pass: {error}"
 
-        is_valid, error = validate_value("import", "max_modules", -1)
+        is_valid, error = validate_value("matching", "top_n", -1)
         assert not is_valid
         assert "not in range" in error
 
@@ -457,7 +451,7 @@ class TestConfigurationValidator:
     def test_get_schema_info(self):
         schema = get_schema_info()
         assert "discovery" in schema
-        assert "import" in schema
+        assert "matching" in schema
         assert "type_check" not in schema
 
         discovery_schema = get_schema_info("discovery")

@@ -126,6 +126,13 @@ class NameTranslation:
                 return str(source.module_path)
         return None
 
+    def target_module(self, name: str) -> str:
+        """The target module the reference module ``name`` was mapped to.
+
+        ``name`` itself when the matching step mapped it nowhere.
+        """
+        return self._to_target.get(name, name)
+
     def target_modules(self, name: str) -> list[str]:
         """Target modules standing for the reference module or package ``name``."""
         names: set[str] = set()

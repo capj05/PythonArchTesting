@@ -1,0 +1,5 @@
+[
+  {"id": "w003", "violates": false, "reason": "The grades.py functions only parse, average and format data and never call input() or print(); all console I/O is confined to main() in app.py.", "explanation": ""},
+  {"id": "w028", "violates": false, "reason": "The grades.py functions take and return data without any input() or print() calls, and main() in app.py alone reads the line and prints the result.", "explanation": ""},
+  {"id": "w033", "violates": false, "reason": "The grades.py functions take and return data without any input() or print() calls, and the printing happens only in main() in app.py.", "explanation": ""}
+]

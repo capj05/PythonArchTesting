@@ -1,0 +1,26 @@
+[
+ {
+  "id": "w004",
+  "violates": false,
+  "reason": "Stav je v soukromém _stock, shop.py používá jen veřejné metody a items() vrací kopii.",
+  "explanation": ""
+ },
+ {
+  "id": "w005",
+  "violates": false,
+  "reason": "Stav je v soukromém _stock, shop.py používá jen veřejné metody a items() vrací kopii.",
+  "explanation": ""
+ },
+ {
+  "id": "w009",
+  "violates": false,
+  "reason": "Stav je v soukromém _stock, shop.py používá jen veřejné metody a items() vrací kopii.",
+  "explanation": ""
+ },
+ {
+  "id": "w036",
+  "violates": false,
+  "reason": "Stav je v soukromém _stock, shop.py používá jen veřejné metody a items() vrací kopii.",
+  "explanation": ""
+ }
+]

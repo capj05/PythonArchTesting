@@ -1,0 +1,1 @@
+[{"id": "fial21_fiala", "violates": false, "reason": "All functions in grades.py take parameters and return values; input() and print() occur only in main.", "explanation": ""}]

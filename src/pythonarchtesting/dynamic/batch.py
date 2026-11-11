@@ -45,6 +45,11 @@ def _pattern_observation(params: dict[str, Any]) -> dict[str, Any]:
     return {"spies": True}
 
 
+# Builtins of no layer a rule may still name (``builtins.isinstance``): the
+# probe records a call of one only when asked (``observe.builtins``).
+WATCHABLE_BUILTINS = ("isinstance", "type")
+
+
 def observation(rule: Any) -> dict[str, Any]:
     """What the probe has to record for ``rule``."""
     if rule.rule_type == "runtime_writes":
@@ -65,9 +70,19 @@ def observation(rule: Any) -> dict[str, Any]:
             "names": list(rule.params.get("attributes") or []),
             "callables": dict(rule.params.get("methods") or {}),
         }
-    if rule.params.get("transitive"):
-        return {"calls": "transitive"}
-    return {"calls": True}
+    calls: dict[str, Any] = {
+        "calls": "transitive" if rule.params.get("transitive") else True
+    }
+    # isinstance() and type() belong to no layer and are recorded only when
+    # the rule names them: they run often and would only grow the report.
+    watched = [
+        name
+        for name in WATCHABLE_BUILTINS
+        if f"builtins.{name}" in (rule.params.get("modules") or [])
+    ]
+    if watched:
+        calls["builtins"] = watched
+    return calls
 
 
 def cache_key(rule: Any, target: Any) -> tuple[str, str, str]:

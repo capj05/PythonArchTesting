@@ -1,0 +1,6 @@
+[
+{"id":"w019","violates":false,"reason":"Funkce v grades.py jen přijímají data a vracejí výsledek; input a print jsou pouze v main (výpočet průměru v main je duplicita, ne I/O v logice).","explanation":""},
+{"id":"w026","violates":true,"reason":"parse_grades ignoruje parametr text a sama čte řádek z klávesnice pomocí input(), main jí předává prázdný řetězec.","explanation":"Funkce parse_grades v grades.py si data načítá sama voláním input() a předaný parametr text přepisuje. Logika je tak svázaná s klávesnicí, nelze ji použít na webu ani otestovat bez simulace vstupu. Vstup má číst jen main a předat jej funkci jako parametr."},
+{"id":"w027","violates":false,"reason":"Veškerý input a print jsou v main, funkce v grades.py berou parametry a vracejí hodnoty.","explanation":""},
+{"id":"w030","violates":false,"reason":"Logika v grades.py je čistá (parametry dovnitř, návratové hodnoty ven), input a print jsou jen v main.","explanation":""}
+]

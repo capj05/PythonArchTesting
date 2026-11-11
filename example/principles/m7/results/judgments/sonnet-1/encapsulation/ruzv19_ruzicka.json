@@ -1,0 +1,1 @@
+[{"id":"ruzv19_ruzicka","violates":false,"reason":"shop.py works with the inventory only through public methods (add, remove, quantity, items) and Inventory keeps its state in a private _stock and returns a copy from items().","explanation":""}]

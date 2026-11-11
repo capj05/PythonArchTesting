@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w014",
+    "violates": false,
+    "reason": "Stav je soukromý a shop.py pracuje jen přes veřejné metody Inventory (add, remove, quantity, items).",
+    "explanation": ""
+  },
+  {
+    "id": "w019",
+    "violates": false,
+    "reason": "Stav je soukromý a shop.py pracuje jen přes veřejné metody; přidaná metoda is_empty je veřejné rozhraní, ne obejití pravidel.",
+    "explanation": ""
+  },
+  {
+    "id": "w021",
+    "violates": true,
+    "reason": "Funkce clear_out v shop.py přímo přepisuje privátní atribut _stock objektu Inventory, čímž obchází jeho pravidla.",
+    "explanation": "Ve funkci clear_out v shop.py se volá inventory._stock = left, tedy zvenku se přepisuje vnitřní stav třídy Inventory. Zadání výslovně říká, že shop.py smí se skladem pracovat jen přes veřejné metody add, remove, quantity a items, a že žádná funkce nesmí pravidla skladu obejít. Přímým přepisem se ztrácí kontrola pravidel uvnitř třídy (třída je neověří a nic nehlídá), a změna vnitřní reprezentace v Inventory by proto vyžadovala úpravu shop.py, což je přesně to, co zapouzdření má zabránit. Stejný úkol šlo splnit přes remove(item, count)."
+  },
+  {
+    "id": "w023",
+    "violates": false,
+    "reason": "Stav je soukromý a shop.py používá jen veřejné metody quantity, remove a add.",
+    "explanation": ""
+  }
+]

@@ -17,6 +17,7 @@ from pythonarchtesting.entities_extraction import (
     root_path_from_module_path,
 )
 from pythonarchtesting.exceptions import ConfigurationError, ErrorContext
+from pythonarchtesting.principles.task import bind_task, is_task, load_task
 from pythonarchtesting.rules.compilation.orchestrator import compile_rules
 from pythonarchtesting.run_state import RunState
 from pythonarchtesting.state import ValidationResult, ValidationStatus
@@ -109,6 +110,12 @@ def prepare_source(
     architecture: bool = False,
 ) -> RunState:
     _require_existing_source(source_path)
+    task = None
+    if is_task(source_path):
+        # A task directory: its task.toml binds a catalogue principle to the
+        # unannotated reference, whose entities get the declarations below.
+        task = load_task(source_path)
+        source_path = task.reference
     include_nested = get_bool(config, "matching", "include_nested_functions", False)
     source_entities: List[Entity] = []
     source_errors: List[ValidationResult] = []
@@ -203,6 +210,8 @@ def prepare_source(
             source_entities.extend(matchable)
 
     source_entities = sort_entities(source_entities)
+    if task is not None:
+        source_entities, _ = bind_task(task, source_entities)
     source_entities = sort_entities(
         filter_entities_for_scope(source_entities, validation_scope)
     )
@@ -249,4 +258,5 @@ def prepare_source(
         run_generated_at=datetime.now(timezone.utc),
         framework_version=_framework_version(),
         validation_scope=validation_scope,
+        principle=task.principle.id if task is not None else None,
     )

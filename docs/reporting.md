@@ -191,6 +191,44 @@ Typical workflow:
 4. use `fix_hints`
 5. inspect `evidence` only if the message is not enough
 
+### Runtime facts
+
+A failed `forbid_runtime_calls`, `require_runtime_calls`,
+`forbid_foreign_writes`, `forbid_runtime_instantiation` or
+`require_runtime_delegation` result lists its violations twice, and so does
+a failed static `forbid_private_access`, `subclass_of` or
+`is_abstract_class` (whose facts have no `case`). `details.violations`
+holds them as English sentences, and `details.facts` holds them as data, so a
+client can phrase the explanation in its own words and language. The two lists
+have the same length and order: `facts[i]` is `violations[i]`. A passing result
+has neither list, and neither has a failed result that ends before a case runs
+(probe timeout, case setup failure, target-kind mismatch); its `reason` and
+`summary` say why. Every fact has `kind` and `case` (the index of the case it
+was seen in):
+
+| `kind` | Other keys |
+|---|---|
+| `call` | `caller` and `callee` (`"module:qualname"`), `file` and `line` where the call was made, `via` (the code a transitive call went through, `"module:qualname"`, outermost first; empty for a direct call), `origin_line` (the line of `caller` the transitive call's detour starts at; `null` for a direct call) |
+| `missing_call` | `module` (the target's module no call went into), `reference_module` (the required module as the marker names it), `raised` (the exception the case stopped at, or `null`) |
+| `write` | `change` (`assigned`, `mutated`, `deleted` or `bypassed`), `writer` (`"module:qualname"`), `class`, `attribute`, `file`, `line` |
+| `instance` | `creator` (`"module:qualname"`, the target's code the object is charged to), `class` (`"module:Class"`), `file` and `line` where the object was built, `via` (the code a transitive instance was built through, outermost first; empty otherwise) |
+| `missing_delegation` | `caller` (the target, `"module:qualname"`), `expected` (the spy, or `"spy.member"`), `raised` (the exception the case stopped at, or `null`) |
+| `read` (static) | `reader` (`"module:qualname"`), `class`, `attribute`, `file`, `line` |
+| `not_subclass` (static) | `class` and `expected_base` (`"module:Class"`), `file`, `line` of the class |
+| `not_abstract` (static) | `class` (`"module:Class"`), `concrete_methods` (what it defines without an abstract decorator), `file`, `line` |
+
+For a transitive call `caller` is the target's code the call is charged to,
+`origin_line` is the line of it that starts the detour, and `file` and `line`
+belong to the last step of `via`. `file` is relative to the target root, and
+`null` for code generated from a string, such as a dataclass `__init__`.
+
+Module and function names in `caller`, `callee`, `via`, `writer` and `class`
+are the target's own. For `missing_call`, `module` is the target's name of the
+required module when the matching step mapped it to a target module of another
+name, and `reference_module` is the name the marker uses; without such a
+mapping both hold the same name. The English sentences in `violations` keep the
+reference's name.
+
 ## Markdown Output
 
 Markdown output always writes a bundle and requires `--output` to point to a

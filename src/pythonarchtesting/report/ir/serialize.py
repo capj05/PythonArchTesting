@@ -129,6 +129,10 @@ def to_legacy_schema_v2(doc: ReportDocument) -> Dict[str, Any]:
         "tool_version": doc.run.tool_version,
         "mode": doc.run.mode,
     }
+    if doc.run.principle is not None:
+        # Only a task source records its principle; other reports keep the
+        # keys they always had.
+        run["principle"] = doc.run.principle
     summary: Dict[str, Any] = {
         "targets_total": doc.summary.targets_total or 0,
         "targets_failed": doc.summary.targets_failed or 0,

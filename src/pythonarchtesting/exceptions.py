@@ -75,21 +75,5 @@ class ImportError(ArchitectureTestingError):
     """Raised when module import fails."""
 
 
-class TypeCheckError(ArchitectureTestingError):
-    """Raised when type checking fails."""
-
-
-class StructuralCheckError(ArchitectureTestingError):
-    """Raised when structural checking fails."""
-
-
-class ValidationError(ArchitectureTestingError):
-    """Raised when validation fails."""
-
-
-class DiscoveryError(ArchitectureTestingError):
-    """Raised when module discovery fails."""
-
-
 class ReportGenerationError(ArchitectureTestingError):
     """Raised when report generation fails."""

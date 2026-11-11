@@ -55,7 +55,7 @@ def _index(root: Path, files: dict[str, str], role: str) -> Any:
     for name, text in files.items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_text(text, encoding="utf-8")
-    config = load_config(config_path=None, cli_args={}, discover_from_cwd=False)
+    config = load_config(config_path=None, discover_from_cwd=False)
     parsed, _ = parse_python_modules(
         root_path=root, config=config, target_module_name=None
     )
@@ -84,7 +84,7 @@ def _match(
     source_index = _index(tmp_path / "reference", reference or _REFERENCE, "source")
     target_index = _index(tmp_path / "target", target, "target")
     config = MatchingConfig.from_config(
-        load_config(config_path=None, cli_args={}, discover_from_cwd=False)
+        load_config(config_path=None, discover_from_cwd=False)
     )
     _, by_source = run_matching(
         source_index, target_index, replace(config, name_fallback=fallback)
@@ -213,7 +213,7 @@ def test_a_pair_by_name_names_its_target_first_among_the_candidates(tmp_path: Pa
     source_index = _index(tmp_path / "reference", _REFERENCE, "source")
     target_index = _index(tmp_path / "target", _TARGET, "target")
     config = MatchingConfig.from_config(
-        load_config(config_path=None, cli_args={}, discover_from_cwd=False)
+        load_config(config_path=None, discover_from_cwd=False)
     )
     _, by_source = run_matching(
         source_index, target_index, _replace(config, name_fallback=True)
@@ -327,7 +327,7 @@ def test_a_property_setter_follows_its_class(tmp_path: Path):
     source_index = _index(tmp_path / "reference", {"a.py": box}, "source")
     target_index = _index(tmp_path / "target", {"zz.py": target}, "target")
     config = MatchingConfig.from_config(
-        load_config(config_path=None, cli_args={}, discover_from_cwd=False)
+        load_config(config_path=None, discover_from_cwd=False)
     )
     _, by_source = run_matching(
         source_index, target_index, replace(config, name_fallback=True)

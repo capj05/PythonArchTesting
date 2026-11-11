@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w019",
+    "violates": false,
+    "reason": "grades.py is pure (parse_grades, average and format_summary take data and return values), and input/print appear only in main() in app.py.",
+    "explanation": ""
+  },
+  {
+    "id": "w026",
+    "violates": true,
+    "reason": "parse_grades in grades.py reads the keyboard itself via input() and ignores its text parameter.",
+    "explanation": "Funkce parse_grades(text) má dostat data jako parametr, ale uvnitř si volá input(\"Zadej známky: \") a parametr text přepíše. Tím je zpracování řádku svázané s klávesnicí: nelze ji použít s textem z webu nebo ze souboru a nelze ji otestovat bez interaktivního vstupu, což je přesně to, co princip zakazuje. Vstup patří jen do main(). Kromě toho main() volá parse_grades(\"\"), takže skutečný vstup od uživatele nikdy nezpracuje přímo; to je jiná chyba, která se do hodnocení principu nepočítá."
+  },
+  {
+    "id": "w027",
+    "violates": false,
+    "reason": "grades.py contains no input or print; main() in app.py reads the line and prints the result or error.",
+    "explanation": ""
+  },
+  {
+    "id": "w030",
+    "violates": false,
+    "reason": "grades.py is pure and returns values or raises ValueError; input and print are confined to main() in app.py.",
+    "explanation": ""
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w006",
+    "violates": false,
+    "reason": "Stav je v soukromém atributu _stock, items() vrací kopii a shop.py pracuje jen přes veřejné metody Inventory, pravidla jsou v Inventory na jednom místě.",
+    "explanation": ""
+  },
+  {
+    "id": "w022",
+    "violates": true,
+    "reason": "Pravidlo kladného množství je kromě Inventory zapsáno také v shop.py (restock), takže nežije na jednom místě uvnitř třídy.",
+    "explanation": "Funkce restock v shop.py kontroluje, že množství v dodávce je kladné, a tím duplikuje pravidlo, které už střeží Inventory.add a Inventory._check_quantity. Pravidlo tak leží na dvou místech, a pokud se změní v Inventory, musí se měnit i shop.py. Zadání přitom požaduje, aby pravidla skladu ležela na jednom místě uvnitř třídy Inventory. Stav skladu samotný je zapouzdřen správně (soukromý _stock, kopie při vytvoření i při items())."
+  },
+  {
+    "id": "w024",
+    "violates": false,
+    "reason": "Všechna pravidla jsou v Inventory, stav je soukromý, kopie vstupního slovníku i výstupu items() jsou vlastní, a shop.py používá jen veřejné metody.",
+    "explanation": ""
+  },
+  {
+    "id": "w030",
+    "violates": true,
+    "reason": "Pravidlo kladného množství je kromě Inventory zapsáno také v shop.py (restock), takže nežije na jednom místě uvnitř třídy.",
+    "explanation": "Funkce restock v shop.py kontroluje qty <= 0 pro každou položku dodávky, tedy duplikuje pravidlo, které už vynucuje Inventory.add a remove. Pravidlo tak leží na dvou místech a při změně v Inventory by bylo nutné upravit i shop.py. Zadání přitom požaduje, aby pravidla skladu ležela na jednom místě uvnitř třídy Inventory. Stav skladu je zapouzdřen správně (soukromý _stock, items() vrací kopii)."
+  }
+]

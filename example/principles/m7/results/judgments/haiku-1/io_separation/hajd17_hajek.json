@@ -1,0 +1,8 @@
+[
+  {
+    "id": "hajd17_hajek",
+    "violates": false,
+    "reason": "grades.py contains no input or output; parse_grades, average and format_summary take data as parameters and return values, and input()/print() appear only in app.py.",
+    "explanation": ""
+  }
+]

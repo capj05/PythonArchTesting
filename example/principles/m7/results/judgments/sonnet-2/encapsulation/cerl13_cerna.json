@@ -1,0 +1,1 @@
+[{"id":"cerl13_cerna","violates":false,"reason":"Inventory keeps its state private and enforces the rules itself, and shop.py uses only the public methods add, remove, quantity and items.","explanation":""}]

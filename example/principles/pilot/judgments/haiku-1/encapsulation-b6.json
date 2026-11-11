@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w003",
+    "violates": false,
+    "reason": "Stav je v Inventory skrytý za _stock a shop.py pracuje se skladem jen přes add, remove, quantity a items.",
+    "explanation": ""
+  },
+  {
+    "id": "w016",
+    "violates": true,
+    "reason": "Funkce clear_out v shop.py přistupuje přímo k privátnímu atributu _stock třídy Inventory.",
+    "explanation": "Funkce clear_out v shop.py volá inventory._stock.pop(item), tedy zvenku sahá na privátní atribut skladu místo veřejné metody. Pravidla skladu (kladná množství, položka s nulou zmizí) se tak obcházejí mimo třídu Inventory, takže změna vnitřního uložení by vyžadovala úpravu shop.py a princip zapouzdření je porušen."
+  },
+  {
+    "id": "w020",
+    "violates": true,
+    "reason": "Funkce clear_out v shop.py přiřazuje přímo privátnímu atributu _stock nový slovník.",
+    "explanation": "Funkce clear_out v shop.py čte inventory._stock přes items() a následně ho přepisuje zvenku (inventory._stock = remaining). Tím zapisuje do vnitřního stavu Inventory mimo jeho metody a obchází pravidla třídy; shop.py je navázán na vnitřní reprezentaci a žádná veřejná metoda pro vyprázdnění položky neexistuje. Princip zapouzdření je porušen."
+  },
+  {
+    "id": "w025",
+    "violates": true,
+    "reason": "Funkce clear_out v shop.py maže položku přímo z privátního atributu _stock.",
+    "explanation": "Funkce clear_out v shop.py provádí del inventory._stock[item], tedy mění vnitřní stav Inventory zvenku. Pravidla skladu tím nejsou vynucována na jednom místě uvnitř třídy, shop.py závisí na vnitřní reprezentaci a princip zapouzdření je porušen."
+  }
+]

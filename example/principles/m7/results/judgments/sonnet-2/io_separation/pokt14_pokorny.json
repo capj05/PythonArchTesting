@@ -1,0 +1,1 @@
+[{"id":"pokt14_pokorny","violates":false,"reason":"All I/O (input, print) is confined to main; grades.py functions take parameters and return values.","explanation":""}]

@@ -54,6 +54,7 @@ _SUPPORTED_MARKER_NAMES = {
     "implements_runtime_protocol",
     "exact_type",
     "forbid_foreign_writes",
+    "forbid_private_access",
     "forbid_imports",
     "forbid_runtime_calls",
     "forbid_runtime_imports",

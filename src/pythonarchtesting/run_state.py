@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pythonarchtesting.config import Config
 from pythonarchtesting.core.models import Rule, RuleResult
@@ -38,6 +38,8 @@ class RunState:
     # Assisted pairing (matching.assisted): {target id or "*": {reference
     # name: target name}}, applied after the automatic matching.
     mappings: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    # The catalogue principle of a task source (principles.task), else None.
+    principle: Optional[str] = None
 
 
 @dataclass

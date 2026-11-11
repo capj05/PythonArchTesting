@@ -134,6 +134,72 @@ def test_import_target_spec_puts_a_plain_root_on_the_path(tmp_path: Path):
     assert package is None
 
 
+def test_a_root_without_init_that_imports_relatively_is_a_package(tmp_path: Path):
+    """A beginner left out ``__init__.py``; ``from .inventory`` says the
+    directory is a package all the same."""
+    root = tmp_path / "capj05_capsky"
+    root.mkdir()
+    (root / "inventory.py").write_text("class Inventory: ...\n", encoding="utf-8")
+    (root / "shop.py").write_text(
+        "from .inventory import Inventory\n", encoding="utf-8"
+    )
+
+    assert import_target_spec(root) == (root.resolve(), "capj05_capsky")
+
+
+@pytest.mark.parametrize("name", ["05capj_capsky", "capj05-capsky", "class"])
+def test_a_root_without_init_is_a_package_whatever_its_name(tmp_path: Path, name: str):
+    """The import system finds a directory by its name, identifier or not, so
+    the probe judges such a root as the static side does: as a package."""
+    root = tmp_path / name
+    root.mkdir()
+    (root / "inventory.py").write_text("class Inventory: ...\n", encoding="utf-8")
+    (root / "shop.py").write_text(
+        "from .inventory import Inventory\n", encoding="utf-8"
+    )
+
+    assert import_target_spec(root) == (root.resolve(), name)
+
+
+def test_a_root_without_init_that_imports_absolutely_stays_plain(tmp_path: Path):
+    root = tmp_path / "capj05_capsky"
+    root.mkdir()
+    (root / "inventory.py").write_text("class Inventory: ...\n", encoding="utf-8")
+    (root / "shop.py").write_text("from inventory import Inventory\n", encoding="utf-8")
+
+    assert import_target_spec(root)[1] is None
+
+
+def test_a_relative_import_up_to_the_root_from_a_subpackage(tmp_path: Path):
+    """``domain/model.py`` reaches the root with ``from ..inventory``: the
+    root is a package, though no module directly in it imports relatively."""
+    root = tmp_path / "capj05_capsky"
+    (root / "domain").mkdir(parents=True)
+    (root / "inventory.py").write_text("class Inventory: ...\n", encoding="utf-8")
+    (root / "shop.py").write_text("import inventory\n", encoding="utf-8")
+    (root / "domain" / "model.py").write_text(
+        "from ..inventory import Inventory\n", encoding="utf-8"
+    )
+
+    assert import_target_spec(root) == (root.resolve(), "capj05_capsky")
+
+
+def test_a_relative_import_within_a_subpackage_says_nothing_of_the_root(
+    tmp_path: Path,
+):
+    """``from .helpers`` in ``domain/model.py`` needs only ``domain`` to be a
+    package, which it is on the path as well."""
+    root = tmp_path / "capj05_capsky"
+    (root / "domain").mkdir(parents=True)
+    (root / "shop.py").write_text("import domain.model\n", encoding="utf-8")
+    (root / "domain" / "helpers.py").write_text("X = 1\n", encoding="utf-8")
+    (root / "domain" / "model.py").write_text(
+        "from .helpers import X\n", encoding="utf-8"
+    )
+
+    assert import_target_spec(root)[1] is None
+
+
 def test_a_call_through_an_injected_object_is_attributed_to_its_module(
     package_root: Path,
 ):
@@ -145,7 +211,7 @@ def test_a_call_through_an_injected_object_is_attributed_to_its_module(
     case = outcome.cases[0]
     assert case["status"] == "passed"
     # The package prefix is stripped; constructing the argument is not a call
-    # the target made.
+    # the target made. The file is relative to the target root.
     assert case["calls"] == [
         {
             "from": "shop",
@@ -153,6 +219,7 @@ def test_a_call_through_an_injected_object_is_attributed_to_its_module(
             "callee": "Store.put",
             "caller": "save",
             "line": _line_of("return store.put(key, 1)"),
+            "file": "shop.py",
         }
     ]
 

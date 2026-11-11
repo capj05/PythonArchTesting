@@ -1,0 +1,26 @@
+[
+ {
+  "id": "w008",
+  "violates": false,
+  "reason": "Veškerý vstup a výstup je v main, grades.py jen počítá a vrací hodnoty.",
+  "explanation": ""
+ },
+ {
+  "id": "w015",
+  "violates": false,
+  "reason": "Veškerý vstup a výstup je v main, grades.py jen počítá a vrací hodnoty.",
+  "explanation": ""
+ },
+ {
+  "id": "w017",
+  "violates": false,
+  "reason": "Veškerý vstup a výstup je v main, grades.py jen počítá a vrací hodnoty.",
+  "explanation": ""
+ },
+ {
+  "id": "w022",
+  "violates": false,
+  "reason": "Veškerý vstup a výstup je v main, grades.py jen počítá a vrací hodnoty.",
+  "explanation": ""
+ }
+]

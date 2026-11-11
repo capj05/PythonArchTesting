@@ -1,0 +1,1 @@
+[{"id": "pokt14_pokorny", "violates": false, "reason": "shop.py works with the inventory only through public methods (remove, add, quantity, items) and Inventory keeps its state in _stock and enforces its own rules; the positivity pre-check in restock is only for all-or-nothing atomicity and does not bypass the rules.", "explanation": ""}]

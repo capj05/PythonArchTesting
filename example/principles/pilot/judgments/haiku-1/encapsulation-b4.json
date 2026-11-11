@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w013",
+    "violates": true,
+    "reason": "Funkce clear_out v shop.py přímo přepisuje privátní atribut inventory._stock, čímž obchází veřejné metody a pravidla třídy Inventory.",
+    "explanation": "V shop.py se volá inventory._stock = rest, tedy zvenku se zapisuje do vnitřního stavu skladu. Pravidla skladu (včetně odstranění položky s nulou) tak nejsou vynucena třídou Inventory, ale kódem mimo ni, a změna vnitřní reprezentace by vyžadovala úpravu shop.py. Přesně tohle zadání zakazuje: na atributy začínající podtržítkem zvenku nesahat."
+  },
+  {
+    "id": "w017",
+    "violates": true,
+    "reason": "Inventory.add nekontroluje, že je množství kladné, takže pravidlo skladu lze obejít veřejnou metodou třídy a kontrola žije jen v shop.restock.",
+    "explanation": "Pravidlo 'přidávat lze jen kladný počet kusů' má podle zadání ležet uvnitř třídy Inventory, ale metoda add ho nevynucuje; kontrola je až v shop.restock. Volání Inventory().add('x', -3) tak zapíše záporné množství do _stock a items() ho vrátí, takže třída nechrání vlastní invariant. Pravidlo je navíc rozdělené mezi dva moduly, což je přesně to, čemu zapouzdření má zabránit."
+  },
+  {
+    "id": "w018",
+    "violates": false,
+    "reason": "Stav je přístupný jen přes metody Inventory, add i remove vynucují pravidla uvnitř třídy a shop.py pracuje jen přes veřejné metody.",
+    "explanation": ""
+  },
+  {
+    "id": "w028",
+    "violates": false,
+    "reason": "Třída Inventory sama validuje množství v add, remove i __init__, a shop.py používá jen veřejné metody bez přístupu k _stock.",
+    "explanation": ""
+  }
+]

@@ -11,7 +11,7 @@ def test_packaged_defaults_do_not_configure_a_phantom_target(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    config = load_config(config_path=None, cli_args={}, discover_from_cwd=False)
+    config = load_config(config_path=None, discover_from_cwd=False)
 
     with pytest.raises(ConfigurationError) as excinfo:
         resolve_projects_config(config)

@@ -19,6 +19,7 @@ from .module_structure import (
     RuntimeLayersEvaluator,
 )
 from .nominal_type_relationship import NominalTypeRelationshipEvaluator
+from .private_access import PrivateAccessEvaluator
 from .protocol_conformance import ProtocolConformanceEvaluator
 from .python_modifiers import PythonModifierEvaluator
 from .runtime_flow import RuntimeFlowEvaluator
@@ -52,6 +53,7 @@ _EVALUATORS: Dict[str, Any] = {
     "architecture_static": ArchitectureStaticEvaluator(),
     "architecture_runtime": ArchitectureRuntimeEvaluator(),
     "nominal_type_relationship": NominalTypeRelationshipEvaluator(),
+    "private_access": PrivateAccessEvaluator(),
     "python_modifier": PythonModifierEvaluator(),
     "protocol_conformance": ProtocolConformanceEvaluator(),
     "runtime_calls": RuntimeCallsEvaluator(),

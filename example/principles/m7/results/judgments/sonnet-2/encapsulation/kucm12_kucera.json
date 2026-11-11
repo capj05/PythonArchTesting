@@ -1,0 +1,1 @@
+[{"id": "kucm12_kucera", "violates": false, "reason": "Inventory keeps its state in _stock and enforces all rules itself, while shop.py works only through the public methods remove, add, quantity and items and never touches underscore attributes.", "explanation": ""}]

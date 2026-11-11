@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w027",
+    "violates": false,
+    "reason": "Stav je v Inventory skrytý za metodami, shop.py používá jen add, remove, quantity a items, a pravidla zůstávají uvnitř třídy.",
+    "explanation": ""
+  },
+  {
+    "id": "w029",
+    "violates": true,
+    "reason": "Funkce clear_out v shop.py přistupuje přímo k privátnímu atributu inventory._stock a obchází veřejnou metodu remove.",
+    "explanation": "Funkce clear_out v shop.py volá del inventory._stock[item], tedy zvenku sahá na atribut začínající podtržítkem a obchází veřejné metody třídy Inventory. Tím se obchází pravidla skladu uložená v remove (kontrola množství a odstranění položky s nulou) a vnitřní uložení v Inventory už nelze změnit bez úpravy shop.py. Kontrola kladného množství v restock navíc duplikuje pravidlo, které má ležet uvnitř Inventory."
+  },
+  {
+    "id": "w031",
+    "violates": true,
+    "reason": "Pravidlo kladného množství je v shop.restock zkopírováno mimo třídu Inventory, což zadání výslovně požaduje jinak.",
+    "explanation": "Funkce restock v shop.py kontroluje qty <= 0 a sama vyhlašuje chybu, takže pravidlo skladu žije na dvou místech (v Inventory.add i zde). Zadání přitom říká, že pravidla mají ležet na jednom místě uvnitř třídy Inventory. Stav skladu tím přímo nekompromituje, protože zápis stále probíhá přes add, takže jde o střední porušení soustředění pravidel, ne o únik dat."
+  },
+  {
+    "id": "w033",
+    "violates": true,
+    "reason": "Pravidlo kladného celého množství je v shop.restock zkopírováno mimo třídu Inventory, což zadání výslovně požaduje jinak.",
+    "explanation": "Funkce restock v shop.py ověřuje isinstance a quantity <= 0 a sama vyhlašuje chybu, takže pravidlo skladu žije na dvou místech (v Inventory._check_quantity i zde). Zadání přitom říká, že pravidla mají ležet na jednom místě uvnitř třídy Inventory. Stav skladu tím přímo nekompromituje, protože zápis stále probíhá přes add, takže jde o střední porušení soustředění pravidel, ne o únik dat."
+  }
+]

@@ -1,0 +1,23 @@
+# Points to the catalogue entry, which ships with the tool:
+# src/pythonarchtesting/principles/catalog/io_separation.toml.
+# `[examples]` maps each of its errors and neutral changes to the variant under
+# `assignments/` that shows it; `verify.py` checks that every variant is listed.
+# An optional `[more_examples]` maps an id to a list of further variants that
+# show it (see ../strategy/principle.toml); `verify.py` holds them to the same
+# promise, the pilot and the M6/M7 harnesses use the `[examples]` one only.
+# The task itself (roles and cases over the unannotated `reference/`) is
+# `task.toml`.
+
+id = "io_separation"
+
+[examples]
+print_instead_of_return = "err_print_in_logic"
+input_in_logic = "err_input_in_logic"
+output_through_helper = "err_print_via_helper"
+file_io_in_logic = "err_open_in_logic"
+logic_in_main = "err_logic_in_main"
+model_solution = "ok_basic"
+different_ui = "ok_different_ui"
+extra_pure_helper = "ok_extra_helper"
+wrong_formula = "ok_wrong_formula"
+style_noise = "ok_style_noise"

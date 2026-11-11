@@ -29,6 +29,7 @@ defects across all 22 showcases lives in [`SUMMARY.md`](SUMMARY.md).
 | [`dyn001_reference_calls/`](dyn001_reference_calls/)            | `enforce_reference_calls` — call graph learned from the reference (runs only with `--dynamic`)        |
 | [`dyn002_runtime_imports/`](dyn002_runtime_imports/)            | `forbid_runtime_imports`, `forbid_runtime_calls` for a lazy import (runs only with `--dynamic`)        |
 | [`dyn003_encapsulation/`](dyn003_encapsulation/)                | `forbid_foreign_writes` (runs only with `--dynamic`)                                                   |
+| [`enc001_private_access/`](enc001_private_access/)              | `forbid_private_access` (static)                                                                       |
 | [`dyn004_injection/`](dyn004_injection/)                        | `forbid_runtime_instantiation` (runs only with `--dynamic`)                                            |
 | [`dyn005_runtime_members/`](dyn005_runtime_members/)            | `require_runtime_members`, `forbid_runtime_members` (runs only with `--dynamic`)                       |
 | [`dyn006_runtime_classes/`](dyn006_runtime_classes/)            | `is_runtime_concrete_class`, `is_runtime_abstract_class`, `implements_runtime_protocol` (runs only with `--dynamic`) |

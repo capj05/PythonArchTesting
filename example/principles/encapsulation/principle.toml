@@ -1,0 +1,16 @@
+# Points to the catalogue entry, which ships with the tool:
+# src/pythonarchtesting/principles/catalog/encapsulation.toml.
+# See ../io_separation/principle.toml for `[examples]`; the task is `task.toml`.
+
+id = "encapsulation"
+
+[examples]
+bypass_method = "err_sell_bypasses_remove"
+mutate_container = "err_restock_writes_log"
+replace_attribute = "err_clear_out_replaces_stock"
+read_private = "err_report_reads_private"
+model_solution = "ok_basic"
+property = "ok_property"
+extra_method = "ok_extra_method"
+wrong_math = "ok_wrong_math"
+style_noise = "ok_style_noise"

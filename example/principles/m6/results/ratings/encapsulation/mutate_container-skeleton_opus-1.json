@@ -1,0 +1,7 @@
+{
+ "location": 1,
+ "principle": 2,
+ "reason": 2,
+ "comment": "The statement `del inventory._stock[item]` is on line 28 of shop.py, not line 29 as the explanation says; file, function and statement are otherwise right.",
+ "model": "opus"
+}

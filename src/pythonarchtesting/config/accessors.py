@@ -12,15 +12,8 @@ from dataclasses import asdict, is_dataclass
 from typing import Any, overload
 
 
-def _section_name(section: str) -> str:
-    """Map config section names to Config dataclass attribute names."""
-    if section == "import":
-        return "import_config"
-    return section
-
-
 def _from_config_dataclass(config: Any, section: str, key: str) -> tuple[bool, Any]:
-    section_obj = getattr(config, _section_name(section), None)
+    section_obj = getattr(config, section, None)
     if section_obj is None:
         return False, None
     if hasattr(section_obj, key):
@@ -35,12 +28,6 @@ def _from_mapping(config: Any, section: str, key: str) -> tuple[bool, Any]:
     section_obj = config.get(section)
     if isinstance(section_obj, Mapping) and key in section_obj:
         return True, section_obj[key]
-
-    alt_section = _section_name(section)
-    if alt_section != section:
-        alt_section_obj = config.get(alt_section)
-        if isinstance(alt_section_obj, Mapping) and key in alt_section_obj:
-            return True, alt_section_obj[key]
 
     return False, None
 
@@ -200,12 +187,9 @@ def get_section(config: Any, section: str) -> dict[str, Any]:
             raw_section = raw_cfg.get(section)
             if isinstance(raw_section, Mapping):
                 return dict(raw_section)
-            alt_section = raw_cfg.get(_section_name(section))
-            if isinstance(alt_section, Mapping):
-                return dict(alt_section)
         return {}
 
-    section_obj = getattr(config, _section_name(section), None)
+    section_obj = getattr(config, section, None)
     if section_obj is not None:
         raw = _raw_section()
         if is_dataclass(section_obj) and not isinstance(section_obj, type):
@@ -227,9 +211,6 @@ def get_section(config: Any, section: str) -> dict[str, Any]:
         raw_value = config.get(section)
         if isinstance(raw_value, Mapping):
             return dict(raw_value)
-        alt_value = config.get(_section_name(section))
-        if isinstance(alt_value, Mapping):
-            return dict(alt_value)
         return {}
 
     get_section_fn = getattr(config, "get_section", None)

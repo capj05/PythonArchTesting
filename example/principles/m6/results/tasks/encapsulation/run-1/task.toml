@@ -1,0 +1,18 @@
+principle = "encapsulation"
+
+[roles]
+owner = ["inventory.Inventory"]
+client = ["shop.sell", "shop.restock", "shop.clear_out"]
+
+[cases]
+"shop.sell" = [
+  {args = [{"$new" = "inventory.Inventory", args = [{apple = 5, pear = 2}]}, "apple", 3]},
+  {args = [{"$new" = "inventory.Inventory", args = [{apple = 5}]}, "apple", 9]},
+]
+"shop.restock" = [
+  {args = [{"$new" = "inventory.Inventory", args = [{apple = 1}]}, {apple = 2, kiwi = 4}]},
+  {args = [{"$new" = "inventory.Inventory", args = [{apple = 1}]}, {kiwi = 0}]},
+]
+"shop.clear_out" = [
+  {args = [{"$new" = "inventory.Inventory", args = [{apple = 5, pear = 2}]}, "apple"]},
+]

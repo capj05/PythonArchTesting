@@ -90,12 +90,28 @@ A target that writes `source.balance -= amount` fails with
 
   These are found by comparing the instances the case can reach — its
   arguments, the instance a method runs on, the project instances they hold
-  (three levels deep), and every instance built while the case runs — before
+  (three levels deep), the project instances the project's modules hold in
+  their global variables (`world.BAG`, or the rooms of a dict
+  `world.ROOMS`), and every instance built while the case runs — before
   and after the code that can change them: a container method returning, a
   library function that was handed one of them returning, and project code
   whose bytecode changes state without a call. A change made by library code
   belongs to the nearest project code that called it; a method of the class
   that hands its own list to a library function still owns the change.
+
+  A write to an instance the case reaches only through a module global
+  names that global in the write's `held_by` (`world.BAG`), in the report
+  (`... changes what is held in Bag.items (held in world.BAG) at
+  actions.py:12`) and in its fact; an instance inside the global (a thing in
+  the bag's list, a room of `world.ROOMS`) is named by it too. The label is
+  taken when the case starts: an instance a global gets while the case runs
+  has none, and one moved from one global to another keeps the first. Code
+  that keeps its state in module globals (a game whose actions get only the
+  words of a command) is so checked without handing the objects to the cases
+  as arguments. A back-reference an owner's method writes into an item it
+  receives (`thing.where = self` in `Room.add`) is a write to another class's
+  object and is reported, by a task as an unclassified write; with the
+  globals watched it shows up more often.
 
 ## What it does not check
 

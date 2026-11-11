@@ -60,16 +60,12 @@ def check_cases(
     all its lines. The calls between modules they drove are returned too:
     that is what a runtime check built on these cases will see.
     """
-    from pythonarchtesting.dynamic.runner import run_cases
-    from pythonarchtesting.execution.evaluators.runtime_structure import (
-        _coverage,
-        _edges,
-    )
     from pythonarchtesting.rules.compilation.decorators.module_structure import (
         entry_problem,
     )
 
     source_path = require_absolute(source, "source")
+    _not_a_task(source_path, "check_cases")
     if not _in_range(min_coverage, 0.0, 1.0):
         raise ToolInputError("min_coverage must be a number in [0, 1]")
     params = {"entry": entry, "cases": cases, "init": init, "timeout_s": timeout_s}
@@ -82,6 +78,38 @@ def check_cases(
         raise ToolInputError(f"{problem[0]}: {problem[1]}")
     assert entity is not None  # nosec B101 - narrowed by the checks above
     policy = _sandbox_policy(True, sandbox, sandbox_memory_mb)
+    return judge_cases(
+        source_path, entity, entry, cases, init, min_coverage, timeout_s, policy
+    )
+
+
+def _not_a_task(source_path: Path, tool: str) -> None:
+    from pythonarchtesting.principles.task import is_task
+
+    if is_task(source_path):
+        raise ToolInputError(
+            f"source is a task directory (task.toml): give {tool} the reference "
+            "directory itself, or check the whole task with prepare_task"
+        )
+
+
+def judge_cases(
+    source_path: Path,
+    entity: Any,
+    entry: str,
+    cases: list[dict[str, Any]],
+    init: Optional[dict[str, Any]],
+    min_coverage: float,
+    timeout_s: float,
+    policy: Any,
+) -> dict[str, Any]:
+    """Run ``cases`` of the reference ``entity`` (named ``entry``) and judge
+    them as ``check_cases`` does."""
+    from pythonarchtesting.dynamic.runner import run_cases
+    from pythonarchtesting.execution.evaluators.runtime_structure import (
+        _coverage,
+        _edges,
+    )
 
     outcome = run_cases(
         target_root=source_path,
@@ -235,9 +263,12 @@ _OPERATORS_BY_MARKER: dict[str, tuple[str, ...]] = {
     "forbid_runtime_imports": ("add_library", "dynamic_import"),
     "module_interface": ("use_private_name",),
     "forbid_foreign_writes": ("foreign_write",),
+    "forbid_private_access": ("read_private_attribute",),
     "implements_protocol": ("break_port",),
     "implements_runtime_protocol": ("break_port",),
     "enforce_reference_calls": ("drop_call", "rebuild_injected"),
+    "subclass_of": ("drop_base",),
+    "is_abstract_class": ("concretize_base",),
 }
 _DETAILS = ("problems", "all")
 _RUNTIME_ONLY = "<runtime only>"
@@ -439,6 +470,7 @@ def verify_marker(
     source_path = require_absolute(source, "source")
     if not source_path.is_dir():
         raise ToolInputError(f"source does not exist: {source}")
+    _not_a_task(source_path, "verify_marker")
     if not _in_range(max_mutants, 1, 200) or int(max_mutants) != max_mutants:
         raise ToolInputError("max_mutants must be a whole number in [1, 200]")
     if detail not in _DETAILS:

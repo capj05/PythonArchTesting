@@ -1,0 +1,1 @@
+[{"id": "benz20_benesova", "violates": false, "reason": "Inventory keeps its state in _stock and enforces all rules itself, and shop.py touches it only via add, remove, quantity and items without accessing underscore attributes.", "explanation": ""}]

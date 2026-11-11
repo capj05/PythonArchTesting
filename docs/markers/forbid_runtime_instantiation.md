@@ -26,7 +26,7 @@ marker forbids the *creation* while still allowing the use.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `*modules` (positional) | `str` | — | Dotted module names whose classes must not be instantiated; each also covers its submodules. |
+| `*modules` (positional) | `str` | — | Dotted module names whose classes must not be instantiated, each also covering its submodules; or qualified class names (`"discounts.PercentDiscount"`), each forbidding that class only. A class the target builds that matches no reference class counts when it lives in the module of a named class and looks like one (a renamed or new strategy): a named class or one of its reference bases is among its bases, or it defines a public method named like one of theirs; a value class, a dataclass or an exception of that module that does neither, and a matched class not named, stay allowed. The likeness is by name only: a helper there with a method named like a named class's counts. |
 | `cases` | `list[dict]` | — | Call arguments that drive the code, see [Cases](../dynamic-checks.md#cases). |
 
 **Optional:**
@@ -82,6 +82,12 @@ repository:OrderRepository at service.py:18`. Worked example:
   `super().__init__()` chain.
 - Objects the case itself builds with `$new` are the caller's, not the
   target's, and do not count.
+- Each violation has a fact in `details.facts`, aligned 1:1 with
+  `details.violations`: `kind` (`instance`), `case`, `creator` (the target's
+  code the object is charged to, `module:qualname`), `class`
+  (`module:Class`), `file` and `line` (where the object was built), and
+  `via` (with `transitive=True` the code it was built through, outermost
+  first; else empty).
 
 ### Factories (`transitive=True`)
 

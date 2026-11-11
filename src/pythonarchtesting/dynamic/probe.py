@@ -23,11 +23,14 @@ import contextlib
 import dis
 import enum
 import importlib
+import importlib.abc
+import importlib.machinery
 import importlib.util
 import inspect
 import io
 import itertools
 import json
+import keyword
 import os
 import random
 import signal
@@ -43,10 +46,32 @@ _MISSING = object()
 # Frames running this file's own code (the write recorder's __setattr__
 # wrapper, the case runner) are not target code and not a layer.
 _PROBE_GLOBALS = globals()
+# ``importlib.import_module`` before the import recorder wraps it: the sibling
+# aliases load the package's module through it, which is no import the
+# target's code made.
+_IMPORT_MODULE = importlib.import_module
 
 
 class CaseSetupError(Exception):
-    """A case could not be prepared, so the target was never called."""
+    """A case could not be prepared, so the target was never called.
+
+    ``unresolved`` is the name a case's ``{"$new": ...}`` gave that the
+    target does not have (a class the reference has, so the case could run
+    there), else ``None``."""
+
+    def __init__(self, message: str, unresolved: str | None = None) -> None:
+        super().__init__(message)
+        self.unresolved = unresolved
+
+
+def _setup_failed(outcome: dict[str, Any], exc: CaseSetupError) -> dict[str, Any]:
+    """Mark ``outcome`` as a case that could not be prepared, naming the
+    unresolved ``$new`` (``unresolved``) when that was why."""
+    outcome["status"] = "error"
+    outcome["failures"].append(f"setup: {exc}")
+    if exc.unresolved is not None:
+        outcome["unresolved"] = exc.unresolved
+    return outcome
 
 
 class JobTimeout(BaseException):
@@ -85,7 +110,16 @@ def _resolve_name(name: str, namespace: dict[str, Any], package: str | None) -> 
         except ImportError as exc:
             raise CaseSetupError(f"cannot resolve {name!r}: {exc}") from exc
     else:
-        raise CaseSetupError(f"cannot resolve {name!r} in the target module")
+        # A root that is no package is on ``sys.path``: ``inventory.Inventory``
+        # names its top-level module ``inventory``.
+        try:
+            if not rest:
+                raise ImportError(name)
+            value = importlib.import_module(head)
+        except ImportError as exc:
+            raise CaseSetupError(
+                f"cannot resolve {name!r} in the target module"
+            ) from exc
     for part in rest.split(".") if rest else ():
         parent, value = value, getattr(value, part, _MISSING)
         if value is _MISSING and hasattr(parent, "__path__"):
@@ -185,7 +219,10 @@ def _build_value(value: Any, namespace: dict[str, Any], package: str | None) -> 
         }
         return _Spy(str(value["$spy"]), returns)
     if isinstance(value, dict) and "$new" in value:
-        factory = _resolve_name(str(value["$new"]), namespace, package)
+        try:
+            factory = _resolve_name(str(value["$new"]), namespace, package)
+        except CaseSetupError as exc:
+            raise CaseSetupError(str(exc), unresolved=str(value["$new"])) from exc
         for recorder in _RECORDING:
             recorder.wrap_loaded()
         args = [
@@ -257,7 +294,9 @@ class _Project:
     def classes(self) -> list[type]:
         """Classes defined in loaded project modules, bases before subclasses."""
         classes: list[type] = []
-        for module in list(sys.modules.values()):
+        # A module aliased under a second name (``_SiblingAliases``) once.
+        modules = {id(module): module for module in list(sys.modules.values())}
+        for module in modules.values():
             if self.relpath(getattr(module, "__file__", None)) is None:
                 continue
             for value in list(vars(module).values()):
@@ -269,6 +308,15 @@ class _Project:
                 ):
                     classes.append(value)
         return sorted(classes, key=lambda cls: len(cls.__mro__))
+
+    def modules(self) -> list[Any]:
+        """The loaded project modules, each once."""
+        modules = {id(module): module for module in list(sys.modules.values())}
+        return [
+            module
+            for module in modules.values()
+            if self.relpath(getattr(module, "__file__", None)) is not None
+        ]
 
 
 def _code_name(code: Any) -> str:
@@ -305,10 +353,13 @@ def _generated(code: Any) -> bool:
     return name.startswith("<") and not name.startswith("<frozen")
 
 
-def _c_callee(arg: Any) -> tuple[str, str] | None:
+def _c_callee(
+    arg: Any, watched: frozenset[str] = frozenset()
+) -> tuple[str, str] | None:
     """The module and name of a builtin or C function a frame calls.
 
-    ``None`` for what belongs to no layer: ``len()``, ``list.append()``.
+    ``None`` for what belongs to no layer: ``len()``, ``list.append()``; a
+    builtin in ``watched`` (``isinstance``) is reported under ``builtins``.
     """
     owner = getattr(arg, "__self__", None)
     module = getattr(arg, "__module__", None)
@@ -321,6 +372,8 @@ def _c_callee(arg: Any) -> tuple[str, str] | None:
         # I/O is a layer of its own: open() is io.open, and print()
         # and input() talk to the console.
         return io_module, str(name)
+    if name in watched and getattr(builtins, str(name), None) is arg:
+        return "builtins", str(name)
     if module == "builtins" or (name and getattr(builtins, name, None) is arg):
         # len(), print(), list.append() belong to no layer; open() is
         # a builtin too, although it reports _io as its module.
@@ -331,6 +384,17 @@ def _c_callee(arg: Any) -> tuple[str, str] | None:
         # pickle.dumps is _pickle.dumps; report the public module.
         module = module[1:]
     return str(module), str(getattr(arg, "__qualname__", arg))
+
+
+# The sys.monitoring tool ids to watch ``type()`` with, in order: 3 and 4 are
+# free for any tool; 0 (debugger), 1 (coverage), 2 (profiler) and 5
+# (optimizer) are taken last, the debugger's never first.
+_TOOL_IDS = (3, 4, 5, 2, 1, 0)
+
+
+def _monitoring() -> Any:
+    """``sys.monitoring``, or ``None`` before Python 3.12."""
+    return getattr(sys, "monitoring", None)
 
 
 class CallRecorder:
@@ -351,6 +415,12 @@ class CallRecorder:
     it carries the ``origin`` (that code) and the project code ``via`` which
     the call was reached, outermost first.
 
+    With ``builtins`` (and ``caller_module``) a call of one of those builtins
+    of no layer (``isinstance``, ``type``) counts as a call into
+    ``builtins``. ``type()`` is a class, which the profile hook does not see
+    called; from Python 3.12 ``sys.monitoring`` reports it, before that it
+    is not recorded.
+
     With ``external`` (and no ``caller_module``) a call from project code
     into a module outside the project counts as well, named by its top-level
     package and marked ``external``: the libraries the project uses. Only the
@@ -364,14 +434,18 @@ class CallRecorder:
         project: _Project | None = None,
         transitive: bool = False,
         external: bool = False,
+        builtins: Iterable[str] = (),
     ) -> None:
         self._caller = caller_module
+        self._builtins = frozenset(builtins)
         self._external = external and caller_module is None and project is not None
         self._package = package
         self._project = project
         self._transitive = transitive and project is not None
         self.calls: list[dict[str, Any]] = []
         self._seen: set[tuple[Any, ...]] = set()
+        # Watched calls that could not be seen, with why (``builtins.type``).
+        self.unobserved: dict[str, str] = {}
 
     def _note_through(self, caller: Any, module: str | None, callee: str) -> None:
         """Note a call by other code, if code of the caller module led to it."""
@@ -424,6 +498,12 @@ class CallRecorder:
             "caller": caller_name,
             "line": caller.f_lineno,
         }
+        file = (
+            self._project.relpath(caller.f_code.co_filename) if self._project else None
+        )
+        if file is not None:
+            # Where the call was made, relative to the target root.
+            call["file"] = file
         if local:
             call["local"] = True
         if external:
@@ -490,7 +570,7 @@ class CallRecorder:
                 note = self._note_through
             if note is None:
                 return
-            target = _c_callee(arg)
+            target = _c_callee(arg, self._builtins)
             if target is not None:
                 note(frame, target[0], target[1])
 
@@ -512,6 +592,52 @@ class CallRecorder:
         package = self._package
         return bool(package) and (module == package or module.startswith(f"{package}."))
 
+    def _on_call(self, code: Any, offset: int, called: Any, arg0: Any) -> None:
+        """A ``sys.monitoring`` call event: a call of ``type`` is noted as
+        the profile hook notes a builtin it sees called."""
+        _ = (code, offset, arg0)
+        if called is type:
+            self.profile(sys._getframe(1), "c_call", type)
+
+    @contextlib.contextmanager
+    def _watching_type(self) -> Iterator[None]:
+        """Report calls of ``type()``, which the profile hook does not see,
+        while ``builtins`` asks for them (Python 3.12+, a free tool id).
+        When they cannot be seen, ``unobserved`` says so: a verdict must not
+        silently depend on the interpreter."""
+        if "type" not in self._builtins or self._caller is None:
+            yield
+            return
+        monitoring = _monitoring()
+        if monitoring is None:
+            self.unobserved = {"builtins.type": "needs Python 3.12+ (sys.monitoring)"}
+            yield
+            return
+        tool = next((i for i in _TOOL_IDS if monitoring.get_tool(i) is None), None)
+        if tool is None:
+            self.unobserved = {"builtins.type": "no free sys.monitoring tool id"}
+            yield
+            return
+        claimed = False
+        try:
+            monitoring.use_tool_id(tool, "pythonarchtesting-probe")
+            claimed = True
+            monitoring.register_callback(tool, monitoring.events.CALL, self._on_call)
+            monitoring.set_events(tool, monitoring.events.CALL)
+            yield
+        finally:
+            # Each step on its own: a JobTimeout in one must not leak the id.
+            try:
+                if claimed:
+                    monitoring.set_events(tool, 0)
+            finally:
+                try:
+                    if claimed:
+                        monitoring.register_callback(tool, monitoring.events.CALL, None)
+                finally:
+                    if claimed:
+                        monitoring.free_tool_id(tool)
+
     @contextlib.contextmanager
     def watching(self) -> Iterator[None]:
         # threading.setprofile covers threads the target starts meanwhile.
@@ -520,7 +646,8 @@ class CallRecorder:
         sys.setprofile(self.profile)
         threading.setprofile(self.profile)
         try:
-            yield
+            with self._watching_type():
+                yield
         finally:
             sys.setprofile(previous)
             threading.setprofile(previous_threads)
@@ -673,6 +800,9 @@ class WriteRecorder:
         # Container id (a __dict__ included) -> ids of the watched instances
         # holding it; a C method of the container can change only those.
         self._held: dict[int, set[int]] = {}
+        # Watched instance id -> the module global that holds it (``world.BAG``),
+        # for an instance the case reaches only through that global.
+        self._holders: dict[int, str] = {}
         # Library frames handed a watched object or container, compared on return.
         self._library: set[Any] = set()
 
@@ -682,7 +812,13 @@ class WriteRecorder:
         ``roots`` (the case's arguments, the instance a method runs on) and
         the project instances they hold are watched for changes that bypass
         ``__setattr__``; instances built while the case runs are added as
-        they are.
+        they are. So are the project instances the project's modules hold in
+        their global variables (``world.BAG``, or one in a dict ``world.ROOMS``
+        holds), which code reaches without getting them as an argument; a
+        write to one of them names that global (``held_by``). The label is
+        taken here, at the start of the case: an object a global gets while
+        the case runs has none, and one moved from one global to another
+        keeps the first.
         """
         self.install()
         self.writes = []
@@ -690,13 +826,42 @@ class WriteRecorder:
         self._classes = set(self._project.classes())
         self._watched = {}
         self._held = {}
+        self._holders = {}
         self._library = set()
-        self._collect(roots)
+        visited: set[int] = set()
+        self._collect(roots, visited)
+        self._collect_globals(visited)
         self.active = True
 
-    def _collect(self, roots: Iterable[Any]) -> None:
+    def _collect_globals(self, visited: set[int]) -> None:
+        """Watch the project instances held in the project modules' globals.
+
+        A global holding an instance itself comes before one holding it in a
+        container, so the instance is named by the global that holds it.
+        """
+        direct: list[tuple[str, Any]] = []
+        nested: list[tuple[str, Any]] = []
+        for module in self._project.modules():
+            local = _local_module(getattr(module, "__name__", None), self._package)
+            for name, value in list(vars(module).items()):
+                if name.startswith("__") or isinstance(
+                    value, (types.ModuleType, type, types.FunctionType)
+                ):
+                    continue
+                label = f"{local}.{name}"
+                if type(value) in self._classes:
+                    direct.append((label, value))
+                elif isinstance(value, (list, tuple, set, frozenset, dict)) and (
+                    len(value) <= _CONTENT_LIMIT
+                ):
+                    nested.append((label, value))
+        for label, value in direct + nested:
+            self._collect([value], visited, label)
+
+    def _collect(
+        self, roots: Iterable[Any], visited: set[int], label: str | None = None
+    ) -> None:
         pending = [(root, 0) for root in roots]
-        visited: set[int] = set()
         while pending:
             obj, depth = pending.pop()
             if id(obj) in visited or depth > _WATCH_DEPTH:
@@ -704,6 +869,8 @@ class WriteRecorder:
             visited.add(id(obj))
             if type(obj) in self._classes:
                 self._watch(obj)
+                if label is not None:
+                    self._holders[id(obj)] = label
                 values = list(getattr(obj, "__dict__", {}).values())
             elif isinstance(obj, (list, tuple, set, frozenset)):
                 values = list(obj)
@@ -939,16 +1106,18 @@ class WriteRecorder:
         if key in self._seen:
             return
         self._seen.add(key)
-        self.writes.append(
-            {
-                "class": owner,
-                "attribute": name,
-                "writer": writer,
-                "file": relpath,
-                "line": frame.f_lineno,
-                "change": change,
-            }
-        )
+        write = {
+            "class": owner,
+            "attribute": name,
+            "writer": writer,
+            "file": relpath,
+            "line": frame.f_lineno,
+            "change": change,
+        }
+        holder = self._holders.get(id(obj))
+        if holder is not None:
+            write["held_by"] = holder
+        self.writes.append(write)
 
 
 _WATCH_DEPTH = 3  # how deep the case's arguments are searched for instances
@@ -1009,9 +1178,10 @@ def _origin_chain(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
     """The code of ``origin_module`` up the stack from ``frame``, and the way there.
 
-    Returns the origin (``from``, ``caller``) and the project code ``via``
-    which it reached ``frame``, outermost first, ``frame`` included; ``None``
-    when no code of ``origin_module`` is on the stack.
+    Returns the origin (``from``, ``caller``, and ``line``, the line of that
+    code the way out starts at) and the project code ``via`` which it reached
+    ``frame``, outermost first, ``frame`` included; ``None`` when no code of
+    ``origin_module`` is on the stack.
     """
     via: list[dict[str, Any]] = []
     while frame is not None:
@@ -1026,6 +1196,7 @@ def _origin_chain(
             origin = {
                 "from": _local_module(origin_module, package),
                 "caller": _code_name(frame.f_code),
+                "line": frame.f_lineno,
             }
             return origin, via
         if in_project(frame):
@@ -1144,11 +1315,51 @@ class InstanceRecorder:
             "file": relpath,
             "line": frame.f_lineno,
         }
+        instance.update(self._shape(cls))
         if self._origin is not None and _module_of(frame) != self._origin:
             chain = _origin_chain(frame, self._origin, self._package, self._in_project)
             if chain is not None:
                 instance["origin"], instance["via"] = chain
         self.instances.append(instance)
+
+    def _shape(self, cls: type) -> dict[str, Any]:
+        """What tells a class the reference lacks apart from another
+        strategy: its project bases as ``[module, qualname]`` (``bases``),
+        the public methods it or a project base defines (``methods``), and
+        whether it is an exception (``exception``; ``classes`` leaves those
+        unwrapped, so it is never set today)."""
+        shape: dict[str, Any] = {}
+        if issubclass(cls, BaseException):
+            shape["exception"] = True
+        project = [
+            klass
+            for klass in cls.__mro__
+            if self._project.relpath(_class_file(klass)) is not None
+        ]
+        bases = [
+            [_local_module(klass.__module__, self._package), klass.__qualname__]
+            for klass in project
+            if klass is not cls
+        ]
+        if bases:
+            shape["bases"] = bases
+        methods = sorted(
+            {
+                name
+                for klass in project
+                for name, value in vars(klass).items()
+                if not name.startswith("_")
+                and (callable(value) or isinstance(value, (staticmethod, classmethod)))
+            }
+        )
+        if methods:
+            shape["methods"] = methods
+        return shape
+
+
+def _class_file(cls: type) -> str | None:
+    """The file of the module that defines ``cls``, if it has one."""
+    return getattr(sys.modules.get(cls.__module__), "__file__", None)
 
 
 class ImportRecorder:
@@ -1511,9 +1722,7 @@ def _inspect_class(
             for k, v in (case.get("kwargs") or {}).items()
         }
     except CaseSetupError as exc:
-        outcome["status"] = "error"
-        outcome["failures"].append(f"setup: {exc}")
-        return outcome
+        return _setup_failed(outcome, exc)
     outcome["abstract"] = bool(inspect.isabstract(cls))
     outcome["abstract_methods"] = sorted(getattr(cls, "__abstractmethods__", ()))
     if observe.get("singleton") is not None:
@@ -1533,9 +1742,7 @@ def _inspect_class(
     try:
         _run_steps(obj, list(case.get("steps") or []), namespace, package)
     except CaseSetupError as exc:
-        outcome["status"] = "error"
-        outcome["failures"].append(f"setup: {exc}")
-        return outcome
+        return _setup_failed(outcome, exc)
     _SPY_CALLS.clear()
     members: dict[str, Any] = {}
     for name in observe.get("names") or []:
@@ -1678,7 +1885,42 @@ def _run_to_completion(result: Any) -> None:
         result.close()
 
 
+@contextlib.contextmanager
+def _case_stdin(case: dict[str, Any]) -> Iterator[None]:
+    """Give the target the case's ``stdin`` text as its keyboard while it runs.
+
+    ``input()`` and ``sys.stdin`` read that text; what the case leaves unread
+    is dropped, and reading past its end raises ``EOFError``. The original
+    ``sys.stdin`` comes back afterwards, so the text never reaches another
+    case. A case without ``stdin`` keeps the probe's own, already exhausted,
+    stdin.
+    """
+    if "stdin" not in case:
+        yield
+        return
+    original = sys.stdin
+    sys.stdin = io.StringIO(str(case["stdin"]))
+    try:
+        yield
+    finally:
+        sys.stdin = original
+
+
 def _run_case(
+    index: int,
+    case: dict[str, Any],
+    request: dict[str, Any],
+    module: Any,
+    package: str | None,
+    writes: WriteRecorder | None = None,
+    instances: InstanceRecorder | None = None,
+) -> dict[str, Any]:
+    """Run one case with its ``stdin``; see :func:`_observe_case`."""
+    with _case_stdin(case):
+        return _observe_case(index, case, request, module, package, writes, instances)
+
+
+def _observe_case(
     index: int,
     case: dict[str, Any],
     request: dict[str, Any],
@@ -1773,9 +2015,7 @@ def _run_case(
     except CaseSetupError as exc:
         if instances is not None:
             instances.stop()
-        outcome["status"] = "error"
-        failures.append(f"setup: {exc}")
-        return outcome
+        return _setup_failed(outcome, exc)
 
     # Internal keys used by the runtime enforce_flow check: "capture_stages"
     # runs the reference and reports the project calls each flow stage makes;
@@ -1792,9 +2032,18 @@ def _run_case(
             None, package, project, external=bool(observe.get("external"))
         )
     elif observe.get("calls") == "transitive":
-        calls = CallRecorder(module.__name__, package, project, transitive=True)
+        calls = CallRecorder(
+            module.__name__,
+            package,
+            project,
+            transitive=True,
+            builtins=observe.get("builtins") or (),
+        )
     elif observe.get("calls"):
-        calls = CallRecorder(module.__name__, package)
+        # The project only names the file of each call here.
+        calls = CallRecorder(
+            module.__name__, package, project, builtins=observe.get("builtins") or ()
+        )
     tracing = bool(capture or flow_calls)
     if tracing and project is None:
         project = _Project(os.path.dirname(str(module.__file__)), package)
@@ -1827,9 +2076,7 @@ def _run_case(
             else:
                 _run_to_completion(func(*args, **kwargs))
     except CaseSetupError as exc:
-        outcome["status"] = "error"
-        failures.append(f"setup: {exc}")
-        return outcome
+        return _setup_failed(outcome, exc)
     except JobTimeout:
         raise
     except BaseException as exc:  # SystemExit included: report, do not die
@@ -1849,6 +2096,8 @@ def _run_case(
         outcome["lines"] = coverage
     if calls is not None:
         outcome["calls"] = calls.calls
+        if calls.unobserved:
+            outcome["unobserved"] = dict(calls.unobserved)
     if writes is not None and observe.get("writes"):
         outcome["writes"] = list(writes.writes)
     if instances is not None and observe.get("instances"):
@@ -1930,6 +2179,8 @@ def _run_job(
     cases: list[dict[str, Any]] = []
     captured = _Captured()
     timed_out = False
+    # A late interrupt can land before a case puts its stdin back.
+    stdin = sys.stdin
     with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
         # The re-firing timer can interrupt anywhere until the deadline context
         # has disarmed it, including inside the inner handler; the outer
@@ -1956,6 +2207,7 @@ def _run_job(
                 timed_out = timed_out or deadline["fired"]
         except JobTimeout:
             timed_out = True
+    sys.stdin = stdin
     result: dict[str, Any] = {
         "status": "timeout" if timed_out else "completed",
         "cases": cases,
@@ -1975,10 +2227,102 @@ def _reset_random() -> None:
     random.seed(0)
 
 
+def _stand_in_package(root: str, package: str) -> None:
+    """An empty package for a root without ``__init__.py`` (a beginner left it
+    out, but the modules import relatively): imported as if the file were
+    there and empty, never through whatever else on ``sys.path`` bears the
+    root's name."""
+    if package in sys.modules or os.path.isfile(os.path.join(root, "__init__.py")):
+        return
+    spec = importlib.machinery.ModuleSpec(package, None, is_package=True)
+    spec.submodule_search_locations = [root]
+    stand_in = importlib.util.module_from_spec(spec)
+    stand_in.__path__ = [root]
+    sys.modules[package] = stand_in
+
+
+def _sibling_names(root: str, package: str) -> set[str]:
+    """The modules and subpackages of the package that an absolute import
+    may name (``from inventory import X`` inside it), as a beginner who runs
+    the code from inside the directory writes it.
+
+    A name is left out when it would shadow anything else: a standard-library
+    module (``sys.stdlib_module_names``, also one not importable here), a
+    module already imported, or one the interpreter finds on its own path (an
+    installed distribution). Such a sibling is reachable only relatively or
+    through the package's name, and the absolute import gets the other module.
+    Runs before the root's parent goes on ``sys.path``, so the package's own
+    neighbours are no reason to leave a name out.
+    """
+    names: set[str] = set()
+    for entry in sorted(os.listdir(root)):
+        path = os.path.join(root, entry)
+        if entry.endswith(".py") and os.path.isfile(path):
+            name = entry[:-3]
+        elif os.path.isdir(path) and any(
+            item.endswith(".py") for item in os.listdir(path)
+        ):
+            name = entry
+        else:
+            continue
+        if (
+            name in ("__init__", package)
+            or not name.isidentifier()
+            or keyword.iskeyword(name)
+            or name in sys.modules
+            or name in sys.stdlib_module_names
+            or name in sys.builtin_module_names
+        ):
+            continue
+        try:
+            found = importlib.util.find_spec(name)
+        except (ImportError, ValueError):
+            continue
+        if found is None:
+            names.add(name)
+    return names
+
+
+class _SiblingAliases(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """Resolve an absolute import of a sibling module to the package's module.
+
+    ``import inventory`` inside package ``pkg`` loads ``pkg.inventory`` and
+    binds the same module object under ``inventory`` too: one module, so its
+    classes are the ones the cases construct (``$new``) and ``isinstance``
+    sees. ``inventory.sub`` likewise becomes ``pkg.inventory.sub``. Only the
+    names of ``_sibling_names``; anything else is left to the other finders.
+    """
+
+    def __init__(self, package: str, names: set[str]) -> None:
+        self._package = package
+        self._names = frozenset(names)
+        self._specs: dict[str, Any] = {}
+
+    def find_spec(self, fullname: str, path: Any = None, target: Any = None) -> Any:
+        if fullname.partition(".")[0] not in self._names:
+            return None
+        return importlib.machinery.ModuleSpec(fullname, self)
+
+    def create_module(self, spec: Any) -> Any:
+        module = _IMPORT_MODULE(f"{self._package}.{spec.name}")
+        self._specs[spec.name] = module.__spec__
+        return module
+
+    def exec_module(self, module: Any) -> None:
+        # The import system set the alias's spec on the module; it keeps its own.
+        alias = module.__spec__.name
+        module.__spec__ = self._specs.pop(alias)
+
+
 def _import_target(request: dict[str, Any]) -> tuple[Any, str | None]:
     _reset_random()
     root = request["target_root"]
     package = request.get("package")
+    if package:
+        _stand_in_package(root, package)
+        names = _sibling_names(root, package)
+        if names:
+            sys.meta_path.insert(0, _SiblingAliases(package, names))
     sys.path.insert(0, os.path.dirname(root) if package else root)
     module_path = request["module_path"]
     if package:
@@ -1986,6 +2330,7 @@ def _import_target(request: dict[str, Any]) -> tuple[Any, str | None]:
             module = _import_without_parents(root, package, module_path)
             if module is not None:
                 return module, package
+            _stand_in_package(root, package)
         module_path = f"{package}.{module_path}" if module_path else package
     return importlib.import_module(module_path), package
 
@@ -2013,10 +2358,19 @@ def _import_without_parents(root: str, package: str, module_path: str) -> Any:
     try:
         return importlib.import_module(f"{package}.{module_path}")
     except Exception:  # noqa: BLE001 - any failure: fall back to a plain import
-        for name in list(sys.modules):
-            if name == package or name.startswith(f"{package}."):
+        # Also the aliases (``_SiblingAliases``) bound to the package's
+        # modules: the plain import must not find the first attempt's module
+        # under a sibling's name and load a second one under the package's.
+        for name, module in list(sys.modules.items()):
+            if _in_package(name, package) or _in_package(
+                str(getattr(module, "__name__", "")), package
+            ):
                 del sys.modules[name]
         return None
+
+
+def _in_package(name: str, package: str) -> bool:
+    return name == package or name.startswith(f"{package}.")
 
 
 def main() -> int:

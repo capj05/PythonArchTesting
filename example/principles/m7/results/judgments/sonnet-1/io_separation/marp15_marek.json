@@ -1,0 +1,1 @@
+[{"id": "marp15_marek", "violates": false, "reason": "All input() and print() calls are in app.main; grades.py functions take parameters and return values with no I/O.", "explanation": ""}]

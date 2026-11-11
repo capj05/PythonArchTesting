@@ -17,8 +17,15 @@ example/*
 !example/llm_authoring/
 !example/matching_weights/
 !example/sonarqube/
+!example/principles/
 example/llm_solutions/generated/
 example/llm_judge/program*/
+# Principle pilot: agents' solutions, injected variants, the judges' inputs
+example/principles/pilot/*/solutions/
+example/principles/pilot/*/injected/
+example/principles/pilot/*/whole/
+# M6 evaluation: realistic solutions, findings, the tool's reports
+example/principles/m6/data/
 # SonarQube run state: credentials, scanned copies, raw issues (T6)
 example/sonarqube/.state/
 example/project_1/reports/

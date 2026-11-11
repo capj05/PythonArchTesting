@@ -1,0 +1,1 @@
+[{"id":"benz20_benesova","violates":false,"reason":"All logic in grades.py takes parameters and returns values; input() and print() occur only in main.","explanation":""}]

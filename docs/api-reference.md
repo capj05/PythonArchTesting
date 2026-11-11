@@ -12,7 +12,6 @@ Supported symbols under `pythonarchtesting.state`:
 - `ValidationStatus`
 - `ValidationResult`
 - `rule_result_to_validation`
-- `MemoryManager`
 - `ModuleDiscovery`
 
 Supported symbols under `pythonarchtesting.runner`:
@@ -104,6 +103,7 @@ documented in [pattern-recipes.md](pattern-recipes.md).
 | `require_runtime_calls(...)` | Runtime check: require calls into the named modules | Function- or method-body `__archtest__: Annotated[...]` |
 | `enforce_reference_calls(...)` | Runtime check: reproduce the reference's call graph | Function- or method-body `__archtest__: Annotated[...]` |
 | `forbid_foreign_writes(...)` | Runtime check: forbid attribute writes on foreign objects | Function- or method-body `__archtest__: Annotated[...]` |
+| `forbid_private_access(...)` | Forbid reading another object's private (`_x`) attributes from outside its class | Function- or method-body `__archtest__: Annotated[...]` |
 | `forbid_runtime_instantiation(...)` | Runtime check: forbid building injected collaborators internally | Function- or method-body `__archtest__: Annotated[...]` |
 | `require_runtime_delegation(...)` | Runtime check: require delegation to an injected spy | Function- or method-body `__archtest__: Annotated[...]` |
 | `forbid_runtime_imports(...)` | Runtime check: forbid modules imported when the module loads | Module-level `__archtest__: Annotated[...]` |
@@ -1852,7 +1852,7 @@ rule type `runtime_calls`, evidence type `runtime`.
 | Option | Type | Default | Meaning |
 |--------|------|---------|---------|
 | `*modules` | `str` | required | Module names, with their submodules |
-| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
+| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods), `steps`, `stdin` ([Cases](dynamic-checks.md#cases)) |
 | `allow` | `list[str] \| None` | `None` | `forbid_runtime_calls` only: exemptions under a listed name |
 | `transitive` | `bool` | `False` | `forbid_runtime_calls` only: also count calls other project code makes while the target runs |
 | `through` | `list[str] \| None` | `None` | With `transitive=True`: modules whose code may make the call on the target's behalf |
@@ -1899,7 +1899,8 @@ Result `details`:
 - `stderr_tail`: the last 2000 characters the target wrote to stdout or stderr
 
 Invalid declarations (no modules, `allow` on `require_runtime_calls`, empty
-`cases`, case keys other than `args`/`kwargs`/`init`, `init` on a function,
+`cases`, case keys other than `args`/`kwargs`/`init`/`steps`/`stdin`, a
+`stdin` that is not a string, `init` on a function,
 `timeout_s` out of range) are dropped at compile time and surface as a
 `compiler_invalid_param` result.
 
@@ -1924,7 +1925,7 @@ Rule id: `DYN001/enforce_reference_calls/v1`, rule type
 
 | Option | Type | Default | Meaning |
 |--------|------|---------|---------|
-| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
+| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods), `steps`, `stdin` ([Cases](dynamic-checks.md#cases)) |
 | `require_all` | `bool` | `False` | Also require every reference edge |
 | `allow_new_modules` | `bool` | `False` | Fold modules the reference lacks into the modules that call them |
 | `init` | `dict \| None` | `None` | Methods only: default constructor arguments |
@@ -1957,7 +1958,7 @@ Rule id: `DYN004/forbid_runtime_instantiation/v1`, rule type
 | Option | Type | Default | Meaning |
 |--------|------|---------|---------|
 | `*modules` | `str` | required | Module names, with their submodules |
-| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
+| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods), `steps`, `stdin` ([Cases](dynamic-checks.md#cases)) |
 | `allow` | `list[str] \| None` | `None` | Exemptions under a listed name |
 | `transitive` | `bool` | `False` | Also count objects other project code builds while the target runs |
 | `through` | `list[str] \| None` | `None` | With `transitive=True`: modules whose code may build them |
@@ -2043,7 +2044,7 @@ evidence type `runtime`.
 
 | Option | Type | Default | Meaning |
 |--------|------|---------|---------|
-| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods) |
+| `cases` | `list[dict]` | required | Call arguments only: `args`, `kwargs`, `init` (methods), `steps`, `stdin` ([Cases](dynamic-checks.md#cases)) |
 | `init` | `dict \| None` | `None` | Methods only: default constructor arguments |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]` |
 | `severity` | `str` | `"error"` | Violation severity |
@@ -2061,6 +2062,29 @@ Non-goals in v1:
 - No changes inside objects an attribute holds other than builtin containers,
   or inside containers nested in them (`obj.rows[0].append(x)`)
 - No exceptions, enums, or classes outside the analysed project
+
+### `forbid_private_access(...)`
+
+See also: [markers/forbid_private_access.md](markers/forbid_private_access.md).
+
+Encapsulation checked statically. The matched target function or method may
+not read an attribute starting with an underscore (not a dunder) of an object
+other than its own `self`/`cls`, unless it is a method of the class that
+defines the attribute. Names bound to modules (`module._helper`) and writes
+(left to `forbid_foreign_writes`) are not reported. Runs without `--dynamic`.
+
+Rule id: `ENC001/forbid_private_access/v1`, rule type `private_access`,
+evidence type `static`.
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `allow` | `list[str] \| None` | `None` | Attribute names that may be read anyway |
+| `severity` | `str` | `"error"` | Violation severity |
+| `message` | `str \| None` | `None` | Custom message override |
+
+Result `details.facts` lists, aligned 1:1 with `details.violations`, `kind`
+(`read`), `attribute`, `class` (from the parameter's annotation, else
+`null`), `file`, `line` and `reader` per private read.
 
 ### `forbid_runtime_imports(...)`
 

@@ -172,7 +172,7 @@ def _layers(program: Path) -> tuple[list[list[str]], set[str], list[str]]:
     from pythonarchtesting.runner.source_prep import prepare_source
 
     state = prepare_source(
-        config=load_config(cli_args={}, discover_from_cwd=False),
+        config=load_config(discover_from_cwd=False),
         source_path=(program / "reference").resolve(),
     )
     rule = next(

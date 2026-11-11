@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w002",
+    "violates": false,
+    "reason": "Stav je v soukromém atributu _stock, shop.py pracuje se skladem jen přes add, remove, quantity a items.",
+    "explanation": ""
+  },
+  {
+    "id": "w011",
+    "violates": true,
+    "reason": "Funkce restock v shop.py zapisuje přímo do soukromého atributu inventory._stock a obchází pravidla třídy Inventory.",
+    "explanation": "Funkce restock v modulu shop.py mění stav skladu přímo přes inventory._stock[item] = ... a obchází veřejnou metodu add. Tím se pravidla skladu (kladné množství, kontrola v jednom místě uvnitř třídy) dají obejít a změna vnitřního uložení v Inventory by vyžadovala úpravu shop.py. Přesně to zadání zakazuje: shop.py smí se skladem pracovat jen přes veřejné metody."
+  },
+  {
+    "id": "w012",
+    "violates": true,
+    "reason": "Funkce clear_out v shop.py maže položku přímo z inventory._stock místo veřejné metody remove.",
+    "explanation": "Funkce clear_out v modulu shop.py volá del inventory._stock[item], tedy přímo mutuje soukromý stav třídy Inventory. Pravidla skladu obsažená v metodě remove (kontroly, odstranění položky s nulovým zůstatkem na jednom místě) se tak obejdou a vnitřní uložení už nelze změnit bez úpravy shop.py. Zadání výslovně požaduje, aby shop.py používal jen add, remove, quantity a items."
+  },
+  {
+    "id": "w015",
+    "violates": true,
+    "reason": "Funkce report v shop.py čte soukromý atribut inventory._stock místo veřejné metody items.",
+    "explanation": "Funkce report v modulu shop.py načítá stav přes inventory._stock, tedy zvenku sahá na atribut začínající podtržítkem. Zadání přitom pro čtení určuje veřejnou metodu items. Vnitřní reprezentace skladu se tím stane součástí rozhraní pro shop.py, takže změna uložení v Inventory by rozbila i report. Porušení je věcné, i když výsledek funkce je správný."
+  }
+]

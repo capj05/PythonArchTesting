@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w005",
+    "violates": false,
+    "reason": "Logika (parse_grades, average, format_summary) je v grades.py bez vstupu a výstupu a main jen čte řádek, volá logiku a vypisuje výsledek.",
+    "explanation": ""
+  },
+  {
+    "id": "w011",
+    "violates": true,
+    "reason": "format_summary v grades.py volá print a výsledek nevrací, takže sestavení souhrnu je výstup uvnitř logiky.",
+    "explanation": "Funkce format_summary v modulu grades.py zapisuje text přímo na standardní výstup místo aby vracela řetězec. Modul logiky tak nelze použít v jiném programu nebo na webu bez toho, aby se vypisovalo do konzole, a nelze ji otestovat bez zachycení výstupu. Sestavení věty souhrnu přitom patří mezi logiku a má být jen vrácená hodnota, kterou main vypíše."
+  },
+  {
+    "id": "w020",
+    "violates": true,
+    "reason": "Funkce main počítá průměr a sestavuje větu souhrnu sama, takže tato logika je smíšena s výstupem a nelze ji znovu použít; format_summary v grades.py zůstává nepoužitá.",
+    "explanation": "V main se počítá average = sum(grades) / len(grades) a sestavuje se text souhrnu přímo v print, tedy výpočet a sestavení věty jsou v I/O funkci místo v grades.py. Modul grades.py přitom obsahuje format_summary, která tutéž větu umí vrátit, ale main ji nevolá, takže logika existuje na dvou místech. Výpočet průměru tak nelze vyzkoušet ani použít bez spuštění main a klávesnice."
+  },
+  {
+    "id": "w025",
+    "violates": true,
+    "reason": "Funkce main počítá průměr a vypisuje souhrn sama, zatímco format_summary v grades.py je nepoužitý duplikát tohoto výpočtu.",
+    "explanation": "V main se počítá average = sum(grades) / len(grades) a výsledná věta se skládá v print, takže výpočet a sestavení souhrnu jsou v I/O funkci místo v modulu logiky. Funkce format_summary a average v grades.py dělají totéž, ale main je nevolá, a logika je tak zdvojená a nelze ji použít samostatně. Vyzkoušet výpočet proto vyžaduje spustit main se vstupem z klávesnice."
+  }
+]

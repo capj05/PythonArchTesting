@@ -347,37 +347,15 @@ def _normalize_report_section(
     report_section["schema_version"] = schema_version
 
 
-def _reject_removed_runtime_cli_args(cli_args: Dict[str, Any]) -> None:
-    removed_flags = {
-        "runtime_max_probe_modules": "--runtime-max-probe-modules",
-        "runtime_fast": "--runtime-fast",
-        "runtime_allow_unsafe_probes": "--allow-unsafe-probes",
-        "runtime_isolation": "--runtime-isolation",
-    }
-    used = []
-    for key, flag in removed_flags.items():
-        value = cli_args.get(key)
-        if value not in (None, False):
-            used.append(flag)
-    if used:
-        joined = ", ".join(sorted(used))
-        raise ConfigurationError(
-            "Runtime options are no longer supported in static-only mode: "
-            f"{joined}. Remove these flags and use static analysis inputs only.",
-            error_code="CONFIG_RUNTIME_FLAGS_REMOVED",
-        )
-
-
 def load_config(
     *,
     config_path: Optional[str] = None,
-    cli_args: Optional[Dict[str, Any]] = None,
     discover_from_cwd: bool = False,
     cwd: str | Path | None = None,
     warning_sink: Callable[[ConfigLoadWarning], None] | None = None,
 ) -> Config:
     """
-    Load configuration from files and CLI arguments.
+    Load configuration from the packaged defaults and an optional config file.
 
     This function performs explicit configuration loading without any
     import-time side effects. It can be called multiple times with
@@ -386,7 +364,6 @@ def load_config(
 
     Args:
         config_path: Optional path to custom configuration file
-        cli_args: Optional CLI arguments dictionary
         discover_from_cwd: Enable config auto-discovery from the current
             working directory or the provided ``cwd``
         cwd: Directory to search when ``discover_from_cwd`` is enabled
@@ -398,9 +375,6 @@ def load_config(
     Raises:
         ConfigurationError: If configuration is invalid or cannot be loaded
     """
-    cli_args = cli_args or {}
-    _reject_removed_runtime_cli_args(cli_args)
-
     # Start with empty configuration
     config_dict: Dict[str, Dict[str, Any]] = {}
 
@@ -434,10 +408,6 @@ def load_config(
             custom_config = _load_config_file(str(auto_config_path))
             _merge_config_dicts(config_dict, custom_config)
 
-    # Apply CLI arguments (highest priority)
-    if cli_args:
-        _apply_cli_args(config_dict, cli_args)
-
     # Apply defaults and validate
     validated_config = _apply_defaults_and_validate(
         config_dict,
@@ -466,41 +436,3 @@ def _merge_config_dicts(
         if section_name not in base:
             base[section_name] = {}
         base[section_name].update(section_data)
-
-
-def _apply_cli_args(
-    config_dict: Dict[str, Dict[str, Any]], cli_args: Dict[str, Any]
-) -> None:
-    """
-    Apply CLI arguments to configuration dictionary.
-
-    Args:
-        config_dict: Configuration dictionary (modified in-place)
-        cli_args: CLI arguments dictionary
-    """
-    # Map common CLI arguments to configuration keys
-    cli_mapping = {
-        "verbose": ("logging", "level", "DEBUG"),
-        "quiet": ("logging", "level", "ERROR"),
-        "timeout": ("performance", "default_timeout"),
-        "output_format": ("reporting", "output_formats"),
-    }
-
-    for cli_key, value in cli_args.items():
-        if cli_key in cli_mapping and value is not None:
-            mapping = cli_mapping[cli_key]
-            if len(mapping) == 3:
-                section, key, transform = mapping
-                # Only apply verbose/quiet flags when they are True
-                if cli_key in ["verbose", "quiet"] and not value:
-                    continue
-                if transform == "DEBUG" and value:
-                    value = "DEBUG"
-                elif transform == "ERROR" and value:
-                    value = "ERROR"
-            else:
-                section, key = mapping
-
-            if section not in config_dict:
-                config_dict[section] = {}
-            config_dict[section][key] = _serialize_config_value(value)

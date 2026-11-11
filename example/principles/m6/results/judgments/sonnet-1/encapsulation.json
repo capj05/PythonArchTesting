@@ -1,0 +1,5 @@
+[
+{"id":"dvop02_dvorak","violates":false,"reason":"Stav je v _stock uvnitř Inventory a shop.py používá jen veřejné metody remove, add, quantity a items.","explanation":""},
+{"id":"novj01_novak","violates":false,"reason":"Pravidla skladu hlídá Inventory nad privátním _stock a shop.py sahá na sklad jen přes veřejné metody.","explanation":""},
+{"id":"svoe03_svoboda","violates":false,"reason":"Stav je privátní a shop.py ho čte i mění výhradně přes veřejné metody Inventory.","explanation":""}
+]

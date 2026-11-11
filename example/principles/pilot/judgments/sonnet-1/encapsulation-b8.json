@@ -1,0 +1,6 @@
+[
+{"id":"w027","violates":false,"reason":"shop.py pracuje se skladem jen přes veřejné metody a pravidla jsou v Inventory.","explanation":""},
+{"id":"w029","violates":true,"reason":"clear_out v shop.py přímo maže z soukromého atributu inventory._stock.","explanation":"Funkce clear_out sahá zvenku na atribut _stock (del inventory._stock[item]) místo volání veřejné metody remove. Obchází pravidla skladu uvnitř Inventory a závisí na vnitřním uložení dat, takže změna reprezentace by rozbila shop.py."},
+{"id":"w031","violates":false,"reason":"shop.py používá pouze veřejné metody add, remove, quantity a items, stav je soukromý.","explanation":""},
+{"id":"w033","violates":false,"reason":"shop.py pracuje jen přes veřejné rozhraní Inventory a stav zůstává v soukromém _stock.","explanation":""}
+]

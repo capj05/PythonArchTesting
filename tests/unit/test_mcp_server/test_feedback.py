@@ -210,3 +210,57 @@ def test_issues_total_counts_every_violation_not_the_capped_list():
     )
 
     assert feedback(result)["issues_total"] == 40
+
+
+def test_feedback_uses_facts_for_runtime_rules():
+    texts = [
+        "case 0: shop:sell sets Inventory._stock at shop.py:10",
+        "case 1: shop:sell changes what is held in Inventory.log at shop.py:11",
+    ]
+    facts = [
+        {
+            "kind": "write",
+            "case": 0,
+            "change": "assigned",
+            "writer": "shop:sell",
+            "class": "Inventory",
+            "attribute": "_stock",
+            "file": "shop.py",
+            "line": 10,
+        },
+        {
+            "kind": "write",
+            "case": 1,
+            "change": "mutated",
+            "writer": "shop:sell",
+            "class": "Inventory",
+            "attribute": "log",
+            "file": "shop.py",
+            "line": 11,
+        },
+    ]
+    result = _result(
+        "DYN004/forbid_foreign_writes/v1",
+        {"summary": texts[0] + " (+1 more)", "violations": texts, "facts": facts},
+    )
+
+    issues = feedback(result)["issues"]
+
+    assert [issue["kind"] for issue in issues] == ["write", "write"]
+    assert [issue["text"] for issue in issues] == texts
+    assert issues[1]["attribute"] == "log"
+    assert issues[1]["change"] == "mutated"
+    assert feedback(result)["issues_total"] == 2
+
+
+def test_feedback_falls_back_to_the_texts_when_facts_do_not_line_up():
+    texts = ["case 0: a calls db:x (line 1)", "case 1: a calls db:y (line 2)"]
+    facts = [{"kind": "call", "case": 0, "callee": "db:x", "line": 1}]
+    result = _result(
+        "DYN001/forbid_runtime_calls/v1",
+        {"summary": texts[0], "violations": texts, "facts": facts},
+    )
+
+    assert feedback(result)["issues"] == [
+        {"kind": "violation", "text": text} for text in texts
+    ]

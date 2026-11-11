@@ -185,14 +185,8 @@ def _maybe_config_snapshot(
                 return normalized_snapshot
     sections = (
         "discovery",
-        "reporting",
-        "files",
-        "performance",
-        "memory",
-        "import",
         "logging",
         "report",
-        "error_handling",
         "projects",
         "matching",
     )
@@ -960,6 +954,7 @@ def _build_run_report_document(
         config_fingerprint=_config_fingerprint(config_snapshot),
         tool_version=run_state.framework_version,
         mode=_analysis_mode(run_state),
+        principle=run_state.principle,
     )
 
     target_id_map = normalize_target_ids(

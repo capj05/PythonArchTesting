@@ -19,6 +19,7 @@ from .nominal_type import (
     compile_not_subclass_of,
     compile_subclass_of,
 )
+from .private_access import compile_forbid_private_access
 from .protocols import compile_implements_protocol
 from .python_modifiers import (
     compile_is_abstract_class,
@@ -54,6 +55,7 @@ __all__ = [
     "compile_module_interface",
     "compile_does_not_have",
     "compile_forbid_foreign_writes",
+    "compile_forbid_private_access",
     "compile_forbid_runtime_calls",
     "compile_enforce_reference_calls",
     "compile_enforce_runtime_observer",

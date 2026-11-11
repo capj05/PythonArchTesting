@@ -28,6 +28,8 @@ classifiers = [
 
 dependencies = [
     "typing-extensions>=4.0.0",
+    # The principle catalogue is TOML; Python 3.10 has no tomllib.
+    'tomli>=2; python_version < "3.11"',
 ]
 
 [project.optional-dependencies]
@@ -88,7 +90,7 @@ package-dir = {"" = "src"}
 "share/pythonarchtesting/markers" = ["docs/markers/*.md"]
 
 [tool.setuptools.package-data]
-pythonarchtesting = ["*.conf"]
+pythonarchtesting = ["*.conf", "principles/catalog/*.toml"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

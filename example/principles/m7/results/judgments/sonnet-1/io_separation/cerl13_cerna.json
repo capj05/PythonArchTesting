@@ -1,0 +1,1 @@
+[{"id": "cerl13_cerna", "violates": false, "reason": "All parsing, averaging and formatting in grades.py take parameters and return values; input() and print() occur only in main.", "explanation": ""}]

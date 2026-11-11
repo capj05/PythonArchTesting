@@ -1,0 +1,26 @@
+[
+  {
+    "id": "w007",
+    "violates": true,
+    "reason": "parse_grades ignores its text parameter and reads the line itself via input(), so the parsing logic is tied to the keyboard.",
+    "explanation": "Funkce parse_grades(text) má dostat řádek jako parametr, ale místo toho ho přepíše hodnotou z input(\"Zadej známky: \") a sama čte z klávesnice; parametr text je zcela ignorován. Navíc main volá parse_grades(\"\"), takže se do logiky míchá vstup i výstup (prompt). Výsledkem je, že logiku v grades.py nelze použít na webu ani v jiném programu bez klávesnice a nelze ji otestovat s daty, což je přesně to, čemu má princip zabránit."
+  },
+  {
+    "id": "w014",
+    "violates": false,
+    "reason": "parse_grades, average and format_summary only take data and return results; all input and print calls are in main.",
+    "explanation": ""
+  },
+  {
+    "id": "w021",
+    "violates": false,
+    "reason": "parse_grades, average and format_summary receive data as parameters and return results without any input or output; reading and printing are confined to main.",
+    "explanation": ""
+  },
+  {
+    "id": "w023",
+    "violates": false,
+    "reason": "grades.py contains no input or print calls; parse_grades takes the text as a parameter and returns the list, and app.py alone reads and prints.",
+    "explanation": ""
+  }
+]

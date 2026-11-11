@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+import ast
+from pathlib import Path
+from typing import Any, Optional
 
 from pythonarchtesting.architecture.compare import fold_new_modules
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult, RuleStatus
@@ -9,6 +11,7 @@ from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 
 from .messages import _build_rule_result
+from .type_tests import TypeTests
 
 _SUPPORTED_TARGET_KINDS = frozenset({"function", "method"})
 
@@ -35,6 +38,72 @@ def _describe_call(call: dict[str, Any]) -> str:
     )
 
 
+def _call_fact(index: Any, call: dict[str, Any]) -> dict[str, Any]:
+    """The structured form of a call ``_describe_call`` puts in words.
+
+    ``caller`` is the target's code the call is charged to; for a detour
+    ``via`` lists the code it went through (outermost first), ``origin_line``
+    is the line of the target's code the detour starts at (``None`` for a
+    direct call), and ``file`` and ``line`` say where the call itself was made.
+    """
+    origin, caller = _started_by(call)
+    via = (call.get("via") or []) if call.get("origin") else []
+    return {
+        "kind": "call",
+        "case": index,
+        "caller": f"{origin}:{caller}",
+        "callee": f"{call.get('module')}:{call.get('callee')}",
+        "file": call.get("file"),
+        "line": call.get("line"),
+        "via": [f"{step.get('module')}:{step.get('caller')}" for step in via],
+        "origin_line": (call.get("origin") or {}).get("line"),
+    }
+
+
+# The builtins a static check (``cover_module``) recognises by their bare
+# name or as ``builtins.x`` / ``io.open``, as (module, name) the probe
+# records them under.
+_STATIC_BUILTINS = {
+    "print": ("builtins", "print"),
+    "input": ("builtins", "input"),
+    "open": ("io", "open"),
+    "builtins.print": ("builtins", "print"),
+    "builtins.input": ("builtins", "input"),
+    "builtins.open": ("io", "open"),
+    "io.open": ("io", "open"),
+}
+
+
+def _static_callee(func: ast.expr) -> Optional[str]:
+    """``print`` of ``print(...)``, ``io.open`` of ``io.open(...)``."""
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        return f"{func.value.id}.{func.attr}"
+    return None
+
+
+def _rebound_names(tree: ast.AST) -> set[str]:
+    """The names a module binds anywhere: by an import, a ``def`` or
+    ``class``, an assignment or a parameter. A bare ``print`` of such a module
+    may not be the builtin (``from rich import print``), so the static check
+    does not take it for one; the set errs on the side of names bound only
+    locally."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names.update(
+                alias.asname or alias.name.split(".")[0] for alias in node.names
+            )
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            names.add(node.id)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+    return names
+
+
 _WRITE_VERBS = {
     "assigned": "sets",
     "mutated": "changes what is held in",
@@ -53,10 +122,33 @@ def _started_by(call: dict[str, Any]) -> tuple[Any, Any]:
 
 def _describe_write(write: dict[str, Any]) -> str:
     verb = _WRITE_VERBS.get(str(write.get("change", "assigned")), "sets")
+    held = f" (held in {write['held_by']})" if write.get("held_by") else ""
     return (
-        f"{write.get('writer')} {verb} {write.get('class')}.{write.get('attribute')} "
-        f"at {write.get('file')}:{write.get('line')}"
+        f"{write.get('writer')} {verb} {write.get('class')}.{write.get('attribute')}"
+        f"{held} at {write.get('file')}:{write.get('line')}"
     )
+
+
+def _write_fact(index: Any, write: dict[str, Any]) -> dict[str, Any]:
+    """The structured form of a write ``_describe_write`` puts in words.
+
+    ``held_by`` names the module global (``world.BAG``) that held the object,
+    itself or inside it, when the case started, for an object the case
+    reached only through it; a write to an argument has none. It is no
+    detour (``via``): the write is the function's own."""
+    fact = {
+        "kind": "write",
+        "case": index,
+        "change": str(write.get("change", "assigned")),
+        "writer": write.get("writer"),
+        "class": write.get("class"),
+        "attribute": write.get("attribute"),
+        "file": write.get("file"),
+        "line": write.get("line"),
+    }
+    if write.get("held_by"):
+        fact["held_by"] = write["held_by"]
+    return fact
 
 
 def _line_ranges(lines: list[int]) -> str:
@@ -108,6 +200,16 @@ def _raised_note(cases: list[dict[str, Any]]) -> str:
     return (
         f"; case {raised.get('index')} raised {raised['raised']}, "
         "so the code after it was not checked"
+    )
+
+
+def _unobserved_note(details: dict[str, Any]) -> str:
+    """Which calls the rule names could not be seen, and why."""
+    unobserved = details.get("unobserved_calls") or {}
+    if not unobserved:
+        return ""
+    return "; not observable: " + ", ".join(
+        f"{name}() ({why})" for name, why in unobserved.items()
     )
 
 
@@ -167,6 +269,12 @@ class _ObservingEvaluator:
     # rule's entity belongs to; set by ``evaluate``.
     _names = NameTranslation([])
     _source_module: str | None = None
+    _target_name: str = ""
+    _target_file: str | None = None
+    _target_module: str = ""
+    # ``module.Class`` of every class of the reference; set by ``evaluate``.
+    _reference_classes: frozenset[str] = frozenset()
+    _source_by_id: dict[str, Any] = {}
 
     def _own(self, module: Any, code: Any) -> bool:
         """Whether ``code`` of the target's ``module`` plays the rule module's part.
@@ -236,7 +344,17 @@ class _ObservingEvaluator:
         from pythonarchtesting.dynamic.runner import run_cases
 
         self._names = NameTranslation.from_context(ctx)
+        self._source_by_id = getattr(ctx, "source_by_id", None) or {}
+        self._reference_classes = frozenset(
+            f"{entity.module_path}.{entity.qualname}"
+            for entity in self._source_by_id.values()
+            if getattr(entity, "kind", None) == "class"
+        )
+        self._target_root = ctx.target_root
         self._source_module = source.module_path
+        self._target_name = f"{target.module_path}:{target.qualname}"
+        self._target_file = str(target.filepath_rel)
+        self._target_module = str(target.module_path)
         batched = ctx.dynamic_cache.get(cache_key(rule, target))
         details["batched"] = batched is not None
         outcome = batched or run_cases(
@@ -290,11 +408,13 @@ class _ObservingEvaluator:
             details["coverage"] = coverage
         violations = self._violations(rule, outcome.cases, details)
         if not violations:
+            details.pop("facts", None)
             details["reason"] = "no_violations"
             details["summary"] = (
                 self._passed_summary(rule, len(cases))
                 + _raised_note(outcome.cases)
                 + _coverage_note(coverage)
+                + _unobserved_note(details)
             )
             return _build_rule_result(rule, source, target, match, "OK", details, ())
         details["violations"] = violations
@@ -315,7 +435,13 @@ class RuntimeCallsEvaluator(_ObservingEvaluator):
         through = [str(name) for name in rule.params.get("through") or []]
         details["modules"] = modules
         violations: list[str] = []
+        # One fact per violation, in the same order (B1 F3).
+        facts: list[dict[str, Any]] = []
+        # A call of isinstance or type counts only where it tests a type.
+        root = getattr(self, "_target_root", None)
+        type_tests = TypeTests(Path(root) if root is not None else None)
         for case in cases:
+            index = case.get("index")
             calls = [
                 call
                 for call in case.get("calls") or []
@@ -327,18 +453,101 @@ class RuntimeCallsEvaluator(_ObservingEvaluator):
                         raised = case.get("raised")
                         suffix = f"; the call raised {raised}" if raised else ""
                         violations.append(
-                            f"case {case.get('index')}: no direct call into "
+                            f"case {index}: no direct call into "
                             f"{module}{suffix}{_missed_in_case(case)}"
+                        )
+                        facts.append(
+                            {
+                                "kind": "missing_call",
+                                "case": index,
+                                "module": self._names.target_module(module),
+                                "reference_module": module,
+                                "raised": raised or None,
+                            }
                         )
                 continue
             for call in calls:
                 if self._hits(call, allow) or self._passes_through(call, through):
                     continue
-                if self._hits(call, modules):
-                    violations.append(
-                        f"case {case.get('index')}: {_describe_call(call)}"
-                    )
+                if self._hits(call, modules) and type_tests.is_type_test(
+                    f"{call.get('module')}:{call.get('callee')}",
+                    call.get("file"),
+                    call.get("line"),
+                ):
+                    violations.append(f"case {index}: {_describe_call(call)}")
+                    facts.append(_call_fact(index, call))
+        if rule.params.get("cover_module") and rule.params.get("mode") != "require":
+            for fact in self._uncovered_calls(modules, allow):
+                violations.append(
+                    f"static: {fact['caller']} calls {fact['callee']} (line "
+                    f"{fact['line']}), in a function no reference entity matches"
+                )
+                facts.append(fact)
+        details["facts"] = facts
+        unobserved: dict[str, str] = {}
+        for case in cases:
+            unobserved.update(case.get("unobserved") or {})
+        if unobserved:
+            # The cases ran, but some calls the rule names could not be seen
+            # on this interpreter: the verdict holds without them.
+            details["unobserved_calls"] = dict(sorted(unobserved.items()))
         return violations
+
+    def _uncovered_calls(
+        self, modules: list[str], allow: list[str]
+    ) -> list[dict[str, Any]]:
+        """``cover_module``: the calls of a builtin the rule forbids
+        (``print``, ``input``, ``open``) in the body of each top-level public
+        function of the target's module that no reference entity matches,
+        as static facts. No case runs such a function, so only its own body
+        is read: a call it makes through a helper of another module is not
+        seen, nor a method of a class the target adds. A bare name the module
+        rebinds (``from rich import print``) is not the builtin."""
+        root = getattr(self, "_target_root", None)
+        if root is None or not self._target_file:
+            return []
+        try:
+            tree = ast.parse(
+                (Path(root) / self._target_file).read_text(encoding="utf-8")
+            )
+        except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+            return []
+        module = self._target_module
+        rebound = _rebound_names(tree)
+        facts: list[dict[str, Any]] = []
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name.startswith("_") or self._names.source_name(module, node.name):
+                continue
+            for call in sorted(
+                (n for n in ast.walk(node) if isinstance(n, ast.Call)),
+                key=lambda n: (n.lineno, n.col_offset),
+            ):
+                name = _static_callee(call.func) or ""
+                callee = _STATIC_BUILTINS.get(name)
+                if callee is None or name in rebound:
+                    continue
+                qualified = ".".join(callee)
+                if any(_in_module(qualified, prefix) for prefix in allow) or not any(
+                    _in_module(qualified, prefix) for prefix in modules
+                ):
+                    continue
+                facts.append(
+                    {
+                        "kind": "call",
+                        "case": None,
+                        "caller": f"{module}:{node.name}",
+                        "callee": ":".join(callee),
+                        "file": self._target_file,
+                        "line": call.lineno,
+                        "via": [],
+                        "origin_line": None,
+                        "static": True,
+                        "function_line": node.lineno,
+                    }
+                )
+        return facts
 
     def _layer(self, call: dict[str, Any]) -> str:
         """The reference module of the code a recorded call went into."""
@@ -370,12 +579,14 @@ class RuntimeWritesEvaluator(_ObservingEvaluator):
     def _violations(
         self, rule: Rule, cases: list[dict[str, Any]], details: dict[str, Any]
     ) -> list[str]:
-        _ = rule, details
-        return [
-            f"case {case.get('index')}: {_describe_write(write)}"
+        _ = rule
+        found = [
+            (case.get("index"), write)
             for case in cases
             for write in case.get("writes") or []
         ]
+        details["facts"] = [_write_fact(index, write) for index, write in found]
+        return [f"case {index}: {_describe_write(write)}" for index, write in found]
 
     def _passed_summary(self, rule: Rule, case_count: int) -> str:
         _ = rule
@@ -397,11 +608,46 @@ def _describe_instance(instance: dict[str, Any]) -> str:
     )
 
 
+def _instance_fact(index: Any, instance: dict[str, Any]) -> dict[str, Any]:
+    """The structured form of an instance ``_describe_instance`` puts in words.
+
+    ``creator`` is the target's code the object is charged to; for one built
+    by other code on its behalf ``via`` lists that code (outermost first), and
+    ``file`` and ``line`` say where the object itself was built.
+    """
+    origin = instance.get("origin")
+    creator = (
+        f"{origin.get('from')}:{origin.get('caller')}"
+        if origin
+        else instance.get("creator")
+    )
+    via = (instance.get("via") or []) if origin else []
+    return {
+        "kind": "instance",
+        "case": index,
+        "creator": creator,
+        "class": f"{instance.get('module')}:{instance.get('class')}",
+        "file": instance.get("file"),
+        "line": instance.get("line"),
+        "via": [f"{step.get('module')}:{step.get('caller')}" for step in via],
+    }
+
+
 class RuntimeInstancesEvaluator(_ObservingEvaluator):
     """Evaluator for ``forbid_runtime_instantiation``.
 
     The probe reports every project class instantiated by project code; only
-    objects created by code of the target's own module count here.
+    objects created by code of the target's own module count here. A name in
+    ``modules`` is a module (each of its classes counts) or a class
+    (``module.Class``, by its name in the reference). A class the target
+    builds that no reference class matches (a renamed one, or one of its
+    own) counts when it lives in the module of a class ``modules`` names and
+    looks like one of them: it has one of them or one of their reference
+    bases (the interface) among its bases, or defines a public method of the
+    same name as one of theirs (``apply``). The reference cannot name it; a
+    class of the module that is no such class (a value ``Money``, a
+    dataclass, an exception) and a matched class the rule does not name (a
+    ``Log`` beside the strategies) stay allowed.
     """
 
     def _violations(
@@ -411,12 +657,26 @@ class RuntimeInstancesEvaluator(_ObservingEvaluator):
         allow = [str(name) for name in rule.params.get("allow") or []]
         through = [str(name) for name in rule.params.get("through") or []]
         own = str(details.get("target_module"))
+        # The modules of the classes ``modules`` names, for a target's class
+        # the reference has no counterpart of.
+        class_modules = {
+            name.rpartition(".")[0]
+            for name in modules
+            if name in self._reference_classes
+        }
+        kin, methods = self._class_kin(
+            [name for name in modules if name in self._reference_classes]
+        )
         violations: list[str] = []
+        # One fact per violation, in the same order.
+        facts: list[dict[str, Any]] = []
         for case in cases:
             for instance in case.get("instances") or []:
-                name = self._names.source_module(
-                    str(instance.get("module")), str(instance.get("class"))
-                )
+                module, cls = str(instance.get("module")), str(instance.get("class"))
+                name = self._names.source_module(module, cls)
+                # The class by its reference name: a target may name a class.
+                source = self._names.source_name(module, cls)
+                full = ".".join(source) if source else f"{name}.{cls}"
                 origin = instance.get("origin")
                 if origin:
                     # Built by other code on the target's behalf (transitive).
@@ -433,11 +693,62 @@ class RuntimeInstancesEvaluator(_ObservingEvaluator):
                         continue
                 if any(_in_module(name, prefix) for prefix in allow):
                     continue
-                if any(_in_module(name, prefix) for prefix in modules):
+                if any(_in_module(full, prefix) for prefix in modules) or (
+                    source is None
+                    and name in class_modules
+                    and self._looks_like(instance, kin, methods)
+                ):
                     violations.append(
                         f"case {case.get('index')}: {_describe_instance(instance)}"
                     )
+                    facts.append(_instance_fact(case.get("index"), instance))
+        details["facts"] = facts
         return violations
+
+    def _class_kin(self, classes: list[str]) -> tuple[set[str], set[str]]:
+        """The reference classes ``classes`` names with their reference
+        bases, and the public methods those define."""
+        entities = list((getattr(self, "_source_by_id", None) or {}).values())
+        by_name = {
+            f"{e.module_path}.{e.qualname}": e
+            for e in entities
+            if getattr(e, "kind", None) == "class"
+        }
+        kin: set[str] = set()
+        todo = list(classes)
+        while todo:
+            name = todo.pop()
+            if name in kin or name not in by_name:
+                continue
+            kin.add(name)
+            todo.extend(str(b) for b in (by_name[name].extras or {}).get("bases") or [])
+        methods = {
+            e.qualname.rpartition(".")[2]
+            for e in entities
+            if getattr(e, "kind", None) == "method"
+            and f"{e.module_path}.{e.qualname.rpartition('.')[0]}" in kin
+            and not e.qualname.rpartition(".")[2].startswith("_")
+        }
+        return kin, methods
+
+    def _looks_like(
+        self, instance: dict[str, Any], kin: set[str], methods: set[str]
+    ) -> bool:
+        """Whether a built class no reference class matches is one of
+        ``kin`` (by a base) or shares a public method with them; an exception
+        never is."""
+        if instance.get("exception"):
+            return False
+        for module, qualname in instance.get("bases") or []:
+            source = self._names.source_name(str(module), str(qualname))
+            full = (
+                ".".join(source)
+                if source
+                else f"{self._names.source_module(str(module), str(qualname))}.{qualname}"
+            )
+            if full in kin:
+                return True
+        return bool(methods & set(instance.get("methods") or []))
 
     def _passed_summary(self, rule: Rule, case_count: int) -> str:
         modules = ", ".join(rule.params.get("modules") or [])
@@ -814,7 +1125,76 @@ def _observer_violations(rule: Rule, case: dict[str, Any]) -> list[str]:
     return violations
 
 
-def _delegation_violations(rule: Rule, case: dict[str, Any]) -> list[str]:
+def spy_holder(tree: ast.Module, owner: str, init: Any, spy: str) -> Optional[str]:
+    """What the constructor of class ``owner`` (its qualname) keeps the spy
+    named ``spy`` in, given ``init`` (``{"args": [...], "kwargs": {...}}``):
+    ``self.x`` for ``self.x = p`` (or ``self.x: T = p``), else the parameter
+    ``p`` itself; ``None`` when the class, its ``__init__`` or the spy is not
+    found."""
+    if not isinstance(init, dict):
+        return None
+    body: list[ast.stmt] = tree.body
+    cls: Optional[ast.ClassDef] = None
+    for part in owner.split("."):
+        cls = next(
+            (n for n in body if isinstance(n, ast.ClassDef) and n.name == part), None
+        )
+        if cls is None:
+            return None
+        body = cls.body
+    constructor = next(
+        (
+            n
+            for n in body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name == "__init__"
+        ),
+        None,
+    )
+    if constructor is None:
+        return None
+    positional = [a.arg for a in constructor.args.posonlyargs + constructor.args.args]
+    if not positional:
+        return None
+    self_name, names = positional[0], positional[1:]
+
+    def is_spy(value: Any) -> bool:
+        return isinstance(value, dict) and value.get("$spy") == spy
+
+    given = list(zip(names, init.get("args") or []))
+    given += list((init.get("kwargs") or {}).items())
+    param = next((name for name, value in given if is_spy(value)), None)
+    if param is None:
+        return None
+    for node in ast.walk(constructor):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target: ast.expr = node.targets[0]
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            target = node.target
+        else:
+            continue
+        if (
+            isinstance(target, ast.Attribute)
+            and isinstance(target.value, ast.Name)
+            and target.value.id == self_name
+            and isinstance(node.value, ast.Name)
+            and node.value.id == param
+        ):
+            return f"{self_name}.{target.attr}"
+    return str(param)
+
+
+def _delegation_violations(
+    rule: Rule,
+    case: dict[str, Any],
+    caller: str,
+    facts: list[dict[str, Any]],
+    holder: Optional[str] = None,
+) -> list[str]:
+    """The case's violation, if it never delegated; its fact (``caller`` is
+    the target as ``module:qualname``) is appended to ``facts``. Its
+    ``expected`` names where the target keeps the spy (``holder``, such as
+    ``self.discount``), else the spy."""
     spy = str(rule.params.get("spy"))
     member = rule.params.get("member")
     calls = [
@@ -827,6 +1207,15 @@ def _delegation_violations(rule: Rule, case: dict[str, Any]) -> list[str]:
     target = f"{spy}.{member}()" if member else spy
     raised = case.get("raised")
     suffix = f"; the call raised {raised}" if raised else ""
+    facts.append(
+        {
+            "kind": "missing_delegation",
+            "case": case.get("index"),
+            "caller": caller,
+            "expected": f"{holder or spy}.{member}" if member else holder or spy,
+            "raised": raised or None,
+        }
+    )
     return [
         f"case {case.get('index')}: never delegated to "
         f"{target}{suffix}{_missed_in_case(case)}"
@@ -842,17 +1231,42 @@ class RuntimePatternEvaluator(_ObservingEvaluator):
     def _violations(
         self, rule: Rule, cases: list[dict[str, Any]], details: dict[str, Any]
     ) -> list[str]:
-        _ = details
         pattern = rule.params.get("pattern")
         violations: list[str] = []
+        facts: list[dict[str, Any]] = []
+        holder = (
+            self._spy_holder(rule) if pattern not in ("singleton", "observer") else None
+        )
         for case in cases:
             if pattern == "singleton":
                 violations.extend(_singleton_violations(case))
             elif pattern == "observer":
                 violations.extend(_observer_violations(rule, case))
             else:
-                violations.extend(_delegation_violations(rule, case))
+                violations.extend(
+                    _delegation_violations(rule, case, self._target_name, facts, holder)
+                )
+        if pattern not in ("singleton", "observer"):
+            # Only delegation reports facts (one per violation).
+            details["facts"] = facts
         return violations
+
+    def _spy_holder(self, rule: Rule) -> Optional[str]:
+        """Where the target's constructor keeps the spy (``spy_holder``), read
+        from the target's code; ``None`` when it cannot be told."""
+        root = getattr(self, "_target_root", None)
+        qualname = self._target_name.partition(":")[2]
+        owner = qualname.rpartition(".")[0]
+        file = self._target_file
+        if root is None or not owner or not file:
+            return None
+        try:
+            tree = ast.parse((Path(root) / str(file)).read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+            return None
+        return spy_holder(
+            tree, owner, rule.params.get("init"), str(rule.params.get("spy"))
+        )
 
     def _passed_summary(self, rule: Rule, case_count: int) -> str:
         pattern = rule.params.get("pattern")

@@ -697,3 +697,191 @@ def test_joining_new_threads_gives_up_after_the_grace_period(
     assert worker.is_alive()
     release.set()
     worker.join()
+
+
+def _forget(*prefixes: str) -> None:
+    for name in list(sys.modules):
+        if name.split(".")[0] in prefixes:
+            del sys.modules[name]
+
+
+def test_sibling_names_never_shadow_another_module(tmp_path: Path) -> None:
+    package = tmp_path / "zz_student"
+    (package / "zz_domain").mkdir(parents=True)
+    (package / "zz_domain" / "model.py").write_text("", encoding="utf-8")
+    (package / "__pycache__").mkdir()
+    for name in (
+        "__init__",
+        "zz_inventory",
+        "json",
+        "calendar",
+        "pytest",
+        "zz_student",
+    ):
+        (package / f"{name}.py").write_text("", encoding="utf-8")
+    (package / "not-a-name.py").write_text("", encoding="utf-8")
+
+    names = probe._sibling_names(str(package), "zz_student")
+
+    # json and calendar: the standard library's; pytest: installed.
+    assert names == {"zz_domain", "zz_inventory"}
+
+
+def test_sibling_aliases_bind_one_module_under_both_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A package without ``__init__.py`` whose modules import each other
+    absolutely: one module object, so the classes are the same."""
+    import importlib
+
+    package = tmp_path / "zz_student"
+    (package / "zz_domain").mkdir(parents=True)
+    (package / "zz_domain" / "model.py").write_text(
+        "class Item:\n    pass\n", encoding="utf-8"
+    )
+    (package / "zz_inventory.py").write_text(
+        "from zz_domain.model import Item\n\nclass Inventory:\n    pass\n",
+        encoding="utf-8",
+    )
+    (package / "zz_shop.py").write_text(
+        "import zz_inventory\nfrom zz_inventory import Inventory\n", encoding="utf-8"
+    )
+    names = probe._sibling_names(str(package), "zz_student")
+    monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
+    monkeypatch.setattr(
+        sys, "meta_path", [probe._SiblingAliases("zz_student", names), *sys.meta_path]
+    )
+    try:
+        probe._stand_in_package(str(package), "zz_student")
+        shop = importlib.import_module("zz_student.zz_shop")
+        inventory = importlib.import_module("zz_student.zz_inventory")
+        model = importlib.import_module("zz_student.zz_domain.model")
+
+        assert shop.Inventory is inventory.Inventory
+        assert shop.zz_inventory is inventory
+        assert sys.modules["zz_inventory"] is inventory
+        assert inventory.Item is model.Item
+        assert sys.modules["zz_domain.model"] is model
+        # Each module keeps its own spec, not the alias's.
+        assert inventory.__spec__.name == "zz_student.zz_inventory"
+        assert sys.modules["zz_student"].__path__ == [str(package)]
+    finally:
+        _forget("zz_student", "zz_inventory", "zz_shop", "zz_domain")
+
+
+def test_an_unresolvable_new_names_what_the_case_references() -> None:
+    """The case's ``$new`` names a class the submission lacks: the setup
+    error says which, so the result can name the missing entity."""
+    with pytest.raises(probe.CaseSetupError) as raised:
+        probe._build_value({"$new": "zz_nowhere.Inventory", "args": []}, {}, None)
+
+    assert raised.value.unresolved == "zz_nowhere.Inventory"
+
+
+def test_a_setup_error_of_another_kind_names_nothing() -> None:
+    assert probe.CaseSetupError("steps need an instance").unresolved is None
+
+
+def test_the_imports_fallback_leaves_no_second_module_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``mode="imports"`` first loads the module without its package's
+    ``__init__.py``; a module that needs the package's names falls back to a
+    plain import. A sibling the first attempt aliased (``import
+    zz_inventory``) must not survive into the second as another module."""
+    import importlib
+
+    package = tmp_path / "zz_student"
+    package.mkdir()
+    (package / "__init__.py").write_text("VERSION = 1\n", encoding="utf-8")
+    (package / "zz_inventory.py").write_text(
+        "class Inventory:\n    pass\n", encoding="utf-8"
+    )
+    (package / "zz_shop.py").write_text(
+        "import zz_inventory\nfrom . import VERSION\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    monkeypatch.setattr(sys, "meta_path", list(sys.meta_path))
+    try:
+        shop, _ = probe._import_target(
+            {
+                "target_root": str(package),
+                "package": "zz_student",
+                "module_path": "zz_shop",
+                "mode": "imports",
+            }
+        )
+        inventory = importlib.import_module("zz_student.zz_inventory")
+
+        assert shop.zz_inventory is inventory
+        assert sys.modules["zz_inventory"] is inventory
+    finally:
+        _forget("zz_student", "zz_inventory", "zz_shop")
+
+
+_WORLD = """
+class Sack:
+    def __init__(self):
+        self.things = []
+
+    def add(self, thing):
+        self.things.append(thing)
+
+
+class Room:
+    def __init__(self):
+        self.things = []
+
+
+SACK = Sack()
+ROOMS = {"hall": Room()}
+here = ROOMS["hall"]
+"""
+
+_ACTIONS = """
+import world_mod
+
+
+def take(word):
+    world_mod.SACK.add(word)
+    world_mod.SACK.things.append(word)
+    world_mod.here.things.append(word)
+
+
+def stuff(sack):
+    sack.things.append(1)
+"""
+
+
+def test_write_recorder_watches_objects_module_globals_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = _module(_WORLD, "world_mod", str(tmp_path / "world_mod.py"), monkeypatch)
+    actions = _module(
+        _ACTIONS, "actions_mod", str(tmp_path / "actions_mod.py"), monkeypatch
+    )
+    recorder = probe.WriteRecorder(str(tmp_path))
+
+    # No argument holds the sack or the room: the module globals do. The
+    # method's own change is no foreign write; a global holding the object
+    # itself names it before a dict that holds it too.
+    recorder.start(["lamp"])
+    with recorder.watching():
+        actions.take("lamp")
+    recorder.active = False
+
+    assert [
+        (w["class"], w["attribute"], w["change"], w.get("held_by"))
+        for w in recorder.writes
+    ] == [
+        ("Sack", "things", "mutated", "world_mod.SACK"),
+        ("Room", "things", "mutated", "world_mod.here"),
+    ]
+
+    # An object the case passes is an argument's, even when a global holds it.
+    recorder.start([world.SACK])
+    with recorder.watching():
+        actions.stuff(world.SACK)
+    recorder.active = False
+
+    assert [(w["class"], w.get("held_by")) for w in recorder.writes] == [("Sack", None)]

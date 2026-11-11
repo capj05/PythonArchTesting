@@ -1,0 +1,8 @@
+{
+ "student": "fial21_fiala",
+ "model": "opus",
+ "variant": "no-principle",
+ "run": 1,
+ "pilot": "/home/jirka/git/PythonArchTesting/.worktrees/pc-b/example/principles/pilot",
+ "init": true
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "id": "proa11_prochazka",
+    "violates": false,
+    "reason": "Stav skladu je uložen v privátním atributu `_stock`, který se mimo třídu nepoužívá, a `shop.py` pracuje výhradně přes veřejné metody `add`, `remove`, `quantity` a `items`.",
+    "explanation": ""
+  }
+]

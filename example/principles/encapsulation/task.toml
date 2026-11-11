@@ -1,0 +1,28 @@
+# The task: the catalogue principle `encapsulation` bound to the unannotated
+# model solution in `reference/` (see ../io_separation/task.toml and
+# docs/tasks.md).
+
+principle = "encapsulation"
+
+[roles]
+owner = ["inventory.Inventory"]
+# A module stands for its top-level public functions: sell, restock,
+# clear_out and report.
+client = ["shop"]
+
+[cases]
+# An inventory whose state the function really changes; for sell also a
+# quantity the inventory refuses.
+"shop.sell" = [
+    { args = [{ "$new" = "inventory.Inventory", args = [{ jablko = 5 }] }, "jablko", 2] },
+    { args = [{ "$new" = "inventory.Inventory", args = [{ jablko = 1 }] }, "jablko", 3] },
+]
+"shop.restock" = [
+    { args = [{ "$new" = "inventory.Inventory", args = [{ jablko = 1 }] }, { jablko = 4, "hruška" = 2 }] },
+]
+"shop.clear_out" = [
+    { args = [{ "$new" = "inventory.Inventory", args = [{ jablko = 3, "hruška" = 1 }] }, "jablko"] },
+]
+"shop.report" = [
+    { args = [{ "$new" = "inventory.Inventory", args = [{ jablko = 3, "hruška" = 1 }] }] },
+]

@@ -1,0 +1,6 @@
+[
+{"id":"w007","violates":true,"reason":"parse_grades ignores its text parameter and reads the line itself via input(), while main passes an empty string.","explanation":"Funkce parse_grades v grades.py přepisuje svůj parametr text voláním input(\"Zadej známky: \"), takže si data čte z klávesnice a vypisuje výzvu místo toho, aby zpracovala předaný text. Logiku pak nelze použít na webu ani otestovat bez klávesnice a main je jen předstírá předáním prázdného řetězce. Čtení vstupu má patřit pouze do main."},
+{"id":"w014","violates":false,"reason":"All input() and print() calls are in main; grades.py functions take parameters and return or raise.","explanation":""},
+{"id":"w021","violates":false,"reason":"grades.py is pure; input and output are only in main.","explanation":""},
+{"id":"w023","violates":false,"reason":"grades.py is pure; input and output are only in main.","explanation":""}
+]

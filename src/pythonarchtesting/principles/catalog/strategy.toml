@@ -1,0 +1,184 @@
+# Catalogue entry; see io_separation.toml for the format notes.
+
+id = "strategy"
+name = "Interchangeable behaviour passed in from outside"
+level = "basic"
+
+summary = """
+A part of a job that can be done in several ways is passed in as an object or
+a function with the same interface: each way is a class with the same method,
+or a function with the same parameters. The code that does the job gets it
+from outside (as a parameter of its constructor) and calls it; it neither
+builds it itself nor asks which way it was given.
+"""
+
+why = """
+A new way is then one new class or function, and the code doing the job does
+not change.
+Code that computes every way by itself, or branches on which way was chosen,
+has to be extended for every new one. Code that builds its object itself is
+stuck with that one way: it cannot be given another, in the program or in a
+test.
+"""
+
+[roles]
+context = "the methods that do the job: they get the interchangeable object from outside and call it"
+strategy = "the interchangeable classes (or functions): each does that part of the job in its own way, through the same interface"
+
+[[checks]]
+role = "context"
+marker = "require_runtime_delegation"
+# `modules` holds the name of the spy (`{"$spy" = "strategy"}`) the cases put
+# in place of the interchangeable object, here through `init`; any call of the
+# spy counts, a call of a method of it or of the spy itself (so the check names
+# no method).
+modules = ["strategy"]
+cases = "for every context method ordinary inputs, each of which reaches the part of the job the interchangeable object does; the object is a spy named `strategy` given to the constructor (`init`, `{\"$spy\" = \"strategy\"}`)"
+
+[[checks]]
+role = "context"
+marker = "forbid_runtime_instantiation"
+# Its targets are the classes bound to `strategy` (not the rest of their
+# modules). Building the object of the context counts, so a constructor that
+# makes its own interchangeable object instead of keeping the one given is
+# seen. When `strategy` binds only functions, nothing can be built: the
+# check is not applicable.
+target_role = "strategy"
+cases = "the same cases and the same spy given to the constructor; objects the case builds (`$new`) are not counted"
+
+[[checks]]
+role = "context"
+marker = "forbid_runtime_calls"
+modules = ["builtins.isinstance", "builtins.type"]
+# Asking which kind of object was given, even with a fallback that calls it
+# (`if isinstance(...): ... else: self.x.apply(...)`), passes the delegation
+# check, so the type tests are forbidden in the context too. Only calls that
+# plainly test no type are dropped (see docs/markers/forbid_runtime_calls.md).
+cases = "the same cases and the same spy given to the constructor"
+
+[[errors]]
+id = "no_delegation"
+title = "the code doing the job does that part of it by itself instead of calling the object it was given"
+detected_by = "require_runtime_delegation"
+what = "Method `{function}` ({file}:{line}) never calls the interchangeable object it was given (`{expected}`): it does that part of the job by itself, or branches on which kind of object it has."
+why = """
+The object exists to do this part of the job, but the code ignores it and
+computes by itself, usually in a chain of `if` branches over the kinds it
+knows. A new kind then needs another branch here, and a kind the code does
+not know is silently handled wrong.
+"""
+fix = "Call what the constructor stored (the same call for every kind) and move the code of each branch into the class or function of its kind."
+signature = { kind = "missing_delegation" }
+# The mutants cut out a call of a collaborator the method holds
+# (`self.x.m(...)`, or `self.x(...)` when the constructor stored a parameter
+# in `x`, a function passed in); a call whose result is used becomes its
+# first argument.
+operator = "drop_call"
+
+[[errors]]
+id = "hardcoded_strategy"
+title = "the code doing the job builds its interchangeable object itself"
+detected_by = "forbid_runtime_instantiation"
+what = "`{creator}` builds its own object of `{class}` (line {fact_line} of `{fact_file}`) instead of using the one it was given."
+why = """
+Whoever creates the code doing the job should choose the way it is done. Code
+that builds its object itself always does the job the same way, whatever it
+was given, and cannot be tried out with another object.
+"""
+fix = "Keep the object the constructor gets as a parameter (`self.x = x`) and let the code that creates this object choose and build the interchangeable one."
+signature = { kind = "instance" }
+# The case gives a spy, so `rebuild_injected` cannot rebuild it from its class.
+# The mutants assign a new object of the first class (by name) bound to
+# `strategy` that can be built without arguments, in place of the parameter
+# the task gives the spy. Such a constructor also never calls the spy, so
+# require_runtime_delegation fails too; the classification keeps one finding,
+# this one. Not applicable when `strategy` binds no class.
+operator = "hardcode_collaborator"
+
+[[errors]]
+id = "type_switch_on_strategy"
+title = "the code doing the job asks which kind of object it was given"
+detected_by = "forbid_runtime_calls"
+what = "Method `{function}` ({file}:{line}) asks which kind of object it was given: on line {fact_line} of `{fact_file}` it calls `{callee_short}`."
+why = """
+The code calls what it was given only for the kinds it does not test for; the
+kinds it tests are computed here, often from their data. A new kind needs
+another branch here, and every kind must do its part of the job twice: once
+in its own class and once in this branch.
+"""
+fix = "Remove the test of the kind: call what the constructor stored for every kind, and move the code of each branch into the class or function of its kind."
+signature = { kind = "call" }
+# One error for `isinstance()` and `type()`: the signature names no callee,
+# so the mutants make both calls the check names, first thing in a context
+# method (`isinstance(None, (object,)[0])`, `type((None,)[0]) == object`). A call
+# of `type()` is seen on Python 3.12 and later only (see
+# forbid_runtime_calls).
+operator = "add_builtin_call"
+
+[[neutral]]
+id = "model_solution"
+title = "the model solution without markers (the reference also passes as a submission)"
+
+[[neutral]]
+id = "extra_strategy"
+title = "another interchangeable class, which the task does not name"
+
+[[neutral]]
+id = "wrong_result"
+title = "a mistake in a computation the principle does not concern (rounding)"
+
+[[neutral]]
+id = "style_noise"
+title = "poor style: other names, loops instead of built-in functions, comments"
+
+[[neutral]]
+id = "strategy_as_function"
+title = "the interchangeable behaviour written as plain functions (or closures a factory function returns) instead of classes"
+# Valid: the code doing the job calls what it was given, and a call of the
+# spy itself counts as delegation. A task binds the strategy role to the
+# reference's classes only to know which objects must not be built; nothing
+# requires a submission to have them.
+
+[[gaps]]
+id = "hardcoded_function"
+title = "code that keeps a function of its own instead of the one it was given is classified as no_delegation"
+detail = """
+forbid_runtime_instantiation sees objects of classes being built. When the
+interchangeable behaviour is a plain function, code that ignores the
+function it was given and uses one it names itself (`self.x = some_function`)
+builds nothing, so hardcoded_strategy is not found. It is still caught:
+the given function (the spy) is never called, so require_runtime_delegation
+fails and the finding is no_delegation, whose advice fits it only in part. A
+future check would need to tell what the constructor stores apart from what
+it was given (a stored attribute that is no parameter and refers to a
+function bound to the strategy role), so that a function chosen inside the code
+counts as hardcoded_strategy too.
+"""
+
+[[gaps]]
+id = "result_discarded"
+title = "code that calls the object it was given but throws away what it returns is not found"
+detail = """
+require_runtime_delegation sees whether the given object (the spy) is called,
+not what is done with its answer. Code that calls it and then computes the
+result by itself (`self.x.apply(amount)` as a statement of its own, then
+`return amount * 0.9`) delegates as far as the check can tell, so it passes.
+The spy returns no real answer, so its result cannot be followed through the
+code either; a future check would need to compare the result of the context
+with the result of the strategy it was given.
+"""
+
+[[gaps]]
+id = "unmatched_class_by_method_name"
+title = "a helper class beside the interchangeable classes that has a method named like theirs is classified as hardcoded_strategy"
+detail = """
+A class the code doing the job builds, which no class of the reference
+matches, is taken for an interchangeable one when it lives in their module
+and has one of them (or their common interface) among its bases, or defines a
+public method named like one of theirs. The likeness is by name only: a
+helper class of that module that happens to have such a method counts too,
+and a new interchangeable class with no such base and only differently named
+methods does not (it could not stand in for the others anyway). Exceptions
+never count. A future check would need to tell, from how the object is used,
+whether the code doing the job calls it in place of the one it was given.
+"""

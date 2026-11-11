@@ -248,6 +248,11 @@ def report_dict_to_ir(report: Dict[str, Any], kind: str) -> ReportDocument:
         config_fingerprint=_config_fingerprint(run_payload.get("config_snapshot")),
         tool_version=framework_version,
         mode=str(run_payload.get("mode") or "static-only"),
+        principle=(
+            str(run_payload["principle"])
+            if run_payload.get("principle") is not None
+            else None
+        ),
     )
 
     target_payloads = [dict(payload or {}) for payload in (report.get("targets") or [])]

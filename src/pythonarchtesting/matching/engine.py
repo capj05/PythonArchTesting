@@ -6,7 +6,7 @@ from pythonarchtesting.entities import Entity, EntityIndex
 
 from .candidates import _explicit_target_match, _stage2_candidates, _stage3_candidates
 from .metrics import ast_similarity, module_distance, module_similarity, name_similarity
-from .models import Candidate, MatchingConfig, MatchResult, MatchStatus
+from .models import NAME_REQUIRED, Candidate, MatchingConfig, MatchResult, MatchStatus
 
 
 def run_matching(
@@ -25,6 +25,17 @@ def run_matching(
     module_distance_cache: Dict[tuple[str, str], int] = {}
     name_similarity_cache: Dict[tuple[str, str], float] = {}
     ast_similarity_cache: Dict[tuple[str, str], float] = {}
+    target_qualnames = {e.canonical_id: e.qualname for e in target_index.all_sorted}
+
+    def _same_name(source: Entity, candidates: List[Candidate]) -> List[Candidate]:
+        """For an entity required by name, only the targets of its name."""
+        if not source.extras.get(NAME_REQUIRED):
+            return candidates
+        return [
+            c
+            for c in candidates
+            if target_qualnames.get(c.target_id) == source.qualname
+        ]
 
     def _cached_module_similarity(source_module: str, target_module: str) -> float:
         key = (source_module, target_module)
@@ -166,6 +177,7 @@ def run_matching(
             name_similarity_fn=_cached_name_similarity,
             max_stage2_candidates=config.max_stage2_candidates,
         )
+        stage2_candidates = _same_name(source, stage2_candidates)
         if not stage2_candidates:
             reasons.append(
                 {
@@ -190,16 +202,19 @@ def run_matching(
 
         final_candidates: List[Candidate]
         if run_stage3:
-            stage3_candidates = _stage3_candidates(
+            stage3_candidates = _same_name(
                 source,
-                target_index,
-                stage2_candidates,
-                config.max_fuzzy_candidates,
-                config.max_stage3_candidates,
-                ast_similarity_fn=_cached_ast_similarity,
-                module_similarity_fn=_cached_module_similarity,
-                module_distance_fn=_cached_module_distance,
-                name_similarity_fn=_cached_name_similarity,
+                _stage3_candidates(
+                    source,
+                    target_index,
+                    stage2_candidates,
+                    config.max_fuzzy_candidates,
+                    config.max_stage3_candidates,
+                    ast_similarity_fn=_cached_ast_similarity,
+                    module_similarity_fn=_cached_module_similarity,
+                    module_distance_fn=_cached_module_distance,
+                    name_similarity_fn=_cached_name_similarity,
+                ),
             )
             if stage3_candidates:
                 reasons.append(

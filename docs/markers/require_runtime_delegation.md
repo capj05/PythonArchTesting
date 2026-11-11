@@ -85,6 +85,11 @@ strategy.apply()`. Worked example:
 ## What it checks
 
 - In every case, at least one call on the named spy (on `member`, if given).
+- Each violation (one per case that never delegated) has a fact in
+  `details.facts`, aligned 1:1 with `details.violations`: `kind`
+  (`missing_delegation`), `case`, `caller` (the target, `module:qualname`),
+  `expected` (the spy, or `spy.member`), `raised` (what the call raised, else
+  `null`).
 
 ## What it does not check
 

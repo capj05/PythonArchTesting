@@ -1,0 +1,8 @@
+[
+  {
+    "id": "fial21_fiala",
+    "violates": false,
+    "reason": "The logic in grades.py (parse_grades, average, format_summary) takes data as parameters and returns results without any input or print calls; input and print appear only in app.py.",
+    "explanation": ""
+  }
+]

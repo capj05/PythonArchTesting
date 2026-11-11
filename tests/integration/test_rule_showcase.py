@@ -31,6 +31,7 @@ SHOWCASE_CASES = (
     "dyn005_runtime_members",
     "dyn006_runtime_classes",
     "dyn008_patterns",
+    "enc001_private_access",
     "enum001_enum",
     "flw001_flow",
     "flw002_runtime_flow",

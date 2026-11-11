@@ -1,0 +1,8 @@
+{
+ "student": "kucm12_kucera",
+ "model": "haiku",
+ "variant": "plain",
+ "run": 2,
+ "pilot": "/home/jirka/git/PythonArchTesting/.worktrees/pc-b/example/principles/pilot",
+ "init": true
+}

@@ -162,7 +162,7 @@ def test_cli_main_autoloads_dotfile_config_without_explicit_config(
     tmp_path, monkeypatch
 ):
     (tmp_path / ".pythonarchtesting").write_text(
-        "[performance]\ndefault_timeout = 45\n",
+        "[matching]\nthreshold = 0.45\n",
         encoding="utf-8",
     )
 
@@ -180,7 +180,7 @@ def test_cli_main_autoloads_dotfile_config_without_explicit_config(
     seen = {}
 
     def _run_projects(*args, **kwargs):
-        seen["timeout"] = kwargs["config"].performance.default_timeout
+        seen["threshold"] = kwargs["config"].matching.threshold
         return _stub_run_projects_result()
 
     def _generate_report(run_state, target_states, fmt, config, output):
@@ -196,7 +196,7 @@ def test_cli_main_autoloads_dotfile_config_without_explicit_config(
     exit_code = cli.main(["--target", "a"])
 
     assert exit_code == 0
-    assert seen["timeout"] == 45
+    assert seen["threshold"] == 0.45
 
 
 def test_cli_single_target_markdown_requires_output(monkeypatch):

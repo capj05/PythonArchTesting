@@ -30,7 +30,7 @@ named stages of the named variable in the declared order. The companion
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
 | `variable` | `str \| None` | `None` | Name of the variable whose flow stages must be ordered. |
-| `cases` | `list[dict] \| None` | `None` | Call arguments (`args`, `kwargs`, `init`) that switch the rule to the [runtime check](#runtime-check-with-cases). |
+| `cases` | `list[dict] \| None` | `None` | Cases (keys `args`, `kwargs`, `init`, `steps` and `stdin`, as in [dynamic-checks.md](../dynamic-checks.md#cases)) that switch the rule to the [runtime check](#runtime-check-with-cases). |
 | `init` | `dict \| None` | `None` | Runtime check on a method only: `{"args": [...], "kwargs": {...}}` for constructing the instance; a case's own `init` overrides it. |
 | `timeout_s` | `float` | `5.0` | Runtime check only: wall-clock limit per interpreter run, in `(0, 60]`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |

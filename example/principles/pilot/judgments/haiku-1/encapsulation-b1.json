@@ -1,0 +1,6 @@
+[
+  {"id": "w004", "violates": false, "reason": "Stav je uložen v soukromém atributu _stock, items() vrací kopii a shop.py pracuje jen přes veřejné metody Inventory.", "explanation": ""},
+  {"id": "w005", "violates": false, "reason": "Stav je v soukromém _stock, shop.py používá jen add, remove, quantity a items, a rollback při chybě dodávky také jede přes veřejné metody.", "explanation": ""},
+  {"id": "w009", "violates": false, "reason": "Stav je soukromý, konstruktor si kopíruje vstupní slovník a items() vrací kopii; shop.py nesahá na vnitřní stav.", "explanation": ""},
+  {"id": "w036", "violates": false, "reason": "Stav je v soukromém _stock, konstruktor vytváří novou kopii slovníku, items() vrací kopii a shop.py používá jen veřejné metody.", "explanation": ""}
+]

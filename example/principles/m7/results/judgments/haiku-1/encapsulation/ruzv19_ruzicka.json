@@ -1,0 +1,8 @@
+[
+  {
+    "id": "ruzv19_ruzicka",
+    "violates": false,
+    "reason": "The stock lives in the private attribute `_stock`, all rules are enforced inside `Inventory`, `shop.py` uses only `add`, `remove`, `quantity` and `items`, and `items()` returns a copy.",
+    "explanation": ""
+  }
+]

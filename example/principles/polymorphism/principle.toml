@@ -1,0 +1,17 @@
+# Points to the catalogue entry, which ships with the tool:
+# src/pythonarchtesting/principles/catalog/polymorphism.toml.
+# See ../io_separation/principle.toml for `[examples]`; the task is `task.toml`.
+
+id = "polymorphism"
+
+[examples]
+type_switch = "err_total_area_isinstance"
+type_comparison = "err_describe_all_type"
+not_a_subclass = "err_square_no_base"
+concrete_base = "err_shape_concrete"
+model_solution = "ok_basic"
+extra_variant = "ok_extra_variant"
+helper_method = "ok_helper_method"
+type_check_in_variant = "ok_type_check_in_variant"
+wrong_formula = "ok_wrong_area"
+style_noise = "ok_style_noise"

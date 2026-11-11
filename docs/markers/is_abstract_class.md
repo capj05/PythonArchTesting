@@ -47,6 +47,10 @@ class RepositoryContract:
 
 - Presence of one or more unresolved abstract member names after local-base propagation and concrete overrides are applied.
 - Static decorator intent on the matched target class and its local bases.
+- A failure has one violation and its fact in `details.facts` (aligned 1:1
+  with `details.violations`): `kind` (`not_abstract`), `class`
+  (`module:Class`), `concrete_methods` (the methods the class defines
+  without an abstract decorator), `file`, `line`.
 
 ## What it does not check
 

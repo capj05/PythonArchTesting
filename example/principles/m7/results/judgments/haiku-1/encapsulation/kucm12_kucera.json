@@ -1,0 +1,8 @@
+[
+  {
+    "id": "kucm12_kucera",
+    "violates": false,
+    "reason": "Stav je uložen v privátním atributu _stock, který shop.py nikde nepoužívá: pracuje jen s add, remove, quantity a items, a items vrací kopii slovníku.",
+    "explanation": ""
+  }
+]
