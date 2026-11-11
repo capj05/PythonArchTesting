@@ -948,22 +948,9 @@ def _not_a_class_result(
     mode: str,
     params: _ConstructorRuleParams,
 ) -> RuleResult:
-    """Fail a constructor rule whose source class matched something else.
-
-    Unlike every other constructor verdict, these details carry no
-    ``params_ignored``; the report has never shown it here.
-    """
+    """Fail a constructor rule whose source class matched something else."""
     reason = "required_constructor requires a matched target class"
-    details = {
-        "reason": reason,
-        "errors": [reason],
-        "mode": mode,
-        "check_return": False,
-        "allow_missing": params.allow_missing,
-        "constructor": params.as_details(),
-        "resolved_target_constructor": None,
-        "member_origin": "missing",
-    }
+    details = _constructor_details(reason, [reason], mode=mode, params=params)
     return build_rule_result(
         rule,
         source,
@@ -1257,6 +1244,12 @@ class _SignatureRuleParams:
 
     @classmethod
     def from_rule(cls, rule: Rule) -> _SignatureRuleParams:
+        """Read the parameters, the aliases and the pattern stripped.
+
+        Surrounding whitespace can never be part of a method name, so it is
+        dropped, as ``does_not_have`` drops it; otherwise a pattern or an
+        alias with a trailing space would silently match nothing.
+        """
         aliases = rule.params.get("aliases")
         pattern = rule.params.get("pattern")
         return cls(
@@ -1270,9 +1263,11 @@ class _SignatureRuleParams:
             declared_only=bool(rule.params.get("declared_only", False)),
             name_match=str(rule.params.get("name_match", "exact")).lower(),
             aliases=(
-                [str(alias) for alias in aliases] if isinstance(aliases, list) else None
+                [str(alias).strip() for alias in aliases]
+                if isinstance(aliases, list)
+                else None
             ),
-            pattern=str(pattern) if pattern is not None else None,
+            pattern=str(pattern).strip() if pattern is not None else None,
         )
 
     @property

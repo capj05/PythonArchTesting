@@ -844,7 +844,9 @@ def User(name: str) -> None:
         "reason": "required_constructor requires a matched target class",
         "errors": ["required_constructor requires a matched target class"],
         "mode": "compatible",
-        # Unlike every other branch, this one reports no "params_ignored".
+        # Like every other branch, this one reports "params_ignored" after
+        # "mode"; it used to be the only branch without it.
+        "params_ignored": False,
         "check_return": False,
         "allow_missing": False,
         "constructor": {
@@ -856,6 +858,32 @@ def User(name: str) -> None:
         "resolved_target_constructor": None,
         "member_origin": "missing",
     }
+    # The key order matches the other constructor verdicts as well.
+    assert list(result.details) == [
+        "reason",
+        "errors",
+        "mode",
+        "params_ignored",
+        "check_return",
+        "allow_missing",
+        "constructor",
+        "resolved_target_constructor",
+        "member_origin",
+    ]
+
+
+def test_api003_ctor_not_a_class_reports_params_ignored_in_mode_any() -> None:
+    target = """
+def User(name: str) -> None:
+    pass
+"""
+    result = _evaluate_ctor_rule(
+        _INIT_SOURCE, target, target_kind="function", params={"mode": "any"}
+    )
+
+    assert result.status == "FAILED"
+    assert result.details["mode"] == "any"
+    assert result.details["params_ignored"] is True
 
 
 @pytest.mark.parametrize(

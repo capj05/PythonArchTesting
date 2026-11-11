@@ -29,8 +29,8 @@ _None — the marker takes only optional arguments._
 | `allow_missing` | `bool` | `False` | Pass when no candidate method exists on the target instead of failing. |
 | `declared_only` | `bool` | `False` | Restrict the search to methods declared on the target class itself, ignoring inherited methods. |
 | `name_match` | `str` | `"exact"` | Name selector: `"exact"`, `"alias"`, `"regex"`, or `"any"`. |
-| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"`. |
-| `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"`. |
+| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"`; whitespace around each alias is stripped. |
+| `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"`; whitespace around it is stripped before matching. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 

@@ -29,8 +29,8 @@ _None — the marker takes only optional arguments._
 | `satisfy_with` | `tuple[str, ...]` | `("constructor", "classmethod", "staticmethod")`; `("classmethod", "staticmethod")` when `aliases`, `pattern`, or a `name_match` other than `"any"` is given | Accepted candidate kinds; may also include `"static_attribute"`, which requires `name_match` `"exact"`, `"alias"`, or `"regex"`. |
 | `allow_inherited` | `bool` | `True` | Accept a factory inherited from a base class as a satisfying candidate. |
 | `name_match` | `str` | `"any"` | Name selector: `"exact"`, `"alias"`, `"regex"`, or `"any"`. An unknown value is treated as `"any"`. |
-| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"`. |
-| `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"`. |
+| `aliases` | `list[str] \| None` | `None` | Accepted alternative names when `name_match="alias"`; whitespace around each alias is stripped. |
+| `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"`; whitespace around it is stripped before matching. |
 | `allow_missing` | `bool` | `False` | Pass when no candidate factory exists on the target instead of failing. |
 | `return_annotation_mode` | `str` | `"ignore"` | Return-annotation matching: `"ignore"`, `"compatible"`, or `"exact"`. |
 | `detection_mode` | `str` | `"strict"` | How factories are detected: `"strict"` or `"extended"`. |

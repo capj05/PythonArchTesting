@@ -181,7 +181,7 @@ class _AbsenceParams:
                 if isinstance(aliases_raw, list)
                 else None
             ),
-            # Stripped here, unlike the copy in ``api_signature``.
+            # Stripped as in ``api_signature``; the compiler checks it stripped.
             pattern=pattern_raw.strip() if isinstance(pattern_raw, str) else None,
             signature_mode=str(params.get("signature_mode", "any")).lower(),
             include_descriptors=bool(params.get("include_descriptors", False)),
