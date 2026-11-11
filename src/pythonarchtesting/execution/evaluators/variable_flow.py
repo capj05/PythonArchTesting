@@ -11,6 +11,18 @@ from pythonarchtesting.matching import MatchResult
 from .messages import build_rule_result
 
 
+def _flow_locations(cfg: flow_cfg.FunctionCfg) -> list[dict[str, Any]]:
+    return [
+        {
+            "lineno": node.lineno,
+            "col": node.col,
+            "stages": [marker.stage for marker in node.flow_markers],
+        }
+        for node in cfg.nodes.values()
+        if node.flow_markers
+    ]
+
+
 class VariableFlowEvaluator:
     """Evaluator for function/method variable-flow rules."""
 
@@ -89,7 +101,7 @@ class VariableFlowEvaluator:
             if current_progress < 0:
                 continue
 
-            if not node.successors:
+            if node_id in cfg.exit_node_ids or not node.successors:
                 missing = required_stages[current_progress:]
                 exit_record = {
                     "exit_lineno": node.lineno,
@@ -107,7 +119,6 @@ class VariableFlowEvaluator:
                             "missing_stages": missing,
                         }
                     )
-                continue
 
             for successor in node.successors:
                 queue.append((successor, current_progress, current_observed))
@@ -124,15 +135,7 @@ class VariableFlowEvaluator:
                     "missing_stages": first_failure.get("missing_stages", []),
                     "first_failing_path_exit_line": first_failure.get("lineno", 0),
                     "observed_path_sequences": exit_sequences,
-                    "target_flow_locations": [
-                        {
-                            "lineno": node.lineno,
-                            "col": node.col,
-                            "stages": [marker.stage for marker in node.flow_markers],
-                        }
-                        for node in cfg.nodes.values()
-                        if node.flow_markers
-                    ],
+                    "target_flow_locations": _flow_locations(cfg),
                 }
             )
             return build_rule_result(
@@ -152,15 +155,7 @@ class VariableFlowEvaluator:
                 "missing_stages": [],
                 "first_failing_path_exit_line": None,
                 "observed_path_sequences": exit_sequences,
-                "target_flow_locations": [
-                    {
-                        "lineno": node.lineno,
-                        "col": node.col,
-                        "stages": [marker.stage for marker in node.flow_markers],
-                    }
-                    for node in cfg.nodes.values()
-                    if node.flow_markers
-                ],
+                "target_flow_locations": _flow_locations(cfg),
             }
         )
         return build_rule_result(rule, source, target, match, "OK", details, ())

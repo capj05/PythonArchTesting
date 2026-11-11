@@ -119,6 +119,23 @@ Worked example: [`example/rule_showcase/flw002_runtime_flow`](../../example/rule
   order, without any markers in the target; the project functions a stage
   calls identify the stage.
 
+### Control-flow graph (static check)
+
+Every path from the function's start to one of its exits counts: a `return`,
+or falling off the end of the body — including the path that skips an `if`
+without `else` or a loop body at the end of the function. Loops follow Python:
+`break` leaves the innermost loop and skips its `else`, `continue` goes back to
+the loop header, the `else` runs only when the loop ends normally, and a
+`while True` loop is left only through `break` or `return`. Known
+simplifications:
+
+- `try`: an `except` handler is entered as if the exception were raised before
+  the `try` body ran; `raise` is treated as an ordinary statement.
+- `return`, `break` and `continue` inside `try ... finally` jump straight to
+  their target without passing through the `finally` block.
+- `match`: the path on which no `case` matches is not modelled, so add a
+  `case _:` if that path matters.
+
 ## What it does not check
 
 - The function's result or any intermediate value: with `cases`, only the
