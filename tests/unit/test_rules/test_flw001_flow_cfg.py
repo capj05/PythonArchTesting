@@ -9,6 +9,8 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from pythonarchtesting.entities_extraction import extract_entities_from_source
 from pythonarchtesting.execution.flow_cfg import FunctionCfg, build_function_cfg
 
@@ -255,7 +257,7 @@ def test_break_inside_try_finally_skips_the_finally_block() -> None:
     assert _edges(cfg)["Break@4"] == ["Return@7"]
 
 
-# --- Try / Match (characterisation: behaviour unchanged) ---------------------
+# --- Try / Match --------------------------------------------------------------
 
 
 def test_try_except_else_finally_structure() -> None:
@@ -311,8 +313,8 @@ def test_match_links_the_subject_to_every_case() -> None:
     }
 
 
-def test_match_without_a_wildcard_has_no_fall_through_edge() -> None:
-    """Known limitation: a subject that matches no case is not modelled."""
+def test_match_without_an_irrefutable_case_falls_through_past_the_match() -> None:
+    """A subject that matches no case continues after the ``match``."""
     cfg = _cfg("""
         match value:
             case 1:
@@ -320,7 +322,53 @@ def test_match_without_a_wildcard_has_no_fall_through_edge() -> None:
         return value
         """)
     assert _edges(cfg) == {
-        "Match@2": ["Assign@4"],
+        "Match@2": ["Assign@4", "Return@5"],
         "Assign@4": ["Return@5"],
         "Return@5": [],
     }
+
+
+def test_match_without_an_irrefutable_case_at_the_end_is_a_function_exit() -> None:
+    cfg = _cfg("""
+        match value:
+            case 1:
+                return value
+        """)
+    assert _edges(cfg) == {"Match@2": ["Return@4"], "Return@4": []}
+    assert _function_exits(cfg) == {"Match@2", "Return@4"}
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    ["_ if items", "other if items", "[*_]"],
+    ids=["guarded-wildcard", "guarded-capture", "sequence"],
+)
+def test_match_with_only_refutable_cases_falls_through(pattern: str) -> None:
+    cfg = _cfg(f"""
+        match value:
+            case 1:
+                value = 1
+            case {pattern}:
+                value = 2
+        return value
+        """)
+    assert _edges(cfg)["Match@2"] == ["Assign@4", "Assign@6", "Return@7"]
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    ["_", "other", "_ as other", "1 | _", "(2 | other) as alias"],
+    ids=["wildcard", "capture", "as-wildcard", "or-wildcard", "as-or-capture"],
+)
+def test_match_with_an_irrefutable_case_has_no_fall_through_edge(
+    pattern: str,
+) -> None:
+    cfg = _cfg(f"""
+        match value:
+            case 1:
+                value = 1
+            case {pattern}:
+                value = 2
+        return value
+        """)
+    assert _edges(cfg)["Match@2"] == ["Assign@4", "Assign@6"]

@@ -341,6 +341,37 @@ def test_flw001_match_passes_when_every_case_reaches_the_stage() -> None:
 """) == ("OK", None)
 
 
+def test_flw001_match_fails_when_no_case_matches_without_a_wildcard() -> None:
+    """Every case reaches the stage, but an unmatched subject skips the match."""
+    assert _status("""\
+    current = value
+    __archtest__: Annotated[None, flow("raw")]
+    match current:
+        case "":
+            current = "empty"
+            __archtest__: Annotated[None, flow("validated")]
+        case str():
+            current = current.strip()
+            __archtest__: Annotated[None, flow("validated")]
+    return current
+""") == ("FAILED", "missing_stages")
+
+
+def test_flw001_match_passes_when_a_capture_case_reaches_the_stage() -> None:
+    assert _status("""\
+    current = value
+    __archtest__: Annotated[None, flow("raw")]
+    match current:
+        case "":
+            current = "empty"
+            __archtest__: Annotated[None, flow("validated")]
+        case other:
+            current = other.strip()
+            __archtest__: Annotated[None, flow("validated")]
+    return current
+""") == ("OK", None)
+
+
 def test_flw001_match_fails_when_a_case_skips_the_stage() -> None:
     assert _status("""\
     current = value

@@ -126,15 +126,21 @@ or falling off the end of the body — including the path that skips an `if`
 without `else` or a loop body at the end of the function. Loops follow Python:
 `break` leaves the innermost loop and skips its `else`, `continue` goes back to
 the loop header, the `else` runs only when the loop ends normally, and a
-`while True` loop is left only through `break` or `return`. Known
+`while True` loop is left only through `break` or `return`. A `match` without
+an irrefutable case also has the path on which no `case` matches and execution
+continues after the `match`; irrefutable is a `case` without a guard whose
+pattern is `_`, a capture name (`case other:`), `P as name` with an irrefutable
+`P`, or an or-pattern with an irrefutable alternative (`case 1 | _:`). Known
 simplifications:
 
 - `try`: an `except` handler is entered as if the exception were raised before
   the `try` body ran; `raise` is treated as an ordinary statement.
 - `return`, `break` and `continue` inside `try ... finally` jump straight to
   their target without passing through the `finally` block.
-- `match`: the path on which no `case` matches is not modelled, so add a
-  `case _:` if that path matters.
+- `match`: irrefutability is read from the pattern alone — a guarded case
+  (`case _ if ready:`) counts as refutable even when its guard is always true,
+  and a class or sequence pattern that covers every value the subject can take
+  still leaves the no-match path in the graph. Add a `case _:` to remove it.
 
 ## What it does not check
 

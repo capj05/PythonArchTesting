@@ -112,6 +112,25 @@ def _is_always_true(test: ast.expr) -> bool:
     return isinstance(test, ast.Constant) and bool(test.value)
 
 
+def _is_irrefutable_pattern(pattern: ast.pattern) -> bool:
+    """Return whether ``pattern`` matches every subject (PEP 634).
+
+    Irrefutable are the wildcard ``_`` and a capture ``name`` (``MatchAs``
+    without a sub-pattern), ``P as name`` with an irrefutable ``P``, and an
+    or-pattern with an irrefutable alternative such as ``1 | _``.
+    """
+    if isinstance(pattern, ast.MatchAs):
+        return pattern.pattern is None or _is_irrefutable_pattern(pattern.pattern)
+    if isinstance(pattern, ast.MatchOr):
+        return any(_is_irrefutable_pattern(item) for item in pattern.patterns)
+    return False
+
+
+def _is_irrefutable_case(case: ast.match_case) -> bool:
+    """Return whether ``case`` is taken for every subject: no guard, irrefutable pattern."""
+    return case.guard is None and _is_irrefutable_pattern(case.pattern)
+
+
 class _CfgBuilder:
     """Build a statement-level CFG.
 
@@ -135,8 +154,10 @@ class _CfgBuilder:
       statement that continues with the next one.
     - ``return``, ``break`` and ``continue`` jump straight to their target; a
       surrounding ``finally`` block is not inserted on that path.
-    - ``match``: only the case bodies are successors of the subject; a subject
-      that matches no case (no fall-through past the ``match``) is not modelled.
+    - ``match``: without an irrefutable case (see :func:`_is_irrefutable_case`)
+      the ``match`` node also falls through past the statement, the path of a
+      subject that matches no case. Irrefutability is decided from the pattern
+      alone, so a case whose guard is always true still counts as refutable.
     """
 
     def __init__(self, flow_by_anchor: dict[tuple[int, int], list[FlowMarker]]) -> None:
@@ -278,6 +299,8 @@ class _CfgBuilder:
             if case_entry is not None:
                 self.nodes[node_id].successors.append(case_entry)
             match_exits.extend(case_exits)
+        if not any(_is_irrefutable_case(case) for case in stmt.cases):
+            match_exits.append(node_id)
         return node_id, match_exits or [node_id]
 
     def _build_with(self, stmt: ast.With | ast.AsyncWith) -> tuple[int, list[int]]:
