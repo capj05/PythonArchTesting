@@ -39,6 +39,7 @@ DEFAULT_SANDBOX_MODE = "limits"
 _MIB = 1024 * 1024
 _BWRAP_HOME = "/tmp/home"  # nosec B108 - inside the sandbox's private tmpfs
 _NPROC_HEADROOM = 256  # tasks a child may add to the user's current count
+_STACK_MB = 8  # a child's stack, and so each of its threads' stacks
 _SYSTEM_DIRS = ("/usr", "/etc", "/opt")
 _SYSTEM_LINKS = ("/bin", "/sbin", "/lib", "/lib64", "/lib32")
 
@@ -100,6 +101,10 @@ class SandboxPolicy:
         memory_limit = getattr(resource, "RLIMIT_DATA", resource.RLIMIT_AS)
         limits: tuple[tuple[int, int], ...] = (
             (memory_limit, self.memory_mb * _MIB),
+            # glibc sizes every thread's stack by RLIMIT_STACK, and RLIMIT_DATA
+            # counts those stacks: a host with a 16 MiB stack left a target
+            # ~60 threads. 8 MiB is the usual Linux default.
+            (resource.RLIMIT_STACK, _STACK_MB * _MIB),
             (resource.RLIMIT_CPU, cpu_s),
             (resource.RLIMIT_FSIZE, self.file_size_mb * _MIB),
             (resource.RLIMIT_NOFILE, self.open_files),
