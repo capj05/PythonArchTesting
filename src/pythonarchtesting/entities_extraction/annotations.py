@@ -287,7 +287,6 @@ def _parse_metadata_item(
     name = _marker_name(node)
     params: dict[str, Any] = {}
     unsupported = list(marker_issues)
-    explicit_variable = False
 
     if isinstance(node, ast.Tuple):
         name, params, tuple_issues = _tuple_metadata_parts(node, file_text=file_text)
@@ -295,16 +294,14 @@ def _parse_metadata_item(
 
     if not name:
         unsupported.append(_issue("metadata", node, expr=raw))
-        return AnnotationDeclaration(
-            kind="unknown",
-            params=params,
-            unsupported=unsupported,
-            raw=raw,
-            lineno=getattr(node, "lineno", 0),
-            col=getattr(node, "col_offset", 0),
+        return _unsupported_marker_declaration(
+            node,
             order=order,
+            file_text=file_text,
             container=container,
             base_annotation=base_annotation,
+            issues=unsupported,
+            params=params,
             surface=surface,
             subject_kind=subject_kind,
             subject_index=subject_index,
@@ -315,73 +312,9 @@ def _parse_metadata_item(
         unsupported.append(_issue("unknown_metadata", node, expr=raw, name=name))
 
     if isinstance(node, ast.Call):
-        positional_literals: list[Any] = []
-        for idx, arg in enumerate(node.args):
-            value_repr = safe_unparse(arg)
-            is_lit, lit_val = _literal_value(arg)
-            if is_lit:
-                positional_literals.append(lit_val)
-            elif not (
-                idx == 0
-                and _POSITIONAL_SINGLE_ARG_NAMES.get(name) == "protocol"
-                and _is_name_reference(arg)
-            ):
-                # A protocol is named by a reference to its class, not a literal.
-                unsupported.append(
-                    _issue("arg", arg, expr=value_repr, index=idx, name=name)
-                )
-        positional_list_key = _POSITIONAL_LIST_ARG_NAMES.get(name)
-        if positional_list_key and positional_literals:
-            params[positional_list_key] = [
-                value for value in positional_literals if isinstance(value, str)
-            ]
-            for idx, value in enumerate(positional_literals):
-                if isinstance(value, str):
-                    continue
-                unsupported.append(
-                    _issue(
-                        "arg", node.args[idx], expr=repr(value), index=idx, name=name
-                    )
-                )
-        positional_single_key = _POSITIONAL_SINGLE_ARG_NAMES.get(name)
-        if positional_single_key and positional_literals:
-            params[positional_single_key] = positional_literals[0]
-            for idx, value in enumerate(positional_literals):
-                if idx == 0 and isinstance(value, str):
-                    continue
-                if (
-                    idx == 0
-                    and name == "enforce_flow"
-                    and isinstance(value, list)
-                    and all(isinstance(item, str) for item in value)
-                ):
-                    continue
-                unsupported.append(
-                    _issue(
-                        "arg", node.args[idx], expr=repr(value), index=idx, name=name
-                    )
-                )
-        if positional_single_key == "protocol" and node.args:
-            params.setdefault("protocol_expr", safe_unparse(node.args[0]))
-        for kw in node.keywords:
-            key = kw.arg if kw.arg is not None else "**"
-            value_repr = safe_unparse(kw.value)
-            is_lit, lit_val = _literal_value(kw.value)
-            if name == "required_attribute" and kw.arg == "annotation":
-                params["annotation"] = lit_val if is_lit else value_repr
-                continue
-            names_protocol = (
-                _POSITIONAL_SINGLE_ARG_NAMES.get(name) == "protocol"
-                and kw.arg == "protocol"
-            )
-            if is_lit and kw.arg is not None:
-                params[kw.arg] = lit_val
-                if kw.arg == "variable":
-                    explicit_variable = True
-            elif not (names_protocol and _is_name_reference(kw.value)):
-                unsupported.append(_issue("kw", kw.value, expr=value_repr, name=key))
-            if names_protocol:
-                params["protocol_expr"] = value_repr
+        # The positional issues come before the keyword ones in the report.
+        _positional_params(node, name, params, unsupported)
+        explicit_variable = _keyword_params(node, name, params, unsupported)
         if name == "flow":
             params["variable_explicit"] = explicit_variable
 
@@ -402,6 +335,138 @@ def _parse_metadata_item(
     )
 
 
+def _positional_params(
+    node: ast.Call,
+    name: str,
+    params: dict[str, Any],
+    unsupported: list[dict[str, Any]],
+) -> None:
+    """Turn a marker's positional arguments into params, recording issues.
+
+    The issues are appended in a fixed order: arguments that are no literal,
+    then the list-valued check, then the single-valued check.
+    """
+    literals = _positional_literals(node, name, unsupported)
+    if literals:
+        _positional_list_param(node, name, literals, params, unsupported)
+        _positional_single_param(node, name, literals, params, unsupported)
+    if _POSITIONAL_SINGLE_ARG_NAMES.get(name) == "protocol" and node.args:
+        # A keyword ``protocol`` given as well overrides this expression.
+        params.setdefault("protocol_expr", safe_unparse(node.args[0]))
+
+
+def _positional_literals(
+    node: ast.Call, name: str, unsupported: list[dict[str, Any]]
+) -> list[Any]:
+    """The literal positional arguments, with an issue for every other one.
+
+    A protocol is named by a reference to its class, not a literal, so a name
+    reference in the first position of a protocol marker is no issue.
+    """
+    literals: list[Any] = []
+    names_protocol = _POSITIONAL_SINGLE_ARG_NAMES.get(name) == "protocol"
+    for idx, arg in enumerate(node.args):
+        is_lit, lit_val = _literal_value(arg)
+        if is_lit:
+            literals.append(lit_val)
+        elif not (idx == 0 and names_protocol and _is_name_reference(arg)):
+            unsupported.append(
+                _issue("arg", arg, expr=safe_unparse(arg), index=idx, name=name)
+            )
+    return literals
+
+
+def _positional_list_param(
+    node: ast.Call,
+    name: str,
+    literals: list[Any],
+    params: dict[str, Any],
+    unsupported: list[dict[str, Any]],
+) -> None:
+    """Collect the strings of a list-valued marker; every other literal is an issue.
+
+    The issue's position comes from the argument at the literal's index, which
+    is the argument itself only when no non-literal argument precedes it.
+    """
+    key = _POSITIONAL_LIST_ARG_NAMES.get(name)
+    if not key:
+        return
+    params[key] = [value for value in literals if isinstance(value, str)]
+    for idx, value in enumerate(literals):
+        if not isinstance(value, str):
+            unsupported.append(
+                _issue("arg", node.args[idx], expr=repr(value), index=idx, name=name)
+            )
+
+
+def _positional_single_param(
+    node: ast.Call,
+    name: str,
+    literals: list[Any],
+    params: dict[str, Any],
+    unsupported: list[dict[str, Any]],
+) -> None:
+    """Take the first literal of a single-valued marker; any other is an issue.
+
+    The first value must be a string, except that ``enforce_flow`` also takes
+    its stages as a list of strings.
+    """
+    key = _POSITIONAL_SINGLE_ARG_NAMES.get(name)
+    if not key:
+        return
+    params[key] = literals[0]
+    for idx, value in enumerate(literals):
+        if idx == 0 and _valid_single_value(name, value):
+            continue
+        unsupported.append(
+            _issue("arg", node.args[idx], expr=repr(value), index=idx, name=name)
+        )
+
+
+def _valid_single_value(name: str, value: Any) -> bool:
+    """Whether ``value`` may stand as the single positional value of ``name``."""
+    if isinstance(value, str):
+        return True
+    return (
+        name == "enforce_flow"
+        and isinstance(value, list)
+        and all(isinstance(item, str) for item in value)
+    )
+
+
+def _keyword_params(
+    node: ast.Call,
+    name: str,
+    params: dict[str, Any],
+    unsupported: list[dict[str, Any]],
+) -> bool:
+    """Turn a marker's keyword arguments into params, recording issues.
+
+    Returns whether a literal ``variable`` keyword was given, which ``flow``
+    records so a default variable can be told from a chosen one.
+    """
+    explicit_variable = False
+    takes_protocol = _POSITIONAL_SINGLE_ARG_NAMES.get(name) == "protocol"
+    for kw in node.keywords:
+        key = kw.arg if kw.arg is not None else "**"
+        value_repr = safe_unparse(kw.value)
+        is_lit, lit_val = _literal_value(kw.value)
+        if name == "required_attribute" and kw.arg == "annotation":
+            # An annotation is any type expression, kept as its source text.
+            params["annotation"] = lit_val if is_lit else value_repr
+            continue
+        names_protocol = takes_protocol and kw.arg == "protocol"
+        if is_lit and kw.arg is not None:
+            params[kw.arg] = lit_val
+            if kw.arg == "variable":
+                explicit_variable = True
+        elif not (names_protocol and _is_name_reference(kw.value)):
+            unsupported.append(_issue("kw", kw.value, expr=value_repr, name=key))
+        if names_protocol:
+            params["protocol_expr"] = value_repr
+    return explicit_variable
+
+
 def _unsupported_marker_declaration(
     node: ast.AST,
     *,
@@ -410,14 +475,19 @@ def _unsupported_marker_declaration(
     container: str,
     base_annotation: str,
     issues: Sequence[dict[str, Any]],
+    params: dict[str, Any] | None = None,
     surface: str = "body",
     subject_kind: str = "",
     subject_index: int = -1,
     subject_name: str = "",
 ) -> AnnotationDeclaration:
+    """A declaration of unknown kind for metadata whose marker cannot be named.
+
+    ``params`` carries what a tuple form still yielded, so it is not lost.
+    """
     return AnnotationDeclaration(
         kind="unknown",
-        params={},
+        params=params if params is not None else {},
         unsupported=list(issues),
         raw=_raw_segment(file_text, node),
         lineno=getattr(node, "lineno", 0),

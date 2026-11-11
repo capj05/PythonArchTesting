@@ -374,21 +374,55 @@ def _pure_helpers(
     return pure
 
 
-def _io(entities: Sequence[Entity]) -> tuple[list[BoundEntity], set[str]]:
-    """The ``io`` candidates and the pure helpers (module docstring)."""
+_ModuleContexts = dict[str, tuple[dict[str, tuple[str, str]], dict[str, str]]]
+
+
+@dataclasses.dataclass(frozen=True)
+class _IoContext:
+    """What ``_io`` works out of the submission once before it binds anything:
+    the functions and methods (``every``), the modules, their imports
+    (``contexts``), the top-level functions, the entry points, the modules
+    that read the keyboard or hold an entry point (``reading_modules``) and
+    the functions and methods that call project code (``callers``). It also
+    keeps the project functions each ``def`` calls (``resolved``), so that
+    the growth of the output helpers does not resolve the calls of an ``io``
+    entity again on every round."""
+
+    facts: _Facts
+    every: list[tuple[Entity, FunctionNode]]
+    trees: list[tuple[str, ast.Module]]
+    modules: list[str]
+    contexts: _ModuleContexts
+    top_level: set[str]
+    entry: set[str]
+    reading_modules: set[str]
+    callers: set[str]
+    _resolved: dict[int, set[str]] = dataclasses.field(default_factory=dict)
+
+    def resolved(self, entity: Entity, node: FunctionNode) -> set[str]:
+        """``_calls_resolved`` of ``node``, the ``def`` of ``entity``, worked
+        out once per node; the set is shared, never change it."""
+        key = id(node)
+        if key not in self._resolved:
+            self._resolved[key] = _calls_resolved(
+                node, entity.module_path, self.contexts, self.modules, self.top_level
+            )
+        return self._resolved[key]
+
+
+def _io_context(entities: Sequence[Entity]) -> _IoContext:
+    """The facts of ``entities`` that ``_io`` asks for (``_IoContext``)."""
     facts = _Facts()
-    calls_input = facts.reads
-    called_names = facts.called
     every = functions(entities)
     trees = module_nodes(entities)
+    modules = [module for module, _ in trees]
     top_level = {
         name_of(e) for e, _ in every if e.kind == "function" and "." not in e.qualname
     }
     entry = _entry_functions(trees, top_level) | _entry_methods(entities, trees)
     reading_modules = {
-        e.module_path for e, node in every if calls_input(node) or name_of(e) in entry
+        e.module_path for e, node in every if facts.reads(node) or name_of(e) in entry
     }
-    modules = [module for module, _ in trees]
     contexts = {
         module: (imported_names(tree), module_aliases(tree, modules))
         for module, tree in trees
@@ -399,87 +433,140 @@ def _io(entities: Sequence[Entity]) -> tuple[list[BoundEntity], set[str]]:
         for e, node in every
         if _calls_project(node, e.module_path, contexts, modules, known)
     }
-    pure = _pure_helpers(every, entry, reading_modules, trees, callers, facts)
+    return _IoContext(
+        facts=facts,
+        every=every,
+        trees=trees,
+        modules=modules,
+        contexts=contexts,
+        top_level=top_level,
+        entry=entry,
+        reading_modules=reading_modules,
+        callers=callers,
+    )
+
+
+def _io(entities: Sequence[Entity]) -> tuple[list[BoundEntity], set[str]]:
+    """The ``io`` candidates and the pure helpers (module docstring)."""
+    ctx = _io_context(entities)
+    pure = _pure_helpers(
+        ctx.every, ctx.entry, ctx.reading_modules, ctx.trees, ctx.callers, ctx.facts
+    )
+    io = _reading_io(pure, ctx)
+    _grow_output_helpers(io, pure, ctx)
+    return [io[name] for name in sorted(io)], set(pure)
+
+
+def _reading_io(
+    pure: Mapping[str, FunctionNode], ctx: _IoContext
+) -> dict[str, BoundEntity]:
+    """The ``io`` entities that are no pure helper and read the keyboard, are
+    an entry point, or read it through a pure input helper, by name, each
+    with its reasons (``_io_reasons``)."""
     # A pure input helper is called by what it is: a function through the
     # imports (``ask()``, ``ui.ask()``), a method by its name on an object.
-    readers = {name for name, node in pure.items() if calls_input(node)}
-    reader_methods = {n.rsplit(".", 1)[-1] for n in readers if n not in top_level}
+    readers = {name for name, node in pure.items() if ctx.facts.reads(node)}
+    reader_methods = {n.rsplit(".", 1)[-1] for n in readers if n not in ctx.top_level}
     io: dict[str, BoundEntity] = {}
-    for entity, node in every:
+    for entity, node in ctx.every:
         name = name_of(entity)
         if name in pure:
             continue
-        reasons = []
-        if calls_input(node):
-            reasons.append("calls input()")
-        if name in entry:
-            reasons.append(ENTRY_POINT)
-        through = {
-            f.rsplit(".", 1)[-1]
-            for f in _calls_resolved(
-                node, entity.module_path, contexts, modules, top_level
-            )
-            & readers
-        }
-        if entity.module_path in reading_modules or entity.kind == "method":
-            through |= called_names(node) & reader_methods
-        if through:
-            reasons.append(
-                "reads input through " + ", ".join(f"{t}()" for t in sorted(through))
-            )
+        reasons = _io_reasons(entity, node, ctx, readers, reader_methods)
         if reasons:
             io[name] = BoundEntity(name, "code", "; ".join(reasons))
-    io_modules = {e.module_path for e, _ in every if name_of(e) in io}
-    nodes = {name_of(e): node for e, node in every}
-    helpers = [
+    return io
+
+
+def _io_reasons(
+    entity: Entity,
+    node: FunctionNode,
+    ctx: _IoContext,
+    readers: set[str],
+    reader_methods: set[str],
+) -> list[str]:
+    """Why ``entity`` is ``io``, in a fixed order: it calls ``input()``, it is
+    an entry point, it reads the keyboard through the pure input helpers
+    ``readers`` (a call resolved through the imports, or a method helper
+    called by its name, ``reader_methods``, from a method or a function of a
+    module that reads the keyboard). Empty when it is not ``io`` so."""
+    reasons = []
+    if ctx.facts.reads(node):
+        reasons.append("calls input()")
+    if name_of(entity) in ctx.entry:
+        reasons.append(ENTRY_POINT)
+    through = {f.rsplit(".", 1)[-1] for f in ctx.resolved(entity, node) & readers}
+    if entity.module_path in ctx.reading_modules or entity.kind == "method":
+        through |= ctx.facts.called(node) & reader_methods
+    if through:
+        reasons.append(
+            "reads input through " + ", ".join(f"{t}()" for t in sorted(through))
+        )
+    return reasons
+
+
+def _output_candidates(
+    io: Mapping[str, BoundEntity], pure: Mapping[str, FunctionNode], ctx: _IoContext
+) -> list[tuple[Entity, FunctionNode]]:
+    """The functions and methods, neither ``io`` nor pure yet, that call
+    ``print()`` or ``open()``, not ``input()``, return no value and change
+    nothing: what ``_grow_output_helpers`` may bind when the ``io`` calls
+    it. Filtered once, before the growth."""
+    return [
         (entity, node)
-        for entity, node in every
+        for entity, node in ctx.every
         if name_of(entity) not in io
         and name_of(entity) not in pure
         and calls_builtin(node, _OUTPUT)
-        and not calls_input(node)
+        and not ctx.facts.reads(node)
         and not _returns_value(node)
         and not _mutates(node)
     ]
-    entities_by_name = {name_of(e): e for e, _ in every}
-    resolved_by_name: dict[str, set[str]] = {}
 
-    def resolved_of(name: str) -> set[str]:
-        if name not in resolved_by_name:
-            resolved_by_name[name] = _calls_resolved(
-                nodes[name],
-                entities_by_name[name].module_path,
-                contexts,
-                modules,
-                top_level,
-            )
-        return resolved_by_name[name]
 
+def _called_by_io(
+    entity: Entity, ctx: _IoContext, called: set[str], resolved: set[str]
+) -> bool:
+    """Whether the ``io`` calls ``entity``: a top-level function when a call
+    resolves to it (``resolved``), a method (or a nested function) when one
+    has its name (``called``)."""
+    name = name_of(entity)
+    if name in ctx.top_level:
+        return name in resolved
+    return _simple(entity) in called
+
+
+def _grow_output_helpers(
+    io: dict[str, BoundEntity], pure: dict[str, FunctionNode], ctx: _IoContext
+) -> None:
+    """Bind, in place, the output helpers the ``io`` calls until nothing new
+    is bound: one that calls nothing of the project (``_output_helper``) is
+    a pure helper (it goes to ``pure``), one that calls project code is
+    ``io`` (``OUTPUT_HELPER``) when it is a method or in a module that had
+    ``io`` before the growth. A new ``io`` entity may call further helpers,
+    hence the rounds."""
+    io_modules = {e.module_path for e, _ in ctx.every if name_of(e) in io}
+    helpers = _output_candidates(io, pure, ctx)
+    # The last ``def`` of each name, as the calls of an io entity are read.
+    defs = {name_of(e): (e, node) for e, node in ctx.every}
     grown = True
     while grown:
         grown = False
-        called = set().union(*(called_names(nodes[name]) for name in io))
-        resolved = set().union(*(resolved_of(name) for name in io))
+        called = set().union(*(ctx.facts.called(defs[name][1]) for name in io))
+        resolved = set().union(*(ctx.resolved(*defs[name]) for name in io))
         for entity, node in helpers:
             name = name_of(entity)
             if name in io or name in pure:
                 continue
-            # A top-level function is called when a call resolves to it, a
-            # method (or a nested function) when one has its name.
-            if (
-                name not in resolved
-                if name in top_level
-                else _simple(entity) not in called
-            ):
+            if not _called_by_io(entity, ctx, called, resolved):
                 continue
-            if _output_helper(node, name in callers):
+            if _output_helper(node, name in ctx.callers):
                 # Prints what it is given and changes nothing: UI.
                 pure[name] = node
             elif entity.module_path in io_modules or entity.kind == "method":
                 # Prints, changes nothing and calls project code: io.
                 io[name] = BoundEntity(name, "code", OUTPUT_HELPER)
                 grown = True
-    return [io[name] for name in sorted(io)], set(pure)
 
 
 _FRESH_BUILTINS = frozenset(
