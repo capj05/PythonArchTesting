@@ -162,6 +162,10 @@ Common options:
 - `severity`
 - `message`
 
+`mode="any"` requires only that the target exists and compares no
+parameters, as `signature_mode="any"` does in the other signature markers;
+the return annotation is still checked as `return_annotation` says.
+
 Example:
 
 ```python

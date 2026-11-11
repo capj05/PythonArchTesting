@@ -26,7 +26,7 @@ _None — the marker takes only optional arguments._
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `mode` | `str` | `"compatible"` | Signature matching mode: `"compatible"`, `"exact"`, or `"any"`. |
+| `mode` | `str` | `"compatible"` | Signature matching mode: `"compatible"`, `"exact"`, or `"any"`; `"any"` requires only that the target exists and leaves its parameters, `*args` and `**kwargs` out (the return annotation is still checked as `return_annotation` says). |
 | `allow_extra_params` | `bool` | `True` | Accept target signatures with extra optional parameters (an extra required parameter always fails); `False` rejects every extra parameter. |
 | `allow_param_rename` | `bool` | `False` | Pair parameters by position instead of by name, so a target may rename them (see [Compatible mode](#compatible-mode)). |
 | `return_annotation` | `str` | `"warning"` | Return-type checking level: `"warning"`, `"error"`, `"off"`, or `"ignore"` (an alias of `"off"`). |
@@ -51,7 +51,7 @@ def normalize(
 
 ## What it checks
 
-- Parameter shape on the matched target (arity, kind, defaults) under `mode="compatible"` or `mode="exact"`.
+- Parameter shape on the matched target (arity, kind, defaults, `*args` and `**kwargs`) under `mode="compatible"` or `mode="exact"`; `mode="any"` compares no parameters, as `signature_mode="any"` does in the other signature markers.
 - Return-annotation presence or compatibility when `return_annotation` is enabled.
 
 ### Compatible mode

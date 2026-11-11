@@ -1826,7 +1826,8 @@ def _evaluate_signature_rule(
     source_model = _param_model(source)
     target_model = _param_model(target)
     errors: List[str] = []
-    if not params.return_only:
+    # ``mode="any"`` leaves the parameters out, as every signature marker does.
+    if not params.return_only and params.mode != "any":
         errors.extend(
             _signature_param_errors(
                 source, target, source_model, target_model, ctx=ctx, params=params

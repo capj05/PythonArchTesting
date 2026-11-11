@@ -794,3 +794,69 @@ def normalize(x: int, y: int = 0) -> int:
     assert len(results) == 1
     assert results[0].status == "FAILED"
     assert results[0].details.get("reason") == "required_target_missing"
+
+
+def _evaluate(source: str, target: str) -> list:
+    source_entity = _extract_function_entity(source, role="source", name="normalize")
+    target_entity = _extract_function_entity(target, role="target", name="normalize")
+    rules, _, _ = compile_rules([source_entity], Mock())
+    matches = {
+        source_entity.canonical_id: MatchResult(
+            source_id=source_entity.canonical_id,
+            status=MatchStatus.MATCHED,
+            target_id=target_entity.canonical_id,
+            confidence=1.0,
+            reasons=[],
+            candidates=[],
+        )
+    }
+    results, errors = evaluate_rules_for_target(
+        rules=rules,
+        source_index=build_entity_index([source_entity]),
+        target_index=build_entity_index([target_entity]),
+        matches=matches,
+        config=Mock(),
+    )
+    assert errors == []
+    return results
+
+
+def test_api001_any_mode_leaves_the_parameters_out_but_checks_the_return():
+    # As in every signature marker, ``mode="any"`` asks only that the target
+    # exists: neither its parameters nor *args/**kwargs are compared, while
+    # the return annotation still is when ``return_annotation`` asks for it.
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_entity_signature
+
+def normalize(a: int, b: int, *args: int, **kwargs: int) -> int:
+    __archtest__: Annotated[
+        None,
+        required_entity_signature(mode="any", return_annotation="error"),
+    ]
+    return a + b
+"""
+    results = _evaluate(source, "def normalize(x: str) -> str:\n    return x\n")
+
+    assert {result.rule_id: result.status for result in results} == {
+        "API001/required_entity_signature/v1": "OK",
+        "API001/required_entity_signature_return/v1": "FAILED",
+    }
+
+
+def test_api001_compatible_mode_still_compares_the_parameters():
+    source = """
+from typing import Annotated
+from pythonarchtesting.rules import required_entity_signature
+
+def normalize(a: int, *args: int) -> int:
+    __archtest__: Annotated[
+        None,
+        required_entity_signature(mode="compatible", return_annotation="off"),
+    ]
+    return a
+"""
+    results = _evaluate(source, "def normalize(a: int) -> int:\n    return a\n")
+
+    assert [result.status for result in results] == ["FAILED"]
+    assert "missing *args support" in results[0].message
