@@ -82,29 +82,6 @@ def _descriptor_matches(
     return member.descriptor_kind in descriptor_kinds
 
 
-def _descriptor_rejection(
-    member: ResolvedAttribute,
-    *,
-    name: str,
-) -> tuple[str, str]:
-    if member.descriptor_kind == "cached_property":
-        return (
-            f"descriptor '{name}' found, but cached_property does not satisfy "
-            "required_attribute without descriptor_kinds=('cached_property',)",
-            "descriptor_present_but_not_enabled",
-        )
-    if member.descriptor_kind == "classproperty":
-        return (
-            f"descriptor '{name}' found, but classproperty does not satisfy "
-            "required_attribute without descriptor_kinds=('classproperty',)",
-            "descriptor_present_but_not_enabled",
-        )
-    return (
-        f"property '{name}' found, but properties do not satisfy required_attribute",
-        "property_present_but_not_allowed",
-    )
-
-
 def _read_only_message(member: ResolvedAttribute, *, name: str) -> str:
     if member.descriptor_kind == "cached_property":
         return (
@@ -221,14 +198,15 @@ def _first_passing(
     source: Entity,
     target: Entity,
     ctx: EvalContext,
-) -> tuple[ResolvedAttribute | None, str | None]:
+) -> tuple[ResolvedAttribute | None, tuple[str, str] | None]:
     """Return the first candidate meeting the annotation and writability checks.
 
     The requirement is existential, so the search stops at the first passing
-    candidate.  When none passes, the reason of the first rejected candidate
-    is returned; the report has always described that one.
+    candidate.  When none passes, the failure of the first rejected candidate
+    is returned as a reason and its matching code; the report has always
+    described that candidate, and the code has to name the same check.
     """
-    first_fail_reason: str | None = None
+    first_failure: tuple[str, str] | None = None
     for member in candidates:
         if params.annotation is not None:
             comparison = compare_annotation_text(
@@ -240,20 +218,24 @@ def _first_passing(
                 variance="invariant",
             )
             if not comparison.compatible:
-                if first_fail_reason is None:
-                    first_fail_reason = (
+                if first_failure is None:
+                    first_failure = (
                         f"attribute annotation mismatch: "
-                        f"expected {comparison.expected}, found {comparison.found}"
+                        f"expected {comparison.expected}, found {comparison.found}",
+                        "attribute_present_but_annotation_mismatch",
                     )
                 continue
 
         if params.require_writable and not member.is_writable:
-            if first_fail_reason is None:
-                first_fail_reason = _read_only_message(member, name=params.name)
+            if first_failure is None:
+                first_failure = (
+                    _read_only_message(member, name=params.name),
+                    "attribute_present_but_read_only",
+                )
             continue
 
-        return member, first_fail_reason
-    return None, first_fail_reason
+        return member, first_failure
+    return None, first_failure
 
 
 def _classify_failure(
@@ -261,7 +243,7 @@ def _classify_failure(
     all_candidates: list[ResolvedAttribute],
     storage_candidates: list[ResolvedAttribute],
     matching_candidates: list[ResolvedAttribute],
-    first_fail_reason: str | None,
+    first_failure: tuple[str, str] | None,
 ) -> tuple[str, str]:
     """Name why no candidate satisfied the requirement, as a reason and a code.
 
@@ -280,21 +262,15 @@ def _classify_failure(
             "storage_mismatch",
         )
     if not matching_candidates:
-        best_descriptor_candidate = sorted(
-            storage_candidates,
-            key=lambda member: _candidate_priority(member, storage=params.storage),
-        )[0]
-        if not _descriptor_matches(
-            best_descriptor_candidate,
-            allow_property=params.allow_property,
-            descriptor_kinds=set(params.descriptor_kinds),
-        ):
-            return _descriptor_rejection(best_descriptor_candidate, name=name)
-        # Not reachable today: an empty ``matching_candidates`` means every
-        # storage candidate, this one included, failed ``_descriptor_matches``.
+        # Only a plain property can fail ``_descriptor_matches``:
+        # ``collect_attributes`` returns a cached_property or classproperty
+        # only when its kind is among ``descriptor_kinds``, and such a member
+        # is then accepted.  So every storage candidate is a property, and
+        # ``allow_property`` is off.
         return (
-            first_fail_reason or f"missing required attribute '{name}'",
-            "attribute_present_but_not_accepted",
+            f"property '{name}' found, but properties do not satisfy "
+            "required_attribute",
+            "property_present_but_not_allowed",
         )
     if params.require_writable and all(
         not member.is_writable for member in matching_candidates
@@ -303,8 +279,8 @@ def _classify_failure(
             _read_only_message(matching_candidates[0], name=name),
             "attribute_present_but_read_only",
         )
-    # Every candidate failed a check, so a first reason has been recorded.
-    return cast(str, first_fail_reason), "attribute_present_but_annotation_mismatch"
+    # Every candidate failed a check, so a first failure has been recorded.
+    return cast(tuple[str, str], first_failure)
 
 
 class AttributeContractEvaluator:
@@ -357,7 +333,7 @@ class AttributeContractEvaluator:
                 details=skip_details,
             )
 
-        passing_candidate, first_fail_reason = _first_passing(
+        passing_candidate, first_failure = _first_passing(
             matching_candidates, params, source=source, target=target, ctx=ctx
         )
         candidate_payloads = [_attribute_payload(member) for member in all_candidates]
@@ -378,7 +354,7 @@ class AttributeContractEvaluator:
             all_candidates,
             storage_candidates,
             matching_candidates,
-            first_fail_reason,
+            first_failure,
         )
         details: dict[str, Any] = {
             "reason": reason,

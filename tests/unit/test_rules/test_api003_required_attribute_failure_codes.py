@@ -178,13 +178,16 @@ class User(Base):
     ]
 
 
-def test_api003_mixed_failures_pair_read_only_reason_with_mismatch_code() -> None:
-    """Pin the current pairing of a read-only reason with a mismatch code.
+def test_api003_mixed_failures_report_the_first_candidates_failure() -> None:
+    """Reason and code both name the check the first candidate failed.
 
-    The child's read-only property is tried first and fails on writability;
-    the inherited writable attribute then fails on its annotation.  Because
-    not every candidate is read-only the code says annotation mismatch, while
-    the reason still carries the first, read-only, failure.
+    The child's read-only property shadows the inherited attribute, so it is
+    tried first and fails on writability; the inherited writable attribute
+    then fails on its annotation.  The report describes the shadowing
+    property, which is what the class actually exposes, and its code has to
+    say read-only as well.  Before the fix the code was taken from the
+    "not every candidate is read-only" test and said annotation mismatch,
+    contradicting the read-only reason next to it.
     """
     result = _evaluate(
         'required_attribute("z", annotation="int", allow_property=True, '
@@ -201,7 +204,7 @@ class User(Base):
     )
 
     assert result.status == "FAILED"
-    assert result.details["fail_code"] == "attribute_present_but_annotation_mismatch"
+    assert result.details["fail_code"] == "attribute_present_but_read_only"
     assert result.details["reason"] == (
         "property 'z' is read-only (no setter); "
         "require_writable=True requires a setter"
