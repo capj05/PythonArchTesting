@@ -357,18 +357,20 @@ def _positional_params(
 
 def _positional_literals(
     node: ast.Call, name: str, unsupported: list[dict[str, Any]]
-) -> list[Any]:
+) -> list[tuple[int, Any]]:
     """The literal positional arguments, with an issue for every other one.
 
+    Each literal comes with its argument's index in ``node.args``, so a later
+    issue about it points at that argument even when a non-literal precedes it.
     A protocol is named by a reference to its class, not a literal, so a name
     reference in the first position of a protocol marker is no issue.
     """
-    literals: list[Any] = []
+    literals: list[tuple[int, Any]] = []
     names_protocol = _POSITIONAL_SINGLE_ARG_NAMES.get(name) == "protocol"
     for idx, arg in enumerate(node.args):
         is_lit, lit_val = _literal_value(arg)
         if is_lit:
-            literals.append(lit_val)
+            literals.append((idx, lit_val))
         elif not (idx == 0 and names_protocol and _is_name_reference(arg)):
             unsupported.append(
                 _issue("arg", arg, expr=safe_unparse(arg), index=idx, name=name)
@@ -379,20 +381,16 @@ def _positional_literals(
 def _positional_list_param(
     node: ast.Call,
     name: str,
-    literals: list[Any],
+    literals: list[tuple[int, Any]],
     params: dict[str, Any],
     unsupported: list[dict[str, Any]],
 ) -> None:
-    """Collect the strings of a list-valued marker; every other literal is an issue.
-
-    The issue's position comes from the argument at the literal's index, which
-    is the argument itself only when no non-literal argument precedes it.
-    """
+    """Collect the strings of a list-valued marker; every other literal is an issue."""
     key = _POSITIONAL_LIST_ARG_NAMES.get(name)
     if not key:
         return
-    params[key] = [value for value in literals if isinstance(value, str)]
-    for idx, value in enumerate(literals):
+    params[key] = [value for _, value in literals if isinstance(value, str)]
+    for idx, value in literals:
         if not isinstance(value, str):
             unsupported.append(
                 _issue("arg", node.args[idx], expr=repr(value), index=idx, name=name)
@@ -402,7 +400,7 @@ def _positional_list_param(
 def _positional_single_param(
     node: ast.Call,
     name: str,
-    literals: list[Any],
+    literals: list[tuple[int, Any]],
     params: dict[str, Any],
     unsupported: list[dict[str, Any]],
 ) -> None:
@@ -414,9 +412,9 @@ def _positional_single_param(
     key = _POSITIONAL_SINGLE_ARG_NAMES.get(name)
     if not key:
         return
-    params[key] = literals[0]
-    for idx, value in enumerate(literals):
-        if idx == 0 and _valid_single_value(name, value):
+    params[key] = literals[0][1]
+    for position, (idx, value) in enumerate(literals):
+        if position == 0 and _valid_single_value(name, value):
             continue
         unsupported.append(
             _issue("arg", node.args[idx], expr=repr(value), index=idx, name=name)

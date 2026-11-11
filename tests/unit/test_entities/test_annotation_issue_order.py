@@ -64,10 +64,10 @@ def test_params_and_issue_order_stay_as_they_were() -> None:
             [
                 _ASSIGNED,
                 ("arg", "x", 3, 19, {"index": 0, "name": "forbid_imports"}),
-                # The list check indexes the literals, not the arguments, so a
-                # non-literal before them shifts the position it reports.
-                ("arg", "1", 3, 19, {"index": 0, "name": "forbid_imports"}),
-                ("arg", "2", 3, 25, {"index": 2, "name": "forbid_imports"}),
+                # A non-literal before them does not shift the literals' issues:
+                # each one carries its own argument's index and position.
+                ("arg", "1", 3, 22, {"index": 1, "name": "forbid_imports"}),
+                ("arg", "2", 3, 30, {"index": 3, "name": "forbid_imports"}),
                 ("kw", "y", 3, 38, {"name": "flag"}),
             ],
             0,
@@ -87,7 +87,7 @@ def test_params_and_issue_order_stay_as_they_were() -> None:
             {"protocol": 2, "protocol_expr": "Other"},
             [
                 _ASSIGNED,
-                ("arg", "2", 5, 24, {"index": 0, "name": "implements_protocol"}),
+                ("arg", "2", 5, 31, {"index": 1, "name": "implements_protocol"}),
             ],
             2,
         ),
@@ -165,3 +165,16 @@ def test_params_keep_their_insertion_order() -> None:
     assert list(declarations[2].params) == ["protocol", "protocol_expr"]
     assert list(declarations[4].params) == ["name", "annotation"]
     assert list(declarations[5].params) == ["stage", "variable", "variable_explicit"]
+
+
+def test_single_valued_issue_points_at_its_own_argument() -> None:
+    """A non-literal first argument does not shift a later literal's issue."""
+    source = '__archtest__: Annotated[None, required_attribute(f(), "n", 4)] = 5\n'
+
+    (declaration,) = extract_annotation_declarations(ast.parse(source).body, source)
+
+    assert declaration.params == {"name": "n"}
+    assert _summary(declaration)[2][1:] == [
+        ("arg", "f()", 1, 49, {"index": 0, "name": "required_attribute"}),
+        ("arg", "4", 1, 59, {"index": 2, "name": "required_attribute"}),
+    ]
