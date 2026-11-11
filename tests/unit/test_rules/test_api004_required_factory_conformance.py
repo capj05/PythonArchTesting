@@ -1827,3 +1827,61 @@ class MyFactory:
 
     assert errors == []
     assert [r.status for r in results] == ["FAILED"]
+
+
+_WRAPPED_FACTORY_SOURCE = """
+from typing import Annotated
+from pythonarchtesting.rules import required_factory
+
+class Session:
+    def _make() -> "Session":
+        __archtest__: Annotated[
+            None,
+            required_factory(
+                satisfy_with=("staticmethod", "static_attribute"),
+                name_match="exact",
+            ),
+        ]
+        return Session()
+
+    create = staticmethod(_make)
+"""
+
+
+def _wrapped_factory_target(attribute: str) -> str:
+    return f"""
+def _build() -> "Session":
+    return Session()
+
+class Session:
+    {attribute} = _build
+"""
+
+
+def test_api004_static_attribute_matches_the_wrapped_factory_name() -> None:
+    results, errors = _evaluate_factory_rule(
+        _WRAPPED_FACTORY_SOURCE,
+        _wrapped_factory_target("create"),
+        source_method_name="_make",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["OK"]
+
+
+def test_api004_static_attribute_does_not_match_the_wrapped_function_name() -> None:
+    results, errors = _evaluate_factory_rule(
+        _WRAPPED_FACTORY_SOURCE,
+        _wrapped_factory_target("_make"),
+        source_method_name="_make",
+        source_class_name="Session",
+        target_class_name="Session",
+        rule_id="API004/required_factory/v3",
+    )
+
+    assert errors == []
+    assert [result.status for result in results] == ["FAILED"]
+    assert results[0].details["reason"] == "no_factory_candidate_found"

@@ -54,7 +54,11 @@ without one, such as `required_method("x")` — is not used for anything: the
 declaration reports it as a warning, an `arg` issue with the argument's index
 and position (`--validate-declarations` shows it). Only the first argument is
 the value; a literal after a first argument that cannot be read does not take
-its place.
+its place. A keyword naming that positional argument when it is given
+positionally as well — `implements_protocol(Seller, protocol=Other)`,
+`required_attribute("n", name="m")` — would make Python reject the call; it is
+reported as a `kw` issue with `duplicate: "positional"` and not used, so the
+positional argument stays the value.
 
 ## Signature And Shape
 

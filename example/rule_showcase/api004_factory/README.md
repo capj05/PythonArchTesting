@@ -30,7 +30,7 @@ Defaults not shown: `allow_inherited=True`, `allow_missing=False`,
 | `target_pass_static_attribute_factory`    | PASS     | `make = classmethod(_make_impl)` assignment satisfies the classmethod requirement |
 | `target_fail_missing_factory`             | FAIL     | `ClassmethodFactory.create` removed; no satisfying member remains                 |
 | `target_fail_wrong_signature`             | FAIL     | `LenientMatch.make` retypes `raw: str -> raw: int`                                |
-| `target_fail_return_annotation`           | FAIL     | `CheckedReturnAnnotation.create` returns `dict` under `return_annotation_mode='check'` |
+| `target_fail_return_annotation`           | FAIL     | `CheckedReturnAnnotation.create` returns `dict` under `return_annotation_mode="exact"` |
 
 ## How to re-run
 

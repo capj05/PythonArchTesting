@@ -111,8 +111,8 @@ class StaticAttributeFactory:
 
 
 class CheckedReturnAnnotation:
-    """``return_annotation_mode='check'`` enforces the factory's return
-    type matches the owning class.
+    """``return_annotation_mode="exact"`` requires the factory's return
+    annotation to name the owning class.
     """
 
     def __init__(self, value: int) -> None:

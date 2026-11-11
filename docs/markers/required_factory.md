@@ -54,6 +54,7 @@ class UserService:
 ## What it checks
 
 - Presence of an accepted factory candidate (constructor, classmethod, staticmethod, or static attribute) under the configured `satisfy_with` and `name_match`.
+- The name a candidate is matched by: the reference method's own name, or, for a factory assigned as `create = staticmethod(_make)`, its public name `create`. Methods and static attributes are matched by the same name.
 - Parameter compatibility under `signature_mode`.
 - Optional return-annotation matching when `return_annotation_mode != "ignore"`.
 - Inherited target candidates when `allow_inherited=True`.

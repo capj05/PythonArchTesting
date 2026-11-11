@@ -428,7 +428,7 @@ def _resolve_factory_class(
 
 
 def _static_attribute_candidates(
-    source: Entity,
+    source_name: str,
     target_class: Entity,
     ctx: EvalContext,
     params: _FactoryRuleParams,
@@ -448,7 +448,7 @@ def _static_attribute_candidates(
     matched = filter_static_attribute_factory_candidates(
         all_candidates,
         name_match=params.name_match,
-        source_name=source.name,
+        source_name=source_name,
         aliases=params.aliases,
         pattern=params.pattern,
     )
@@ -760,6 +760,9 @@ def _evaluate_required_factory_rule(
             rule_evidence,
         )
 
+    # A factory assigned as ``create = staticmethod(_make)`` is required under
+    # its public name, by methods and static attributes alike.
+    factory_name = source.extras.get("assignment_wrapped_by") or source.name
     candidates = factory_candidates_for_class(
         target_class,
         ctx,
@@ -770,13 +773,13 @@ def _evaluate_required_factory_rule(
         candidates,
         satisfy_with=params.satisfy_with,
         name_match=params.name_match,
-        source_name=source.extras.get("assignment_wrapped_by") or source.name,
+        source_name=factory_name,
         aliases=params.aliases,
         pattern=params.pattern,
         detection_mode=params.detection_mode,
     )
     static_candidates, matched_static, filtered_static = _static_attribute_candidates(
-        source, target_class, ctx, params
+        factory_name, target_class, ctx, params
     )
 
     details_by_key: dict[tuple[str, str], dict[str, Any]] = {}

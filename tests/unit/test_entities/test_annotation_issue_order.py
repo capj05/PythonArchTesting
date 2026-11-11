@@ -86,11 +86,19 @@ def test_params_and_issue_order_stay_as_they_were() -> None:
         ),
         (
             "implements_protocol",
-            # The surplus ``2`` is reported but no longer stored as the protocol.
-            {"protocol_expr": "Other"},
+            # The surplus ``2`` is reported but not stored as the protocol, and
+            # the keyword repeating the positional protocol is reported unused.
+            {"protocol_expr": "Proto"},
             [
                 _ASSIGNED,
                 ("arg", "2", 5, 31, {"index": 1, "name": "implements_protocol"}),
+                (
+                    "kw",
+                    "Other",
+                    5,
+                    43,
+                    {"name": "protocol", "duplicate": "positional"},
+                ),
             ],
             2,
         ),
@@ -218,12 +226,44 @@ def test_a_protocol_given_once_has_no_issue(marker: str) -> None:
     assert declaration.unsupported == []
 
 
-def test_a_protocol_keyword_overrides_the_positional_protocol_silently() -> None:
-    """Pinned as it is: Python itself would reject the call with a TypeError."""
-    declaration = _only("implements_protocol(Seller, protocol=Other)")
+@pytest.mark.parametrize(
+    ("marker", "params", "expr", "name"),
+    [
+        (
+            "implements_protocol(Seller, protocol=Other)",
+            {"protocol_expr": "Seller"},
+            "Other",
+            "protocol",
+        ),
+        (
+            "implements_runtime_protocol(Seller, protocol=Other)",
+            {"protocol_expr": "Seller"},
+            "Other",
+            "protocol",
+        ),
+        ('required_attribute("n", name="m")', {"name": "n"}, "'m'", "name"),
+        ('flow("s", stage="t")', {"stage": "s"}, "'t'", "stage"),
+        ('subclass_of("Base", base="Other")', {"base": "Base"}, "'Other'", "base"),
+    ],
+)
+def test_a_keyword_repeating_the_positional_argument_is_an_issue(
+    marker: str, params: dict[str, str], expr: str, name: str
+) -> None:
+    """Python rejects such a call, so the keyword is reported and not used.
 
-    assert declaration.params == {"protocol_expr": "Other"}
-    assert declaration.unsupported == []
+    The positional argument stays the value, as it would without the keyword.
+    """
+    declaration = _only(marker)
+
+    assert {
+        key: value
+        for key, value in declaration.params.items()
+        if key == name or key == "protocol_expr"
+    } == params
+    assert [
+        (issue["kind"], issue["expr"], issue["name"], issue.get("duplicate"))
+        for issue in declaration.unsupported
+    ] == [("kw", expr, name, "positional")]
 
 
 def test_only_the_first_argument_is_the_value_of_a_single_valued_marker() -> None:

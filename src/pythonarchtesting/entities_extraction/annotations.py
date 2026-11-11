@@ -351,8 +351,7 @@ def _positional_params(
         _positional_list_param(node, name, literals, params, unsupported)
         _positional_single_param(node, name, literals, params, unsupported)
     if _POSITIONAL_SINGLE_ARG_NAMES.get(name) == "protocol" and node.args:
-        # A keyword ``protocol`` given as well overrides this expression.
-        params.setdefault("protocol_expr", safe_unparse(node.args[0]))
+        params["protocol_expr"] = safe_unparse(node.args[0])
 
 
 def _positional_literals(
@@ -446,13 +445,24 @@ def _keyword_params(
     """Turn a marker's keyword arguments into params, recording issues.
 
     Returns whether a literal ``variable`` keyword was given, which ``flow``
-    records so a default variable can be told from a chosen one.
+    records so a default variable can be told from a chosen one. A keyword
+    naming the positional parameter of a marker that already got a positional
+    argument would make Python reject the call; it is an issue and not used,
+    so the positional argument stays the value.
     """
     explicit_variable = False
-    takes_protocol = _POSITIONAL_SINGLE_ARG_NAMES.get(name) == "protocol"
+    positional_key = _POSITIONAL_SINGLE_ARG_NAMES.get(name)
+    takes_protocol = positional_key == "protocol"
     for kw in node.keywords:
         key = kw.arg if kw.arg is not None else "**"
         value_repr = safe_unparse(kw.value)
+        if node.args and positional_key and kw.arg == positional_key:
+            unsupported.append(
+                _issue(
+                    "kw", kw.value, expr=value_repr, name=key, duplicate="positional"
+                )
+            )
+            continue
         is_lit, lit_val = _literal_value(kw.value)
         if name == "required_attribute" and kw.arg == "annotation":
             # An annotation is any type expression, kept as its source text.
