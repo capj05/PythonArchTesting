@@ -44,12 +44,14 @@ All paths are absolute. Entity names are relative to the submission root:
    `{"$new": "ship.State"}`); an entry of `kind: "method"` needs the
    arguments of its object's constructor in each case,
    `"init": {"args": [...]}`. It returns `task_dirs` and `parts`, one entry
-   per task written, each with its `task_dir`, `roles`, `dropped` (bound entities
-   without cases: they are left out of the task and reported as unverified,
-   never lost), `ignored_cases` (cases no check runs, with the reason: an
-   entity of a role checked only statically, a private function, a name the
-   submission does not have) and `problems` (what keeps the core from running
-   the task); with one part its keys are repeated at the top level. A
+   per task written, each with its `task_dir`, `roles`, `conflicts`,
+   `not_applied`, `dropped` (bound entities without cases: they are left out
+   of the task and reported as unverified, never lost) and `problems` (what
+   keeps the core from running the task); with one part its keys are repeated
+   at the top level. Beside them, once for all parts, `ignored_cases` (cases
+   no check runs, with the reason: an entity of a role checked only
+   statically, a private function, a name the submission does not have) and
+   `syntax_errors`. A
    principle that does not apply lists nothing as `dropped`, since nothing
    of it runs. A
    polymorphism discovery with several independent hierarchies gives one task

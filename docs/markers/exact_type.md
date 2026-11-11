@@ -33,6 +33,7 @@ rule.
 ## Example
 
 ```python
+# reference/repositories.py
 from typing import Annotated
 from pythonarchtesting.rules import exact_type
 
@@ -42,7 +43,7 @@ class BaseRepository:
 
 
 class CsvRepository(BaseRepository):
-    __archtest__: Annotated[None, exact_type("reference.BaseRepository")]
+    __archtest__: Annotated[None, exact_type("repositories.BaseRepository")]
 ```
 
 ## What it checks

@@ -65,15 +65,16 @@ A target whose `report` reads `inventory._stock.items()` fails with
 - Each violation has a fact in `details.facts`, aligned 1:1 with
   `details.violations`: `kind` (`read`), `attribute`, `class` (the class the
   annotation of the parameter read through names, else `null`), `file`,
-  `line`, `reader` (`module:qualname`), and `receiver` (`true`, present
-  only when the attribute is read to call a method on it that changes a
-  container in place, `obj._x.append(v)` (`append`, `extend`, `insert`,
-  `update`, `pop`, `popitem`, `remove`, `clear`, `setdefault`, `add`,
-  `discard`, `sort`, `reverse`): a principle's findings count such a read on
-  the line of a write of the same attribute as part of that write; so is a
-  read in a statement that assigns that very attribute of the same object,
-  `obj._x = {k: v for k, v in obj._x.items() if ...}`; `a._x = b._x.copy()`
-  is a read of its own).
+  `line`, `reader` (`module:qualname`), and `receiver`, present only when
+  the read is part of a write of the same attribute: `"mutated"` when the
+  attribute is read to call a method on it that changes a container in
+  place, `obj._x.append(v)` (`append`, `extend`, `insert`, `update`, `pop`,
+  `popitem`, `remove`, `clear`, `setdefault`, `add`, `discard`, `sort`,
+  `reverse`), `"assigned"` when it is read in a statement that assigns that
+  very attribute of the same object, `obj._x = {k: v for k, v in
+  obj._x.items() if ...}` (`a._x = b._x.copy()` is a read of its own). A
+  principle's findings count such a read on the line of a write of the same
+  attribute as part of that write.
 
 These are no violation:
 

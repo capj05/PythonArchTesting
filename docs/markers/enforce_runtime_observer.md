@@ -27,7 +27,7 @@ target's calling convention does not matter.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `subscribe` | `str` | — | Method that registers a listener; called with the listener as its only argument. |
+| `subscribe` | `str` | — | Method that registers a listener; called with the listener as its last argument, after `subscribe_args` (as its only argument without them). |
 | `notify` | `str` | — | Method that notifies listeners. |
 | `cases` | `list[dict]` | — | Constructor arguments of the subject (`args`, `kwargs`). |
 

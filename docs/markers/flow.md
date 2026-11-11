@@ -28,7 +28,7 @@ the target function's control-flow graph.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `variable` | `str \| None` | `None` | Name of the variable whose flow this stage marks. |
+| `variable` | `str \| None` | `None` | Name of the variable whose flow this stage marks. Left out, it is the variable the statement right before the marker assigns (`x = ...`, `x: T = ...`, `x += ...`); a marker after any other statement then marks no variable. |
 | `message` | `str` | `None` | Custom violation message override. |
 
 Severity is fixed to `"info"` for `flow` markers and is not a configurable argument.
@@ -48,7 +48,7 @@ def process(value: str) -> str:
 
 ## What it checks
 
-- The named `variable` has been assigned by the marker's program point in the source function's CFG.
+- Nothing on its own: `flow` compiles to no rule. It records the stage at the marker's program point in the function's CFG, for its `variable`; whether the variable was assigned there is not checked.
 - The stage identifier is recorded in source order for downstream `enforce_flow` evaluation.
 
 ## What it does not check

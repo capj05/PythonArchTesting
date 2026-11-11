@@ -32,6 +32,7 @@ itself, direct subclasses, and transitive subclasses all fail.
 ## Example
 
 ```python
+# reference/repositories.py
 from typing import Annotated
 from pythonarchtesting.rules import not_subclass_of
 
@@ -41,7 +42,7 @@ class BaseRepository:
 
 
 class CsvRepository:
-    __archtest__: Annotated[None, not_subclass_of("reference.BaseRepository")]
+    __archtest__: Annotated[None, not_subclass_of("repositories.BaseRepository")]
 ```
 
 ## What it checks

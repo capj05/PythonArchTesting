@@ -67,7 +67,8 @@ A target that copies every override fails with `case 0: the instance has
 
 ## What it does not check
 
-- Members added later by other method calls.
+- Members added later by other method calls, unless the case calls them
+  first with `steps` ([Cases](../dynamic-checks.md#cases)).
 - Name patterns — list the names; see [does_not_have](does_not_have.md) for
   `pattern` and `aliases` in the static check.
 

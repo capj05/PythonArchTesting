@@ -33,7 +33,7 @@ _None — the marker takes only optional arguments._
 | `method_kind` | `str` | `"any"` | Method-kind filter when `member_kinds` includes methods: `"any"`, `"instance"`, `"classmethod"`, or `"staticmethod"`. |
 | `storage` | `str` | `"any"` | Attribute storage filter: `"any"`, `"class"`, or `"instance"`. |
 | `allow_property` | `bool` | `True` | Accept `@property` definitions when matching attributes. |
-| `descriptor_kinds` | `tuple[str, ...] \| None` | `None` | Descriptor families to accept (e.g. `"cached_property"`, `"classproperty"`). |
+| `descriptor_kinds` | `tuple[str, ...] \| None` | `None` | Descriptor families to accept, any of `"cached_property"` and `"classproperty"`. |
 | `include_dynamic_attributes` | `bool` | `False` | Include attributes assigned at runtime via `setattr` or wrappers. |
 | `interpret_dataclass_fields` | `bool` | `False` | Treat dataclass fields as instance attributes. |
 | `constructor_kind` | `str` | `"auto"` | Constructor preference when matching constructors: `"auto"`, `"__init__"`, or `"__new__"`. |

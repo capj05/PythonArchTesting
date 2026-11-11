@@ -4,7 +4,7 @@ Require a function or method to expose a compatible signature on the matched
 target.
 
 - **Category:** Signature & shape
-- **Placement:** signature-level `Annotated[...]` (return annotation or parameter annotation)
+- **Placement:** signature-level `Annotated[...]` (return annotation or parameter annotation), or function- or method-body `__archtest__: Annotated[...]`
 
 ## Usage
 
@@ -13,8 +13,8 @@ from pythonarchtesting.rules import required_entity_signature
 ```
 
 Place the marker inside an `Annotated[...]` on a parameter or return annotation
-of the source function or method. The matched target callable must expose a
-compatible signature.
+of the source function or method, or in its body as `__archtest__`. The
+matched target callable must expose a compatible signature.
 
 ## Arguments
 
@@ -52,7 +52,6 @@ def normalize(
 ## What it checks
 
 - Parameter shape on the matched target (arity, kind, defaults) under `mode="compatible"` or `mode="exact"`.
-- Async/sync parity between source and target.
 - Return-annotation presence or compatibility when `return_annotation` is enabled.
 
 ### Compatible mode
@@ -81,6 +80,9 @@ parameters.
 
 ## What it does not check
 
+- Async/sync parity: an `async def` reference is satisfied by a plain `def`
+  target with the same parameters, and the reverse
+  ([required_method](required_method.md) does compare it).
 - Function or method body behavior — purely a signature check.
 - Docstrings, decorators, or type-aliased return values beyond the configured `return_annotation` mode.
 - Implementations attached to instance objects at runtime.

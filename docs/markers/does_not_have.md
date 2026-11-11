@@ -48,6 +48,27 @@ missing `name` with `name_match="exact"` on a class body (issue
 `missing_name`; a `name` that is no non-empty string is `invalid_name`) and an
 invalid `severity` (see [Severity](README.md#severity)).
 
+The arguments must also fit together; each mismatch makes the declaration
+invalid with its own issue:
+
+- `storage` other than `"any"` with `member_kind="method"` or `"property"`
+  (`invalid_storage_for_member_kind`);
+- `signature_mode` other than `"any"` with `member_kind="attribute"` or
+  `"property"` (`invalid_signature_mode_for_member_kind`), or on a class body
+  (`signature_mode_requires_method_body`): only a method-body declaration has
+  a method whose signature can be compared;
+- `include_descriptors=True` or `include_dynamic_attributes=True` with
+  `member_kind="method"` (`include_descriptors_not_supported_for_method_kind`,
+  `include_dynamic_attributes_not_supported_for_method_kind`);
+- on a method body, `member_kind="attribute"` or `"property"`
+  (`invalid_member_kind_for_method_body`);
+- `aliases` without `name_match="alias"` or `pattern` without
+  `name_match="regex"` (`aliases_not_allowed_for_<name_match>_name_match`,
+  `pattern_not_allowed_for_<name_match>_name_match`); `name_match="alias"`
+  without `aliases` (`missing_aliases`); `name_match="regex"` without
+  `pattern` (`missing_pattern`), or with one that does not compile
+  (`invalid_pattern`).
+
 ## Example
 
 ```python

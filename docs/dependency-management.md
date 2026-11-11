@@ -33,8 +33,14 @@ pip install -e .[dev]
 
 Edit dependencies only in `pyproject.toml`:
 
-- `[project.dependencies]` for runtime requirements
+- `[project.dependencies]` for runtime requirements: `typing-extensions`, and
+  `tomli` on Python 3.10 only (the principle catalogue is TOML; 3.11 has
+  `tomllib`)
 - `[project.optional-dependencies].mcp` for the MCP server
+- `[project.optional-dependencies].eval` (`import-linter`) for the baseline of
+  the architectural-mutant evaluation
+  (`example/architectural_mutants/baselines/importlinter.py`), installed with
+  `pip install ".[eval]"`
 - `[project.optional-dependencies].dev` for development, test, and documentation
   tooling; it repeats the `mcp` requirement so the MCP tests run
 

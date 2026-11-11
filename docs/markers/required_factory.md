@@ -33,7 +33,7 @@ _None — the marker takes only optional arguments._
 | `pattern` | `str \| None` | `None` | Regex pattern when `name_match="regex"`; whitespace around it is stripped before matching. |
 | `allow_missing` | `bool` | `False` | Pass when no candidate factory exists on the target instead of failing. |
 | `return_annotation_mode` | `str` | `"ignore"` | Return-annotation matching: `"ignore"`, `"compatible"`, or `"exact"`. |
-| `detection_mode` | `str` | `"strict"` | How factories are detected: `"strict"` or `"extended"`. |
+| `detection_mode` | `str` | `"strict"`; `"extended"` when the source factory is assigned through a wrapper (`create = staticmethod(_make)`) | How factories are detected: `"strict"` or `"extended"`. |
 | `severity` | `str` | `"error"` | Violation severity (`"error"`, `"warning"`, `"info"`). |
 | `message` | `str` | `None` | Custom violation message override. |
 

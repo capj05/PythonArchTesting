@@ -22,8 +22,24 @@ The CLI process itself also exits `2` when the run could not start at all — an
 invalid flag combination (a non-default `--sandbox` or `--sandbox-memory-mb`
 without `--dynamic`, `--dynamic` with `--validate-declarations`, a sandbox that
 is not available on this machine), a configuration error, a `--source` or `--target` path
-that does not exist, or an output path that cannot be written. Those failures print a single `error: ...` line on stderr and produce no
-report. Exit codes `0` and `1` always mean a run completed and was judged.
+that does not exist, or an output path that cannot be written. Those failures print an `error: ...` line on stderr
+(after the usage summary when the flags are wrong) and produce no report.
+Exit codes `0` and `1` always mean a run completed and was judged.
+
+### Warnings on stderr
+
+A completed run can still pass without having checked everything. The CLI
+then prints, on stderr, one line per kind:
+
+- `warning: N runtime rule result(s) were SKIPPED because --dynamic was not
+  given; …`
+- `warning: N runtime rule result(s) passed with code or cases left
+  unchecked; see details.unverified`
+- `warning: N result(s) passed with undecided architecture changes; see
+  details.undecided` (an `architecture_entry` comparison its policy could not
+  judge)
+
+None of them changes the exit code.
 
 `SKIPPED` does not fail a target by itself.
 
@@ -56,6 +72,28 @@ These fields matter first:
 - `results[*].fix_hints`
 - `results[*].evidence`
 - `results[*].locations`
+
+### JSON fields
+
+- top level: `schema_version` (the string `"2"`), `framework_version`,
+  `generated_at`, `exit_code`, `run`, `summary`, `targets`;
+- `run`: `mode`, `source_path`, `reference_modules`, `tool_version`,
+  `generated_at`, `principle` (only for a task source), and
+  `config_snapshot` / `config_fingerprint` (`null` unless
+  `[report].include_config_snapshot = true`);
+- `summary`: `targets_total`, `targets_failed`, `targets_passed`, and
+  `results` with `results_total`, `status_counts`, `severity_counts`,
+  `category_counts`, `top_rules` and `top_source_files` (`name`, `count`),
+  `timings`, and `unverified_total`;
+- `targets[*]`: `target_id`, `display_name`, `target_path`, `source_root`,
+  `mode`, `exit_code`, `summary`, `matching` (`matches`, `matching_config`),
+  `results`, `artifacts`, `tags`;
+- `results[*]`: `result_id`, `rule_id`, `rule_type`, `category`, `status`,
+  `severity`, `message`, `fix_hints`, `evidence`, `locations` (`source` and
+  `target`: `file`, `line`, `module`, `qualname`, …), `source` and `target`
+  (the paired entities), `source_entity_id`, `target_entity_id`,
+  `match_status`, `confidence`, `details`, `project_id`, `timing_seconds`,
+  `tags`.
 
 ## Status vs Severity
 

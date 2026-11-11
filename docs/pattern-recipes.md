@@ -318,7 +318,7 @@ method presence constraints.
 
 ### Variations
 
-- Use `method_kind="class"` in `require_method_set(...)` for class-level hook
+- Use `method_kind="classmethod"` in `require_method_set(...)` for class-level hook
   registries.
 - Replace `debug` with project-local helper names or a regex-driven negative
   recipe elsewhere in the catalog.

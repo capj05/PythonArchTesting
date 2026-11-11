@@ -4,6 +4,8 @@
 
 The supported module entrypoints are:
 
+- `pythonarchtesting.rules`: the declaration markers, see
+  [Marker Factories](#marker-factories-from-pythonarchtestingrules)
 - `pythonarchtesting.state`
 - `pythonarchtesting.runner`
 
@@ -46,6 +48,14 @@ supported public API.
 - `--dynamic`: run the runtime rules, see [dynamic-checks.md](dynamic-checks.md)
 - `--sandbox {none,limits,bwrap}`: confinement of target code under `--dynamic` (default `limits`)
 - `--sandbox-memory-mb`: heap limit per child interpreter under `--dynamic` (default `1024`, must be positive)
+- `--architecture`: compare the target with the reference's module dependencies
+  even where the reference declares no `architecture_entry` (static only)
+- `--write-model FILE`: write the reference's architecture model as JSON to
+  `FILE` and stop; needs only `--source` (with `--dynamic` it includes what the
+  cases do)
+- `--mapping FILE`: JSON pairing of reference entities with target entities the
+  matching could not pair (`{"pairs": {...}}`, or per target
+  `{"targets": {"<id>": {"pairs": ...}}}`); automatic matches are never overridden
 
 ## Supported Annotation Containers
 
@@ -116,6 +126,28 @@ documented in [pattern-recipes.md](pattern-recipes.md).
 | `enforce_runtime_observer(...)` | Runtime check: subscribe, notify and unsubscribe behave as an observer | Class-level `__archtest__: Annotated[...]` |
 
 The runtime markers above run only with `--dynamic`; see [dynamic-checks.md](dynamic-checks.md).
+
+### Positional Arguments
+
+Every argument is a keyword except these positional ones:
+
+- several names: `forbid_imports(*forbidden)`, `enforce_layers(*layers)`,
+  `module_interface(*names)`, `forbid_runtime_imports(*forbidden)`,
+  `forbid_runtime_calls(*modules)`, `require_runtime_calls(*modules)`,
+  `forbid_runtime_instantiation(*modules)`, `require_runtime_members(*names)`,
+  `forbid_runtime_members(*names)`
+- one value: `does_not_have(name)`, `required_attribute(name)`,
+  `subclass_of(base)`, `exact_type(base)`, `not_subclass_of(base)`,
+  `inherits_directly_from(base)`, `implements_protocol(protocol)`,
+  `implements_runtime_protocol(protocol)`, `require_runtime_delegation(spy)`,
+  `flow(stage)`, `enforce_flow(stages)`
+
+A surplus positional argument, or a keyword repeating the positional one, is
+reported as a declaration warning and not used; see
+[markers/README.md § Positional Arguments](markers/README.md#positional-arguments).
+Invalid logical, enumerated and severity values are described in
+[§ Logical And Enumerated Arguments](markers/README.md#logical-and-enumerated-arguments)
+and [§ Severity](markers/README.md#severity).
 
 ### `required_entity_signature(...)`
 
@@ -1175,6 +1207,7 @@ Runtime counterpart: [`forbid_runtime_imports`](markers/forbid_runtime_imports.m
 
 Common options:
 
+- `*forbidden` — module names whose import is forbidden
 - `scope`
 - `package`
 - `mode`
@@ -1279,6 +1312,48 @@ Notes:
 - `--write-model FILE` (with `--source` only) writes the reference's model as
   JSON, with `--dynamic` including what the cases do; MCP
   `describe_architecture` returns it.
+
+### `module_interface(...)`
+
+See also: [markers/module_interface.md](markers/module_interface.md) — focused per-marker page(s).
+
+Common options:
+
+- `*names` — the module's top-level names other modules may use; none given:
+  its public names (no leading underscore)
+- `ignore_type_checking`
+- `entry`, `cases`, `init`, `timeout_s` — the runtime check
+- `severity`
+- `message`
+
+Notes:
+
+- placement is module-level in the module whose interface it states;
+- every listed name must exist in the module, otherwise the declaration is
+  dropped with a `compiler_invalid_param` sentinel for `names`;
+- the static rule (`DEP005/module_interface/v1`) checks that every other
+  module of the target imports or uses only names of the interface, imports
+  inside functions included;
+- the runtime rule (`DYN012/module_interface/v1`), with `entry`, `cases` and
+  `--dynamic`, checks that every call another module makes into the module
+  while `entry` runs goes to a name of the interface.
+
+Example:
+
+```python
+from typing import Annotated
+from pythonarchtesting.rules import module_interface
+
+__archtest__: Annotated[None, module_interface("Order")]
+
+
+class Order:
+    pass
+
+
+def _check_price(price: float) -> bool:
+    return price >= 0
+```
 
 ### `implements_protocol(...)`
 
@@ -1818,7 +1893,7 @@ Stages that call no project function are listed in
 `details.unchecked_stages`. Result `details.reason` is
 `stages_reached_in_order`, `stage_order_mismatch`, `reference_failed`,
 `reference_misses_stage`, `reference_stages_call_nothing`, `case_setup_failed`,
-a `probe_*` status, or `dynamic_checks_disabled`.
+a `probe_*` status, `target_kind_mismatch`, or `dynamic_checks_disabled`.
 
 Example:
 
@@ -1861,6 +1936,7 @@ rule type `runtime_calls`, evidence type `runtime`.
 | `allow` | `list[str] \| None` | `None` | `forbid_runtime_calls` only: exemptions under a listed name |
 | `transitive` | `bool` | `False` | `forbid_runtime_calls` only: also count calls other project code makes while the target runs |
 | `through` | `list[str] \| None` | `None` | With `transitive=True`: modules whose code may make the call on the target's behalf |
+| `cover_module` | `bool` | `False` | `forbid_runtime_calls` only: also read, statically, the top-level functions of the target's module that no reference entity matches, for calls of the I/O builtins (`print`, `input`, `open`) the rule names; see [markers/forbid_runtime_calls.md](markers/forbid_runtime_calls.md#functions-no-case-runs-cover_moduletrue) |
 | `init` | `dict \| None` | `None` | Methods only: default constructor arguments `{"args": [...], "kwargs": {...}}` |
 | `timeout_s` | `float` | `5.0` | Wall-clock limit per rule, in `(0, 60]` |
 | `severity` | `str` | `"error"` | Violation severity |
@@ -1875,18 +1951,24 @@ Example:
 from typing import Annotated, Any
 from pythonarchtesting.rules import forbid_runtime_calls, require_runtime_calls
 
-_CASE = {"args": [{"id": "A1", "prices": [10.0]},
-                  {"$new": "service.OrderService",
-                   "args": [{"$new": "repository.OrderRepository"}]}]}
-
 
 def handle_order(request: dict[str, Any], service: Any) -> dict[str, Any]:
     __archtest__: Annotated[
         None,
-        require_runtime_calls("service", cases=[...]),     # literal cases
-        forbid_runtime_calls("repository", cases=[...]),
+        require_runtime_calls(
+            "service",
+            cases=[{"args": [{"id": "A1", "prices": [10.0]},
+                             {"$new": "service.OrderService",
+                              "args": [{"$new": "repository.OrderRepository"}]}]}],
+        ),
+        forbid_runtime_calls(
+            "repository",
+            cases=[{"args": [{"id": "A1", "prices": [10.0]},
+                             {"$new": "service.OrderService",
+                              "args": [{"$new": "repository.OrderRepository"}]}]}],
+        ),
     ]
-    ...
+    return service.place(request)
 ```
 
 Markers are read from the source without executing it, so `cases` must be
@@ -1911,8 +1993,11 @@ Invalid declarations (no modules, `allow` on `require_runtime_calls`, empty
 
 Non-goals in v1:
 
-- No indirect calls: only calls made by code of the target's module count
-- No calls of builtins (`len`, `list.append`)
+- No indirect calls unless `transitive=True`: otherwise only calls made by
+  code of the target's module count
+- No calls of builtins (`len`, `list.append`), except the I/O builtins `open`,
+  `print`, `input` and builtins named in full (`builtins.isinstance`,
+  `builtins.type`); see [markers/forbid_runtime_calls.md](markers/forbid_runtime_calls.md)
 - No comparison of what the call returns
 
 ### `enforce_reference_calls(...)`
@@ -1979,7 +2064,8 @@ Result `details.cases[*].instances` lists `class`, `module`, `from`,
 Non-goals in v1:
 
 - No classes outside the analysed project
-- No objects created by other modules on the target's behalf
+- No objects created by other modules on the target's behalf, unless
+  `transitive=True`
 
 ### Runtime class rules (DYN005–DYN007)
 
@@ -2089,7 +2175,10 @@ evidence type `static`.
 
 Result `details.facts` lists, aligned 1:1 with `details.violations`, `kind`
 (`read`), `attribute`, `class` (from the parameter's annotation, else
-`null`), `file`, `line` and `reader` per private read.
+`null`), `file`, `line` and `reader` per private read, plus `receiver`
+(`mutated` or `assigned`) when the read is only the object a write changes
+(`obj._items.append(x)`). A target without a function body gives status
+`ERROR` with `details.reason` `missing_function_body`.
 
 ### `forbid_runtime_imports(...)`
 

@@ -78,6 +78,13 @@ A student who kept the behaviour but renamed a required function (say
 
 All paths passed to the MCP tools must be absolute.
 
+Without a model solution, **global mode** checks a student's free-form
+project against itself: `discover_roles` finds the entities that play the
+principle's roles, `prepare_global_task` writes a task from the AI's cases and
+`run_global_evaluation` judges the project
+([docs/global_mode.md](docs/global_mode.md)). It covers `io_separation`,
+`encapsulation` and `polymorphism`; the CLI has no global mode.
+
 ## The same from the command line
 
 ```bash
@@ -90,9 +97,8 @@ python-arch-test \
 A `--source` that holds `task.toml` is a task: its principle's checks are
 generated from it. `--sandbox bwrap` adds no network and a read-only file
 system for code you did not write. The example's variants (`ok_*` must pass,
-`err_*` show one typical error each; `err_report_reads_private` passes, because
-reading a private attribute from outside is a known gap, G2, in the catalogue)
-are checked against the catalogue with:
+`err_*` show one typical error each and must fail) are checked against the
+catalogue with:
 
 ```bash
 python example/principles/verify.py
@@ -136,6 +142,10 @@ Editable development install with test and lint extras:
 ```bash
 pip install -e .[dev]
 ```
+
+The `eval` extra (`import-linter`) is only for the baseline of the
+architectural-mutant evaluation (`example/architectural_mutants/`). On Python
+3.10 the base install also pulls in `tomli`, since the catalogue is TOML.
 
 Dependencies are declared in `pyproject.toml` only. The repository does not
 maintain `requirements*.txt` files.
@@ -226,6 +236,11 @@ All markers are imported from `pythonarchtesting.rules`. See
 - `flow` — mark a statement as a stage in an ordered variable flow
 - `enforce_flow` — require those stages to appear in declared order
 
+**Encapsulation**
+
+- `forbid_private_access` — the function or method may not read an attribute
+  starting with `_` of an object other than its own (static)
+
 **Runtime structure** (opt-in, runs only with `--dynamic`; `cases` only
 give call arguments, results are never compared)
 
@@ -259,12 +274,16 @@ give call arguments, results are never compared)
 
 At the report level each result is grouped by evaluator family
 (`results[*].category`). Static results use `api_signature`, `attribute_contract`, `enum_type`, `import_policy`,
-`member_absence`, `member_set`, `method_set`, `nominal_type_relationship`,
-`protocol_conformance`, `python_modifier`, and `variable_flow`.
+`member_absence`, `member_set`, `method_set`, `module_layers`,
+`module_cycles`, `module_interface`, `architecture_static`,
+`nominal_type_relationship`, `private_access`, `protocol_conformance`,
+`python_modifier`, and `variable_flow`; a marker argument the compiler refuses
+is reported under `compiler_invalid_param`.
 With `--dynamic`, runtime results are reported under `runtime_calls`,
 `runtime_reference_calls`, `runtime_writes`, `runtime_instances`,
 `runtime_members`, `runtime_class_kind`, `runtime_protocol`, `runtime_pattern`,
-`runtime_imports`, and `runtime_flow`.
+`runtime_imports`, `runtime_flow`, `runtime_layers`, `runtime_cycles`,
+`runtime_module_interface`, and `architecture_runtime`.
 
 A separate CLI mode validates the reference declarations themselves before any
 target is analyzed:
@@ -381,6 +400,9 @@ python-arch-test \
 
 `--sandbox-memory-mb N` sets the heap limit per child interpreter (default
 `1024`). `--sandbox` and `--sandbox-memory-mb` apply only with `--dynamic`.
+Every flag, including `--targets`, `--reference-modules`, `--architecture`,
+`--write-model` and `--mapping`, is listed in the
+[usage guide](docs/usage-guide.md#cli-reference).
 
 A pre-rendered Markdown bundle for this example lives at
 `example/checkout_assignment/reports/report_md/`. JSON output is not checked in;
@@ -405,6 +427,10 @@ full output reference.
 - [Documentation index](docs/README.md)
 - [MCP server](docs/mcp.md): the teaching workflow and every tool
 - [Tasks](docs/tasks.md): `task.toml`, a principle bound to a model solution
+- [Global mode](docs/global_mode.md): principles checked in a free-form
+  project without a model solution
+- [Dynamic checks](docs/dynamic-checks.md): how runtime checks run the code,
+  and the sandbox
 - [Principle examples](example/principles/README.md): one task per principle
 - [Overview](docs/overview.md): markers, concepts and supported checks
 - [Usage guide](docs/usage-guide.md): step-by-step worked example with markers

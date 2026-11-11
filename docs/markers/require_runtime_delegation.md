@@ -88,8 +88,11 @@ strategy.apply()`. Worked example:
 - Each violation (one per case that never delegated) has a fact in
   `details.facts`, aligned 1:1 with `details.violations`: `kind`
   (`missing_delegation`), `case`, `caller` (the target, `module:qualname`),
-  `expected` (the spy, or `spy.member`), `raised` (what the call raised, else
-  `null`).
+  `expected` (where the target keeps the spy when `init` injects it: the
+  attribute its constructor stores it in, `self.strategy`, else the
+  constructor parameter it is passed as; otherwise the spy's name; followed
+  by `.member` when `member` is given), `raised`
+  (what the call raised, else `null`).
 
 ## What it does not check
 

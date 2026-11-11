@@ -336,3 +336,38 @@ so a pass says nothing about them. A `--dynamic` run reports
 
 Use `matching` when the failure might be caused by a bad or uncertain entity
 match rather than by the rule itself.
+
+## CLI Reference
+
+`python-arch-test` (or `python -m pythonarchtesting.cli`) has no
+subcommands; the flags choose the mode.
+
+| Flag | Meaning |
+|------|---------|
+| `--config FILE` | Configuration file; without it `.pythonarchtesting` in the working directory is used when present ([configuration.md](configuration.md)). |
+| `--source PATH` | The reference project, or a task directory holding `task.toml` ([tasks.md](tasks.md)). |
+| `--reference-modules A,B` | Read only these reference modules (dotted names under `--source`) instead of discovering every file. |
+| `--target PATH` | One target project; repeatable. |
+| `--targets A,B` | Target projects as a comma-separated list; adds to `--target`. |
+| `--targets-dir DIR` | Every subdirectory is a target, filtered by `--project-pattern GLOB` and `--exclude-patterns A,B`. |
+| `--format json\|markdown` | Report format (default `json`); `markdown` requires `--output DIR`. |
+| `--output PATH` | Report file (JSON) or bundle directory (Markdown); stdout when omitted. |
+| `--validate-declarations` | Check the reference's markers only ([§ 2](#2-validate-declarations-first)); JSON only, no target flags, no `--dynamic`. |
+| `--validation-scope all\|logical-views` | Limit validation ([§ 6](#6-use---validation-scope-only-when-you-mean-it)). |
+| `--dynamic`, `--sandbox`, `--sandbox-memory-mb N` | Runtime checks ([§ 7](#7-add-runtime-checks-with---dynamic)). |
+| `--architecture` | Compare every target with the reference's module dependencies even where the reference declares no `architecture_entry`; the static comparison only. |
+| `--mapping FILE` | Pair entities the matching could not ([reporting.md](reporting.md#assisted-pairing)). |
+| `--write-model FILE` | Write the reference's architecture model as JSON to `FILE` and stop (with `--dynamic`, also what its declared cases do). |
+
+Targets come from `--target`/`--targets`, else `--targets-dir`, else the
+`[projects]` configuration, else the environment variable
+`PYTHON_ARCH_TARGET_PATH` (one target path).
+
+`--write-model` wins over every other mode. It needs `--source` (or
+`[projects].source_path`) and refuses the flags it would ignore:
+`--target`/`--targets`/`--targets-dir`, `--project-pattern`,
+`--exclude-patterns`, `--validate-declarations`, `--architecture`, `--mapping`,
+`--output` and a `--format` other than `json`; each is a usage error (exit
+`2`). It prints `Model written to FILE` and exits `0`; a declaration that does
+not compile, or cases that did not run, are reported as `warning:` lines on
+stderr. The MCP tool `describe_architecture` returns the same JSON.
