@@ -25,6 +25,7 @@ import builtins
 import contextlib
 import dis
 import enum
+import gc
 import importlib
 import importlib.abc
 import importlib.machinery
@@ -312,8 +313,28 @@ class _Project:
 
 
 def _code_name(code: Any) -> str:
-    # co_qualname exists from Python 3.11; co_name is the fallback.
-    return str(getattr(code, "co_qualname", code.co_name))
+    """The qualified name of the function ``code`` belongs to, as ``Store.put``."""
+    qualname = getattr(code, "co_qualname", None)
+    if qualname is not None:
+        return str(qualname)
+    # Python 3.10 has no co_qualname: the function that holds the code knows the name.
+    known = _QUALNAMES.get(code)
+    if known is None:
+        known = next(
+            (
+                str(referrer.__qualname__)
+                for referrer in gc.get_referrers(code)
+                if isinstance(referrer, types.FunctionType)
+                and referrer.__code__ is code
+            ),
+            code.co_name,
+        )
+        _QUALNAMES[code] = known
+    return known
+
+
+# Qualified names found for code objects on Python 3.10, each looked up once.
+_QUALNAMES: dict[Any, str] = {}
 
 
 _WRAPPER_NAMES = frozenset({"__setattr__", "__init__"})

@@ -7,7 +7,6 @@ runner API, so the probe runs in a child interpreter exactly as in a
 
 from __future__ import annotations
 
-import sys
 import textwrap
 from pathlib import Path
 from types import SimpleNamespace
@@ -282,7 +281,6 @@ def test_an_own_setattr_that_calls_super_is_not_a_foreign_write(root: Path) -> N
     ) == {"0": [], "1": []}
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="needs co_qualname")
 def test_a_method_behind_a_decorator_without_wraps_owns_its_writes(
     root: Path,
 ) -> None:
@@ -301,11 +299,8 @@ def test_nested_helpers_and_module_functions_still_write_foreign(
         },
     )
 
-    nested = "Account.via_helper.<locals>.helper"
-    if sys.version_info < (3, 11):
-        nested = "helper"
     assert writes == {
-        "0": [("v", f"writes:{nested}")],
+        "0": [("v", "writes:Account.via_helper.<locals>.helper")],
         "1": [("v", "writes:poke")],
     }
 

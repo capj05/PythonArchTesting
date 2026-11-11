@@ -285,6 +285,24 @@ def test_limits_leave_room_for_a_thread_pool(root: Path) -> None:
     assert "threads=64" in stderr
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="glibc thread stacks")
+def test_a_large_host_stack_still_leaves_room_for_a_thread_pool(root: Path) -> None:
+    import resource
+
+    soft, hard = resource.getrlimit(resource.RLIMIT_STACK)
+    large = 16 * 1024 * 1024
+    if hard != resource.RLIM_INFINITY and hard < large:
+        pytest.skip("the hard stack limit is below 16 MiB")
+    resource.setrlimit(resource.RLIMIT_STACK, (large, hard))
+    try:
+        case, stderr = _call(root, "threads", [64], "limits")
+    finally:
+        resource.setrlimit(resource.RLIMIT_STACK, (soft, hard))
+
+    assert "raised" not in case
+    assert "threads=64" in stderr
+
+
 @needs_bwrap
 def test_bwrap_home_exists_and_is_writable(root: Path) -> None:
     case, stderr = _call(root, "home_is_writable", [], "bwrap")

@@ -565,12 +565,18 @@ def fork():
 
 
 def _spawned(root: Path, wait_s: float = 10.0) -> list[int]:
-    """The pids the target noted, once it has noted one."""
+    """The pids the target noted, once it has noted one.
+
+    The target opens the file before it writes the pid, so the file can exist
+    and still be empty: wait for a whole line, not for the file.
+    """
     path = root / "spawned.pid"
     deadline = time.monotonic() + wait_s
-    while not path.exists() and time.monotonic() < deadline:
+    while True:
+        text = path.read_text(encoding="ascii") if path.exists() else ""
+        if text.endswith("\n") or time.monotonic() >= deadline:
+            return [int(line) for line in text.split()]
         time.sleep(0.05)
-    return [int(line) for line in path.read_text(encoding="ascii").split()]
 
 
 def _running(pid: int) -> bool:
