@@ -10,6 +10,7 @@ from .annotation_compatibility import compare_annotation_text
 
 _FEWER_POSITIONAL = "target has fewer positional-compatible parameters than required"
 _FEWER_KWONLY = "target has fewer keyword-only parameters than required"
+_OPTIONAL_BECAME_REQUIRED = "optional parameter became required"
 
 
 def function_node(entity: Entity) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
@@ -298,13 +299,15 @@ def _compare_positional(
     target: Entity,
     ctx: EvalContext,
 ) -> list[str]:
-    """Pair parameters by position and report kind and annotation mismatches.
+    """Pair parameters by position and report mismatches within each pair.
 
     Names are not compared, which is what lets a target rename a parameter.
-    When the target has fewer parameters, only ``fewer_message`` is reported
-    and no pair is checked. Extra target parameters beyond the expected ones
-    are not inspected. The messages carry no parameter name, because the
-    names of the pair may differ.
+    For each pair the kind, a change from optional to required, and the
+    annotation are checked, in that order, as in ``_compare_by_name``. When
+    the target has fewer parameters, only ``fewer_message`` is reported and
+    no pair is checked. Surplus target parameters are left to
+    ``_extra_param_errors``. The messages carry no parameter name, because
+    the names of the pair may differ.
     """
     if len(found) < len(expected):
         return [fewer_message]
@@ -315,6 +318,8 @@ def _compare_positional(
                 f"parameter kind mismatch: expected {exp.get('kind')}, "
                 f"found {got.get('kind')}"
             )
+        if not exp.get("required") and got.get("required"):
+            errors.append(_OPTIONAL_BECAME_REQUIRED)
         error = _annotation_error(
             "parameter annotation mismatch",
             exp.get("annotation"),
@@ -410,7 +415,7 @@ def _compare_by_name(
                 f"expected {exp.get('kind')}, found {got.get('kind')}"
             )
         if not exp.get("required") and got.get("required"):
-            errors.append(f"optional parameter became required: '{name}'")
+            errors.append(f"{_OPTIONAL_BECAME_REQUIRED}: '{name}'")
         error = _annotation_error(
             f"parameter annotation mismatch for '{name}'",
             exp.get("annotation"),
@@ -425,20 +430,41 @@ def _compare_by_name(
     return errors
 
 
-def _extra_param_errors(
+def _extra_by_name(
     expected: list[dict[str, Any]],
     found: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return the target parameters whose names the reference does not have."""
+    expected_names = {str(param.get("name")) for param in expected}
+    return [param for param in found if str(param.get("name")) not in expected_names]
+
+
+def _extra_by_position(
+    expected: list[dict[str, Any]],
+    found: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return the target parameters beyond the expected count of their group.
+
+    The groups are the ones ``_compare_by_position`` pairs: positional-compatible
+    and keyword-only parameters. A group with fewer target parameters than
+    expected has no surplus.
+    """
+    expected_non_kw, expected_kw = _split_kwonly(expected)
+    found_non_kw, found_kw = _split_kwonly(found)
+    return found_non_kw[len(expected_non_kw) :] + found_kw[len(expected_kw) :]
+
+
+def _extra_param_errors(
+    extra: list[dict[str, Any]],
     *,
     allow_extra_params: bool,
 ) -> list[str]:
-    """Report target parameters whose names the reference does not have.
+    """Judge the target parameters that have no counterpart in the reference.
 
     Without ``allow_extra_params`` every extra parameter is an error. With it,
     only the required ones are, since callers of the reference's signature do
-    not pass them.
+    not pass them. Either way all offending names go into one message, sorted.
     """
-    expected_names = {str(param.get("name")) for param in expected}
-    extra = [param for param in found if str(param.get("name")) not in expected_names]
     if not allow_extra_params:
         if not extra:
             return []
@@ -467,20 +493,30 @@ def compatible_compare(
 ) -> list[str]:
     """Check that a target's parameters can stand in for the expected ones.
 
-    With ``allow_param_rename`` the parameters are paired by position, so
-    names are free to differ; otherwise they are paired by name and extra
-    target parameters are checked against ``allow_extra_params``. The
-    by-position comparison does not check extra parameters at all, so
-    ``allow_extra_params`` has no effect there; this is the existing
-    behaviour, kept as it is.
+    With ``allow_param_rename`` the parameters are paired by position (the
+    positional-compatible and the keyword-only ones separately), so names are
+    free to differ; otherwise they are paired by name. Both strategies apply
+    the same rules: each pair is checked for its kind, for an optional
+    parameter that became required, and for its annotation; the target
+    parameters left without a counterpart (by position: those beyond the
+    expected count of their group; by name: those with a name the reference
+    lacks) are judged against ``allow_extra_params``.
+
+    The errors come in this order: the pairs' errors in the order of the
+    expected parameters (by position: all positional pairs, then all
+    keyword-only ones), then at most one message about extra parameters.
     """
     if allow_param_rename:
-        return _compare_by_position(
+        errors = _compare_by_position(
             expected, found, source=source, target=target, ctx=ctx
         )
-    return _compare_by_name(
-        expected, found, source=source, target=target, ctx=ctx
-    ) + _extra_param_errors(expected, found, allow_extra_params=allow_extra_params)
+        extra = _extra_by_position(expected, found)
+    else:
+        errors = _compare_by_name(
+            expected, found, source=source, target=target, ctx=ctx
+        )
+        extra = _extra_by_name(expected, found)
+    return errors + _extra_param_errors(extra, allow_extra_params=allow_extra_params)
 
 
 def evaluate_method_compatibility(

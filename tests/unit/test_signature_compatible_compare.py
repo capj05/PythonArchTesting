@@ -1,11 +1,11 @@
 """Characterization tests for ``compatible_compare``.
 
-The tests pin the exact error list (texts and order) the function returns
-today, so that a refactor of the function can be checked for unchanged
-behaviour. They cover both comparison strategies (by position with
+The tests pin the exact error list (texts and order) the function returns,
+so that a refactor of the function can be checked for unchanged behaviour.
+They cover both comparison strategies (by position with
 ``allow_param_rename`` and by name), positional and keyword-only parameters,
-fewer/equal/more parameters, kind and annotation agreement, and both values of
-``allow_extra_params``.
+fewer/equal/more parameters, kind and annotation agreement, a lost default,
+and both values of ``allow_extra_params``.
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ _EXTRA_REQUIRED = (
 )
 _FEWER_POSITIONAL = "target has fewer positional-compatible parameters than required"
 _FEWER_KWONLY = "target has fewer keyword-only parameters than required"
+_OPTIONAL_BECAME_REQUIRED = "optional parameter became required"
 
 
 def _entities(role: str) -> list[Entity]:
@@ -111,8 +112,10 @@ def _run(
     )
 
 
-# Each case: (expected params, found params, expected errors). The rename
-# branch ignores ``allow_extra_params``, so every case is run with both values.
+# Each case: (expected params, found params, expected errors). No case has a
+# surplus target parameter, so ``allow_extra_params`` cannot change the result
+# and every case is run with both values; surplus parameters are covered by
+# ``_RENAME_EXTRA_CASES``.
 _RENAME_CASES = [
     pytest.param([], [], [], id="empty"),
     pytest.param(
@@ -153,12 +156,6 @@ _RENAME_CASES = [
             "parameter annotation mismatch: expected int, found str",
         ],
         id="positional-fewer-kwonly-still-compared",
-    ),
-    pytest.param(
-        [_p("a", annotation="int")],
-        [_p("a", "kwonly", annotation="int")],
-        [_FEWER_POSITIONAL],
-        id="positional-moved-to-kwonly-counts-as-fewer",
     ),
     pytest.param(
         [_p("a", "posonly")],
@@ -217,20 +214,8 @@ _RENAME_CASES = [
     pytest.param(
         [_p("a", required=False)],
         [_p("a", required=True)],
-        [],
-        id="optional-to-required-ignored",
-    ),
-    pytest.param(
-        [_p("a", annotation="int"), _p("b")],
-        [_p("a", annotation="int"), _p("b"), _p("c", annotation="str")],
-        [],
-        id="positional-more-required-extra-ignored",
-    ),
-    pytest.param(
-        [_p("k", "kwonly")],
-        [_p("k", "kwonly"), _p("extra", "kwonly")],
-        [],
-        id="kwonly-more-required-extra-ignored",
+        [_OPTIONAL_BECAME_REQUIRED],
+        id="optional-to-required-reported",
     ),
     pytest.param(
         [
@@ -271,13 +256,15 @@ def test_rename_branch_pins_current_errors(
     errors: list[str],
     allow_extra_params: bool,
 ) -> None:
-    """The rename branch compares by position and returns early.
+    """The rename branch pairs parameters by position, group by group.
 
-    Pinned current behaviour (a probable defect, left for the owner to
-    decide): the rename branch returns before the extra-parameter check, so
-    ``allow_extra_params=False`` has no effect here and required extra
-    parameters on the target are not reported either. The same expected
-    list is therefore asserted for both values of ``allow_extra_params``.
+    Without surplus target parameters the result does not depend on
+    ``allow_extra_params``, so the same expected list is asserted for both
+    values. (Until 2026-11-10 the branch returned before the extra-parameter
+    check and ignored a lost default; the three cases pinning that were
+    replaced by ``optional-to-required-reported`` and by
+    ``_RENAME_EXTRA_CASES``, where ``positional-moved-to-kwonly`` moved too,
+    since its target now has a surplus keyword-only parameter.)
     """
     assert (
         _run(
@@ -289,6 +276,183 @@ def test_rename_branch_pins_current_errors(
         )
         == errors
     )
+
+
+# Each case: (expected params, found params, expected errors). A pair whose
+# reference parameter is optional must stay optional on the target, as in the
+# by-name branch; the message carries no name, like the other messages of the
+# rename branch.
+_RENAME_DEFAULT_CASES = [
+    pytest.param(
+        [_p("a", required=False)],
+        [_p("x", required=True)],
+        [_OPTIONAL_BECAME_REQUIRED],
+        id="positional-optional-became-required",
+    ),
+    pytest.param(
+        [_p("k", "kwonly", required=False)],
+        [_p("z", "kwonly", required=True)],
+        [_OPTIONAL_BECAME_REQUIRED],
+        id="kwonly-optional-became-required",
+    ),
+    pytest.param(
+        [_p("a", required=True)],
+        [_p("x", required=False)],
+        [],
+        id="required-became-optional-ok",
+    ),
+    pytest.param(
+        [_p("a", "posonly", required=False, annotation="int")],
+        [_p("x", "pos_or_kw", required=True, annotation="str")],
+        [
+            "parameter kind mismatch: expected posonly, found pos_or_kw",
+            _OPTIONAL_BECAME_REQUIRED,
+            "parameter annotation mismatch: expected int, found str",
+        ],
+        id="kind-then-required-then-annotation",
+    ),
+    pytest.param(
+        [_p("a", required=False), _p("k", "kwonly", required=False)],
+        [_p("x", required=True), _p("z", "kwonly", required=True)],
+        [_OPTIONAL_BECAME_REQUIRED, _OPTIONAL_BECAME_REQUIRED],
+        id="one-error-per-pair",
+    ),
+]
+
+
+@pytest.mark.parametrize("allow_extra_params", [True, False])
+@pytest.mark.parametrize(("expected", "found", "errors"), _RENAME_DEFAULT_CASES)
+def test_rename_branch_reports_lost_default(
+    setting: tuple[Entity, Entity, EvalContext],
+    expected: list[dict[str, Any]],
+    found: list[dict[str, Any]],
+    errors: list[str],
+    allow_extra_params: bool,
+) -> None:
+    """A positional pair is checked for a lost default, as a named pair is."""
+    assert (
+        _run(
+            setting,
+            expected,
+            found,
+            allow_extra_params=allow_extra_params,
+            allow_param_rename=True,
+        )
+        == errors
+    )
+
+
+# Each case: (expected params, found params, errors with extras allowed,
+# errors with extras forbidden). In the rename branch a target parameter is
+# extra when it lies beyond the expected count of its group (positional or
+# keyword-only); it is judged by the same rule as in the by-name branch.
+_RENAME_EXTRA_CASES = [
+    pytest.param(
+        [_p("a"), _p("b")],
+        [_p("x"), _p("y"), _p("c", annotation="str")],
+        [_EXTRA_REQUIRED.format("c")],
+        ["extra parameters not allowed: c"],
+        id="positional-extra-required",
+    ),
+    pytest.param(
+        [_p("a")],
+        [_p("x"), _p("c", required=False)],
+        [],
+        ["extra parameters not allowed: c"],
+        id="positional-extra-optional",
+    ),
+    pytest.param(
+        [_p("k", "kwonly")],
+        [_p("z", "kwonly"), _p("extra", "kwonly")],
+        [_EXTRA_REQUIRED.format("extra")],
+        ["extra parameters not allowed: extra"],
+        id="kwonly-extra-required",
+    ),
+    pytest.param(
+        [_p("k", "kwonly")],
+        [_p("z", "kwonly"), _p("extra", "kwonly", required=False)],
+        [],
+        ["extra parameters not allowed: extra"],
+        id="kwonly-extra-optional",
+    ),
+    pytest.param(
+        [_p("a"), _p("k", "kwonly")],
+        [
+            _p("x"),
+            _p("z"),
+            _p("y", "kwonly"),
+            _p("b", "kwonly", required=False),
+        ],
+        [_EXTRA_REQUIRED.format("z")],
+        ["extra parameters not allowed: b, z"],
+        id="extras-of-both-groups-in-one-sorted-message",
+    ),
+    pytest.param(
+        [_p("a")],
+        [_p("x"), _p("a")],
+        [_EXTRA_REQUIRED.format("a")],
+        ["extra parameters not allowed: a"],
+        id="extra-decided-by-position-not-by-name",
+    ),
+    pytest.param(
+        [_p("a", annotation="int", required=False)],
+        [_p("x", annotation="str"), _p("c")],
+        [
+            _OPTIONAL_BECAME_REQUIRED,
+            "parameter annotation mismatch: expected int, found str",
+            _EXTRA_REQUIRED.format("c"),
+        ],
+        [
+            _OPTIONAL_BECAME_REQUIRED,
+            "parameter annotation mismatch: expected int, found str",
+            "extra parameters not allowed: c",
+        ],
+        id="pair-errors-before-extras",
+    ),
+    pytest.param(
+        [_p("a"), _p("k", "kwonly")],
+        [_p("z", "kwonly"), _p("m", "kwonly")],
+        [_FEWER_POSITIONAL, _EXTRA_REQUIRED.format("m")],
+        [_FEWER_POSITIONAL, "extra parameters not allowed: m"],
+        id="positional-fewer-kwonly-extra",
+    ),
+    pytest.param(
+        [_p("a"), _p("b")],
+        [_p("a")],
+        [_FEWER_POSITIONAL],
+        [_FEWER_POSITIONAL],
+        id="fewer-has-no-extras",
+    ),
+    pytest.param(
+        [_p("a", annotation="int")],
+        [_p("a", "kwonly", annotation="int")],
+        [_FEWER_POSITIONAL, _EXTRA_REQUIRED.format("a")],
+        [_FEWER_POSITIONAL, "extra parameters not allowed: a"],
+        id="positional-moved-to-kwonly-is-fewer-plus-extra",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("expected", "found", "errors_allowed", "errors_forbidden"), _RENAME_EXTRA_CASES
+)
+@pytest.mark.parametrize("allow_extra_params", [True, False])
+def test_rename_branch_judges_extra_params(
+    setting: tuple[Entity, Entity, EvalContext],
+    expected: list[dict[str, Any]],
+    found: list[dict[str, Any]],
+    errors_allowed: list[str],
+    errors_forbidden: list[str],
+    allow_extra_params: bool,
+) -> None:
+    """Surplus target parameters are judged against ``allow_extra_params``."""
+    assert _run(
+        setting,
+        expected,
+        found,
+        allow_extra_params=allow_extra_params,
+        allow_param_rename=True,
+    ) == (errors_allowed if allow_extra_params else errors_forbidden)
 
 
 # Each case: (expected params, found params, errors with extras allowed,
