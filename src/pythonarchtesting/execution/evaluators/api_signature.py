@@ -869,196 +869,262 @@ def _evaluate_required_factory_rule(
     )
 
 
-def _evaluate_required_constructor_rule(
+@dataclass(frozen=True)
+class _ConstructorRuleParams:
+    """The ``required_constructor`` parameters, read once per evaluation."""
+
+    kind: str
+    resolved_kind: str
+    allow_inherited: bool
+    allow_missing: bool
+
+    @classmethod
+    def from_rule(cls, rule: Rule) -> _ConstructorRuleParams:
+        kind = str(rule.params.get("constructor_kind", "auto")).lower()
+        return cls(
+            kind=kind,
+            resolved_kind=str(
+                rule.params.get("resolved_constructor_kind", kind)
+            ).lower(),
+            allow_inherited=bool(rule.params.get("allow_inherited", True)),
+            allow_missing=bool(rule.params.get("allow_missing", False)),
+        )
+
+    @property
+    def method_name(self) -> Literal["__init__", "__new__"]:
+        """The constructor method the target class has to provide."""
+        return "__new__" if self.resolved_kind == "__new__" else "__init__"
+
+    def as_details(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "resolved_kind": self.resolved_kind,
+            "allow_inherited": self.allow_inherited,
+            "allow_missing": self.allow_missing,
+        }
+
+
+def _constructor_details(
+    reason: str,
+    errors: list[str],
+    *,
+    mode: str,
+    params: _ConstructorRuleParams,
+    member_origin: str = "missing",
+    resolved_target_constructor: str | None = None,
+    comparison: dict[str, Any] | None = None,
+    failure_reason: str | None = None,
+) -> Dict[str, Any]:
+    """The details of a constructor verdict, keys in the order reported.
+
+    ``comparison`` (``expected`` and ``found``) is present only when two
+    constructors were compared, ``failure_reason`` only when the target has
+    no usable constructor.
+    """
+    details: Dict[str, Any] = {
+        "reason": reason,
+        "errors": errors,
+        **(comparison or {}),
+        "mode": mode,
+        "params_ignored": mode == "any",
+        "check_return": False,
+        "allow_missing": params.allow_missing,
+        "constructor": params.as_details(),
+        "resolved_target_constructor": resolved_target_constructor,
+        "member_origin": member_origin,
+    }
+    if failure_reason is not None:
+        details["failure_reason"] = failure_reason
+    return details
+
+
+def _not_a_class_result(
     rule: Rule,
     source: Entity,
     target: Entity,
     match: MatchResult,
-    *,
-    ctx: EvalContext,
-    mode: str,
     rule_evidence: tuple[Any, ...],
+    *,
+    mode: str,
+    params: _ConstructorRuleParams,
 ) -> RuleResult:
-    constructor_kind = str(rule.params.get("constructor_kind", "auto")).lower()
-    resolved_kind = str(
-        rule.params.get("resolved_constructor_kind", constructor_kind)
-    ).lower()
-    allow_inherited = bool(rule.params.get("allow_inherited", True))
-    allow_missing = bool(rule.params.get("allow_missing", False))
-    expected_source_id = rule.params.get("expected_source_constructor_id")
+    """Fail a constructor rule whose source class matched something else.
 
-    constructor_details = {
-        "kind": constructor_kind,
-        "resolved_kind": resolved_kind,
-        "allow_inherited": allow_inherited,
-        "allow_missing": allow_missing,
+    Unlike every other constructor verdict, these details carry no
+    ``params_ignored``; the report has never shown it here.
+    """
+    reason = "required_constructor requires a matched target class"
+    details = {
+        "reason": reason,
+        "errors": [reason],
+        "mode": mode,
+        "check_return": False,
+        "allow_missing": params.allow_missing,
+        "constructor": params.as_details(),
+        "resolved_target_constructor": None,
+        "member_origin": "missing",
     }
+    return build_rule_result(
+        rule,
+        source,
+        target,
+        match,
+        "FAILED",
+        details,
+        rule_evidence,
+    )
 
-    target_class: Entity | None = target if target.kind == "class" else None
-    if target_class is None:
-        details = {
-            "reason": "required_constructor requires a matched target class",
-            "errors": ["required_constructor requires a matched target class"],
-            "mode": mode,
-            "check_return": False,
-            "allow_missing": allow_missing,
-            "constructor": constructor_details,
-            "resolved_target_constructor": None,
-            "member_origin": "missing",
-        }
-        return build_rule_result(
-            rule,
-            source,
-            target,
-            match,
-            "FAILED",
-            details,
-            rule_evidence,
+
+def _synthetic_source_constructor(rule: Rule, ctx: EvalContext) -> Entity | None:
+    """The generated reference constructor the compiler described, if any.
+
+    A generated constructor, such as a dataclass ``__init__``, has no entity
+    of its own; the compiler records its class and parameter model instead,
+    and the method is rebuilt from them here.
+    """
+    source_model = rule.params.get("expected_source_constructor_model")
+    source_context_id = rule.params.get("expected_source_constructor_context_id")
+    source_origin = str(
+        rule.params.get(
+            "source_constructor_origin",
+            "generated_dataclass_init",
         )
+    )
+    source_context = (
+        ctx.source_by_id.get(str(source_context_id))
+        if source_context_id is not None
+        else None
+    )
+    if (
+        not isinstance(source_context, Entity)
+        or source_context.kind != "class"
+        or not isinstance(source_model, dict)
+    ):
+        return None
 
-    source_ctor = None
+    from .construction_resolution import build_synthetic_constructor_entity
+
+    return build_synthetic_constructor_entity(
+        source_context,
+        name="__init__",
+        origin=source_origin,  # type: ignore[arg-type]
+        inherited=False,
+        param_model=source_model,
+    )
+
+
+def _resolve_source_constructor(rule: Rule, ctx: EvalContext) -> Entity | None:
+    """The reference constructor the target's is compared with, or None.
+
+    A declared constructor is named by its id; an id that resolves to no
+    method falls back to the generated constructor's model.
+    """
+    expected_source_id = rule.params.get("expected_source_constructor_id")
     if expected_source_id is not None:
         resolved_source = ctx.source_by_id.get(str(expected_source_id))
         if isinstance(resolved_source, Entity) and resolved_source.kind == "method":
-            source_ctor = resolved_source
-
-    if source_ctor is None:
-        source_model = rule.params.get("expected_source_constructor_model")
-        source_context_id = rule.params.get("expected_source_constructor_context_id")
-        source_origin = str(
-            rule.params.get(
-                "source_constructor_origin",
-                "generated_dataclass_init",
-            )
-        )
-        source_context = (
-            ctx.source_by_id.get(str(source_context_id))
-            if source_context_id is not None
-            else None
-        )
-        if (
-            isinstance(source_context, Entity)
-            and source_context.kind == "class"
-            and isinstance(source_model, dict)
-        ):
-            from .construction_resolution import build_synthetic_constructor_entity
-
-            source_ctor = build_synthetic_constructor_entity(
-                source_context,
-                name="__init__",
-                origin=source_origin,  # type: ignore[arg-type]
-                inherited=False,
-                param_model=source_model,
-            )
-
+            return resolved_source
+    source_ctor = _synthetic_source_constructor(rule, ctx)
     if not isinstance(source_ctor, Entity) or source_ctor.kind != "method":
-        details = {
-            "reason": (
-                "compiler did not resolve a source constructor for "
-                "required_constructor"
-            ),
-            "errors": [
-                "compiler did not resolve a source constructor for "
-                "required_constructor"
-            ],
-            "mode": mode,
-            "params_ignored": mode == "any",
-            "check_return": False,
-            "allow_missing": allow_missing,
-            "constructor": constructor_details,
-            "resolved_target_constructor": None,
-            "member_origin": "missing",
-        }
-        return build_rule_result(
-            rule,
-            source,
-            target_class,
-            match,
-            "FAILED",
-            details,
-            rule_evidence,
-        )
+        return None
+    return source_ctor
 
-    target_entities = ctx.target_index.all_sorted
-    resolved_kind_name: Literal["__init__", "__new__"] = (
-        "__new__" if resolved_kind == "__new__" else "__init__"
-    )
-    target_candidate = resolve_target_constructor(
-        target_class,
-        target_entities,
-        constructor_kind=resolved_kind_name,
-        allow_inherited=allow_inherited,
-    )
-    target_ctor = target_candidate.entity if target_candidate is not None else None
-    member_origin = "missing"
-    if target_candidate is not None:
-        member_origin = "inherited" if target_candidate.inherited else "declared"
 
-    if target_ctor is None:
-        inherited_only = False
+def _only_inherited(
+    target_class: Entity,
+    target_entities: Any,
+    method_name: Literal["__init__", "__new__"],
+) -> bool:
+    """Whether the class has the constructor only from a base class."""
+    return any(
+        candidate.kind == method_name and candidate.inherited
         for candidate in constructor_candidates_for_class(
             target_class,
             target_entities,
             allow_inherited=True,
-        ):
-            if candidate.kind == resolved_kind_name and candidate.inherited:
-                inherited_only = True
-                break
-        if allow_missing:
-            details = {
-                "reason": (
-                    f"Optional constructor '{resolved_kind}' is not present on "
-                    "target class"
-                ),
-                "errors": [],
-                "mode": mode,
-                "params_ignored": mode == "any",
-                "check_return": False,
-                "allow_missing": True,
-                "constructor": constructor_details,
-                "resolved_target_constructor": None,
-                "member_origin": "missing",
-                "failure_reason": "optional_member_absent",
-            }
-            return _skip_optional_signature_rule(
-                rule,
-                source,
-                target_class,
-                match,
-                rule_evidence,
-                details=details,
-            )
-        if inherited_only and not allow_inherited:
-            reason = (
-                "constructor is inherited but not declared directly on " "target class"
-            )
-            member_origin = "inherited"
-            failure_reason = "constructor_inherited_not_allowed"
-        else:
-            reason = f"missing required constructor '{resolved_kind}'"
-            failure_reason = "missing_constructor"
-        details = {
-            "reason": reason,
-            "errors": [reason],
-            "mode": mode,
-            "params_ignored": mode == "any",
-            "check_return": False,
-            "allow_missing": allow_missing,
-            "constructor": constructor_details,
-            "resolved_target_constructor": None,
-            "member_origin": member_origin,
-            "failure_reason": failure_reason,
-        }
-        return build_rule_result(
+        )
+    )
+
+
+def _missing_constructor_result(
+    rule: Rule,
+    source: Entity,
+    target_class: Entity,
+    match: MatchResult,
+    rule_evidence: tuple[Any, ...],
+    *,
+    mode: str,
+    params: _ConstructorRuleParams,
+    member_origin: str,
+    inherited_only: bool,
+) -> RuleResult:
+    """Skip or fail a rule whose target class has no usable constructor.
+
+    An optional constructor is skipped. A required one fails, and the reason
+    says whether the class has none or only inherits one it may not.
+    """
+    if params.allow_missing:
+        details = _constructor_details(
+            f"Optional constructor '{params.resolved_kind}' is not present on "
+            "target class",
+            [],
+            mode=mode,
+            params=params,
+            failure_reason="optional_member_absent",
+        )
+        return _skip_optional_signature_rule(
             rule,
             source,
             target_class,
             match,
-            "FAILED",
-            details,
             rule_evidence,
+            details=details,
         )
+    if inherited_only and not params.allow_inherited:
+        reason = "constructor is inherited but not declared directly on target class"
+        member_origin = "inherited"
+        failure_reason = "constructor_inherited_not_allowed"
+    else:
+        reason = f"missing required constructor '{params.resolved_kind}'"
+        failure_reason = "missing_constructor"
+    details = _constructor_details(
+        reason,
+        [reason],
+        mode=mode,
+        params=params,
+        member_origin=member_origin,
+        failure_reason=failure_reason,
+    )
+    return build_rule_result(
+        rule,
+        source,
+        target_class,
+        match,
+        "FAILED",
+        details,
+        rule_evidence,
+    )
 
+
+def _compared_constructor_result(
+    rule: Rule,
+    source: Entity,
+    target_class: Entity,
+    match: MatchResult,
+    rule_evidence: tuple[Any, ...],
+    *,
+    ctx: EvalContext,
+    mode: str,
+    params: _ConstructorRuleParams,
+    source_ctor: Entity,
+    target_ctor: Entity,
+    member_origin: str,
+) -> RuleResult:
+    """Judge the target's constructor against the reference's signature.
+
+    Neither the method kind nor the return is compared: only the parameters
+    say whether the class is built the same way.
+    """
     method_result = evaluate_method_compatibility(
         source_ctor,
         target_ctor,
@@ -1070,19 +1136,18 @@ def _evaluate_required_constructor_rule(
     errors = method_result["errors"]
     status: RuleStatus = "OK" if not errors else "FAILED"
     reason = "Required constructor satisfied." if not errors else "; ".join(errors)
-    details = {
-        "reason": reason,
-        "errors": errors,
-        "expected": method_result["expected"],
-        "found": method_result["found"],
-        "mode": mode,
-        "params_ignored": mode == "any",
-        "check_return": False,
-        "allow_missing": allow_missing,
-        "constructor": constructor_details,
-        "resolved_target_constructor": target_ctor.name,
-        "member_origin": member_origin,
-    }
+    details = _constructor_details(
+        reason,
+        errors,
+        mode=mode,
+        params=params,
+        member_origin=member_origin,
+        resolved_target_constructor=target_ctor.name,
+        comparison={
+            "expected": method_result["expected"],
+            "found": method_result["found"],
+        },
+    )
     return build_rule_result(
         rule,
         source,
@@ -1091,6 +1156,86 @@ def _evaluate_required_constructor_rule(
         status,
         details,
         rule_evidence,
+    )
+
+
+def _evaluate_required_constructor_rule(
+    rule: Rule,
+    source: Entity,
+    target: Entity,
+    match: MatchResult,
+    *,
+    ctx: EvalContext,
+    mode: str,
+    rule_evidence: tuple[Any, ...],
+) -> RuleResult:
+    """Check that the matched class is constructed like the reference class.
+
+    The match has to be a class; the compiler has to have resolved the
+    reference constructor; the target class has to provide the required
+    ``__init__`` or ``__new__`` (declared, or inherited when allowed); and
+    its parameters have to fit the reference's under ``mode``.
+    """
+    params = _ConstructorRuleParams.from_rule(rule)
+    if target.kind != "class":
+        return _not_a_class_result(
+            rule, source, target, match, rule_evidence, mode=mode, params=params
+        )
+    target_class = target
+
+    source_ctor = _resolve_source_constructor(rule, ctx)
+    if source_ctor is None:
+        reason = (
+            "compiler did not resolve a source constructor for required_constructor"
+        )
+        return build_rule_result(
+            rule,
+            source,
+            target_class,
+            match,
+            "FAILED",
+            _constructor_details(reason, [reason], mode=mode, params=params),
+            rule_evidence,
+        )
+
+    target_entities = ctx.target_index.all_sorted
+    target_candidate = resolve_target_constructor(
+        target_class,
+        target_entities,
+        constructor_kind=params.method_name,
+        allow_inherited=params.allow_inherited,
+    )
+    target_ctor = target_candidate.entity if target_candidate is not None else None
+    member_origin = "missing"
+    if target_candidate is not None:
+        member_origin = "inherited" if target_candidate.inherited else "declared"
+
+    if target_ctor is None:
+        return _missing_constructor_result(
+            rule,
+            source,
+            target_class,
+            match,
+            rule_evidence,
+            mode=mode,
+            params=params,
+            member_origin=member_origin,
+            inherited_only=_only_inherited(
+                target_class, target_entities, params.method_name
+            ),
+        )
+    return _compared_constructor_result(
+        rule,
+        source,
+        target_class,
+        match,
+        rule_evidence,
+        ctx=ctx,
+        mode=mode,
+        params=params,
+        source_ctor=source_ctor,
+        target_ctor=target_ctor,
+        member_origin=member_origin,
     )
 
 
