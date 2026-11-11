@@ -8,6 +8,7 @@ from pythonarchtesting.entities import DeclarationEntry, Entity
 
 from ..common import (
     declaration_evidence,
+    drop_with_sentinel,
     marker_severity,
     reject_invalid_severity,
     with_rule_id_suffix,
@@ -53,7 +54,10 @@ def compile_enforce_flow(
 
     _ = cfg
     compiler_evidence: list[Evidence] = []
-    params_kwargs = dict(declaration.params)
+    # An argument given as None is left out: cases=None is no runtime check.
+    params_kwargs = {
+        key: value for key, value in declaration.params.items() if value is not None
+    }
 
     if source_entity.kind not in {"function", "method"}:
         compiler_evidence.append(
@@ -70,6 +74,16 @@ def compile_enforce_flow(
         )
         return [], compiler_evidence, []
 
+    runtime = "cases" in params_kwargs
+    drop: dict[str, Any] = {
+        "marker": "enforce_flow",
+        "rule_id_prefix": (
+            "FLW002/enforce_flow_runtime/invalid_declaration"
+            if runtime
+            else "FLW001/enforce_flow/invalid_declaration"
+        ),
+        "rule_id_suffix": rule_id_suffix,
+    }
     stages_raw = params_kwargs.get("stages", [])
     stages = (
         [str(item) for item in stages_raw if isinstance(item, str)]
@@ -88,7 +102,14 @@ def compile_enforce_flow(
                 },
             )
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            **drop,
+            param="stages",
+            value=stages_raw,
+            reason="stages must be a non-empty list of stage names",
+        )
 
     flow_entries = _valid_flow_entries(source_entity)
     if not flow_entries:
@@ -128,7 +149,16 @@ def compile_enforce_flow(
                     },
                 )
             )
-            return [], compiler_evidence, []
+            return drop_with_sentinel(
+                source_entity,
+                compiler_evidence,
+                **drop,
+                param="variable",
+                reason=(
+                    "variable must be given when the flow markers do not "
+                    "track exactly one variable"
+                ),
+            )
     elif not isinstance(variable, str) or not variable.strip():
         compiler_evidence.append(
             _evidence(
@@ -141,7 +171,14 @@ def compile_enforce_flow(
                 },
             )
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            **drop,
+            param="variable",
+            value=variable,
+            reason="variable must be a non-empty string",
+        )
 
     selected_variable = str(variable).strip()
     selected_flow_entries = [
@@ -177,19 +214,19 @@ def compile_enforce_flow(
                     },
                 )
             )
-            return [], compiler_evidence, []
+            return drop_with_sentinel(
+                source_entity,
+                compiler_evidence,
+                **drop,
+                param="stage",
+                value=stage,
+                reason="every flow marker of the tracked variable needs a stage",
+            )
 
-    runtime = "cases" in params_kwargs
     rejected = reject_invalid_severity(
         source_entity,
         declaration,
-        marker="enforce_flow",
-        rule_id_prefix=(
-            "FLW002/enforce_flow_runtime/invalid_declaration"
-            if runtime
-            else "FLW001/enforce_flow/invalid_declaration"
-        ),
-        rule_id_suffix=rule_id_suffix,
+        **drop,
         evidence_type="compiler_invalid_flow_declaration",
         key="declaration",
         compiler_evidence=compiler_evidence,

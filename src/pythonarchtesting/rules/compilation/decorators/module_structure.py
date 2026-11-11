@@ -107,7 +107,7 @@ def _structure_problem(
         or not all(isinstance(item, str) for item in raw)
     ):
         return "layers", "give the layers as module names, highest first"
-    closed = params.get("closed", [])
+    closed = [] if params.get("closed") is None else params["closed"]
     if not isinstance(closed, list) or not all(isinstance(i, str) for i in closed):
         return "closed", "closed must be a list of module names"
     try:

@@ -11,6 +11,7 @@ from pythonarchtesting.execution.evaluators.construction_resolution import (
 
 from ..common import (
     bool_param,
+    drop_with_sentinel,
     invalid_declaration_evidence,
     invalid_target_evidence,
     marker_severity,
@@ -49,6 +50,11 @@ def compile_required_constructor(
         )
         return [], compiler_evidence, []
 
+    drop: dict[str, Any] = {
+        "marker": _DECORATOR,
+        "rule_id_prefix": "API003/required_constructor/invalid_declaration",
+        "rule_id_suffix": rule_id_suffix,
+    }
     signature_mode = str(params_kwargs.get("signature_mode", "compatible")).lower()
     if signature_mode not in _VALID_SIGNATURE_MODES:
         compiler_evidence.append(
@@ -60,7 +66,15 @@ def compile_required_constructor(
                 params=params_kwargs,
             )
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            **drop,
+            param="signature_mode",
+            value=signature_mode,
+            valid=_VALID_SIGNATURE_MODES,
+            reason="signature_mode must be one of: compatible, exact, any",
+        )
 
     constructor_kind = str(params_kwargs.get("constructor_kind", "auto")).lower()
     if constructor_kind not in _VALID_CONSTRUCTOR_KINDS:
@@ -73,12 +87,18 @@ def compile_required_constructor(
                 params=params_kwargs,
             )
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            **drop,
+            param="constructor_kind",
+            value=constructor_kind,
+            valid=_VALID_CONSTRUCTOR_KINDS,
+            reason="constructor_kind must be one of: auto, __init__, __new__",
+        )
 
     reject: dict[str, Any] = {
-        "marker": _DECORATOR,
-        "rule_id_prefix": "API003/required_constructor/invalid_declaration",
-        "rule_id_suffix": rule_id_suffix,
+        **drop,
         "evidence_type": "compiler_invalid_declaration",
         "compiler_evidence": compiler_evidence,
     }

@@ -13,6 +13,7 @@ from pythonarchtesting.protocols.reference_resolution import (
 from ..common import (
     bool_param,
     declaration_evidence,
+    drop_with_sentinel,
     marker_severity,
     options_problem,
     reject_invalid_param,
@@ -121,6 +122,31 @@ def resolve_protocol_entity(
     return resolution.entity, resolution.normalized, []
 
 
+def unresolved_protocol(
+    source_entity: Entity,
+    evidence: list[Evidence],
+    *,
+    marker: str,
+    rule_id_prefix: str,
+    rule_id_suffix: str,
+) -> Tuple[List[Any], List[Any], List[Any]]:
+    """The declaration dropped because its ``protocol`` argument names no
+    ``typing.Protocol`` class: :func:`resolve_protocol_entity` gave
+    ``evidence``, which says why."""
+    payload = evidence[-1].payload if evidence else {}
+    why = str(payload.get("reason", "ambiguous_or_missing")).replace("_", " ")
+    return drop_with_sentinel(
+        source_entity,
+        evidence,
+        marker=marker,
+        rule_id_prefix=rule_id_prefix,
+        rule_id_suffix=rule_id_suffix,
+        param="protocol",
+        value=payload.get("protocol"),
+        reason=f"protocol must name a typing.Protocol class ({why})",
+    )
+
+
 def _target_kind_error(
     source_entity: Entity,
     declaration: DeclarationEntry,
@@ -225,14 +251,17 @@ def _compile_protocol_rule(
         source_entity, declaration, source_entities=source_entities
     )
     compiler_evidence.extend(evidence_items)
-    if protocol_entity is None or protocol_ref is None:
-        return [], compiler_evidence, []
-
-    params_kwargs = without_none(declaration.params, _OPTIONS)
-    reject: dict[str, Any] = {
+    drop: dict[str, Any] = {
         "marker": declaration.kind or "implements_protocol",
         "rule_id_prefix": f"{rule_id.rsplit('/', 1)[0]}/invalid_declaration",
         "rule_id_suffix": rule_id_suffix,
+    }
+    if protocol_entity is None or protocol_ref is None:
+        return unresolved_protocol(source_entity, compiler_evidence, **drop)
+
+    params_kwargs = without_none(declaration.params, _OPTIONS)
+    reject: dict[str, Any] = {
+        **drop,
         "key": "declaration",
         "compiler_evidence": compiler_evidence,
     }
@@ -303,4 +332,5 @@ def compile_implements_protocol(
 __all__ = [
     "compile_implements_protocol",
     "resolve_protocol_entity",
+    "unresolved_protocol",
 ]

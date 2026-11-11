@@ -200,7 +200,7 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
     assert evidence[0].payload["decorator"] == "required_constructor"
@@ -356,7 +356,7 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
     assert evidence[0].payload["decorator"] == "required_constructor"

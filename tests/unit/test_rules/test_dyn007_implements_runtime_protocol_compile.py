@@ -97,14 +97,14 @@ def test_a_function_is_not_a_valid_target() -> None:
     ("protocol", "reason"),
     [("Missing", None), ("Plain", "not_typing_protocol")],
 )
-def test_an_unusable_protocol_yields_evidence_and_no_rule(
+def test_an_unusable_protocol_yields_evidence_and_a_sentinel(
     protocol: str, reason: str | None
 ) -> None:
     rules, evidence, _ = _compile(
         f"implements_runtime_protocol({protocol}, cases=[{{}}])"
     )
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert [item.type for item in evidence] == ["compiler_invalid_protocol_reference"]
     assert evidence[0].payload["declaration"] == "implements_runtime_protocol"
     if reason is not None:

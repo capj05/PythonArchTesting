@@ -76,7 +76,7 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == [
         "compiler_invalid_attribute_declaration"
@@ -195,7 +195,7 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == [
         "compiler_invalid_attribute_declaration"
@@ -269,7 +269,7 @@ class User:
 
     rules, evidence, compiler_results = compile_rules(source_entities, Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == [
         "compiler_invalid_attribute_declaration"

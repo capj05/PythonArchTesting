@@ -554,7 +554,7 @@ def test_protocol_signature_symbol_reference_missing_emits_compiler_evidence() -
 
     rules, evidence, compiler_results = compile_rules(entities, Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_protocol_reference"]
 
@@ -896,6 +896,6 @@ def test_enforce_flow_without_explicit_variable_emits_ambiguity_evidence() -> No
     function_entity = next(entity for entity in entities if entity.kind == "function")
     rules, evidence, compiler_results = compile_rules([function_entity], Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_flow_declaration"]

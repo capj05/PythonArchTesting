@@ -203,7 +203,7 @@ class Processor:
 """
     rules, evidence, compiler_results = _compile(source)
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_declaration"]
     assert reason_fragment in evidence[0].payload["reason"]

@@ -288,3 +288,14 @@ def test_a_marker_without_positional_parameters_reports_a_literal_one(
         ("arg", "'x'", 1, 31 + len(marker), {"index": 0, "name": marker}),
         ("arg", "1", 1, 36 + len(marker), {"index": 1, "name": marker}),
     ]
+
+
+def test_an_unknown_keyword_of_flow_is_an_issue_and_not_used() -> None:
+    """flow compiles to no rule, so its misspelt keyword is reported here."""
+    declaration = _only('flow("raw", varible="value")')
+
+    assert "varible" not in declaration.params
+    assert [
+        (issue["kind"], issue["name"], issue.get("unknown"))
+        for issue in declaration.unsupported
+    ] == [("kw", "varible", True)]

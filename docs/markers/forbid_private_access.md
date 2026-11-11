@@ -31,7 +31,8 @@ cases and no `--dynamic`. Its runtime companion for writes is
 
 Any other argument, and any positional one, makes the declaration invalid
 (`ENC001/forbid_private_access/invalid_declaration`): a misspelt `alow=[...]`
-would otherwise silently allow nothing.
+would otherwise silently allow nothing. A misspelt keyword is refused as by
+every marker (see [Unknown Keywords](README.md#unknown-keywords)).
 
 ## Example
 

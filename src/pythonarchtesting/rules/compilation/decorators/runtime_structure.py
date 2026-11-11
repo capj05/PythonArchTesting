@@ -742,7 +742,7 @@ def compile_implements_runtime_protocol(
         protocol_methods,
     )
 
-    from .protocols import resolve_protocol_entity
+    from .protocols import resolve_protocol_entity, unresolved_protocol
 
     marker = "implements_runtime_protocol"
     params_kwargs = dict(declaration.params)
@@ -752,7 +752,13 @@ def compile_implements_runtime_protocol(
         source_entity, declaration, source_entities=source_entities
     )
     if protocol_entity is None or protocol_ref is None:
-        return [], evidence, []
+        return unresolved_protocol(
+            source_entity,
+            evidence,
+            marker=marker,
+            rule_id_prefix=f"DYN007/{marker}/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+        )
     problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     rejected = rejected_declaration(
         source_entity,

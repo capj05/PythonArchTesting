@@ -9,6 +9,7 @@ from pythonarchtesting.entities import DeclarationEntry, Entity
 from ..common import (
     bool_param,
     declaration_evidence,
+    drop_with_sentinel,
     invalid_target_evidence,
     marker_severity,
     options_problem,
@@ -86,10 +87,13 @@ def compile_required_attribute(
     _ = cfg
     params_kwargs = without_none(declaration.params, _OPTIONS)
     compiler_evidence: list[Evidence] = []
-    reject: dict[str, Any] = {
+    drop: dict[str, Any] = {
         "marker": "required_attribute",
         "rule_id_prefix": "API003/required_attribute/invalid_declaration",
         "rule_id_suffix": rule_id_suffix,
+    }
+    reject: dict[str, Any] = {
+        **drop,
         "evidence_type": "compiler_invalid_attribute_declaration",
         "key": "declaration",
     }
@@ -137,7 +141,14 @@ def compile_required_attribute(
                 payload=invalid_name_payload,
             )
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            **drop,
+            param="name",
+            value=name,
+            reason="name must be a non-empty string",
+        )
 
     storage = str(params_kwargs.get("storage", "any")).lower()
     if storage not in _VALID_STORAGE_VALUES:
@@ -149,7 +160,15 @@ def compile_required_attribute(
                 storage=storage,
             )
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            **drop,
+            param="storage",
+            value=storage,
+            valid=_VALID_STORAGE_VALUES,
+            reason="storage must be one of: any, class, instance",
+        )
 
     rejected = reject_invalid_param(
         source_entity,
@@ -174,7 +193,14 @@ def compile_required_attribute(
                 descriptor_kinds=params_kwargs.get("descriptor_kinds"),
             )
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            **drop,
+            param="descriptor_kinds",
+            value=params_kwargs.get("descriptor_kinds"),
+            reason="descriptor_kinds must be a list of non-empty strings",
+        )
 
     unsupported_descriptor_kinds = tuple(
         kind for kind in descriptor_kinds if kind not in _VALID_DESCRIPTOR_KINDS
@@ -189,7 +215,15 @@ def compile_required_attribute(
                 unsupported_descriptor_kinds=unsupported_descriptor_kinds,
             )
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            **drop,
+            param="descriptor_kinds",
+            value=list(descriptor_kinds),
+            valid=_VALID_DESCRIPTOR_KINDS,
+            reason="descriptor_kinds may contain only: cached_property, classproperty",
+        )
 
     if allow_property and storage == "class":
         compiler_evidence.append(
@@ -201,7 +235,14 @@ def compile_required_attribute(
                 storage=storage,
             )
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            **drop,
+            param="allow_property",
+            value=True,
+            reason="allow_property=True does not combine with storage='class'",
+        )
 
     rejected = reject_invalid_severity(
         source_entity,

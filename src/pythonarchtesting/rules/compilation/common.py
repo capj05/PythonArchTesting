@@ -245,6 +245,36 @@ def reject_invalid_param(
     return [sentinel], [*(compiler_evidence or []), evidence], []
 
 
+def drop_with_sentinel(
+    source_entity: Entity,
+    compiler_evidence: List[Evidence],
+    *,
+    marker: str,
+    rule_id_prefix: str,
+    rule_id_suffix: str,
+    param: str,
+    reason: str,
+    value: Any = None,
+    valid: Iterable[Any] | None = None,
+) -> Tuple[List[Any], List[Any], List[Any]]:
+    """The declaration dropped for an invalid value of its argument
+    ``param``: a ``compiler_invalid_param`` sentinel rule under the marker's
+    ``rule_id_prefix`` and ``compiler_evidence``, which already reports the
+    problem in the marker's own payload. For a marker whose evidence of an
+    invalid argument predates :func:`reject_invalid_param`."""
+    sentinel = build_invalid_param_sentinel_rule(
+        source_entity,
+        decorator_name=marker,
+        rule_id_prefix=rule_id_prefix,
+        rule_id_suffix=rule_id_suffix,
+        param=param,
+        value=value,
+        valid=sorted(valid) if valid is not None else None,
+        reason=reason,
+    )
+    return [sentinel], compiler_evidence, []
+
+
 SEVERITIES = ("error", "warning", "info")
 INVALID_SEVERITY_ISSUE = "invalid_severity"
 
@@ -398,6 +428,7 @@ __all__ = [
     "build_invalid_param_sentinel_rule",
     "canonicalize_payload",
     "declaration_evidence",
+    "drop_with_sentinel",
     "evidence_id",
     "invalid_declaration_evidence",
     "invalid_param_payload",

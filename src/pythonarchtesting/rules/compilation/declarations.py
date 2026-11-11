@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
@@ -8,9 +9,11 @@ from typing import Any
 
 from pythonarchtesting.entities import DeclarationEntry, Entity
 from pythonarchtesting.rules.compilation.common import (
+    build_invalid_param_sentinel_rule,
     canonicalize_payload,
     declaration_evidence,
 )
+from pythonarchtesting.rules.declaration import core as marker_helpers
 
 _SUPPORTED_DECLARATION_KINDS = frozenset(
     {
@@ -306,11 +309,107 @@ def compile_declarations(
                 cfg,
                 **compiler_kwargs,
             )
+            rejected = _reject_unknown_params(
+                source_entity, declaration, compiled_rules, rule_id_suffix
+            )
+            if rejected is not None:
+                compiled_rules, unknown_evidence, results = rejected
+                evidence_items = [*evidence_items, *unknown_evidence]
             rules.extend(compiled_rules)
             compiler_evidence.extend(evidence_items)
             compiler_results.extend(results)
 
     return rules, compiler_evidence, compiler_results
+
+
+# Keys the extraction adds to a declaration's params besides its arguments:
+# the source text of a protocol and whether ``flow`` named its variable.
+_DERIVED_PARAMS = frozenset({"protocol_expr", "variable_explicit"})
+# The prefix of invalid declarations where it is not ``<code>/<marker>/
+# invalid_declaration``.
+_INVALID_SUFFIX = {"required_factory": "invalid_param"}
+
+
+def marker_keywords(kind: str) -> list[str]:
+    """The keyword arguments marker ``kind`` takes, in signature order: every
+    parameter of its helper except a ``*names`` one."""
+    helper = getattr(marker_helpers, kind, None)
+    if helper is None:
+        return []
+    return [
+        name
+        for name, param in inspect.signature(helper).parameters.items()
+        if param.kind is not inspect.Parameter.VAR_POSITIONAL
+    ]
+
+
+def _accepted_params(kind: str) -> frozenset[str]:
+    """The params keys a declaration of ``kind`` may have: its keywords, its
+    ``*names`` parameter (filled from positional arguments) and the keys the
+    extraction derives."""
+    helper = getattr(marker_helpers, kind)
+    return frozenset(inspect.signature(helper).parameters) | _DERIVED_PARAMS
+
+
+def _reject_unknown_params(
+    source_entity: Entity,
+    declaration: DeclarationEntry,
+    compiled_rules: Sequence[Any],
+    rule_id_suffix: str,
+) -> tuple[list[Any], list[Any], list[Any]] | None:
+    """The dropped declaration when it has a keyword its marker does not take,
+    else ``None``.
+
+    A misspelt keyword would otherwise leave the option it meant at its
+    default without a word. Only a declaration that compiled to rules of its
+    own is dropped: one its compiler already refused keeps that report, and
+    one that compiles to no rule (``flow``, a misplaced marker) has no result
+    to replace. The sentinel takes the marker's prefix for invalid
+    declarations from the rule it replaces.
+    """
+    kind = declaration.kind
+    if not compiled_rules or not hasattr(marker_helpers, kind):
+        return None
+    if any(rule.rule_type == "compiler_invalid_param" for rule in compiled_rules):
+        return None
+    accepted = _accepted_params(kind)
+    unknown = sorted(key for key in declaration.params if key not in accepted)
+    if not unknown:
+        return None
+    own = next((rule for rule in compiled_rules if rule.name == kind), None)
+    rule_id = (own or compiled_rules[0]).rule_id
+    if rule_id_suffix and rule_id.endswith(rule_id_suffix):
+        rule_id = rule_id[: -len(rule_id_suffix)]
+    code = "/".join(rule_id.split("/")[:2])
+    prefix = f"{code}/{_INVALID_SUFFIX.get(kind, 'invalid_declaration')}"
+    takes = marker_keywords(kind)
+    param = unknown[0]
+    reason = f"unknown parameter {param!r}; {kind} takes " + ", ".join(takes)
+    sentinel = build_invalid_param_sentinel_rule(
+        source_entity,
+        decorator_name=kind,
+        rule_id_prefix=prefix,
+        param=param,
+        value=declaration.params[param],
+        valid=sorted(takes),
+        reason=reason,
+        rule_id_suffix=rule_id_suffix,
+    )
+    evidence = declaration_evidence(
+        source_entity,
+        declaration,
+        evidence_type="compiler_invalid_param",
+        payload={
+            "declaration": kind,
+            "issue": "unknown_param",
+            "param": param,
+            "unknown": unknown,
+            "value": declaration.params[param],
+            "valid": sorted(takes),
+            "reason": reason,
+        },
+    )
+    return [sentinel], [evidence], []
 
 
 def in_rule_order(

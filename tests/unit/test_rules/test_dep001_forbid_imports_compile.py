@@ -128,7 +128,7 @@ def _architecture_rules_marker() -> None:
     source_entity, _ = build_source_index_from_rule_source(source)
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_import_policy_mode"]
     assert evidence[0].payload["issue"] == "invalid_mode"
@@ -143,3 +143,43 @@ def test_dep001_helper_rejects_invalid_mode() -> None:
         match="forbid_imports\\(\\) mode must be 'reachable' or 'direct'\\.",
     ):
         forbid_imports("requests", mode="invalid")
+
+
+@pytest.mark.parametrize("arguments", ["", 'scope="module"', 'package="assignment"'])
+def test_dep001_compile_rejects_forbid_imports_without_a_module(arguments: str) -> None:
+    """A forbid_imports() that names no module forbids nothing; it is dropped
+    as forbid_runtime_imports drops it, not compiled to a rule that passes."""
+    source = f"""
+from typing import Annotated
+from pythonarchtesting.rules import forbid_imports
+
+def _architecture_rules_marker() -> None:
+    __archtest__: Annotated[None, forbid_imports({arguments})]
+    return None
+"""
+    source_entity, _ = build_source_index_from_rule_source(source)
+    rules, evidence, compiler_results = compile_rules([source_entity], Mock())
+
+    assert compiler_results == []
+    assert [(rule.rule_id, rule.rule_type) for rule in rules] == [
+        (
+            "DEP001/forbid_imports/invalid_declaration/forbidden",
+            "compiler_invalid_param",
+        )
+    ]
+    assert rules[0].params["compiler_reason"] == (
+        "give at least one module name to forbid"
+    )
+    assert [(item.type, item.payload) for item in evidence] == [
+        (
+            "compiler_invalid_param",
+            {
+                "declaration": "forbid_imports",
+                "issue": "invalid_forbidden",
+                "param": "forbidden",
+                "reason": "give at least one module name to forbid",
+                "valid": None,
+                "value": [],
+            },
+        )
+    ]

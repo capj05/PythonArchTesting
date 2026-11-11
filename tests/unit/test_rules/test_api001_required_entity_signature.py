@@ -582,7 +582,7 @@ def normalize(a: int) -> int:
     source_entity = _extract_function_entity(source, role="source", name="normalize")
     rules, evidence, _ = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    assert [rule.rule_type for rule in rules] == ["compiler_invalid_param"]
     assert len(evidence) == 1
     assert evidence[0].type == "compiler_invalid_param"
     assert evidence[0].payload["param"] == "return_annotation"

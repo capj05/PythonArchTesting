@@ -21,7 +21,6 @@ MARKER = "forbid_private_access"
 RULE_ID = "ENC001/forbid_private_access/v1"
 _INVALID_PREFIX = f"ENC001/{MARKER}/invalid_declaration"
 _SUPPORTED_KINDS = ("function", "method")
-_PARAMS = ("allow", "severity", "message")
 
 
 def _positional_count(raw: str) -> int:
@@ -37,13 +36,7 @@ def _problem(params: dict[str, Any], raw: str) -> Optional[tuple[str, str]]:
     """What is wrong with the marker's arguments, as ``(param, reason)``."""
     if _positional_count(raw):
         return ("args", f"{MARKER} takes no positional arguments; use allow=[...]")
-    unknown = sorted(key for key in params if key not in _PARAMS)
-    if unknown:
-        return (
-            unknown[0],
-            f"unknown parameter {unknown[0]!r}; {MARKER} takes " + ", ".join(_PARAMS),
-        )
-    allow = params.get("allow", [])
+    allow = [] if params.get("allow") is None else params["allow"]
     if not isinstance(allow, list) or not all(
         isinstance(name, str) and name.isidentifier() for name in allow
     ):
@@ -75,7 +68,7 @@ def compile_forbid_private_access(
     )
     if rejected is not None:
         return rejected
-    allow = params.get("allow", [])
+    allow = [] if params.get("allow") is None else params["allow"]
     rule = Rule(
         rule_id=with_rule_id_suffix(RULE_ID, rule_id_suffix),
         rule_type="private_access",

@@ -39,10 +39,46 @@ every marker:
   sentinel with the valid values and the issue `invalid_<argument>`, for
   example `required_entity_signature(mode="strict")` with `invalid_mode`.
 - `None` declares the default of either kind, as if the argument were left
-  out.
+  out. The same holds for every argument whose default is `None`
+  (`enforce_layers(closed=None)`, `forbid_private_access(allow=None)`,
+  `enforce_flow(cases=None)`, which is then no runtime check).
 
 The sentinel and the evidence are the ones the marker reports an invalid
 severity with.
+
+## Other Invalid Argument Values
+
+Any other declaration dropped for an argument value is reported the same way:
+a `compiler_invalid_param` sentinel rule for the argument at fault, under the
+marker's `…/invalid_declaration/<argument>` (`required_factory`:
+`…/invalid_param/<argument>`) rule id, so the dropped marker is a FAILED
+result rather than missing from the report. That covers a name, list or
+pattern that is not valid (`required_attribute("")`,
+`required_method(name_match="regex", pattern="(")`), arguments that do not
+combine (`required_attribute(allow_property=True, storage="class")`), a
+`protocol` that names no `typing.Protocol` class, an `enforce_flow` whose
+`variable` is missing or invalid, and a `flow` marker without a stage. The
+compiler evidence keeps the issue it always had (`invalid_storage`,
+`compiler_invalid_protocol_reference`, `ambiguous_variable`, …).
+
+A declaration dropped for where it stands rather than for an argument value —
+a marker on the wrong kind of entity, an `enforce_flow` in a function without
+`flow` markers, a `required_constructor` on a class that declares no
+constructor — is reported by its compiler evidence (`--validate-declarations`
+shows it).
+
+## Unknown Keywords
+
+A keyword a marker does not take — usually a misspelling such as
+`required_method(declard_only=True)` — makes the declaration invalid instead
+of leaving the option it meant at its default: a `compiler_invalid_param`
+sentinel rule for that keyword under the marker's
+`…/invalid_declaration/<keyword>` rule id (`required_factory`:
+`…/invalid_param/<keyword>`) and compiler evidence with the issue
+`unknown_param`, whose `valid` lists the keywords the marker takes. The
+keywords are the parameters on the marker's page. A declaration its compiler
+already refused for another reason keeps that report. `flow` compiles to no
+rule; its unknown keyword is a warning instead (see [flow](flow.md)).
 
 ## Positional Arguments
 

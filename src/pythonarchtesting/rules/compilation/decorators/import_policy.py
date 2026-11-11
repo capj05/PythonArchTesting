@@ -7,10 +7,12 @@ from pythonarchtesting.core.models import Evidence
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
 from ..common import (
+    InvalidParam,
     bool_param,
     bool_problem,
     choice_problem,
     declaration_evidence,
+    drop_with_sentinel,
     marker_severity,
     reject_invalid_param,
     reject_invalid_severity,
@@ -51,6 +53,20 @@ def _invalid_mode_evidence(
         declaration,
         evidence_type="compiler_invalid_import_policy_mode",
         payload=payload,
+    )
+
+
+def _forbidden_problem(raw: Any, forbidden: list[str]) -> InvalidParam | None:
+    """Why the declaration forbids nothing, ``None`` when it names a module:
+    a ``forbid_imports()`` without modules would compile to a rule that
+    always passes."""
+    if forbidden:
+        return None
+    return InvalidParam(
+        param="forbidden",
+        value=raw,
+        valid=None,
+        reason="give at least one module name to forbid",
     )
 
 
@@ -95,7 +111,8 @@ def compile_forbid_imports(
     rejected = reject_invalid_param(
         source_entity,
         declaration,
-        choice_problem(params_kwargs, "scope", _VALID_SCOPES),
+        _forbidden_problem(forbidden_raw, forbidden)
+        or choice_problem(params_kwargs, "scope", _VALID_SCOPES),
         marker="forbid_imports",
         rule_id_prefix=_INVALID_PREFIX,
         rule_id_suffix=rule_id_suffix,
@@ -114,7 +131,17 @@ def compile_forbid_imports(
         compiler_evidence.append(
             _invalid_mode_evidence(source_entity, declaration, mode)
         )
-        return [], compiler_evidence, []
+        return drop_with_sentinel(
+            source_entity,
+            compiler_evidence,
+            marker="forbid_imports",
+            rule_id_prefix=_INVALID_PREFIX,
+            rule_id_suffix=rule_id_suffix,
+            param="mode",
+            value=mode,
+            valid=_VALID_IMPORT_POLICY_MODES,
+            reason="forbid_imports mode must be 'reachable' or 'direct'.",
+        )
 
     reject: dict[str, Any] = {
         "marker": "forbid_imports",

@@ -33,6 +33,12 @@ the target function's control-flow graph.
 
 Severity is fixed to `"info"` for `flow` markers and is not a configurable argument.
 
+A keyword `flow` does not take (`flow("raw", varible="value")`) is not used:
+`--validate-declarations` reports it as a warning, a `kw` issue with
+`unknown: true`. `flow` compiles to no rule, so unlike the other markers (see
+[Unknown Keywords](README.md#unknown-keywords)) the declaration stays valid —
+with the variable left out, as the misspelling had it.
+
 ## Example
 
 ```python

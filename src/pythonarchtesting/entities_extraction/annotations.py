@@ -36,6 +36,8 @@ _POSITIONAL_SINGLE_ARG_NAMES = {
     "flow": "stage",
     "enforce_flow": "stages",
 }
+# The keywords of ``flow`` (rules.declaration.core.flow).
+_FLOW_KEYWORDS = frozenset({"stage", "variable", "message"})
 SUPPORTED_MARKER_NAMES = {
     "architecture_entry",
     "module_interface",
@@ -467,6 +469,13 @@ def _keyword_params(
         if name == "required_attribute" and kw.arg == "annotation":
             # An annotation is any type expression, kept as its source text.
             params["annotation"] = lit_val if is_lit else value_repr
+            continue
+        if name == "flow" and kw.arg not in _FLOW_KEYWORDS:
+            # flow compiles to no rule a misspelt keyword could invalidate,
+            # so the keyword is reported here and not used.
+            unsupported.append(
+                _issue("kw", kw.value, expr=value_repr, name=key, unknown=True)
+            )
             continue
         names_protocol = takes_protocol and kw.arg == "protocol"
         if is_lit and kw.arg is not None:
