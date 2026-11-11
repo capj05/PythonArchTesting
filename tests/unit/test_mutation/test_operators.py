@@ -1788,12 +1788,12 @@ def test_a_local_first_set_to_none_holds_the_class_it_is_built_of() -> None:
     """``found = None`` before ``found = Item()`` says no class: the local
     holds an ``Item``; another builtin value (``0``) or a second class does
     make it unknown."""
-    from pythonarchtesting.mutation.operators import _object_class
+    from pythonarchtesting.mutation.objects import object_class
 
     classes, functions = _helpers_source()
 
     def of(name: str) -> object:
-        found = _object_class(classes, functions[name], "found", [])
+        found = object_class(classes, functions[name], "found", [])
         return found.name if found is not None else None
 
     assert of("none_first") == "Item"
@@ -1805,23 +1805,23 @@ def test_a_local_first_set_to_none_holds_the_class_it_is_built_of() -> None:
 def test_methods_called_on_a_name_are_those_the_function_itself_calls() -> None:
     """A nested function, comprehension or lambda binds a name of its own:
     ``item.zap()`` there is no call on the parameter ``item``."""
-    from pythonarchtesting.mutation.operators import _called_on
+    from pythonarchtesting.mutation.functions import called_on
 
     _, functions = _helpers_source()
 
-    assert _called_on(functions["shadowed"], "item") == {"tag"}
+    assert called_on(functions["shadowed"], "item") == {"tag"}
 
 
 def test_a_nested_definition_s_decorators_defaults_and_bases_run_in_the_function() -> (
     None
 ):
-    from pythonarchtesting.mutation.operators import _body_nodes
+    from pythonarchtesting.mutation.functions import body_nodes
 
     _, functions = _helpers_source()
 
     read = {
         ast.unparse(node)
-        for node in _body_nodes(functions["decorated"])
+        for node in body_nodes(functions["decorated"])
         if isinstance(node, ast.Attribute)
     }
 

@@ -24,7 +24,12 @@ from pythonarchtesting.execution.module_structure import in_module
 
 from ..common import with_rule_id_suffix
 from .module_structure import entry_problem
-from .runtime_structure import _case_params, _invalid_param, _invalid_target, _severity
+from .runtime_structure import (
+    case_params,
+    invalid_param,
+    invalid_target,
+    marker_severity,
+)
 
 MARKER = "architecture_entry"
 STATIC_RULE_ID = "DEP004/architecture_entry/v1"
@@ -111,14 +116,14 @@ def compile_architecture_entry(
     entities = list(source_entities or [])
     params = dict(declaration.params)
     if source_entity.kind != "module" or source_entity.module_path:
-        return _invalid_target(source_entity, declaration, MARKER, ["root module"])
+        return invalid_target(source_entity, declaration, MARKER, ["root module"])
 
     problem = _problem(params, entities)
     entry_entity: Entity | None = None
     if problem is None:
         problem, entry_entity = entry_problem(params, entities, MARKER)
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=MARKER,
@@ -133,7 +138,7 @@ def compile_architecture_entry(
             rule_id=with_rule_id_suffix(STATIC_RULE_ID, rule_id_suffix),
             rule_type="architecture_static",
             name=MARKER,
-            severity=_severity(params),
+            severity=marker_severity(params),
             scope=source_entity.kind,
             evidence_type="static",
             selector=RuleSelector(
@@ -151,14 +156,14 @@ def compile_architecture_entry(
                 rule_id=with_rule_id_suffix(RUNTIME_RULE_ID, rule_id_suffix),
                 rule_type="architecture_runtime",
                 name=MARKER,
-                severity=_severity(params),
+                severity=marker_severity(params),
                 scope=entry_entity.kind,
                 evidence_type="runtime",
                 selector=RuleSelector(
                     source_entity_id=entry_entity.canonical_id, explicit_target=None
                 ),
                 params={
-                    **_case_params(params),
+                    **case_params(params),
                     **model,
                     "entry": params["entry"],
                     "require_all": bool(params.get("require_all", False)),

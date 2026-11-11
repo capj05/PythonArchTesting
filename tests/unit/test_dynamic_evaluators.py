@@ -18,8 +18,8 @@ from pythonarchtesting.dynamic.batch import cache_key
 from pythonarchtesting.dynamic.runner import ProbeOutcome
 from pythonarchtesting.entities_extraction import extract_entities_from_source
 from pythonarchtesting.execution.evaluators.messages import (
-    _build_rule_result,
     _has_caveat,
+    build_rule_result,
 )
 from pythonarchtesting.execution.evaluators.runtime_structure import (
     RuntimeCallsEvaluator,
@@ -209,7 +209,7 @@ def test_an_ok_message_carries_the_summary_only_with_a_caveat(
     rule, entity = _rule_and_entity(_FORBID)
     match = SimpleNamespace(status=MatchStatus.MATCHED, confidence=1.0)
 
-    result = _build_rule_result(rule, entity, entity, match, "OK", details, ())
+    result = build_rule_result(rule, entity, entity, match, "OK", details, ())
 
     assert _has_caveat(details) is caveat
     assert result.message == ("OK: s" if caveat else "OK")
@@ -237,7 +237,7 @@ def test_a_pass_that_left_something_unchecked_lists_why(
     rule, entity = _rule_and_entity(_FORBID)
     match = SimpleNamespace(status=MatchStatus.MATCHED, confidence=1.0)
 
-    result = _build_rule_result(rule, entity, entity, match, "OK", details, ())
+    result = build_rule_result(rule, entity, entity, match, "OK", details, ())
 
     assert result.details.get("unverified") == reasons
 
@@ -247,7 +247,7 @@ def test_a_failure_is_never_marked_unverified() -> None:
     match = SimpleNamespace(status=MatchStatus.MATCHED, confidence=1.0)
     details = {"summary": "s", "coverage": {"unexercised_lines": [4]}}
 
-    result = _build_rule_result(rule, entity, entity, match, "FAILED", details, ())
+    result = build_rule_result(rule, entity, entity, match, "FAILED", details, ())
 
     assert "unverified" not in result.details
 

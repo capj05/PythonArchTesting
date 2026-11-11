@@ -15,7 +15,7 @@ from pythonarchtesting.core.models import Rule, RuleSelector
 from pythonarchtesting.entities import DeclarationEntry, Entity
 
 from ..common import with_rule_id_suffix
-from .runtime_structure import _invalid_param, _invalid_target, _severity
+from .runtime_structure import invalid_param, invalid_target, marker_severity
 
 MARKER = "forbid_private_access"
 RULE_ID = "ENC001/forbid_private_access/v1"
@@ -61,12 +61,12 @@ def compile_forbid_private_access(
     _ = cfg
     params = dict(declaration.params)
     if source_entity.kind not in _SUPPORTED_KINDS:
-        return _invalid_target(
+        return invalid_target(
             source_entity, declaration, MARKER, list(_SUPPORTED_KINDS)
         )
     problem = _problem(params, declaration.raw)
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=MARKER,
@@ -79,7 +79,7 @@ def compile_forbid_private_access(
         rule_id=with_rule_id_suffix(RULE_ID, rule_id_suffix),
         rule_type="private_access",
         name=MARKER,
-        severity=_severity(params),
+        severity=marker_severity(params),
         scope=source_entity.kind,
         evidence_type="static",
         selector=RuleSelector(

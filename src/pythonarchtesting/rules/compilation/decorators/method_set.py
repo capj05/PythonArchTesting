@@ -16,8 +16,8 @@ from ..common import (
 
 _SENTINEL_RULE_ID_PREFIX = "API005/require_method_set/invalid_declaration"
 
-_VALID_NAME_MATCH = frozenset({"any", "regex", "names"})
-_VALID_METHOD_KINDS = frozenset({"any", "instance", "classmethod", "staticmethod"})
+VALID_NAME_MATCH = frozenset({"any", "regex", "names"})
+VALID_METHOD_KINDS = frozenset({"any", "instance", "classmethod", "staticmethod"})
 
 
 def _invalid_declaration_evidence(
@@ -106,7 +106,7 @@ def _drop(
     return [sentinel], [evidence], []
 
 
-def _normalize_names(raw_names: Any) -> tuple[list[str] | None, bool]:
+def normalize_names(raw_names: Any) -> tuple[list[str] | None, bool]:
     if raw_names is None:
         return None, True
     if not isinstance(raw_names, list):
@@ -117,7 +117,7 @@ def _normalize_names(raw_names: Any) -> tuple[list[str] | None, bool]:
     return names, True
 
 
-def _normalize_nonnegative_int(value: Any) -> tuple[int | None, bool]:
+def normalize_nonnegative_int(value: Any) -> tuple[int | None, bool]:
     if value is None or isinstance(value, bool) or not isinstance(value, int):
         return None, False
     return value, value >= 0
@@ -164,19 +164,19 @@ def compile_require_method_set(
         )
 
     name_match = str(params_kwargs.get("name_match", "any")).lower()
-    if name_match not in _VALID_NAME_MATCH:
+    if name_match not in VALID_NAME_MATCH:
         return _drop(
             source_entity,
             declaration,
             param="name_match",
             value=params_kwargs.get("name_match"),
-            valid=sorted(_VALID_NAME_MATCH),
+            valid=sorted(VALID_NAME_MATCH),
             reason="name_match must be one of: any, regex, names",
             params_kwargs=params_kwargs,
             rule_id_suffix=rule_id_suffix,
         )
 
-    names, names_valid = _normalize_names(params_kwargs.get("names"))
+    names, names_valid = normalize_names(params_kwargs.get("names"))
     if not names_valid:
         return _drop(
             source_entity,
@@ -276,13 +276,13 @@ def compile_require_method_set(
         )
 
     method_kind = str(params_kwargs.get("method_kind", "any")).lower()
-    if method_kind not in _VALID_METHOD_KINDS:
+    if method_kind not in VALID_METHOD_KINDS:
         return _drop(
             source_entity,
             declaration,
             param="method_kind",
             value=params_kwargs.get("method_kind"),
-            valid=sorted(_VALID_METHOD_KINDS),
+            valid=sorted(VALID_METHOD_KINDS),
             reason=(
                 "method_kind must be one of: any, instance, "
                 "classmethod, staticmethod"
@@ -291,7 +291,7 @@ def compile_require_method_set(
             rule_id_suffix=rule_id_suffix,
         )
 
-    min_count, min_count_valid = _normalize_nonnegative_int(
+    min_count, min_count_valid = normalize_nonnegative_int(
         params_kwargs.get("min_count", 1)
     )
     if not min_count_valid or min_count is None:
@@ -311,7 +311,7 @@ def compile_require_method_set(
     if max_count_raw is None:
         max_count = None
     else:
-        max_count, max_count_valid = _normalize_nonnegative_int(max_count_raw)
+        max_count, max_count_valid = normalize_nonnegative_int(max_count_raw)
         if not max_count_valid or max_count is None:
             return _drop(
                 source_entity,
@@ -386,4 +386,10 @@ def compile_require_method_set(
     return [rule], compiler_evidence, []
 
 
-__all__ = ["compile_require_method_set"]
+__all__ = [
+    "compile_require_method_set",
+    "VALID_METHOD_KINDS",
+    "VALID_NAME_MATCH",
+    "normalize_names",
+    "normalize_nonnegative_int",
+]

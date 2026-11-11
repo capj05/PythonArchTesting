@@ -7,7 +7,7 @@ from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult, MatchStatus
 from pythonarchtesting.protocols.entity_lookup import ProtocolEntityLookup
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 
 def _entity_payload(entity: Entity) -> dict[str, Any]:
@@ -203,9 +203,7 @@ class NominalTypeRelationshipEvaluator:
                 "required base counterpart is not available in target matching "
                 f"(status={match_status})"
             )
-            return _build_rule_result(
-                rule, source, target, match, "FAILED", details, ()
-            )
+            return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
         details["self_matches_required_base"] = (
             target.canonical_id == expected_target_base.canonical_id
@@ -242,7 +240,7 @@ class NominalTypeRelationshipEvaluator:
             ]
             details["facts"] = [fact]
 
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target,

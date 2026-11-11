@@ -36,7 +36,7 @@ _POSITIONAL_SINGLE_ARG_NAMES = {
     "flow": "stage",
     "enforce_flow": "stages",
 }
-_SUPPORTED_MARKER_NAMES = {
+SUPPORTED_MARKER_NAMES = {
     "architecture_entry",
     "module_interface",
     "does_not_have",
@@ -238,7 +238,7 @@ def _metadata_declarations(
         name = _metadata_kind_name(metadata_node, file_text=file_text)
         if (
             allowed_marker_names is not None
-            and name in _SUPPORTED_MARKER_NAMES
+            and name in SUPPORTED_MARKER_NAMES
             and name not in allowed_marker_names
         ):
             metadata_issues.append(
@@ -311,7 +311,7 @@ def _parse_metadata_item(
             subject_name=subject_name,
         )
 
-    if name not in _SUPPORTED_MARKER_NAMES:
+    if name not in SUPPORTED_MARKER_NAMES:
         unsupported.append(_issue("unknown_metadata", node, expr=raw, name=name))
 
     if isinstance(node, ast.Call):
@@ -681,7 +681,7 @@ def extract_signature_annotation_declarations(
             continue
         if not any(
             _metadata_kind_name(metadata_node, file_text=file_text)
-            in _SUPPORTED_MARKER_NAMES
+            in SUPPORTED_MARKER_NAMES
             for metadata_node in metadata_nodes
         ):
             continue
@@ -708,4 +708,5 @@ __all__ = [
     "extract_annotation_declarations",
     "extract_function_body_annotation_declarations",
     "extract_signature_annotation_declarations",
+    "SUPPORTED_MARKER_NAMES",
 ]

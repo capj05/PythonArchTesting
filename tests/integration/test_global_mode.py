@@ -28,9 +28,10 @@ from pythonarchtesting.global_mode.outcome import judge_principle
 from pythonarchtesting.global_mode.selftask import _source_entities, write_self_task
 from pythonarchtesting.mcp_server import global_tools
 from pythonarchtesting.mcp_server.evaluation import run_evaluation
-from pythonarchtesting.mcp_server.reports import _findings, load_report
+from pythonarchtesting.mcp_server.reports import load_report
 from pythonarchtesting.mcp_server.tasks import prepare_task
 from pythonarchtesting.principles.catalog import get_principle
+from pythonarchtesting.principles.verdict import target_findings
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -96,7 +97,7 @@ def test_self_task_finds_print_in_logic_of_space_a(tmp_path: Path) -> None:
     report = load_report(run["report_json"])
     found = {
         f.error_id
-        for f in _findings(get_principle("io_separation"), report["targets"][0])
+        for f in target_findings(get_principle("io_separation"), report["targets"][0])
     }
     assert "print_instead_of_return" in found
 

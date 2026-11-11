@@ -11,7 +11,7 @@ from .member_name_resolution import (
     member_origin,
     target_methods_for_class,
 )
-from .messages import _build_rule_result
+from .messages import build_rule_result
 from .signature_comparison import method_kind as resolved_method_kind
 
 
@@ -126,7 +126,7 @@ class MethodSetEvaluator:
                 "method_kind": method_kind,
                 "selected_methods": [],
             }
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -191,7 +191,7 @@ class MethodSetEvaluator:
             "method_kind": method_kind,
             "selected_methods": selected_payload,
         }
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target,

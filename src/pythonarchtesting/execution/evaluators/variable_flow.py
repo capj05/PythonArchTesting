@@ -8,7 +8,7 @@ from pythonarchtesting.entities import Entity
 from pythonarchtesting.execution.flow_cfg import build_function_cfg
 from pythonarchtesting.matching import MatchResult
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 
 class VariableFlowEvaluator:
@@ -40,7 +40,7 @@ class VariableFlowEvaluator:
                 "target entity does not expose a function body for CFG evaluation"
             )
             details["failure_reason"] = "missing_cfg"
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -135,7 +135,7 @@ class VariableFlowEvaluator:
                     ],
                 }
             )
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -163,7 +163,7 @@ class VariableFlowEvaluator:
                 ],
             }
         )
-        return _build_rule_result(rule, source, target, match, "OK", details, ())
+        return build_rule_result(rule, source, target, match, "OK", details, ())
 
 
 __all__ = ["VariableFlowEvaluator"]

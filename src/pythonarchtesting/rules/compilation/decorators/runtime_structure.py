@@ -69,7 +69,7 @@ def _evidence(
     )
 
 
-def _severity(params: dict[str, Any]) -> Literal["error", "warning", "info"]:
+def marker_severity(params: dict[str, Any]) -> Literal["error", "warning", "info"]:
     raw = str(params.get("severity", "error")).lower()
     if raw in {"error", "warning", "info"}:
         return cast(Literal["error", "warning", "info"], raw)
@@ -215,7 +215,7 @@ def _module_names(value: Any) -> list[str] | None:
     return [str(name) for name in value]
 
 
-def _invalid_target(
+def invalid_target(
     source_entity: Entity, declaration: DeclarationEntry, marker: str, expected: Any
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     payload = {
@@ -238,7 +238,7 @@ def _invalid_target(
     )
 
 
-def _invalid_param(
+def invalid_param(
     source_entity: Entity,
     declaration: DeclarationEntry,
     *,
@@ -276,7 +276,7 @@ def _invalid_param(
     )
 
 
-def _case_params(params: dict[str, Any]) -> dict[str, Any]:
+def case_params(params: dict[str, Any]) -> dict[str, Any]:
     return {
         "cases": params["cases"],
         "init": params.get("init"),
@@ -294,7 +294,7 @@ def _compile_module_list(
     rule_id, rule_type, mode, hint = _MODULE_LIST_MARKERS[marker]
     params_kwargs = dict(declaration.params)
     if source_entity.kind not in _SUPPORTED_KINDS:
-        return _invalid_target(
+        return invalid_target(
             source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
         )
 
@@ -325,7 +325,7 @@ def _compile_module_list(
     else:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=marker,
@@ -338,7 +338,7 @@ def _compile_module_list(
         rule_id=with_rule_id_suffix(rule_id, rule_id_suffix),
         rule_type=rule_type,
         name=marker,
-        severity=_severity(params_kwargs),
+        severity=marker_severity(params_kwargs),
         scope=source_entity.kind,
         evidence_type="runtime",
         selector=RuleSelector(
@@ -346,7 +346,7 @@ def _compile_module_list(
             explicit_target=None,
         ),
         params={
-            **_case_params(params_kwargs),
+            **case_params(params_kwargs),
             "mode": mode,
             "modules": sorted(set(modules or [])),
             "allow": sorted(set(allow or [])),
@@ -419,7 +419,7 @@ def compile_enforce_reference_calls(
     marker = "enforce_reference_calls"
     params_kwargs = dict(declaration.params)
     if source_entity.kind not in _SUPPORTED_KINDS:
-        return _invalid_target(
+        return invalid_target(
             source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
         )
     require_all = params_kwargs.get("require_all", False)
@@ -432,7 +432,7 @@ def compile_enforce_reference_calls(
     else:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=marker,
@@ -446,7 +446,7 @@ def compile_enforce_reference_calls(
         ),
         rule_type="runtime_reference_calls",
         name=marker,
-        severity=_severity(params_kwargs),
+        severity=marker_severity(params_kwargs),
         scope=source_entity.kind,
         evidence_type="runtime",
         selector=RuleSelector(
@@ -454,7 +454,7 @@ def compile_enforce_reference_calls(
             explicit_target=None,
         ),
         params={
-            **_case_params(params_kwargs),
+            **case_params(params_kwargs),
             "require_all": require_all,
             **({"allow_new_modules": True} if allow_new_modules else {}),
         },
@@ -524,7 +524,7 @@ def _compile_runtime_members(
     mode, hint = _MEMBER_MARKERS[marker]
     params_kwargs = dict(declaration.params)
     if source_entity.kind != "class":
-        return _invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(source_entity, declaration, marker, "class")
     names = _module_names(params_kwargs.get("names", []))
     types = params_kwargs.get("types")
     problem: tuple[str, str] | None = None
@@ -543,7 +543,7 @@ def _compile_runtime_members(
     else:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=marker,
@@ -557,12 +557,12 @@ def _compile_runtime_members(
         rule_id=f"DYN005/{marker}/v1",
         rule_type="runtime_members",
         params={
-            **_case_params(params_kwargs),
+            **case_params(params_kwargs),
             "mode": mode,
             "names": sorted(set(names or [])),
             **({"types": dict(types)} if types else {}),
         },
-        severity=_severity(params_kwargs),
+        severity=marker_severity(params_kwargs),
         hint=hint,
         rule_id_suffix=rule_id_suffix,
     )
@@ -617,10 +617,10 @@ def compile_is_runtime_concrete_class(
     marker = "is_runtime_concrete_class"
     params_kwargs = dict(declaration.params)
     if source_entity.kind != "class":
-        return _invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(source_entity, declaration, marker, "class")
     problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=marker,
@@ -633,8 +633,8 @@ def compile_is_runtime_concrete_class(
         marker=marker,
         rule_id=f"DYN006/{marker}/v1",
         rule_type="runtime_class_kind",
-        params={**_case_params(params_kwargs), "expect": "concrete"},
-        severity=_severity(params_kwargs),
+        params={**case_params(params_kwargs), "expect": "concrete"},
+        severity=marker_severity(params_kwargs),
         hint=(
             "Implement every abstract method the class inherits, including those "
             "of bases outside the project."
@@ -655,12 +655,12 @@ def compile_is_runtime_abstract_class(
     marker = "is_runtime_abstract_class"
     params_kwargs = dict(declaration.params)
     if source_entity.kind != "class":
-        return _invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(source_entity, declaration, marker, "class")
     problem = _timeout_problem(params_kwargs)
     if "cases" in params_kwargs:
         problem = ("cases", f"{marker} takes no cases: nothing is instantiated")
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=marker,
@@ -680,7 +680,7 @@ def compile_is_runtime_abstract_class(
             "timeout_s": float(params_kwargs.get("timeout_s", 5.0)),
             "expect": "abstract",
         },
-        severity=_severity(params_kwargs),
+        severity=marker_severity(params_kwargs),
         hint=(
             "Keep at least one abstract method unimplemented (for example by "
             "deriving from abc.ABC and marking it @abstractmethod)."
@@ -715,20 +715,20 @@ def compile_implements_runtime_protocol(
         protocol_methods,
     )
 
-    from .protocols import _resolve_protocol_entity
+    from .protocols import resolve_protocol_entity
 
     marker = "implements_runtime_protocol"
     params_kwargs = dict(declaration.params)
     if source_entity.kind != "class":
-        return _invalid_target(source_entity, declaration, marker, "class")
-    protocol_entity, protocol_ref, evidence = _resolve_protocol_entity(
+        return invalid_target(source_entity, declaration, marker, "class")
+    protocol_entity, protocol_ref, evidence = resolve_protocol_entity(
         source_entity, declaration, source_entities=source_entities
     )
     if protocol_entity is None or protocol_ref is None:
         return [], evidence, []
     problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=marker,
@@ -751,12 +751,12 @@ def compile_implements_runtime_protocol(
         rule_id=f"DYN007/{marker}/v1",
         rule_type="runtime_protocol",
         params={
-            **_case_params(params_kwargs),
+            **case_params(params_kwargs),
             "protocol": protocol_ref,
             "methods": dict(sorted(methods.items())),
             "attributes": attributes,
         },
-        severity=_severity(params_kwargs),
+        severity=marker_severity(params_kwargs),
         hint=(
             "Give instances every member of the protocol, with methods that "
             "accept the protocol's arguments."
@@ -810,7 +810,7 @@ def _pattern_rule(
     if problem is None:
         problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=marker,
@@ -823,8 +823,8 @@ def _pattern_rule(
         marker=marker,
         rule_id=f"DYN008/{marker}/v1",
         rule_type="runtime_pattern",
-        params={**_case_params(params_kwargs), **params},
-        severity=_severity(params_kwargs),
+        params={**case_params(params_kwargs), **params},
+        severity=marker_severity(params_kwargs),
         hint=hint,
         rule_id_suffix=rule_id_suffix,
     )
@@ -841,7 +841,7 @@ def compile_is_runtime_singleton(
     _ = cfg
     marker = "is_runtime_singleton"
     if source_entity.kind != "class":
-        return _invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(source_entity, declaration, marker, "class")
     params_kwargs = dict(declaration.params)
     return _pattern_rule(
         source_entity,
@@ -868,7 +868,7 @@ def compile_enforce_runtime_observer(
     _ = cfg
     marker = "enforce_runtime_observer"
     if source_entity.kind != "class":
-        return _invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(source_entity, declaration, marker, "class")
     params_kwargs = dict(declaration.params)
     problem = (
         _identifier_problem(params_kwargs, "subscribe", required=True)
@@ -923,7 +923,7 @@ def compile_require_runtime_delegation(
     _ = cfg
     marker = "require_runtime_delegation"
     if source_entity.kind not in _SUPPORTED_KINDS:
-        return _invalid_target(
+        return invalid_target(
             source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
         )
     params_kwargs = dict(declaration.params)
@@ -972,12 +972,12 @@ def compile_forbid_foreign_writes(
     marker = "forbid_foreign_writes"
     params_kwargs = dict(declaration.params)
     if source_entity.kind not in _SUPPORTED_KINDS:
-        return _invalid_target(
+        return invalid_target(
             source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
         )
     problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=marker,
@@ -989,14 +989,14 @@ def compile_forbid_foreign_writes(
         rule_id=with_rule_id_suffix("DYN003/forbid_foreign_writes/v1", rule_id_suffix),
         rule_type="runtime_writes",
         name=marker,
-        severity=_severity(params_kwargs),
+        severity=marker_severity(params_kwargs),
         scope=source_entity.kind,
         evidence_type="runtime",
         selector=RuleSelector(
             source_entity_id=source_entity.canonical_id,
             explicit_target=None,
         ),
-        params=_case_params(params_kwargs),
+        params=case_params(params_kwargs),
         message_template=(
             "forbid_foreign_writes for "
             "{target.module_path}:{target.qualname}: {details.summary}"
@@ -1022,7 +1022,7 @@ def compile_forbid_runtime_imports(
     params_kwargs = dict(declaration.params)
 
     if source_entity.kind != "module":
-        return _invalid_target(
+        return invalid_target(
             source_entity, declaration, "forbid_runtime_imports", "module"
         )
 
@@ -1044,7 +1044,7 @@ def compile_forbid_runtime_imports(
             f"timeout_s must be a number in (0, {_MAX_TIMEOUT_S:g}]",
         )
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker="forbid_runtime_imports",
@@ -1057,7 +1057,7 @@ def compile_forbid_runtime_imports(
         rule_id=with_rule_id_suffix("DYN002/forbid_runtime_imports/v1", rule_id_suffix),
         rule_type="runtime_imports",
         name="forbid_runtime_imports",
-        severity=_severity(params_kwargs),
+        severity=marker_severity(params_kwargs),
         scope=source_entity.kind,
         evidence_type="runtime",
         selector=RuleSelector(
@@ -1098,4 +1098,8 @@ __all__ = [
     "compile_forbid_runtime_instantiation",
     "compile_require_runtime_calls",
     "runtime_cases_problem",
+    "case_params",
+    "invalid_param",
+    "invalid_target",
+    "marker_severity",
 ]

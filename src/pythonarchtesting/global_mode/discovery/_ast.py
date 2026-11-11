@@ -9,7 +9,9 @@ from pathlib import PurePosixPath
 from typing import Optional, Union
 
 from pythonarchtesting.entities import Entity
-from pythonarchtesting.principles.task import _entity_name, _interface
+from pythonarchtesting.principles.task import entity_name
+from pythonarchtesting.util.ast_utils import is_abstract_method, is_interface
+from pythonarchtesting.util.module_names import project_module_by_suffix
 
 FunctionNode = Union[ast.FunctionDef, ast.AsyncFunctionDef]
 # The expressions that build a new builtin object: a literal, an f-string, a
@@ -29,9 +31,9 @@ LITERALS = (
 
 
 def name_of(entity: Entity) -> str:
-    """The entity's name as the self-task binds it (``task._entity_name``):
+    """The entity's name as the self-task binds it (``task.entity_name``):
     ``actions`` for a module, ``ship.Cargo.load`` for a method."""
-    return _entity_name(entity)
+    return entity_name(entity)
 
 
 def function_node(entity: Entity) -> Optional[FunctionNode]:
@@ -74,7 +76,7 @@ def classes(entities: Sequence[Entity]) -> list[tuple[Entity, ast.ClassDef]]:
 
 
 def is_top_level_public(entity: Entity) -> bool:
-    """A public function at the top of its module: what ``task._resolve``
+    """A public function at the top of its module: what ``task.resolve_name``
     binds when a role names the whole module."""
     return (
         entity.kind == "function"
@@ -187,15 +189,6 @@ def _is_main_guard(test: ast.expr) -> bool:
     return has_name and has_main
 
 
-def main_guards(module: ast.Module) -> list[ast.If]:
-    """The module's top-level ``if __name__ == "__main__":`` statements."""
-    return [
-        statement
-        for statement in module.body
-        if isinstance(statement, ast.If) and _is_main_guard(statement.test)
-    ]
-
-
 def entry_blocks(module: ast.Module) -> list[ast.stmt]:
     """The statements that start the program when the module is run: its
     top-level ``if __name__ == "__main__":`` statements, and each top-level
@@ -230,18 +223,6 @@ def imported_names(module: ast.Module) -> dict[str, tuple[str, str]]:
     return found
 
 
-def project_module(written: str, modules: Sequence[str]) -> Optional[str]:
-    """The project module a ``from <written> import`` names: the module path
-    equal to ``written`` or to its tail past a package prefix
-    (``space_a.actions`` -> ``actions``), else ``None``."""
-    parts = written.split(".")
-    for start in range(len(parts)):
-        tail = ".".join(parts[start:])
-        if tail in modules:
-            return tail
-    return None
-
-
 def _walk_skipping(root: ast.AST, skip: Sequence[ast.AST]) -> Iterator[ast.AST]:
     stack = [root]
     while stack:
@@ -266,7 +247,8 @@ def _local_names(
     names = {
         local
         for local, (written, original) in imported_names(tree).items()
-        if original == simple and project_module(written, modules) == target.module_path
+        if original == simple
+        and project_module_by_suffix(written, modules) == target.module_path
     }
     aliases = {
         local
@@ -324,55 +306,10 @@ def references_outside(target: Entity, entities: Sequence[Entity]) -> list[str]:
     return found
 
 
-def only_raises_not_implemented(node: FunctionNode) -> bool:
-    """Whether the body, past a docstring, is one ``raise NotImplementedError``."""
-    body = list(node.body)
-    if (
-        body
-        and isinstance(body[0], ast.Expr)
-        and isinstance(body[0].value, ast.Constant)
-        and isinstance(body[0].value.value, str)
-    ):
-        body = body[1:]
-    if len(body) != 1 or not isinstance(body[0], ast.Raise):
-        return False
-    exc = body[0].exc
-    if isinstance(exc, ast.Call):
-        exc = exc.func
-    return isinstance(exc, ast.Name) and exc.id == "NotImplementedError"
-
-
-def is_abstract_method(node: FunctionNode) -> bool:
-    """Whether the method is abstract: decorated with ``abstractmethod``, or
-    its body (past a docstring) only raises ``NotImplementedError`` or is
-    ``...`` or ``pass``. No case can run such a method on an object of its
-    own class."""
-    if any("abstractmethod" in ast.unparse(d) for d in node.decorator_list):
-        return True
-    if only_raises_not_implemented(node):
-        return True
-    body = list(node.body)
-    if (
-        body
-        and isinstance(body[0], ast.Expr)
-        and isinstance(body[0].value, ast.Constant)
-        and isinstance(body[0].value.value, str)
-    ):
-        body = body[1:]
-    return len(body) == 1 and (
-        isinstance(body[0], ast.Pass)
-        or (
-            isinstance(body[0], ast.Expr)
-            and isinstance(body[0].value, ast.Constant)
-            and body[0].value.value is Ellipsis
-        )
-    )
-
-
 def interface_classes(entities: Sequence[Entity]) -> set[str]:
-    """The classes that are interfaces (``task._interface``: ``ABC``,
+    """The classes that are interfaces (``ast_utils.is_interface``: ``ABC``,
     ``Protocol``, ``ABCMeta``, an ``@abstractmethod``), by name."""
-    return {name_of(e) for e, node in classes(entities) if _interface(node)}
+    return {name_of(e) for e, node in classes(entities) if is_interface(node)}
 
 
 def runnable_method(entity: Entity, node: FunctionNode, interfaces: set[str]) -> bool:
@@ -444,12 +381,15 @@ def class_parents(entities: Sequence[Entity]) -> dict[str, list[str]]:
     return parents
 
 
-def _closure(start: str, links: Mapping[str, Sequence[str]]) -> set[str]:
+def reachable(start: str, links: Mapping[str, Sequence[str]]) -> set[str]:
+    """The names reachable from ``start`` by one or more ``links`` (its
+    ancestors by parent links, its descendants by child links), ``start``
+    itself never, even on a cycle."""
     found: set[str] = set()
     todo = [start]
     while todo:
         for nxt in links.get(todo.pop(), ()):
-            if nxt not in found:
+            if nxt != start and nxt not in found:
                 found.add(nxt)
                 todo.append(nxt)
     return found
@@ -466,7 +406,7 @@ def class_family(entities: Sequence[Entity]) -> Callable[[str], set[str]]:
             children.setdefault(base, []).append(name)
 
     def family(cls: str) -> set[str]:
-        return {cls} | _closure(cls, parents) | _closure(cls, children)
+        return {cls} | reachable(cls, parents) | reachable(cls, children)
 
     return family
 
@@ -484,13 +424,13 @@ def module_aliases(module: ast.Module, modules: Sequence[str]) -> dict[str, str]
                 # ``import a.b`` binds ``a``, the package: an alias of the
                 # module ``a.b`` only with ``as``.
                 written = alias.name if alias.asname else alias.name.split(".")[0]
-                source = project_module(written, modules)
+                source = project_module_by_suffix(written, modules)
                 if source is not None:
                     found[alias.asname or written] = source
         elif isinstance(statement, ast.ImportFrom):
             prefix = f"{statement.module}." if statement.module else ""
             for alias in statement.names:
-                source = project_module(prefix + alias.name, modules)
+                source = project_module_by_suffix(prefix + alias.name, modules)
                 if source is not None and source.split(".")[-1] == alias.name:
                     found[alias.asname or alias.name] = source
     return found

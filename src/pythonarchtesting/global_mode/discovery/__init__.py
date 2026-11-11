@@ -90,7 +90,8 @@ class Predicates:
     hidden_by: Mapping[str, str] = dataclasses.field(default_factory=dict)
 
 
-_REGISTRY: dict[str, Predicates] = {
+# The principles global mode can discover the roles of, with how.
+REGISTRY: dict[str, Predicates] = {
     "io_separation": Predicates(
         io_separation.find, io_separation.NOT_FOUND, io_separation.HIDDEN_BY
     ),
@@ -185,7 +186,7 @@ def discover_roles(
     for a principle not in the catalogue and ``ValueError`` for one that has
     no discovery yet."""
     entry = get_principle(principle)
-    predicates = _REGISTRY.get(principle)
+    predicates = REGISTRY.get(principle)
     if predicates is None:
         raise ValueError(f"principle {principle!r} has no role discovery yet")
     found = predicates.find(project_entities(entities))
@@ -224,6 +225,7 @@ __all__ = [
     "ESSENTIAL_ROLES",
     "Override",
     "Predicates",
+    "REGISTRY",
     "discover_roles",
     "split_by_base",
 ]

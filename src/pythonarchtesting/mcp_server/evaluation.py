@@ -1,21 +1,27 @@
+"""MCP tools that evaluate: ``run_evaluation`` writes the reports of a run,
+``check_architecture`` checks one target in a loop, and
+``validate_declarations_tool`` checks the reference's markers.
+
+``resolve_config`` and ``sandbox_policy`` are the core's
+(``runner.settings``) with its refusals as tool input errors; the other MCP
+tools take the config and the sandbox through them.
+"""
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from pythonarchtesting.config import Config, load_config, resolve_projects_config
+from pythonarchtesting.config import Config
 from pythonarchtesting.exceptions import ConfigurationError
+from pythonarchtesting.invalid_input import InvalidInputError
 from pythonarchtesting.mcp_server.errors import ToolInputError, require_absolute
 from pythonarchtesting.mcp_server.reports import summarize_payload
 from pythonarchtesting.report.lazy import generate_run_report
+from pythonarchtesting.runner import settings
+from pythonarchtesting.runner.settings import DEFAULT_SANDBOX_MEMORY_MB
 from pythonarchtesting.validation_scope import VALIDATION_SCOPES
-
-CONFIG_FILENAME = ".pythonarchtesting"
-DEFAULT_SANDBOX = "bwrap"
-DEFAULT_SANDBOX_MEMORY_MB = 1024
-_ALLOWED_SANDBOXES = ("limits", "bwrap")
 
 
 def resolve_config(source: Path, config: Optional[str]) -> tuple[Config, str]:
@@ -25,22 +31,18 @@ def resolve_config(source: Path, config: Optional[str]) -> tuple[Config, str]:
     call gives the same result whatever the MCP client's launch directory is.
     The second element is ``"defaults"`` when no config file applies.
     """
-    config_path: Optional[Path] = None
-    if config is not None:
-        config_path = require_absolute(config, "config")
-        if not config_path.is_file():
-            raise ToolInputError(f"config does not exist: {config}")
-    else:
-        for directory in (source, source.parent):
-            candidate = directory / CONFIG_FILENAME
-            if candidate.is_file():
-                config_path = candidate
-                break
-    loaded = load_config(
-        config_path=str(config_path) if config_path else None,
-        discover_from_cwd=False,
-    )
-    return loaded, str(config_path) if config_path else "defaults"
+    try:
+        return settings.resolve_config(source, config)
+    except InvalidInputError as exc:
+        raise ToolInputError(str(exc)) from exc
+
+
+def sandbox_policy(dynamic: bool, sandbox: Optional[str], memory_mb: int) -> Any:
+    """Build and check the sandbox for a dynamic run; None for static runs."""
+    try:
+        return settings.sandbox_policy(dynamic, sandbox, memory_mb)
+    except InvalidInputError as exc:
+        raise ToolInputError(str(exc)) from exc
 
 
 def _check_scope(validation_scope: str) -> None:
@@ -71,37 +73,6 @@ def validate_declarations_tool(
         raise ToolInputError(str(exc)) from exc
     payload["config"] = applied
     return payload
-
-
-def _sandbox_policy(dynamic: bool, sandbox: Optional[str], memory_mb: int) -> Any:
-    """Build and check the sandbox for a dynamic run; None for static runs."""
-    if not dynamic:
-        if sandbox is not None or memory_mb != DEFAULT_SANDBOX_MEMORY_MB:
-            raise ToolInputError(
-                "sandbox and sandbox_memory_mb apply only with dynamic."
-            )
-        return None
-    from pythonarchtesting.dynamic.sandbox import (
-        SandboxPolicy,
-        SandboxUnavailableError,
-        check_available,
-    )
-
-    mode = sandbox or DEFAULT_SANDBOX
-    if mode == "none":
-        raise ToolInputError("the MCP server refuses an unconfined run: sandbox none")
-    if mode not in _ALLOWED_SANDBOXES:
-        raise ToolInputError(
-            f"sandbox must be one of {', '.join(_ALLOWED_SANDBOXES)}: {mode}"
-        )
-    if memory_mb <= 0:
-        raise ToolInputError("sandbox_memory_mb must be positive.")
-    policy = SandboxPolicy(mode=mode, memory_mb=memory_mb)
-    try:
-        check_available(policy)
-    except SandboxUnavailableError as exc:
-        raise ToolInputError(f"sandbox {mode} is not available here: {exc}") from exc
-    return policy
 
 
 def _check_targets(
@@ -135,11 +106,10 @@ def run_evaluation(
     *,
     states: Optional[list[Any]] = None,
 ) -> dict[str, Any]:
-    """Evaluate targets against ``source`` and write JSON and Markdown reports.
-    ``states``, when given, receives the run's target states (global mode
-    takes the unchanged submission's results from them instead of running it
-    again; not a parameter of the MCP tool)."""
-    from pythonarchtesting.runner import run_projects
+    """Evaluate targets against ``source`` and write JSON and Markdown reports
+    (``runner.reported_run``). ``states``, when given, receives the run's
+    target states (not a parameter of the MCP tool)."""
+    from pythonarchtesting.runner.reported_run import run_and_report
     from pythonarchtesting.runner.skips import (
         count_results_undecided,
         count_runtime_results_unverified,
@@ -154,7 +124,7 @@ def run_evaluation(
     if targets_dir is not None:
         require_absolute(targets_dir, "targets_dir")
     _check_targets(targets, targets_dir, project_pattern, exclude_patterns)
-    policy = _sandbox_policy(dynamic, sandbox, sandbox_memory_mb)
+    policy = sandbox_policy(dynamic, sandbox, sandbox_memory_mb)
     mappings = None
     if mapping is not None:
         from pythonarchtesting.matching.assisted import mapping_from_data
@@ -163,60 +133,39 @@ def run_evaluation(
             mappings = mapping_from_data(mapping)
         except ValueError as exc:
             raise ToolInputError(f"mapping: {exc}") from exc
-    run_dir = output_root / datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%S%fZ")
     try:
-        loaded, applied = resolve_config(source_path, config)
-        projects_cfg = resolve_projects_config(
-            config=loaded,
-            source_path=str(source_path),
-            targets=targets or None,
+        run = run_and_report(
+            source_path,
+            output_root,
+            targets=targets,
             targets_dir=targets_dir,
             project_pattern=project_pattern,
-            exclude_patterns=exclude_patterns or None,
-            env_target_path=None,
-        )
-        run_dir.mkdir(parents=True, exist_ok=False)
-        run_state, target_states = run_projects(
-            config=loaded,
-            projects=projects_cfg,
-            source_path=str(source_path),
-            targets=targets or None,
-            targets_dir=targets_dir,
-            reference_modules=reference_modules or None,
-            project_pattern=project_pattern,
-            exclude_patterns=exclude_patterns or None,
+            exclude_patterns=exclude_patterns,
+            reference_modules=reference_modules,
             validation_scope=validation_scope,
-            load_config_first=False,
             dynamic=dynamic,
             sandbox=policy,
+            config=config,
+            on_progress=on_progress,
             architecture=architecture,
             mappings=mappings,
-            on_target_done=on_progress,
         )
-        report_json = run_dir / "report.json"
-        report_markdown = run_dir / "markdown"
-        rendered = generate_run_report(
-            run_state, target_states, "json", loaded, report_json
-        )
-        generate_run_report(
-            run_state, target_states, "markdown", loaded, report_markdown
-        )
-    except (ConfigurationError, OSError) as exc:
+    except (ConfigurationError, OSError, InvalidInputError) as exc:
         raise ToolInputError(str(exc)) from exc
     if states is not None:
-        states.extend(target_states)
-    result = summarize_payload(json.loads(rendered), str(report_json))
+        states.extend(run.target_states)
+    result = summarize_payload(json.loads(run.rendered), str(run.report_json))
     result.update(
         {
-            "config": applied,
-            "run_dir": str(run_dir),
-            "report_json": str(report_json),
-            "report_markdown": str(report_markdown),
-            "runtime_rules_skipped": count_runtime_rules_skipped(target_states),
+            "config": run.config,
+            "run_dir": str(run.run_dir),
+            "report_json": str(run.report_json),
+            "report_markdown": str(run.report_markdown),
+            "runtime_rules_skipped": count_runtime_rules_skipped(run.target_states),
             "runtime_results_unverified": count_runtime_results_unverified(
-                target_states
+                run.target_states
             ),
-            "results_undecided": count_results_undecided(target_states),
+            "results_undecided": count_results_undecided(run.target_states),
         }
     )
     return result
@@ -258,7 +207,7 @@ def check_architecture(
     feedback and the changes nothing decided come back directly.
     """
     from pythonarchtesting.matching.assisted import mapping_from_data
-    from pythonarchtesting.mcp_server.reports import _explain_result, _is_problem
+    from pythonarchtesting.report.feedback import explain_result, is_problem
     from pythonarchtesting.runner import run_projects
 
     if mode not in _CHECK_MODES:
@@ -266,7 +215,7 @@ def check_architecture(
     source_path = require_absolute(source, "source")
     target_path = require_absolute(target, "target")
     dynamic = mode == "full"
-    policy = _sandbox_policy(dynamic, sandbox, sandbox_memory_mb)
+    policy = sandbox_policy(dynamic, sandbox, sandbox_memory_mb)
     try:
         mappings = mapping_from_data(mapping) if mapping is not None else None
     except ValueError as exc:
@@ -297,9 +246,7 @@ def check_architecture(
         or str(r["rule_id"]).startswith("compiler_")
     ]
     problems = [
-        _explain_result(r)
-        for r in found["results"]
-        if _is_problem(r) and r not in broken
+        explain_result(r) for r in found["results"] if is_problem(r) and r not in broken
     ]
     undecided = sorted(
         {
@@ -341,3 +288,13 @@ def check_architecture(
             if (r.get("details") or {}).get("reason") == "required_target_missing"
         ),
     }
+
+
+__all__ = [
+    "DEFAULT_SANDBOX_MEMORY_MB",
+    "check_architecture",
+    "resolve_config",
+    "run_evaluation",
+    "sandbox_policy",
+    "validate_declarations_tool",
+]

@@ -14,10 +14,10 @@ from ..common import (
     with_rule_id_suffix,
 )
 from .method_set import (
-    _VALID_METHOD_KINDS,
-    _VALID_NAME_MATCH,
-    _normalize_names,
-    _normalize_nonnegative_int,
+    VALID_METHOD_KINDS,
+    VALID_NAME_MATCH,
+    normalize_names,
+    normalize_nonnegative_int,
 )
 
 _SENTINEL_RULE_ID_PREFIX = "API006/require_member_set/invalid_declaration"
@@ -216,19 +216,19 @@ def compile_require_member_set(
         )
 
     name_match = str(params_kwargs.get("name_match", "any")).lower()
-    if name_match not in _VALID_NAME_MATCH:
+    if name_match not in VALID_NAME_MATCH:
         return _drop(
             source_entity,
             declaration,
             param="name_match",
             value=params_kwargs.get("name_match"),
-            valid=sorted(_VALID_NAME_MATCH),
+            valid=sorted(VALID_NAME_MATCH),
             reason="name_match must be one of: any, regex, names",
             params_kwargs=params_kwargs,
             rule_id_suffix=rule_id_suffix,
         )
 
-    names, names_valid = _normalize_names(params_kwargs.get("names"))
+    names, names_valid = normalize_names(params_kwargs.get("names"))
     if not names_valid:
         return _drop(
             source_entity,
@@ -328,13 +328,13 @@ def compile_require_member_set(
         )
 
     method_kind = str(params_kwargs.get("method_kind", "any")).lower()
-    if method_kind not in _VALID_METHOD_KINDS:
+    if method_kind not in VALID_METHOD_KINDS:
         return _drop(
             source_entity,
             declaration,
             param="method_kind",
             value=params_kwargs.get("method_kind"),
-            valid=sorted(_VALID_METHOD_KINDS),
+            valid=sorted(VALID_METHOD_KINDS),
             reason=(
                 "method_kind must be one of: any, instance, "
                 "classmethod, staticmethod"
@@ -387,7 +387,7 @@ def compile_require_member_set(
             rule_id_suffix=rule_id_suffix,
         )
 
-    min_count, min_count_valid = _normalize_nonnegative_int(
+    min_count, min_count_valid = normalize_nonnegative_int(
         params_kwargs.get("min_count", 1)
     )
     if not min_count_valid or min_count is None:
@@ -407,7 +407,7 @@ def compile_require_member_set(
     if max_count_raw is None:
         max_count = None
     else:
-        max_count, max_count_valid = _normalize_nonnegative_int(max_count_raw)
+        max_count, max_count_valid = normalize_nonnegative_int(max_count_raw)
         if not max_count_valid or max_count is None:
             return _drop(
                 source_entity,

@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Optional
 
 from pythonarchtesting.constants import FileConstants
+from pythonarchtesting.util import ast_utils
 
 TYPE_TEST_CALLEES = frozenset({"builtins:isinstance", "builtins:type"})
 _COMPARING = (ast.Eq, ast.NotEq, ast.Is, ast.IsNot, ast.In, ast.NotIn)
@@ -132,7 +133,7 @@ class TypeTests:
                     for node in ast.walk(tree) if tree is not None else ():
                         if isinstance(node, ast.ClassDef):
                             bases.setdefault(node.name, set()).update(
-                                (_dotted(b) or "").rpartition(".")[2]
+                                (ast_utils.dotted(b) or "").rpartition(".")[2]
                                 for b in node.bases
                             )
             found = {
@@ -224,7 +225,7 @@ class TypeTests:
             )  # int | float
         if isinstance(node, ast.Call):
             return _none_type(node)  # type(None)
-        dotted = _dotted(node)
+        dotted = ast_utils.dotted(node)
         if dotted is None:
             return False
         if dotted.rpartition(".")[2] in self.project_exceptions() or dotted.endswith(
@@ -274,16 +275,6 @@ def _no_test_of_its_own(call: ast.Call, parents: dict[ast.AST, ast.AST]) -> bool
         and parent.func.id in _CLASS_TAKING
         and call in parent.args
     )
-
-
-def _dotted(node: ast.expr) -> Optional[str]:
-    """``a.b.c`` for a chain of plain names, else ``None``."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        base = _dotted(node.value)
-        return f"{base}.{node.attr}" if base is not None else None
-    return None
 
 
 def _imported(tree: ast.Module) -> dict[str, str]:
@@ -396,7 +387,7 @@ def _logged(parent: Optional[ast.AST], node: ast.AST) -> bool:
         isinstance(parent, ast.Call)
         and isinstance(parent.func, ast.Attribute)
         and parent.func.attr in _LOGGING
-        and _dotted(parent.func.value) is not None
+        and ast_utils.dotted(parent.func.value) is not None
         and node in parent.args
     )
 

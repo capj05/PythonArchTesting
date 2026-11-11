@@ -18,10 +18,10 @@ from pythonarchtesting.execution.module_structure import in_module, parse_layers
 
 from ..common import with_rule_id_suffix
 from .runtime_structure import (
-    _case_params,
-    _invalid_param,
-    _invalid_target,
-    _severity,
+    case_params,
+    invalid_param,
+    invalid_target,
+    marker_severity,
     runtime_cases_problem,
 )
 
@@ -137,7 +137,7 @@ def _compile_module_structure(
     static_id, static_type, runtime_id, runtime_type = _RULES[marker]
     params = dict(declaration.params)
     if source_entity.kind != "module":
-        return _invalid_target(source_entity, declaration, marker, ["module"])
+        return invalid_target(source_entity, declaration, marker, ["module"])
 
     problem = _structure_problem(marker, params, source_entities)
     entry_entity: Entity | None = None
@@ -145,7 +145,7 @@ def _compile_module_structure(
     if problem is None:
         problem, entry_entity = entry_problem(params, source_entities, marker)
     if problem is not None:
-        return _invalid_param(
+        return invalid_param(
             source_entity,
             declaration,
             marker=marker,
@@ -160,7 +160,7 @@ def _compile_module_structure(
             rule_id=with_rule_id_suffix(static_id, rule_id_suffix),
             rule_type=static_type,
             name=marker,
-            severity=_severity(params),
+            severity=marker_severity(params),
             scope=source_entity.kind,
             evidence_type="static",
             selector=RuleSelector(
@@ -179,14 +179,14 @@ def _compile_module_structure(
                 rule_id=with_rule_id_suffix(runtime_id, rule_id_suffix),
                 rule_type=runtime_type,
                 name=marker,
-                severity=_severity(params),
+                severity=marker_severity(params),
                 scope=entry_entity.kind,
                 evidence_type="runtime",
                 selector=RuleSelector(
                     source_entity_id=entry_entity.canonical_id,
                     explicit_target=None,
                 ),
-                params={**_case_params(params), **structure, "entry": entry},
+                params={**case_params(params), **structure, "entry": entry},
                 message_template=(
                     f"{marker} while "
                     "{target.module_path}:{target.qualname} "

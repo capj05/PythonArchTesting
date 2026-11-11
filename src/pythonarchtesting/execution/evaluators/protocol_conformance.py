@@ -27,7 +27,7 @@ from pythonarchtesting.protocols.signature_slots import signature_subject_annota
 
 from .annotation_compatibility import compare_annotation_text
 from .api_signature import evaluate_method_compatibility
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 
 def _class_methods(entity: Entity, ctx: EvalContext, role: str) -> dict[str, Entity]:
@@ -308,7 +308,7 @@ class ProtocolConformanceEvaluator:
             "enforce_method_kind": enforce_method_kind,
             "return_annotation": return_annotation,
         }
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target,
@@ -370,7 +370,7 @@ class ProtocolConformanceEvaluator:
                     "missing target annotation on the required signature slot"
                 )
                 details["failure_reason"] = "missing_target_annotation"
-                return _build_rule_result(
+                return build_rule_result(
                     rule,
                     source,
                     target,
@@ -386,7 +386,7 @@ class ProtocolConformanceEvaluator:
                 details["failure_reason"] = (
                     inference.failure_reason or "ambiguous_or_missing"
                 )
-                return _build_rule_result(
+                return build_rule_result(
                     rule,
                     source,
                     target,
@@ -415,7 +415,7 @@ class ProtocolConformanceEvaluator:
             details["failure_reason"] = (
                 resolution.reason or "unresolved_target_annotation"
             )
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -480,7 +480,7 @@ class ProtocolConformanceEvaluator:
                 "return_annotation": return_annotation,
             }
         )
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target,

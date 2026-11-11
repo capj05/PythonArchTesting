@@ -19,7 +19,7 @@ def test_the_reference_import_graph_is_built_once_per_run(
         calls.append(args)
         return {}, {}, {"pkg.a"}
 
-    monkeypatch.setattr(architecture, "_import_edges", built)
+    monkeypatch.setattr(architecture, "static_import_edges", built)
     shared: dict[str, Any] = {}
     first = SimpleNamespace(reference_runs=shared, source_by_id={}, source_package="p")
     second = SimpleNamespace(reference_runs=shared, source_by_id={}, source_package="p")

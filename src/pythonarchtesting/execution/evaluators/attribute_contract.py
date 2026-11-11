@@ -11,7 +11,7 @@ from pythonarchtesting.protocols.attribute_introspection import (
 )
 
 from .annotation_compatibility import compare_annotation_text
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 
 def _skip_optional_attribute(
@@ -22,7 +22,7 @@ def _skip_optional_attribute(
     *,
     details: dict[str, Any],
 ) -> RuleResult:
-    return _build_rule_result(
+    return build_rule_result(
         rule,
         source,
         target,
@@ -266,7 +266,7 @@ class AttributeContractEvaluator:
                     _attribute_payload(member) for member in all_candidates
                 ],
             }
-            return _build_rule_result(
+            return build_rule_result(
                 rule, source, target, match, "OK", success_details, ()
             )
 
@@ -324,7 +324,7 @@ class AttributeContractEvaluator:
             ],
             "allow_missing": allow_missing,
         }
-        return _build_rule_result(rule, source, target, match, "FAILED", details, ())
+        return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
 
 __all__ = ["AttributeContractEvaluator"]

@@ -13,7 +13,7 @@ from pythonarchtesting.protocols.introspection import (
     declared_class_methods,
 )
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
 from .signature_comparison import evaluate_method_compatibility
 
 
@@ -195,7 +195,7 @@ class MemberAbsenceEvaluator:
                 "name_match": name_match,
                 "signature_mode": signature_mode,
             }
-            return _build_rule_result(
+            return build_rule_result(
                 rule, source, target, match, "FAILED", invalid_target_details, ()
             )
 
@@ -205,7 +205,7 @@ class MemberAbsenceEvaluator:
             else None
         )
         if signature_mode in {"compatible", "exact"} and signature_anchor is None:
-            return _build_rule_result(
+            return build_rule_result(
                 rule,
                 source,
                 target,
@@ -311,7 +311,7 @@ class MemberAbsenceEvaluator:
         if pattern is not None:
             details["pattern"] = pattern
         status: RuleStatus = "OK" if not hits else "FAILED"
-        return _build_rule_result(rule, source, target, match, status, details, ())
+        return build_rule_result(rule, source, target, match, status, details, ())
 
 
 __all__ = ["ForbiddenMemberHit", "MemberAbsenceEvaluator"]

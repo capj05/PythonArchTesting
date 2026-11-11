@@ -104,7 +104,7 @@ def _has_caveat(details: Dict[str, Any]) -> bool:
     return bool(details.get("summary")) and bool(_unverified_reasons(details))
 
 
-def _build_rule_result(
+def build_rule_result(
     rule: Rule,
     source: Entity,
     target: Entity,
@@ -173,10 +173,15 @@ def finish_violations(
         details["reason"] = "violation"
         more = f" (+{len(violations) - 1} more)" if len(violations) > 1 else ""
         details["summary"] = violations[0] + more
-        return _build_rule_result(rule, source, target, match, "FAILED", details, ())
+        return build_rule_result(rule, source, target, match, "FAILED", details, ())
     details["reason"] = "no_violations"
     details["summary"] = passed
-    return _build_rule_result(rule, source, target, match, "OK", details, ())
+    return build_rule_result(rule, source, target, match, "OK", details, ())
 
 
-__all__ = ["MAX_REPORTED", "finish_violations", "render_message"]
+__all__ = [
+    "MAX_REPORTED",
+    "finish_violations",
+    "render_message",
+    "build_rule_result",
+]

@@ -130,4 +130,4 @@ class PrincipleOutcome:
         }
 
 
-__all__ = ["BoundEntity", "PrincipleOutcome", "RoleDiscovery"]
+__all__ = ["BoundEntity", "PrincipleOutcome", "RoleDiscovery", "Status"]

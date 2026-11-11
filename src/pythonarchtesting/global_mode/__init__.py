@@ -1,8 +1,7 @@
 """Global mode: the taught principles checked in a student's project without a
 reference solution. Each submission becomes its own reference (``selftask``),
-so the existing core checks it unchanged. Importing the package does not load
-the MCP layer (``pythonarchtesting.mcp_server``); the functions that run the
-core import it when called."""
+so the existing core checks it unchanged. The package builds on the core
+only; the MCP layer (``mcp_server.global_tools``) builds on it."""
 
 from pythonarchtesting.global_mode.discovery import (
     ESSENTIAL_ROLES,

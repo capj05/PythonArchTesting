@@ -7,7 +7,7 @@ from pythonarchtesting.dynamic.translation import NameTranslation
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 _SUPPORTED_KINDS = frozenset({"function", "method"})
 _REPORTED_CALLS = 50
@@ -119,7 +119,7 @@ class RuntimeFlowEvaluator:
         }
 
         def result(status: Any) -> RuleResult:
-            return _build_rule_result(rule, source, target, match, status, details, ())
+            return build_rule_result(rule, source, target, match, status, details, ())
 
         if ctx.target_root is None or ctx.source_root is None:
             details["reason"] = "dynamic_checks_disabled"

@@ -56,7 +56,7 @@ def _protocol_rule_options(
     return mode, return_annotation, base_severity
 
 
-def _resolve_protocol_entity(
+def resolve_protocol_entity(
     source_entity: Entity,
     declaration: DeclarationEntry,
     *,
@@ -237,7 +237,7 @@ def _compile_protocol_rule(
         )
 
     compiler_evidence: List[Evidence] = []
-    protocol_entity, protocol_ref, evidence_items = _resolve_protocol_entity(
+    protocol_entity, protocol_ref, evidence_items = resolve_protocol_entity(
         source_entity, declaration, source_entities=source_entities
     )
     compiler_evidence.extend(evidence_items)
@@ -293,4 +293,7 @@ def compile_implements_protocol(
     )
 
 
-__all__ = ["compile_implements_protocol"]
+__all__ = [
+    "compile_implements_protocol",
+    "resolve_protocol_entity",
+]

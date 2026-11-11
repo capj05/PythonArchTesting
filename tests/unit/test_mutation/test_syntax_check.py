@@ -10,6 +10,8 @@ import pytest
 
 from pythonarchtesting.mutation import operators
 from pythonarchtesting.mutation.operators import OPERATORS, generate_mutants
+from pythonarchtesting.mutation.project import Module
+from pythonarchtesting.mutation.syntax import Syntax
 
 _TEXT = '''"""A module."""
 
@@ -43,8 +45,8 @@ z = (
 _EXAMPLES = Path(__file__).resolve().parents[3] / "example" / "principles"
 
 
-def _module(text: str) -> operators._Module:
-    return operators._Module("m", "m.py", text, ast.parse(text), False)
+def _module(text: str) -> Module:
+    return Module("m", "m.py", text, ast.parse(text), False)
 
 
 def _whole(text: str) -> bool:
@@ -78,7 +80,7 @@ def _whole(text: str) -> bool:
     ],
 )
 def test_the_answer_is_the_whole_texts(new: str) -> None:
-    assert operators._Syntax(_module(_TEXT)).parses(new) is _whole(new)
+    assert Syntax(_module(_TEXT)).parses(new) is _whole(new)
 
 
 def test_random_edits_get_the_whole_texts_answer() -> None:
@@ -89,7 +91,7 @@ def test_random_edits_get_the_whole_texts_answer() -> None:
     chance = random.Random(7)
     for path in paths:
         text = path.read_text(encoding="utf-8")
-        check = operators._Syntax(_module(text))
+        check = Syntax(_module(text))
         lines = text.splitlines(keepends=True)
         for _ in range(60):
             changed = list(lines)
@@ -117,7 +119,7 @@ def test_a_mutant_is_parsed_by_the_statements_it_touches(
         parsed.append(len(source))
         return original(source, *args, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(operators.ast, "parse", counting)
+    monkeypatch.setattr(ast, "parse", counting)
 
     mutants = generate_mutants(tmp_path, ["add_io_call"])
 
@@ -141,8 +143,5 @@ def test_a_limit_keeps_the_first_mutants_and_stops_there(
 
     first = every[0].operator
     for name in OPERATORS[OPERATORS.index(first) + 1 :]:
-        target = f"_{name}"
-        if hasattr(operators, target):
-            monkeypatch.setattr(operators, target, unreachable)
-    monkeypatch.setattr(operators, "_hardcode_collaborator", unreachable)
+        monkeypatch.setitem(operators.REGISTRY, name, unreachable)
     assert generate_mutants(reference, limit=1) == every[:1]

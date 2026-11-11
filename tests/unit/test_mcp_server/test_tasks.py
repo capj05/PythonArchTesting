@@ -9,13 +9,12 @@ from typing import Any, Optional
 
 import pytest
 
-from pythonarchtesting.mcp_server.tasks import (
-    _candidates,
-    _mutants_for,
-    _not_utf8,
-    _run_mutants,
+from pythonarchtesting.principles.task_mutants import (
+    mutants_for,
     parameter_classes,
+    seed_candidates,
 )
+from pythonarchtesting.principles.task_verification import _not_utf8, _run_mutants
 
 
 def _error(operator: str, callee: Optional[str] = None) -> Any:
@@ -43,8 +42,8 @@ def test_stub_role_call_keeps_only_calls_into_a_module_the_check_names() -> None
     ]
     error = _error("stub_role_call")
 
-    candidates = _candidates(error, mutants)
-    chosen = _mutants_for(error, candidates or [], {("app.py", "main")}, {"grades"})
+    candidates = seed_candidates(error, mutants)
+    chosen = mutants_for(error, candidates or [], {("app.py", "main")}, {"grades"})
 
     assert candidates == mutants[:4]
     assert chosen == [mutants[0]]
@@ -57,15 +56,19 @@ def test_an_io_operator_seeds_only_the_calls_it_can_make() -> None:
         _mutant("add_io_via_helper", "f", "print"),
     ]
 
-    assert _candidates(_error("add_io_call", "builtins:input"), mutants) == [mutants[1]]
-    assert _candidates(_error("add_io_via_helper", "builtins:print"), mutants) == [
+    assert seed_candidates(_error("add_io_call", "builtins:input"), mutants) == [
+        mutants[1]
+    ]
+    assert seed_candidates(_error("add_io_via_helper", "builtins:print"), mutants) == [
         mutants[2]
     ]
     # The helper only prints: an error about input or open is not verifiable
     # by it, which is no ``no_mutants`` of the task.
-    assert _candidates(_error("add_io_via_helper", "builtins:input"), mutants) is None
-    assert _candidates(_error("add_io_via_helper", "io:open"), mutants) is None
-    assert _candidates(_error("add_io_call", "os:system"), mutants) is None
+    assert (
+        seed_candidates(_error("add_io_via_helper", "builtins:input"), mutants) is None
+    )
+    assert seed_candidates(_error("add_io_via_helper", "io:open"), mutants) is None
+    assert seed_candidates(_error("add_io_call", "os:system"), mutants) is None
 
 
 def test_add_builtin_call_seeds_the_type_test_the_signature_names() -> None:
@@ -76,17 +79,19 @@ def test_add_builtin_call_seeds_the_type_test_the_signature_names() -> None:
         _mutant("add_io_call", "f", "print"),
     ]
 
-    assert _candidates(_error("add_builtin_call", "builtins:isinstance"), mutants) == [
-        mutants[1]
-    ]
-    assert _candidates(_error("add_builtin_call", "builtins:type"), mutants) == [
+    assert seed_candidates(
+        _error("add_builtin_call", "builtins:isinstance"), mutants
+    ) == [mutants[1]]
+    assert seed_candidates(_error("add_builtin_call", "builtins:type"), mutants) == [
         mutants[2]
     ]
-    assert _candidates(_error("add_builtin_call", "builtins:print"), mutants) == [
+    assert seed_candidates(_error("add_builtin_call", "builtins:print"), mutants) == [
         mutants[0]
     ]
     # The I/O-only alias cannot make a type test.
-    assert _candidates(_error("add_io_call", "builtins:isinstance"), mutants) is None
+    assert (
+        seed_candidates(_error("add_io_call", "builtins:isinstance"), mutants) is None
+    )
 
 
 def test_a_class_operator_is_aimed_at_the_classes_the_check_is_on() -> None:
@@ -96,8 +101,8 @@ def test_a_class_operator_is_aimed_at_the_classes_the_check_is_on() -> None:
     ]
     error = _error("drop_base")
 
-    chosen = _mutants_for(
-        error, _candidates(error, mutants) or [], {("shapes.py", "Circle")}, set()
+    chosen = mutants_for(
+        error, seed_candidates(error, mutants) or [], {("shapes.py", "Circle")}, set()
     )
 
     assert chosen == [mutants[0]]
@@ -115,10 +120,10 @@ def test_a_constructor_operator_is_aimed_at_the_class_of_a_checked_method() -> N
     aimed = {("pricing.py", "Calc.total")}
 
     error = _error("hardcode_collaborator")
-    chosen = _mutants_for(error, _candidates(error, mutants) or [], aimed, set())
+    chosen = mutants_for(error, seed_candidates(error, mutants) or [], aimed, set())
     io_error = _error("add_io_call", "builtins:print")
-    io_chosen = _mutants_for(
-        io_error, _candidates(io_error, mutants) or [], aimed, set()
+    io_chosen = mutants_for(
+        io_error, seed_candidates(io_error, mutants) or [], aimed, set()
     )
 
     assert chosen == [mutants[0]]
@@ -177,7 +182,7 @@ def test_only_hardcode_collaborator_is_aimed_at_a_method_through_its_constructor
     """A constructor mutant reaches the checks on the methods of its class;
     ``rebuild_injected`` names no function, so it never could (review of N5:
     the dead entry is gone, behaviour unchanged)."""
-    from pythonarchtesting.mcp_server.tasks import _in_aimed
+    from pythonarchtesting.principles.task_mutants import _in_aimed
 
     aimed = {("pricing.py", "Calc.total")}
     hardcoded = _mutant(
@@ -196,7 +201,7 @@ def test_a_call_seeding_error_without_a_callee_seeds_the_calls_its_check_names()
 ):
     """type_switch_on_strategy names no callee: its mutants are the calls of
     isinstance and type its check forbids, not print or input."""
-    from pythonarchtesting.mcp_server.tasks import _callees
+    from pythonarchtesting.principles.task_mutants import named_callees
 
     mutants = [
         _mutant("add_builtin_call", "f", member)
@@ -211,15 +216,15 @@ def test_a_call_seeding_error_without_a_callee_seeds_the_calls_its_check_names()
         )
     ]
 
-    callees = _callees(error, checks)
+    callees = named_callees(error, checks)
 
     assert callees == ["builtins:isinstance", "builtins:type"]
-    assert _candidates(error, mutants, callees) == mutants[3:]
+    assert seed_candidates(error, mutants, callees) == mutants[3:]
 
 
 def test_a_callee_less_error_names_the_callees_its_check_names() -> None:
     """Review of the N5 fix round: never 'cannot seed a call of None'."""
-    from pythonarchtesting.mcp_server.tasks import _unseedable
+    from pythonarchtesting.principles.task_mutants import unseedable_reason
 
     error = _error("add_io_call")
     error.detected_by = "forbid_runtime_calls"
@@ -229,12 +234,12 @@ def test_a_callee_less_error_names_the_callees_its_check_names() -> None:
         )
     ]
 
-    assert _unseedable(error, checks) == (
+    assert unseedable_reason(error, checks) == (
         "add_io_call cannot seed a call of any callee forbid_runtime_calls "
         "names (builtins:isinstance)"
     )
     named = _error("add_io_via_helper", "builtins:input")
-    assert _unseedable(named, checks).endswith("a call of builtins:input")
+    assert unseedable_reason(named, checks).endswith("a call of builtins:input")
 
 
 def test_foreign_write_seeds_only_an_attribute_of_the_declared_privacy() -> None:
@@ -251,14 +256,14 @@ def test_foreign_write_seeds_only_an_attribute_of_the_declared_privacy() -> None
     )
     either = _error("foreign_write")
 
-    assert _candidates(private, mutants) == [mutants[1]]
-    assert _candidates(either, mutants) == mutants
+    assert seed_candidates(private, mutants) == [mutants[1]]
+    assert seed_candidates(either, mutants) == mutants
 
 
 def test_a_check_that_did_not_run_on_the_reference_is_a_problem() -> None:
     """Review of the N5 fix round: reference_fails always comes with its
     reason, also when the check did not run (a case that cannot be set up)."""
-    from pythonarchtesting.mcp_server.tasks import _reference_problems
+    from pythonarchtesting.principles.task_verification import _reference_problems
 
     rule = "DYN001/forbid_runtime_calls/v1"
     base = [
@@ -285,7 +290,7 @@ def test_spied_follows_a_constructor_inherited_from_a_project_base() -> None:
     """Review of the N5 fix round: a context that inherits its constructor
     keeps the spy in the base's ``__init__``; both it and the mutants are
     aimed there."""
-    from pythonarchtesting.mcp_server.tasks import _aimed, spied
+    from pythonarchtesting.principles.task_mutants import aimed_entities, spied
 
     source = (
         "class Base:\n    def __init__(self, discount):\n"
@@ -327,7 +332,7 @@ def test_spied_follows_a_constructor_inherited_from_a_project_base() -> None:
     )
 
     assert spied([check], entities) == {("pricing.py", "Base"): {"discount"}}
-    assert _aimed(error, [check], entities) == {
+    assert aimed_entities(error, [check], entities) == {
         ("pricing.py", "Calc.total"),
         ("pricing.py", "Base.__init__"),
     }
@@ -337,22 +342,22 @@ def test_max_mutants_takes_the_mutants_in_turn_from_each_error() -> None:
     """Audit K3: the mutants are taken in turn from each error (a mutant two
     errors share is taken once), not the first ``max_mutants`` by id, which
     left a whole error without any."""
-    from pythonarchtesting.mcp_server.authoring import _in_turn
+    from pythonarchtesting.verification.mutant_runs import in_turn
 
     def mutants(*ids: str) -> list[Any]:
         return [SimpleNamespace(id=i) for i in ids]
 
     groups = [mutants("a1", "a2", "a3"), mutants("a1", "b2"), mutants("c1")]
 
-    assert [m.id for m in _in_turn(groups, 3)] == ["a1", "b2", "c1"]
-    assert [m.id for m in _in_turn(groups, 4)] == ["a1", "b2", "c1", "a2"]
-    assert [m.id for m in _in_turn(groups, 10)] == ["a1", "b2", "c1", "a2", "a3"]
+    assert [m.id for m in in_turn(groups, 3)] == ["a1", "b2", "c1"]
+    assert [m.id for m in in_turn(groups, 4)] == ["a1", "b2", "c1", "a2"]
+    assert [m.id for m in in_turn(groups, 10)] == ["a1", "b2", "c1", "a2", "a3"]
 
 
 def test_an_error_max_mutants_left_without_mutants_is_truncated() -> None:
     """Audit K3: an error whose mutants max_mutants dropped is ``truncated``,
     never ``no_mutants`` with "found nothing to change"."""
-    from pythonarchtesting.mcp_server.tasks import _error_entry
+    from pythonarchtesting.principles.task_verification import _error_entry
 
     error = SimpleNamespace(
         id="e", detected_by="forbid_runtime_calls", operator="add_io_call"

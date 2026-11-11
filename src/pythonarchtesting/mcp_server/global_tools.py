@@ -31,8 +31,9 @@ from typing import Any, Optional
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.exceptions import ConfigurationError
 from pythonarchtesting.global_mode.model import PrincipleOutcome, RoleDiscovery
-from pythonarchtesting.global_mode.selftask import _runs_code
+from pythonarchtesting.global_mode.selftask import runs_code
 from pythonarchtesting.global_mode.source import Scan, scan
+from pythonarchtesting.invalid_input import InvalidInputError
 from pythonarchtesting.mcp_server.errors import ToolInputError, require_absolute
 from pythonarchtesting.principles import Principle
 
@@ -62,14 +63,14 @@ def _apart(path: str, name: str, sub: Path) -> Path:
 
 def _principle(principle: str) -> Principle:
     """The catalogue entry of a principle global mode can check."""
-    from pythonarchtesting.global_mode.discovery import _REGISTRY
+    from pythonarchtesting.global_mode.discovery import REGISTRY
     from pythonarchtesting.mcp_server.principles import resolve_principle
 
     entry = resolve_principle(principle)
-    if principle not in _REGISTRY:
+    if principle not in REGISTRY:
         raise ToolInputError(
             f"principle {principle!r} has no role discovery yet; global mode "
-            f"checks: {', '.join(sorted(_REGISTRY))}"
+            f"checks: {', '.join(sorted(REGISTRY))}"
         )
     return entry
 
@@ -107,19 +108,19 @@ def _covered(
 ) -> dict[str, tuple[str, Optional[Entity], Optional[str]]]:
     """Per name a check of the task runs: its role, its entity and, for a
     module with no public function, the problem. A module bound as a whole
-    stands for its public functions (``task._resolve``)."""
-    from pythonarchtesting.principles.task import _entity_name, _resolve
+    stands for its public functions (``task.resolve_name``)."""
+    from pythonarchtesting.principles.task import entity_name, resolve_name
 
     covered: dict[str, tuple[str, Optional[Entity], Optional[str]]] = {}
     for role, bound in discovery.roles.items():
-        if not _runs_code(entry, role):
+        if not runs_code(entry, role):
             continue
         for b in bound:
-            found, problem = _resolve(b.entity, entities)
+            found, problem = resolve_name(b.entity, entities)
             if not found:
                 covered.setdefault(b.entity, (role, None, problem))
             for entity in found:
-                covered.setdefault(_entity_name(entity), (role, entity, None))
+                covered.setdefault(entity_name(entity), (role, entity, None))
     return covered
 
 
@@ -213,7 +214,7 @@ def _overrides(items: Optional[list[dict[str, Any]]]) -> dict[str, list[Any]]:
 def _checked_cases(cases: Any) -> dict[str, list]:
     """``cases`` as ``write_self_task`` takes them; a value TOML cannot hold
     (a JSON null) is an error naming the entity and the case."""
-    from pythonarchtesting.global_mode.selftask import _toml
+    from pythonarchtesting.global_mode.selftask import toml_value
 
     if not isinstance(cases, Mapping):
         raise ToolInputError("cases must be an object: entity name -> list of cases")
@@ -222,7 +223,7 @@ def _checked_cases(cases: Any) -> dict[str, list]:
             raise ToolInputError(f"cases of {name!r} must be a list of cases")
         for index, case in enumerate(items):
             try:
-                _toml(case)
+                toml_value(case)
             except TypeError as error:
                 raise ToolInputError(
                     f"cases of {name!r}, case {index}: {error}; a case holds only "
@@ -238,12 +239,12 @@ def _ignored(
     entities: Sequence[Entity],
 ) -> str:
     """Why no check of the task runs ``name``."""
-    from pythonarchtesting.principles.task import _entity_name
+    from pythonarchtesting.principles.task import entity_name
 
     for role, bound in discovery.roles.items():
-        if any(b.entity == name for b in bound) and not _runs_code(entry, role):
+        if any(b.entity == name for b in bound) and not runs_code(entry, role):
             return f"bound to role {role!r}, whose checks read the code and run nothing"
-    if not any(e.kind != "module" and _entity_name(e) == name for e in entities):
+    if not any(e.kind != "module" and entity_name(e) == name for e in entities):
         return "the submission has no such function or method"
     return "no role of the principle binds it to a check that runs code"
 
@@ -261,7 +262,7 @@ def _write_part(
     task_dir: Path,
     scanned: Scan,
 ) -> dict[str, Any]:
-    from pythonarchtesting.global_mode.outcome import _task_problems
+    from pythonarchtesting.global_mode.outcome import task_problems
     from pythonarchtesting.global_mode.selftask import write_self_task
 
     roles = {role: [b.entity for b in bound] for role, bound in part.roles.items()}
@@ -285,7 +286,7 @@ def _write_part(
         # A principle that does not apply runs nothing: nothing is dropped.
         "dropped": [] if part.not_applied else [dict(d) for d in task.dropped],
         "problems": (
-            [] if part.not_applied else _task_problems(task_dir, None, scanned)
+            [] if part.not_applied else task_problems(task_dir, None, scanned)
         ),
     }
 
@@ -434,7 +435,7 @@ def run_global_evaluation(
                     sub, discovery, task, work_dir, sandbox=sandbox, scanned=scanned
                 )
             )
-        except (ConfigurationError, OSError) as error:
+        except (ConfigurationError, OSError, InvalidInputError) as error:
             raise ToolInputError(str(error)) from error
     summary = summarize_outcomes(outcomes)
     summary["submission"] = str(sub)

@@ -281,7 +281,7 @@ def _pair_members(
 
 @contextlib.contextmanager
 def _name_weight(name: float, structure: float) -> Iterator[None]:
-    original = candidates_module._stage3_candidates
+    original = candidates_module.rank_stage3_candidates
 
     def reweighted(*args: Any, **kwargs: Any) -> Any:
         found = original(*args, **kwargs)
@@ -302,11 +302,11 @@ def _name_weight(name: float, structure: float) -> Iterator[None]:
             changed.append(replace(candidate, confidence=confidence))
         return candidates_module._sort_candidates(changed)
 
-    engine_module._stage3_candidates = reweighted
+    engine_module.rank_stage3_candidates = reweighted
     try:
         yield
     finally:
-        engine_module._stage3_candidates = original
+        engine_module.rank_stage3_candidates = original
 
 
 def _measure(

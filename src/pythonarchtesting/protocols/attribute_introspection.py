@@ -8,6 +8,7 @@ from pythonarchtesting.entities import Entity
 from pythonarchtesting.protocols.entity_lookup import ProtocolEntityLookup
 from pythonarchtesting.protocols.type_expr import (
     classvar_inner_annotation,
+    dotted_name,
     safe_unparse,
 )
 
@@ -754,7 +755,7 @@ def _decorator_descriptor_spec(node: ast.AST) -> _DescriptorSpec | None:
 def _assigned_descriptor_spec(node: ast.AST | None) -> _DescriptorSpec | None:
     if not isinstance(node, ast.Call):
         return None
-    ref = _dotted_name(node.func)
+    ref = dotted_name(node.func)
     return _descriptor_spec_from_ref(ref, assignment=True)
 
 
@@ -832,7 +833,7 @@ def _is_classvar_annotation(annotation: ast.AST) -> bool:
 def _is_initvar_annotation(annotation: ast.AST) -> bool:
     if not isinstance(annotation, ast.Subscript):
         return False
-    container = _dotted_name(annotation.value)
+    container = dotted_name(annotation.value)
     return container in {"InitVar", "dataclasses.InitVar"}
 
 
@@ -869,7 +870,7 @@ def _is_descriptor_assignment(
 ) -> bool:
     if not isinstance(value, ast.Call):
         return False
-    ref = _dotted_name(value.func)
+    ref = dotted_name(value.func)
     if not ref:
         return False
     terminal = ref.rsplit(".", 1)[-1]
@@ -883,21 +884,10 @@ def _decorator_ref_name(node: ast.AST) -> str | None:
     if isinstance(target, ast.Name):
         return target.id
     if isinstance(target, ast.Attribute):
-        base = _dotted_name(target.value)
+        base = dotted_name(target.value)
         if base:
             return f"{base}.{target.attr}"
         return target.attr
-    return None
-
-
-def _dotted_name(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        base = _dotted_name(node.value)
-        if base:
-            return f"{base}.{node.attr}"
-        return node.attr
     return None
 
 

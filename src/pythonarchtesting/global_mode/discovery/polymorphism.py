@@ -1,7 +1,7 @@
 """Discovery predicates of ``polymorphism``.
 
 - ``base``: a class with at least one subclass in the project that is
-  abstract (``task._interface``: ``ABC``, ``Protocol``, ``ABCMeta``,
+  abstract (``ast_utils.is_interface``: ``ABC``, ``Protocol``, ``ABCMeta``,
   ``@abstractmethod``). A class that is not abstract is a "concrete base
   candidate", bound so that the catalogue reports ``concrete_base`` instead
   of the principle not applying, when it has a subclass and either every
@@ -14,7 +14,7 @@
   their bases; ``split_by_base`` makes one discovery per base of them, from
   the class hierarchy and the calls, not from the reasons' text.
 - ``variant``: the subclasses of a base, direct or not, abstract or not,
-  found by the base names a class statement lists (``task._base_names``).
+  found by the base names a class statement lists (``_ast.class_parents``).
 - ``client``: a function or method outside the bases and variants that calls
   ``x.m(...)``, ``m`` a polymorphic method of a base or of a candidate
   below it, and ``x`` not ``self`` and no object that is obviously a
@@ -46,18 +46,23 @@ from pythonarchtesting.entities import Entity
 from pythonarchtesting.global_mode.discovery._ast import (
     LITERALS,
     FunctionNode,
+    class_parents,
     classes,
     functions,
-    is_abstract_method,
     local_bindings,
     module_nodes,
     name_of,
-    only_raises_not_implemented,
     owner_class,
     project_entities,
+    reachable,
 )
 from pythonarchtesting.global_mode.model import BoundEntity, RoleDiscovery
-from pythonarchtesting.principles.task import _base_names, _interface, _methods_of
+from pythonarchtesting.principles.task import methods_of
+from pythonarchtesting.util.ast_utils import (
+    declares_abstract,
+    is_interface,
+    only_raises_not_implemented,
+)
 
 CONCRETE_BASE = "concrete base candidate"
 NOT_FOUND: Mapping[str, str] = {
@@ -82,13 +87,6 @@ def _concrete_base(node: ast.ClassDef) -> bool:
     return bool(methods) and all(only_raises_not_implemented(m) for m in methods)
 
 
-def _declared_abstract(node: FunctionNode) -> bool:
-    """``is_abstract_method`` but for an undecorated ``pass`` body."""
-    if any("abstractmethod" in ast.unparse(d) for d in node.decorator_list):
-        return True
-    return is_abstract_method(node) and not isinstance(node.body[-1], ast.Pass)
-
-
 def _own_methods(node: ast.ClassDef) -> set[str]:
     """The methods the class statement defines, ``__init__`` left out."""
     return {
@@ -97,17 +95,6 @@ def _own_methods(node: ast.ClassDef) -> set[str]:
         if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
         and item.name != "__init__"
     }
-
-
-def _closure(start: str, links: Mapping[str, list[str]]) -> set[str]:
-    found: set[str] = set()
-    todo = [start]
-    while todo:
-        for nxt in links.get(todo.pop(), []):
-            if nxt != start and nxt not in found:
-                found.add(nxt)
-                todo.append(nxt)
-    return found
 
 
 @dataclass(frozen=True)
@@ -122,29 +109,19 @@ class _Hierarchy:
 
     @classmethod
     def of(cls, entities: Sequence[Entity]) -> _Hierarchy:
-        every = classes(entities)
-        nodes = {name_of(e): node for e, node in every}
-        by_simple: dict[str, list[str]] = {}
-        for entity, _ in every:
-            by_simple.setdefault(entity.qualname.rsplit(".", 1)[-1], []).append(
-                name_of(entity)
-            )
+        nodes = {name_of(e): node for e, node in classes(entities)}
+        parents = class_parents(entities)
         children: dict[str, list[str]] = {}
-        parents: dict[str, list[str]] = {}
-        for entity, node in every:
-            name = name_of(entity)
-            for base in sorted(_base_names(node)):
-                for parent in by_simple.get(base, []):
-                    if parent != name:
-                        children.setdefault(parent, []).append(name)
-                        parents.setdefault(name, []).append(parent)
+        for name, bases in parents.items():
+            for parent in bases:
+                children.setdefault(parent, []).append(name)
         hierarchy = cls(nodes, children, parents, {})
         candidates: dict[str, str] = {}
         for name, node in sorted(nodes.items()):
             below = hierarchy.descendants(name)
             if not below:
                 continue
-            if _interface(node):
+            if is_interface(node):
                 candidates[name] = "abstract class with subclasses"
             elif _concrete_base(node) or any(
                 _own_methods(node) & _own_methods(nodes[child]) for child in below
@@ -153,17 +130,17 @@ class _Hierarchy:
         return cls(nodes, children, parents, candidates)
 
     def descendants(self, name: str) -> set[str]:
-        return _closure(name, self.children)
+        return reachable(name, self.children)
 
     def ancestors(self, name: str) -> set[str]:
-        return _closure(name, self.parents)
+        return reachable(name, self.parents)
 
     def methods(self, base: str) -> set[str]:
         """The methods of ``base`` and of the candidates below it."""
-        found = set(_methods_of(self.nodes[base])) if base in self.nodes else set()
+        found = set(methods_of(self.nodes[base])) if base in self.nodes else set()
         for below in self.descendants(base):
             if below in self.candidates:
-                found |= _methods_of(self.nodes[below])
+                found |= methods_of(self.nodes[below])
         return found
 
     def polymorphic(self, base: str) -> set[str]:
@@ -181,7 +158,7 @@ class _Hierarchy:
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     defined[item.name] = defined.get(item.name, 0) + 1
-                    if _declared_abstract(item):
+                    if declares_abstract(item):
                         abstract.add(item.name)
         return {
             m for m in self.methods(base) if m in abstract or defined.get(m, 0) >= 2

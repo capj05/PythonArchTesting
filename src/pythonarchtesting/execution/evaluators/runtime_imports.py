@@ -7,7 +7,7 @@ from pythonarchtesting.dynamic.translation import NameTranslation
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 
 def _describe(hit: dict[str, Any]) -> str:
@@ -42,16 +42,14 @@ class RuntimeImportsEvaluator:
         if ctx.target_root is None:
             details["reason"] = "dynamic_checks_disabled"
             details["summary"] = "dynamic checks are off; run with --dynamic"
-            return _build_rule_result(
+            return build_rule_result(
                 rule, source, target, match, "SKIPPED", details, ()
             )
 
         if target.kind != "module":
             details["reason"] = "target_kind_mismatch"
             details["summary"] = f"expected a module, matched a {target.kind}"
-            return _build_rule_result(
-                rule, source, target, match, "FAILED", details, ()
-            )
+            return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
         from pythonarchtesting.dynamic.runner import run_import_check
 
@@ -82,20 +80,18 @@ class RuntimeImportsEvaluator:
         if outcome.status != "completed":
             details["reason"] = f"probe_{outcome.status}"
             details["summary"] = f"{outcome.status}: {outcome.error or 'no detail'}"
-            return _build_rule_result(
-                rule, source, target, match, "FAILED", details, ()
-            )
+            return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
         if not outcome.imports:
             details["reason"] = "no_forbidden_imports"
             details["summary"] = "no forbidden module was imported"
-            return _build_rule_result(rule, source, target, match, "OK", details, ())
+            return build_rule_result(rule, source, target, match, "OK", details, ())
 
         details["reason"] = "forbidden_import_executed"
         details["summary"] = "imported " + "; ".join(
             _describe(hit) for hit in outcome.imports
         )
-        return _build_rule_result(rule, source, target, match, "FAILED", details, ())
+        return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
 
 __all__ = ["RuntimeImportsEvaluator"]

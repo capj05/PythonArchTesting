@@ -9,8 +9,9 @@ from pythonarchtesting.core.models import EvalContext, Rule, RuleResult, RuleSta
 from pythonarchtesting.dynamic.translation import NameTranslation
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
+from pythonarchtesting.util.ast_utils import kept_names
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
 from .type_tests import TypeTests
 
 _SUPPORTED_TARGET_KINDS = frozenset({"function", "method"})
@@ -20,7 +21,7 @@ def _in_module(module: str, prefix: str) -> bool:
     return module == prefix or module.startswith(prefix + ".")
 
 
-def _describe_call(call: dict[str, Any]) -> str:
+def describe_call(call: dict[str, Any]) -> str:
     origin = call.get("origin")
     if origin:
         # A call another module made while the target ran: name the detour.
@@ -39,7 +40,7 @@ def _describe_call(call: dict[str, Any]) -> str:
 
 
 def _call_fact(index: Any, call: dict[str, Any]) -> dict[str, Any]:
-    """The structured form of a call ``_describe_call`` puts in words.
+    """The structured form of a call ``describe_call`` puts in words.
 
     ``caller`` is the target's code the call is charged to; for a detour
     ``via`` lists the code it went through (outermost first), ``origin_line``
@@ -151,7 +152,7 @@ def _write_fact(index: Any, write: dict[str, Any]) -> dict[str, Any]:
     return fact
 
 
-def _line_ranges(lines: list[int]) -> str:
+def line_ranges(lines: list[int]) -> str:
     """``[3, 4, 5, 9]`` as ``"3-5, 9"``."""
     spans: list[list[int]] = []
     for line in sorted(lines):
@@ -162,7 +163,7 @@ def _line_ranges(lines: list[int]) -> str:
     return ", ".join(str(a) if a == b else f"{a}-{b}" for a, b in spans)
 
 
-def _coverage(cases: list[dict[str, Any]]) -> dict[str, Any] | None:
+def case_coverage(cases: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Lines of the target's own code that ran in at least one case.
 
     A dynamic check only sees what runs: a line no case executed was not
@@ -183,11 +184,11 @@ def _coverage(cases: list[dict[str, Any]]) -> dict[str, Any] | None:
     }
 
 
-def _coverage_note(coverage: dict[str, Any] | None) -> str:
+def coverage_note(coverage: dict[str, Any] | None) -> str:
     if not coverage or not coverage["unexercised_lines"]:
         return ""
     return (
-        f"; no case ran lines {_line_ranges(coverage['unexercised_lines'])} "
+        f"; no case ran lines {line_ranges(coverage['unexercised_lines'])} "
         f"of {coverage['file']}, so they were not checked"
     )
 
@@ -218,7 +219,7 @@ def _missed_in_case(case: dict[str, Any]) -> str:
     missed = (case.get("lines") or {}).get("missed") or []
     if not missed:
         return ""
-    return f"; lines {_line_ranges(missed)} did not run in this case"
+    return f"; lines {line_ranges(missed)} did not run in this case"
 
 
 def _reference_cannot_run(
@@ -329,16 +330,14 @@ class _ObservingEvaluator:
         if ctx.target_root is None:
             details["reason"] = "dynamic_checks_disabled"
             details["summary"] = "dynamic checks are off; run with --dynamic"
-            return _build_rule_result(
+            return build_rule_result(
                 rule, source, target, match, "SKIPPED", details, ()
             )
 
         if target.kind not in self.supported_kinds or target.kind != source.kind:
             details["reason"] = "target_kind_mismatch"
             details["summary"] = f"expected a {source.kind}, matched a {target.kind}"
-            return _build_rule_result(
-                rule, source, target, match, "FAILED", details, ()
-            )
+            return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
         from pythonarchtesting.dynamic.batch import cache_key, observation, solo_key
         from pythonarchtesting.dynamic.runner import run_cases
@@ -383,9 +382,7 @@ class _ObservingEvaluator:
         if outcome.status != "completed":
             details["reason"] = f"probe_{outcome.status}"
             details["summary"] = f"{outcome.status}: {outcome.error or 'no detail'}"
-            return _build_rule_result(
-                rule, source, target, match, "FAILED", details, ()
-            )
+            return build_rule_result(rule, source, target, match, "FAILED", details, ())
         broken = [case for case in outcome.cases if case.get("status") == "error"]
         if broken:
             first = broken[0]
@@ -398,17 +395,15 @@ class _ObservingEvaluator:
                     f"case {first.get('index')} cannot run on the reference "
                     f"either: {failure}"
                 )
-                return _build_rule_result(
+                return build_rule_result(
                     rule, source, target, match, "ERROR", details, ()
                 )
             details["reason"] = "case_setup_failed"
             details["summary"] = f"case {first.get('index')} could not run: {failure}"
-            return _build_rule_result(
-                rule, source, target, match, "FAILED", details, ()
-            )
+            return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
         details["target_module"] = target.module_path
-        coverage = _coverage(outcome.cases)
+        coverage = case_coverage(outcome.cases)
         if coverage is not None:
             details["coverage"] = coverage
         violations = self._violations(rule, outcome.cases, details)
@@ -418,15 +413,15 @@ class _ObservingEvaluator:
             details["summary"] = (
                 self._passed_summary(rule, len(cases))
                 + _raised_note(outcome.cases)
-                + _coverage_note(coverage)
+                + coverage_note(coverage)
                 + _unobserved_note(details)
             )
-            return _build_rule_result(rule, source, target, match, "OK", details, ())
+            return build_rule_result(rule, source, target, match, "OK", details, ())
         details["violations"] = violations
         details["reason"] = "violation"
         more = f" (+{len(violations) - 1} more)" if len(violations) > 1 else ""
         details["summary"] = violations[0] + more
-        return _build_rule_result(rule, source, target, match, "FAILED", details, ())
+        return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
 
 class RuntimeCallsEvaluator(_ObservingEvaluator):
@@ -479,7 +474,7 @@ class RuntimeCallsEvaluator(_ObservingEvaluator):
                     call.get("file"),
                     call.get("line"),
                 ):
-                    violations.append(f"case {index}: {_describe_call(call)}")
+                    violations.append(f"case {index}: {describe_call(call)}")
                     facts.append(_call_fact(index, call))
         if rule.params.get("cover_module") and rule.params.get("mode") != "require":
             for fact in self._uncovered_calls(modules, allow):
@@ -760,7 +755,7 @@ class RuntimeInstancesEvaluator(_ObservingEvaluator):
         return f"no instance of {modules} created in {case_count} case(s)"
 
 
-def _edges(
+def case_edges(
     case: dict[str, Any], names: NameTranslation | None = None
 ) -> dict[tuple[str, str], dict[str, Any]]:
     """First call per ``(from, to)`` module pair, in the order they happened.
@@ -897,13 +892,13 @@ class RuntimeReferenceCallsEvaluator:
         }
 
         def result(status: Any) -> RuleResult:
-            return _build_rule_result(rule, source, target, match, status, details, ())
+            return build_rule_result(rule, source, target, match, status, details, ())
 
         observed = run_edges(rule, source, target, ctx, details)
         if isinstance(observed, str):
             return result(observed)
         reference_cases, target_cases, names = observed
-        expected = [_edges(case) for case in reference_cases]
+        expected = [case_edges(case) for case in reference_cases]
         details["reference_edges"] = [
             sorted(f"{a} -> {b}" for a, b in edges) for edges in expected
         ]
@@ -920,14 +915,14 @@ class RuntimeReferenceCallsEvaluator:
         )
         for case, allowed in zip(target_cases, expected):
             index = case.get("index")
-            actual = _edges(case, names)
+            actual = case_edges(case, names)
             if allow_new:
                 actual = fold_new_modules(actual, known)[0]
             for (origin, module), call in actual.items():
                 if (origin, module) not in allowed:
                     divergences.append(
                         f"case {index}: {origin} -> {module} is not in the "
-                        f"reference ({_describe_call(call)})"
+                        f"reference ({describe_call(call)})"
                     )
             for origin, module in allowed:
                 if (origin, module) not in actual:
@@ -939,7 +934,7 @@ class RuntimeReferenceCallsEvaluator:
                     )
         details["divergences"] = divergences
         details["absences"] = absences
-        coverage = _coverage(target_cases)
+        coverage = case_coverage(target_cases)
         if coverage is not None:
             details["coverage"] = coverage
         violations = divergences + (absences if require_all else [])
@@ -954,7 +949,7 @@ class RuntimeReferenceCallsEvaluator:
             details["summary"] = (
                 f"{len(cases)} case(s) used only the reference's module calls"
                 + unmade
-                + _coverage_note(coverage)
+                + coverage_note(coverage)
             )
             return result("OK")
         details["violations"] = violations
@@ -1171,21 +1166,10 @@ def spy_holder(tree: ast.Module, owner: str, init: Any, spy: str) -> Optional[st
     param = next((name for name, value in given if is_spy(value)), None)
     if param is None:
         return None
-    for node in ast.walk(constructor):
-        if isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target: ast.expr = node.targets[0]
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            target = node.target
-        else:
-            continue
-        if (
-            isinstance(target, ast.Attribute)
-            and isinstance(target.value, ast.Name)
-            and target.value.id == self_name
-            and isinstance(node.value, ast.Name)
-            and node.value.id == param
-        ):
-            return f"{self_name}.{target.attr}"
+    # ``kept_names`` takes ``self`` as the constructor's first parameter too.
+    for _, attribute, value in kept_names(constructor):
+        if value.id == param:
+            return f"{self_name}.{attribute}"
     return str(param)
 
 
@@ -1291,4 +1275,9 @@ __all__ = [
     "RuntimeInstancesEvaluator",
     "RuntimeReferenceCallsEvaluator",
     "RuntimeWritesEvaluator",
+    "case_coverage",
+    "coverage_note",
+    "describe_call",
+    "case_edges",
+    "line_ranges",
 ]

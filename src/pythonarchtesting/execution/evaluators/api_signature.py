@@ -27,7 +27,7 @@ from .member_name_resolution import (
 )
 from .member_name_resolution import member_origin as resolved_member_origin
 from .member_name_resolution import target_methods_for_class, target_parent_class
-from .messages import _build_rule_result
+from .messages import build_rule_result
 from .signature_comparison import compatible_compare as _compatible_compare
 from .signature_comparison import evaluate_method_compatibility
 from .signature_comparison import exact_compare as _exact_compare
@@ -96,7 +96,7 @@ def _evaluate_required_method_against_candidate(
     }
     if details_extra:
         details.update(details_extra)
-    return _build_rule_result(
+    return build_rule_result(
         rule,
         source,
         candidate,
@@ -134,7 +134,7 @@ def _skip_optional_required_method(
     }
     if details_extra:
         details.update(details_extra)
-    return _build_rule_result(
+    return build_rule_result(
         rule,
         source,
         target,
@@ -154,7 +154,7 @@ def _skip_optional_signature_rule(
     *,
     details: dict[str, Any],
 ) -> RuleResult:
-    return _build_rule_result(
+    return build_rule_result(
         rule,
         source,
         target,
@@ -403,7 +403,7 @@ def _evaluate_required_factory_rule(
             "candidate_factories": [],
             "selected_candidate": None,
         }
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target,
@@ -544,7 +544,7 @@ def _evaluate_required_factory_rule(
                 rule_evidence,
                 details=details,
             )
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target_class,
@@ -656,7 +656,7 @@ def _evaluate_required_factory_rule(
             "candidate_factories": candidate_details,
             "selected_candidate": None,
         }
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target_class,
@@ -684,7 +684,7 @@ def _evaluate_required_factory_rule(
             "candidate_factories": candidate_details,
             "selected_candidate": None,
         }
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target_class,
@@ -734,7 +734,7 @@ def _evaluate_required_factory_rule(
         "candidate_factories": candidate_details,
         "selected_candidate": selected_candidate_details,
     }
-    return _build_rule_result(
+    return build_rule_result(
         rule,
         source,
         selected_entity,
@@ -782,7 +782,7 @@ def _evaluate_required_constructor_rule(
             "resolved_target_constructor": None,
             "member_origin": "missing",
         }
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target,
@@ -845,7 +845,7 @@ def _evaluate_required_constructor_rule(
             "resolved_target_constructor": None,
             "member_origin": "missing",
         }
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target_class,
@@ -925,7 +925,7 @@ def _evaluate_required_constructor_rule(
             "member_origin": member_origin,
             "failure_reason": failure_reason,
         }
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target_class,
@@ -959,7 +959,7 @@ def _evaluate_required_constructor_rule(
         "resolved_target_constructor": target_ctor.name,
         "member_origin": member_origin,
     }
-    return _build_rule_result(
+    return build_rule_result(
         rule,
         source,
         target_class,
@@ -1094,7 +1094,7 @@ class ApiSignatureEvaluator:
                                 "member_resolution": "declared_only",
                                 "member_origin": member_origin,
                             }
-                            return _build_rule_result(
+                            return build_rule_result(
                                 rule,
                                 source,
                                 target_class,
@@ -1140,7 +1140,7 @@ class ApiSignatureEvaluator:
                             ),
                             "member_origin": member_origin,
                         }
-                        return _build_rule_result(
+                        return build_rule_result(
                             rule,
                             source,
                             target_class,
@@ -1302,7 +1302,7 @@ class ApiSignatureEvaluator:
                             "compatible_candidates": compatible_candidate_names,
                         },
                     }
-                    return _build_rule_result(
+                    return build_rule_result(
                         rule,
                         source,
                         anchor_target,
@@ -1354,7 +1354,7 @@ class ApiSignatureEvaluator:
                             "failure_reason": "no_candidate_in_matched_class_context",
                             "ambiguity": None,
                         }
-                        return _build_rule_result(
+                        return build_rule_result(
                             rule,
                             source,
                             target_class,
@@ -1423,7 +1423,7 @@ class ApiSignatureEvaluator:
                     "failure_reason": failure_reason,
                     "ambiguity": None,
                 }
-                return _build_rule_result(
+                return build_rule_result(
                     rule,
                     source,
                     anchor_target,
@@ -1488,7 +1488,7 @@ class ApiSignatureEvaluator:
             "check_return": check_return,
         }
 
-        return _build_rule_result(
+        return build_rule_result(
             rule,
             source,
             target,

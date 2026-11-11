@@ -13,7 +13,7 @@ from pythonarchtesting.global_mode.model import (
     PrincipleOutcome,
     RoleDiscovery,
 )
-from pythonarchtesting.global_mode.selftask import SelfTask, _toml, write_self_task
+from pythonarchtesting.global_mode.selftask import SelfTask, toml_value, write_self_task
 from pythonarchtesting.principles.catalog import UnknownPrincipleError
 
 if sys.version_info >= (3, 11):
@@ -155,10 +155,10 @@ def test_init_and_awkward_values_survive_the_round_trip(tmp_path: Path) -> None:
 
 def test_toml_refuses_what_it_cannot_write() -> None:
     with pytest.raises(TypeError):
-        _toml(None)
-    assert _toml(float("inf")) == "inf"
-    assert _toml(float("-inf")) == "-inf"
-    assert _toml(float("nan")) == "nan"
+        toml_value(None)
+    assert toml_value(float("inf")) == "inf"
+    assert toml_value(float("-inf")) == "-inf"
+    assert toml_value(float("nan")) == "nan"
 
 
 def test_unknown_principle_is_refused(tmp_path: Path) -> None:

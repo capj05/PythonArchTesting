@@ -20,7 +20,7 @@ from types import MappingProxyType
 from typing import Any, Optional
 
 from pythonarchtesting.entities_extraction.annotations import (
-    _SUPPORTED_MARKER_NAMES as MARKERS,
+    SUPPORTED_MARKER_NAMES as MARKERS,
 )
 from pythonarchtesting.mutation.operators import OPERATORS
 

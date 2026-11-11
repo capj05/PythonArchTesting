@@ -37,7 +37,7 @@ def _matches_ignore_globs(
     return path_matches_any_glob(filepath_rel, ignore_globs)
 
 
-def _resolve_relative_module(
+def resolve_relative_module(
     *,
     importer_module: str,
     filepath_rel: str,
@@ -60,7 +60,7 @@ def _resolve_relative_module(
     return ".".join(base_parts)
 
 
-def _is_type_checking_test(test: ast.AST) -> bool:
+def is_type_checking_test(test: ast.AST) -> bool:
     if isinstance(test, ast.Name):
         return test.id == "TYPE_CHECKING"
     if isinstance(test, ast.Attribute):
@@ -83,7 +83,7 @@ def collect_import_references_from_node(
     references: list[ParsedImportReference] = []
     for child in ast.iter_child_nodes(node):
         child_in_type_checking = in_type_checking
-        if isinstance(child, ast.If) and _is_type_checking_test(child.test):
+        if isinstance(child, ast.If) and is_type_checking_test(child.test):
             child_in_type_checking = True
         child_is_top_level_context = is_top_level_context
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -156,7 +156,7 @@ def normalize_import_reference(
         level += 1
     module_name = ref.module[level:] if level > 0 else ref.module
     base_module = (
-        _resolve_relative_module(
+        resolve_relative_module(
             importer_module=ref.importer_module,
             filepath_rel=ref.filepath_rel,
             level=level,

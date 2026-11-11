@@ -1,7 +1,7 @@
 """Discovery predicates of ``encapsulation``.
 
 - ``owner``: a class with a container attribute, as the core's mutation
-  operators find one (``mutation.operators._containers``): a list, dict or
+  operators find one (``mutation.class_model.containers``): a list, dict or
   set its methods or those of its project bases assign to ``self.<a>``,
   in ``__init__`` or later (a course's ``initialize()``), a comprehension
   or ``defaultdict(...)`` included, or a dataclass field with a container
@@ -56,7 +56,7 @@ from pythonarchtesting.global_mode.discovery._ast import (
     runnable_method,
 )
 from pythonarchtesting.global_mode.model import BoundEntity
-from pythonarchtesting.mutation.operators import _containers, _family
+from pythonarchtesting.mutation.class_model import containers, family
 
 NOT_FOUND: Mapping[str, str] = {
     "owner": (
@@ -142,21 +142,21 @@ def _changed_outside(
     return found
 
 
-def _methods(family: Sequence[ast.ClassDef]) -> dict[str, FunctionNode]:
-    """The methods an object of ``family[0]`` has, nearest class first."""
+def _methods(bases: Sequence[ast.ClassDef]) -> dict[str, FunctionNode]:
+    """The methods an object of ``bases[0]`` has, nearest class first."""
     found: dict[str, FunctionNode] = {}
-    for member in family:
+    for member in bases:
         for item in member.body:
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 found.setdefault(item.name, item)
     return found
 
 
-def _created_in(attribute: str, family: Sequence[ast.ClassDef]) -> str:
+def _created_in(attribute: str, bases: Sequence[ast.ClassDef]) -> str:
     """Where the container is created (``in __init__``): the first method of the family,
     nearest class first and ``__init__`` before the others, that assigns
     it; else a dataclass field."""
-    for member in family:
+    for member in bases:
         defs = [
             item
             for item in member.body
@@ -191,17 +191,17 @@ def _owner_reason(
     outside: Sequence[tuple[Optional[str], set[str]]],
 ) -> Optional[str]:
     """Why the class ``name`` is an owner (module docstring), else ``None``."""
-    family = _family(node, by_simple)
-    methods = _methods(family)
+    bases = family(node, by_simple)
+    methods = _methods(bases)
     reasons = []
-    for attribute, kind in sorted(_containers(node, family).items()):
+    for attribute, kind in sorted(containers(node, bases).items()):
         changers = [
             f"{method}()"
             for method, function in sorted(methods.items())
             if method != "__init__" and attribute in _changed_on_self(function)
         ]
         if changers:
-            where = _created_in(attribute, family)
+            where = _created_in(attribute, bases)
             reasons.append(
                 f"creates {kind} {attribute} {where}, changed by {', '.join(changers)}"
             )

@@ -53,11 +53,13 @@ from typing import Any, Iterator, NamedTuple, Optional
 
 from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
 from pythonarchtesting.entities import Entity
-from pythonarchtesting.execution.import_edges import _resolve_relative_module
+from pythonarchtesting.execution.import_edges import resolve_relative_module
 from pythonarchtesting.matching import MatchResult
 from pythonarchtesting.protocols.entity_lookup import ProtocolEntityLookup
+from pythonarchtesting.util.ast_utils import annotated_class, is_private
+from pythonarchtesting.util.module_names import strip_package
 
-from .messages import MAX_REPORTED, _build_rule_result, finish_violations
+from .messages import MAX_REPORTED, build_rule_result, finish_violations
 
 _FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 
@@ -66,14 +68,6 @@ _FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 NAMED_TUPLE_API = frozenset(
     {"_replace", "_asdict", "_fields", "_make", "_field_defaults"}
 )
-
-
-def is_private(attribute: str) -> bool:
-    """An attribute starting with ``_`` that is no dunder (``__x`` and the
-    mangled ``_Owner__x`` are private)."""
-    return attribute.startswith("_") and not (
-        attribute.startswith("__") and attribute.endswith("__")
-    )
 
 
 def _public_by_convention(attribute: str) -> bool:
@@ -111,19 +105,6 @@ def _first_parameter(function: ast.AST) -> Optional[str]:
             return None
     arguments = function.args.posonlyargs + function.args.args
     return arguments[0].arg if arguments else None
-
-
-def _annotated_class(annotation: Optional[ast.expr]) -> Optional[str]:
-    """The class a parameter's annotation names: ``Inventory``,
-    ``inventory.Inventory`` or ``"Inventory"``; ``None`` for anything else."""
-    if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
-        name = annotation.value.rpartition(".")[2]
-        return name if name.isidentifier() else None
-    if isinstance(annotation, ast.Name):
-        return annotation.id
-    if isinstance(annotation, ast.Attribute):
-        return annotation.attr
-    return None
 
 
 def _own(value: ast.expr, self_name: Optional[str]) -> bool:
@@ -344,11 +325,8 @@ def _entities(ctx: EvalContext) -> list[Entity]:
 
 def _own_name(name: str, package: Optional[str]) -> str:
     """An absolute module name without the project's package prefix."""
-    if package and name == package:
-        return ""
-    if package and name.startswith(f"{package}."):
-        return name[len(package) + 1 :]
-    return name
+    stripped = strip_package(name, package)
+    return name if stripped is None else stripped
 
 
 def _import_scope(target: Entity, ctx: EvalContext) -> _Scope:
@@ -379,7 +357,7 @@ def _import_scope(target: Entity, ctx: EvalContext) -> _Scope:
                 scope.modules[alias.asname or bound] = _own_name(bound, package)
         elif isinstance(node, ast.ImportFrom):
             base = (
-                _resolve_relative_module(
+                resolve_relative_module(
                     importer_module=str(target.module_path),
                     filepath_rel=str(target.filepath_rel),
                     level=node.level,
@@ -795,7 +773,7 @@ def _parameter_annotations(function: ast.AST) -> dict[str, Optional[ast.expr]]:
 
 def _parameter_classes(function: ast.AST) -> dict[str, Optional[str]]:
     return {
-        name: _annotated_class(annotation)
+        name: annotated_class(annotation)
         for name, annotation in _parameter_annotations(function).items()
     }
 
@@ -817,7 +795,7 @@ class PrivateAccessEvaluator:
         if not isinstance(function, _FUNCTIONS):
             details["reason"] = "missing_function_body"
             details["summary"] = f"{reader} has no function body to check"
-            return _build_rule_result(rule, source, target, match, "ERROR", details, ())
+            return build_rule_result(rule, source, target, match, "ERROR", details, ())
         self_name = _first_parameter(function) if target.kind == "method" else None
         scope = _import_scope(target, ctx)
         family = _class_family(_owning_class(target, ctx), ctx, scope)
@@ -872,10 +850,10 @@ class PrivateAccessEvaluator:
 __all__ = [
     "BINARY_DUNDERS",
     "KnownClasses",
+    "MUTATING_METHODS",
     "NAMED_TUPLE_API",
     "PrivateAccessEvaluator",
     "PrivateRead",
-    "is_private",
     "private_reads",
     "self_assigned",
 ]

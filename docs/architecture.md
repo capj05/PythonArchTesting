@@ -188,9 +188,35 @@ or Markdown.
 - `pythonarchtesting.mcp_server.reports`
 - `pythonarchtesting.mcp_server.markers`
 - `pythonarchtesting.mcp_server.errors`
+- `pythonarchtesting.mcp_server.tasks`
+- `pythonarchtesting.mcp_server.authoring`
+- `pythonarchtesting.mcp_server.principles`
+- `pythonarchtesting.mcp_server.global_tools`
 
-`mcp_server.server` registers seven tools and serves them on stdio
-(`python-arch-test-mcp`). `.evaluation` runs `run_projects` and the report
+`mcp_server.server` registers nineteen tools and serves them on stdio
+(`python-arch-test-mcp`). The MCP modules check the client's arguments, call
+the core and shape its answer; what the core refuses
+(`pythonarchtesting.invalid_input.InvalidInputError`) they pass on as a
+`ToolInputError`. The core they call:
+
+- `pythonarchtesting.runner.settings`: the config of a source (`resolve_config`)
+  and the sandbox of a dynamic run (`sandbox_policy`);
+- `pythonarchtesting.runner.reported_run`: a run that writes its JSON and
+  Markdown reports (`run_and_report`);
+- `pythonarchtesting.report.load` and `pythonarchtesting.report.feedback`: a
+  saved report read back, and one result explained (`feedback`);
+- `pythonarchtesting.principles.verdict`: the verdict on a submission by a
+  principle;
+- `pythonarchtesting.principles.task_verification` and `.task_mutants`: a
+  task verified by its cases and by mutation (`verify_task`);
+- `pythonarchtesting.verification`: proposed cases judged (`cases`), a marker
+  verified by mutation (`marker`), and what both mutation checks share
+  (`mutant_runs`).
+
+Global mode (`pythonarchtesting.global_mode`) builds on the same core and
+never imports `mcp_server`; `mcp_server.global_tools` builds on it.
+
+`.evaluation` runs `run_projects` and the report
 generators exactly as the CLI does; `.reports` reads a saved `report.json`;
 `.markers` reads the marker pages from `docs/markers` in a checkout, otherwise
 from `share/pythonarchtesting/markers` (installed as data files, also looked up

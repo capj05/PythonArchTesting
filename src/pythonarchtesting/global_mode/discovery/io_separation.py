@@ -130,11 +130,11 @@ from pythonarchtesting.global_mode.discovery._ast import (
     module_nodes,
     name_of,
     owner_class,
-    project_module,
     references_outside,
     runnable_method,
 )
 from pythonarchtesting.global_mode.model import BoundEntity
+from pythonarchtesting.util.module_names import project_module_by_suffix
 
 NOT_FOUND: Mapping[str, str] = {
     "io": (
@@ -212,7 +212,7 @@ def _class_lookup(
             return f"{module}.{local}"
         if local in imported:
             written, original = imported[local]
-            source = project_module(written, modules)
+            source = project_module_by_suffix(written, modules)
             if source is not None and f"{source}.{original}" in class_names:
                 return f"{source}.{original}"
         return None
@@ -619,7 +619,7 @@ def _calls_project(
             return True
         return (
             local in imported
-            and project_module(imported[local][0], modules) is not None
+            and project_module_by_suffix(imported[local][0], modules) is not None
         )
 
     for n in ast.walk(node):
@@ -679,7 +679,7 @@ def _calls_resolved(
                 qualified = f"{module}.{n.func.id}"
             elif n.func.id in imported:
                 written, original = imported[n.func.id]
-                source = project_module(written, modules)
+                source = project_module_by_suffix(written, modules)
                 if source is not None:
                     qualified = f"{source}.{original}"
         elif (
@@ -734,7 +734,7 @@ def _references(
                 return tables[ref.id], module
             if ref.id in imported:
                 written, original = imported[ref.id]
-                source = project_module(written, modules)
+                source = project_module_by_suffix(written, modules)
                 if source is not None and source != module:
                     value = _module_tables(trees[source]).get(original)
                     if value is not None:
@@ -800,7 +800,7 @@ def _called_directly(
                     qualified = f"{module}.{ref.id}"
                 elif ref.id in imports[module]:
                     written, original = imports[module][ref.id]
-                    source = project_module(written, modules)
+                    source = project_module_by_suffix(written, modules)
                     if source is not None:
                         qualified = f"{source}.{original}"
             elif isinstance(ref, ast.Attribute) and isinstance(ref.value, ast.Name):
@@ -844,40 +844,40 @@ def _logic_functions(
     return logic
 
 
+def _method_ref(attr: ast.Attribute) -> tuple[str, bool]:
+    """``(m, on self)`` of ``x.m``: ``on self`` when ``x`` is ``self``."""
+    return attr.attr, isinstance(attr.value, ast.Name) and attr.value.id == "self"
+
+
+def _dispatched(node: ast.Dict, methods: set[str]) -> list[ast.Attribute]:
+    """The values ``x.m`` of a dict, ``m`` among ``methods``."""
+    return [
+        v for v in node.values if isinstance(v, ast.Attribute) and v.attr in methods
+    ]
+
+
 def _method_refs(node: ast.AST, methods: set[str]) -> set[tuple[str, bool]]:
-    """``(method, on self)`` of each ``x.m(...)`` call under ``node`` and of
-    each dict value ``x.m``, ``m`` among ``methods``; ``on self`` when ``x``
-    is ``self``."""
+    """``_method_ref`` of each ``x.m(...)`` call under ``node`` and of each
+    dict value ``x.m``, ``m`` among ``methods`` (``_dispatched``)."""
     found: set[tuple[str, bool]] = set()
     for n in ast.walk(node):
-        attrs: list[ast.Attribute] = []
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
-            attrs.append(n.func)
+            found.add(_method_ref(n.func))
         elif isinstance(n, ast.Dict):
-            attrs.extend(
-                v
-                for v in n.values
-                if isinstance(v, ast.Attribute) and v.attr in methods
-            )
-        for attr in attrs:
-            on_self = isinstance(attr.value, ast.Name) and attr.value.id == "self"
-            found.add((attr.attr, on_self))
+            found.update(_method_ref(v) for v in _dispatched(n, methods))
     return found
 
 
 def _dispatched_in_class(
     node: ast.ClassDef, methods: set[str]
 ) -> set[tuple[str, bool]]:
-    """``(method, on self)`` of each dict value ``x.m`` in the class."""
-    found: set[tuple[str, bool]] = set()
-    for n in ast.walk(node):
-        if isinstance(n, ast.Dict):
-            for v in n.values:
-                if isinstance(v, ast.Attribute) and v.attr in methods:
-                    found.add(
-                        (v.attr, isinstance(v.value, ast.Name) and v.value.id == "self")
-                    )
-    return found
+    """``_method_ref`` of each dict value ``x.m`` in the class (``_dispatched``)."""
+    return {
+        _method_ref(v)
+        for n in ast.walk(node)
+        if isinstance(n, ast.Dict)
+        for v in _dispatched(n, methods)
+    }
 
 
 def _used_methods(

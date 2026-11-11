@@ -6,7 +6,7 @@ from pythonarchtesting.core.models import EvalContext, Rule, RuleResult
 from pythonarchtesting.entities import Entity
 from pythonarchtesting.matching import MatchResult
 
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 
 class CompilerInvalidParamEvaluator:
@@ -34,7 +34,7 @@ class CompilerInvalidParamEvaluator:
             "valid": rule.params.get("valid"),
             "compiler_reason": rule.params.get("compiler_reason"),
         }
-        return _build_rule_result(rule, source, target, match, "FAILED", details, ())
+        return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
 
 __all__ = ["CompilerInvalidParamEvaluator"]

@@ -39,11 +39,11 @@ class StaticAttributeFactoryCandidate:
 
 
 def factory_kind(entity: Entity, *, detection_mode: str = "strict") -> str:
-    from pythonarchtesting.execution.evaluators.api_signature import _method_kind
+    from pythonarchtesting.execution.evaluators.signature_comparison import method_kind
 
     if entity.name in _FACTORY_CONSTRUCTOR_NAMES:
         return "constructor"
-    kind = _method_kind(entity, detection_mode=detection_mode)
+    kind = method_kind(entity, detection_mode=detection_mode)
     if kind == "class":
         return "classmethod"
     if kind == "static":

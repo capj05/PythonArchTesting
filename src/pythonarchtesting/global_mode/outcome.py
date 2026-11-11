@@ -1,13 +1,13 @@
 """The verdict of one principle for one submission (design § 5.5).
 
 ``judge_principle`` runs the self-task (``selftask``) over a copy of the
-submission with ``run_evaluation``. A finding of a typical error is proof
+submission with ``run_and_report``. A finding of a typical error is proof
 in itself: the principle is ``violated`` and no mutant runs, since the core
 would only report the error as ``reference_fails``. A finding without a
 verdict (a case that timed out, a file that does not parse) already keeps
 the principle from being ``ok``, and every mutant would run into it again (a
 game loop no case ends costs the whole timeout per mutant), so no mutant runs
-then either (``mutation:not_run``). Without either, ``prepare_task`` checks
+then either (``mutation:not_run``). Without either, ``verify_task`` checks
 that the cases cover the bound entities and that a mutant of every typical
 error is caught; that alone lets the principle be ``ok``.
 
@@ -106,6 +106,7 @@ from pythonarchtesting.global_mode.model import (
 )
 from pythonarchtesting.global_mode.selftask import SelfTask
 from pythonarchtesting.global_mode.source import Scan, entities_of, scan
+from pythonarchtesting.invalid_input import InvalidInputError
 from pythonarchtesting.principles import (
     Finding,
     Principle,
@@ -113,6 +114,16 @@ from pythonarchtesting.principles import (
     result_entity,
     rule_marker,
 )
+from pythonarchtesting.principles.task_verification import verify_task
+from pythonarchtesting.principles.verdict import target_findings
+from pythonarchtesting.report.load import read_report
+from pythonarchtesting.runner.settings import (
+    DEFAULT_SANDBOX_MEMORY_MB,
+    resolve_config,
+    sandbox_policy,
+)
+from pythonarchtesting.verification.cases import DEFAULT_MIN_COVERAGE
+from pythonarchtesting.verification.mutant_runs import DEFAULT_MAX_MUTANTS
 
 # The mutation statuses that let a principle be ok (design § 5.5).
 _MUTATION_OK = frozenset({"killed", "not_applicable", "gap"})
@@ -128,19 +139,23 @@ _UNBOUND = re.compile(
 )
 
 _WARNING = "WARNING:"
-# How prepare_task words a check the unchanged reference fails
-# (``tasks._reference_problems``): "<marker> fails on the reference: <why>".
+# How verify_task words a check the unchanged reference fails
+# (``task_verification._reference_problems``): "<marker> fails on the reference: <why>".
 _FAILS_ON_REFERENCE = " fails on the reference"
 
 
 def _min_coverage(value: Optional[float]) -> float:
-    """``value``, else the core's default threshold (imported here, so that
-    the package does not load the MCP layer when it is imported)."""
-    if value is not None:
-        return value
-    from pythonarchtesting.mcp_server.authoring import DEFAULT_MIN_COVERAGE
-
-    return DEFAULT_MIN_COVERAGE
+    """``value``, else the core's default threshold; a value outside
+    ``[0, 1]`` is refused as ``prepare_task`` refuses it."""
+    if value is None:
+        return DEFAULT_MIN_COVERAGE
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not 0.0 <= value <= 1.0
+    ):
+        raise InvalidInputError("min_coverage must be a number in [0, 1]")
+    return value
 
 
 def _entity(finding: Finding) -> Optional[str]:
@@ -463,7 +478,7 @@ def decide_status(
     class_families: Optional[Mapping[str, Collection[str]]] = None,
 ) -> tuple[Status, list[dict[str, Any]]]:
     """The status of the principle and why parts of it are unverified
-    (module docstring). ``prepared`` is ``prepare_task``'s result, ``None``
+    (module docstring). ``prepared`` is ``verify_task``'s result, ``None``
     when it did not run (a violated principle runs no mutant);
     ``case_counts`` the number of cases per entity of the
     ``require_runtime_calls`` results (``cases_per_entity``), which tells a
@@ -526,7 +541,7 @@ def _copy(submission: Path, work_dir: Path) -> Path:
     copy = work_dir / "target" / submission.name
     if copy.exists():
         shutil.rmtree(copy)
-    # As prepare_task copies a reference: a symlink stays a link (a loop
+    # As verify_task copies a reference: a symlink stays a link (a loop
     # ``loop -> .`` would recurse without end), and ``.git``, ``.venv`` and
     # caches are no part of the program.
     shutil.copytree(
@@ -609,15 +624,14 @@ def _global_problem(problem: str) -> str:
     )
 
 
-def _task_problems(
+def task_problems(
     task_dir: Path, config: Optional[str], scanned: Optional[Scan] = None
 ) -> list[str]:
     """What keeps the core from running the task at ``task_dir``: the
-    problems ``load_task`` and ``bind_task`` raise, as ``prepare_task``
-    finds them (``tasks._bind``), in the words of global mode
-    (``_global_problem``); empty when it can run. ``scanned`` is the
-    submission as the caller read it (``source.entities_of``)."""
-    from pythonarchtesting.mcp_server.evaluation import resolve_config
+    problems ``load_task`` and ``bind_task`` raise, as ``verify_task``
+    finds them, in the words of global mode (``_global_problem``); empty
+    when it can run. ``scanned`` is the submission as the caller read it
+    (``source.entities_of``)."""
     from pythonarchtesting.principles.task import TaskError, bind_task, load_task
 
     try:
@@ -691,16 +705,18 @@ def judge_principle(
     (module docstring). A principle that does not apply, or whose task the
     core refuses, runs nothing; else the run writes under ``work_dir``
     (``target/`` the copy, ``out/`` the report). ``coverage`` is the lowest
-    coverage of a checked entity's cases, ``None`` when ``prepare_task`` did
+    coverage of a checked entity's cases, ``None`` when ``verify_task`` did
     not run; ``min_coverage`` defaults to the core's threshold. ``scanned``
     is the submission as the caller read it (``source.scan``), read from
     ``submission`` when not given. The unchanged submission runs once by the
-    task's checks: ``prepare_task`` takes those results as its mutation
-    baseline instead of running it again."""
-    from pythonarchtesting.mcp_server.evaluation import run_evaluation
-    from pythonarchtesting.mcp_server.reports import _findings, load_report
-    from pythonarchtesting.mcp_server.tasks import prepare_task
+    task's checks: ``verify_task`` takes those results as its mutation
+    baseline instead of running it again.
+
+    What the core refuses (a sandbox that is not available, a config path
+    that cannot be used, a file of the submission that is not UTF-8) raises
+    ``InvalidInputError``; a config or file problem is raised as it is."""
     from pythonarchtesting.principles.catalog import get_principle
+    from pythonarchtesting.runner.reported_run import run_and_report
 
     if discovery.not_applied is not None:
         return PrincipleOutcome(
@@ -717,36 +733,36 @@ def judge_principle(
     min_coverage = _min_coverage(min_coverage)
     principle = get_principle(discovery.principle)
     task_dir = Path(task.task_dir).resolve()
-    problems = _task_problems(task_dir, config, scanned)
+    problems = task_problems(task_dir, config, scanned)
     if problems:
         return _refused(discovery, task, problems)
     work_dir = Path(work_dir).resolve()
     copy = _copy(Path(submission).resolve(), work_dir)
-    states: list[Any] = []
-    run = run_evaluation(
-        str(task_dir),
-        str(work_dir / "out"),
+    policy = sandbox_policy(True, sandbox, DEFAULT_SANDBOX_MEMORY_MB)
+    run = run_and_report(
+        task_dir,
+        work_dir / "out",
         targets=[str(copy)],
         dynamic=True,
-        sandbox=sandbox,
+        sandbox=policy,
         config=config,
-        states=states,
     )
-    target = load_report(run["report_json"])["targets"][0]
+    target = read_report(run.report_json)["targets"][0]
     counts = cases_per_entity(target)
     if scanned is None:
         scanned = scan(Path(submission), config)
     families = families_of_classes(scanned.entities)
-    findings = _relax(_findings(principle, target), discovery, counts, families)
+    findings = _relax(target_findings(principle, target), discovery, counts, families)
     prepared: Optional[dict[str, Any]] = None
     if not any(_classified(f) or f.not_judged for f in findings):
-        prepared = prepare_task(
-            str(task_dir),
-            min_coverage=min_coverage,
-            sandbox=sandbox,
-            config=config,
+        prepared = verify_task(
+            task_dir,
+            config,
+            policy,
+            min_coverage,
+            DEFAULT_MAX_MUTANTS,
             scanned=scanned,
-            baseline=_unchanged(states, copy),
+            baseline=_unchanged(run.target_states, copy),
         )
     status, unverified = _status(
         discovery, findings, prepared, task.dropped, min_coverage
@@ -790,5 +806,6 @@ __all__ = [
     "relax_role_dependent",
     "relax_self_calls",
     "split_findings",
+    "task_problems",
     "unexercised_lines",
 ]

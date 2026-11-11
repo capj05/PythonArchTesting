@@ -4,7 +4,11 @@ from typing import Any, Callable, Dict, List
 
 from pythonarchtesting.entities import Entity, EntityIndex
 
-from .candidates import _explicit_target_match, _stage2_candidates, _stage3_candidates
+from .candidates import (
+    explicit_target_match,
+    rank_stage2_candidates,
+    rank_stage3_candidates,
+)
 from .metrics import ast_similarity, module_distance, module_similarity, name_similarity
 from .models import NAME_REQUIRED, Candidate, MatchingConfig, MatchResult, MatchStatus
 
@@ -76,7 +80,7 @@ def run_matching(
     for source in source_index.all_sorted:
         reasons: List[Dict[str, Any]] = []
 
-        explicit_target, explicit_reason = _explicit_target_match(source, target_index)
+        explicit_target, explicit_reason = explicit_target_match(source, target_index)
         if explicit_reason is not None:
             reasons.append(explicit_reason)
         if explicit_target is not None:
@@ -168,7 +172,7 @@ def run_matching(
                 }
             )
 
-        stage2_candidates = _stage2_candidates(
+        stage2_candidates = rank_stage2_candidates(
             source,
             target_index,
             ast_similarity_fn=_cached_ast_similarity,
@@ -204,7 +208,7 @@ def run_matching(
         if run_stage3:
             stage3_candidates = _same_name(
                 source,
-                _stage3_candidates(
+                rank_stage3_candidates(
                     source,
                     target_index,
                     stage2_candidates,

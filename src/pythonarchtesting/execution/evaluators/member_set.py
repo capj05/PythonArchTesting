@@ -13,7 +13,7 @@ from .member_set_resolution import (
     collect_method_members,
     filter_members_by_name_match,
 )
-from .messages import _build_rule_result
+from .messages import build_rule_result
 
 _ALL_MEMBER_KINDS = ("method", "attribute", "property", "descriptor", "constructor")
 
@@ -169,9 +169,7 @@ class MemberSetEvaluator:
                 "selected_members": [],
                 **common_details,
             }
-            return _build_rule_result(
-                rule, source, target, match, "FAILED", details, ()
-            )
+            return build_rule_result(rule, source, target, match, "FAILED", details, ())
 
         all_members: list[SelectedMember] = []
 
@@ -264,7 +262,7 @@ class MemberSetEvaluator:
             "selected_members": selected_payload,
             **common_details,
         }
-        return _build_rule_result(rule, source, target, match, status, details, ())
+        return build_rule_result(rule, source, target, match, status, details, ())
 
 
 __all__ = ["MemberSetEvaluator"]
