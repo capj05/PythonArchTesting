@@ -82,10 +82,38 @@ These are no violation:
   `self.__class__`;
 - in a method of the class that defines `_x`, or of a subclass of a project
   class that does (a class-level name, a method, or what its methods assign
-  to their `self`, also by unpacking: `self._x, self._y = x, y`), any object:
-  another instance of the same class (`other._x` in `__eq__`) is the class's
-  own business. The check does not know `other`'s type, so in such a method
-  an object of another class with an attribute of the same name passes too;
+  to their `self`, also by unpacking: `self._x, self._y = x, y`), an object
+  known to be of that class: another instance of the same class (`other._x`
+  in `__eq__`) is the class's own business. An object is known to be of the
+  class when
+  - it is annotated with the class or one of its bases (also as a string,
+    `other: "Cart"`, or through a module, `other: "models.Cart"`);
+  - it is built by `Cart()`, `cls()`, `type(self)()` or `self.__class__()`;
+  - an `isinstance(other, Cart)` check (the class, a base, or a tuple holding
+    one) proves it: in the body of `if isinstance(...)`, after
+    `isinstance(...) and`, in the branch of `... if isinstance(...) else ...`,
+    and after `assert isinstance(...)` or an `if not isinstance(...):` whose
+    body ends in `return`, `raise`, `continue` or `break`, in the same block.
+    A read before the check, `name = other._name` above
+    `return isinstance(other, Room) and ...`, is not covered;
+  - it is the unannotated `other` operand of a comparison or binary-operator
+    dunder: `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__`, and
+    `__add__`, `__sub__`, `__mul__`, `__matmul__`, `__truediv__`,
+    `__floordiv__`, `__mod__`, `__divmod__`, `__pow__`, `__lshift__`,
+    `__rshift__`, `__and__`, `__xor__`, `__or__` with their reflected
+    (`__radd__`) and in-place (`__iadd__`) forms; an `other` annotated with
+    another class (`def __eq__(self, other: Player)`) is that class.
+
+  A class is told by what the module binds its name to: `views.Item` (after
+  `from . import views`) or a `ViewItem` imported from `views` is not the
+  `Item` of `models`, though both are called `Item`. Only a name the module
+  binds by no import or class statement is taken by its simple name.
+
+  An object of unknown type passes only while no project class outside the
+  class's family (its bases and subclasses) defines `_x`: `inv._items` in
+  `Cart` fails when `Inventory` has `_items` too, and `other._exits` in
+  `Room.connect(self, other)` passes unless another class, a `Player`,
+  defines `_exits` as well;
 - `module._helper` on a name an import binds to a module (`import tools`,
   `from . import tools`): a module's private names are
   [module_interface](module_interface.md)'s concern, not an object's. A name

@@ -200,6 +200,34 @@ def test_a_relative_import_within_a_subpackage_says_nothing_of_the_root(
     assert import_target_spec(root)[1] is None
 
 
+@pytest.mark.parametrize("venv", ["venv", ".venv", "__pycache__"])
+def test_a_virtual_environment_in_the_root_says_nothing_of_it(
+    tmp_path: Path, venv: str
+):
+    """A library in a ``venv`` the student handed in imports relatively deep
+    inside its own package; the root is no package for it (audit E3)."""
+    root = tmp_path / "capj05_capsky"
+    library = root / venv / "lib" / "pygments"
+    library.mkdir(parents=True)
+    (root / "shop.py").write_text("import inventory\n", encoding="utf-8")
+    (library / "lexer.py").write_text("from .... import x\n", encoding="utf-8")
+
+    assert import_target_spec(root)[1] is None
+
+
+def test_a_rewritten_module_is_looked_at_again(tmp_path: Path):
+    """What a module imports is remembered only while the file stays as it
+    was: a mutant written over it is read again."""
+    root = tmp_path / "capj05_capsky"
+    root.mkdir()
+    (root / "shop.py").write_text("import inventory\n", encoding="utf-8")
+    assert import_target_spec(root)[1] is None
+
+    (root / "shop.py").write_text("from . import inventory\n", encoding="utf-8")
+
+    assert import_target_spec(root)[1] == "capj05_capsky"
+
+
 def test_a_call_through_an_injected_object_is_attributed_to_its_module(
     package_root: Path,
 ):
@@ -426,3 +454,14 @@ def test_a_target_that_kills_the_interpreter_is_reported_as_crashed(
 
     assert outcome.status == "crashed"
     assert "exited with code 3" in (outcome.error or "")
+
+
+def test_a_module_saved_with_a_byte_order_mark_is_read(tmp_path: Path):
+    """Notepad saves UTF-8 with a BOM: its relative import still makes the
+    root a package (audit E5)."""
+    root = tmp_path / "capj05_capsky"
+    root.mkdir()
+    (root / "inventory.py").write_text("class Inventory: ...\n", encoding="utf-8")
+    (root / "shop.py").write_bytes(b"\xef\xbb\xbffrom .inventory import Inventory\n")
+
+    assert import_target_spec(root)[1] == "capj05_capsky"

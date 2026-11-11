@@ -132,8 +132,13 @@ def run_evaluation(
     on_progress: Optional[Callable[[int, int, str], None]] = None,
     architecture: bool = False,
     mapping: Optional[dict[str, Any]] = None,
+    *,
+    states: Optional[list[Any]] = None,
 ) -> dict[str, Any]:
-    """Evaluate targets against ``source`` and write JSON and Markdown reports."""
+    """Evaluate targets against ``source`` and write JSON and Markdown reports.
+    ``states``, when given, receives the run's target states (global mode
+    takes the unchanged submission's results from them instead of running it
+    again; not a parameter of the MCP tool)."""
     from pythonarchtesting.runner import run_projects
     from pythonarchtesting.runner.skips import (
         count_results_undecided,
@@ -198,6 +203,8 @@ def run_evaluation(
         )
     except (ConfigurationError, OSError) as exc:
         raise ToolInputError(str(exc)) from exc
+    if states is not None:
+        states.extend(target_states)
     result = summarize_payload(json.loads(rendered), str(report_json))
     result.update(
         {

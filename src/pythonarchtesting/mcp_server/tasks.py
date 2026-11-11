@@ -20,8 +20,11 @@ to grade a class:
    ``killed_other``. An error is ``killed`` (accepted) only with at least one
    signature-matched kill; when every kill is another error's, its status is
    ``killed_other``.
-   A mutant never counts as killed by a check the unchanged reference
-   already fails: the error is ``reference_fails``.
+   The unchanged reference runs every check of the task, also when no
+   operator finds anything to change; a check it fails (or that does not run
+   on it) keeps the task from being accepted (``reference_passes: false``),
+   and a mutant never counts as killed by such a check: the errors it
+   detects are ``reference_fails``.
    An error without an operator, or whose operator cannot seed the call its
    signature names, is ``not_verifiable_by_mutation``; an error whose
    operator finds nothing to change anywhere in the reference (no public
@@ -32,7 +35,12 @@ to grade a class:
    ``gap``. None of these keeps the task from
    being accepted. An operator that finds something to change, but nothing in
    the entities of the check, gives ``no_mutants``, which does: the task
-   binds the role to other code than the one the error lives in.
+   binds the role to other code than the one the error lives in. A file of
+   the reference the operators cannot read gets no mutant: the ``why`` of a
+   ``not_applicable`` or ``no_mutants`` error names it. More
+   mutants than ``max_mutants`` are taken in turn from each error
+   (``truncated: true``, which keeps the task from being accepted); an error
+   left with none of its mutants is ``truncated``, with ``why``.
 
 Nothing is written into the task: the mutants live in a temporary directory.
 """
@@ -49,6 +57,7 @@ from pythonarchtesting.mcp_server.authoring import (
     DEFAULT_MAX_MUTANTS,
     DEFAULT_MIN_COVERAGE,
     _in_range,
+    _in_turn,
     _judge,
     judge_cases,
 )
@@ -150,19 +159,61 @@ def _problem(validation: Any) -> str:
     return f"{head}: {why or validation.description}"
 
 
-def _bind(task_path: Path, loaded: Any) -> tuple[Any, list[Any], list[str]]:
-    """The task, its checks and the problems that keep it from running."""
+def _bind(
+    task_path: Path, loaded: Any, applied: str, scanned: Any = None
+) -> tuple[Any, list[Any], list[str], dict[str, Any]]:
+    """The task, its checks, the problems that keep it from running and the
+    entities of its reference by canonical id. ``scanned`` (a
+    ``runner.source_prep.Scan``) are the reference's entities when the caller
+    has read them under the same config (``applied``)."""
     from pythonarchtesting.principles.task import TaskError, bind_task, load_task
-    from pythonarchtesting.runner.source_prep import prepare_source
+    from pythonarchtesting.runner.source_prep import entities_of, prepare_source
 
     try:
         task = load_task(task_path)
-        plain = prepare_source(config=loaded, source_path=task.reference)
-        _, checks = bind_task(task, plain.source_entities)
+        plain = entities_of(task.reference, loaded, applied, scanned)
+        _, checks = bind_task(task, plain)
         compiled = prepare_source(config=loaded, source_path=task_path)
     except TaskError as error:
-        return None, [], error.problems
-    return task, checks, _problems(compiled)
+        return None, [], error.problems, {}
+    entities = {e.canonical_id: e for e in plain}
+    return task, checks, _problems(compiled), entities
+
+
+def _not_utf8(task_path: Path, error: UnicodeDecodeError) -> str:
+    """Why the task could not be read: the files of ``task_path`` that are
+    not UTF-8 (a step read one as UTF-8 although its coding line says
+    otherwise). A hidden directory, ``__pycache__`` or a virtual environment
+    (``FileConstants.EXCLUDED_DIRS``) is not looked into."""
+    import os
+
+    from pythonarchtesting.constants import FileConstants
+
+    found = []
+    for root, dirs, names in os.walk(task_path):
+        dirs[:] = [
+            d
+            for d in dirs
+            if not d.startswith(".") and d not in FileConstants.EXCLUDED_DIRS
+        ]
+        found += [
+            Path(root) / name
+            for name in names
+            if not name.startswith(".") and Path(name).suffix in (".py", ".toml")
+        ]
+    files = []
+    for path in sorted(found):
+        if not path.is_file():
+            continue
+        try:
+            path.read_bytes().decode("utf-8")
+        except UnicodeDecodeError:
+            files.append(str(path.relative_to(task_path)))
+    where = ", ".join(files) or "a file of the task"
+    return (
+        f"{where} is not UTF-8 ({error.reason} at byte {error.start}): "
+        "save the reference as UTF-8"
+    )
 
 
 def _check_cases(
@@ -460,17 +511,37 @@ def _matched(principle: Any, error: Any, results: list[Any]) -> bool:
 
 
 def _run_mutants(
-    task: Any, loaded: Any, mutants: list[Any], markers: set[str], policy: Any
+    task: Any,
+    loaded: Any,
+    mutants: list[Any],
+    markers: set[str],
+    policy: Any,
+    baseline_results: Optional[list[Any]] = None,
+    required: Optional[set[str]] = None,
 ) -> tuple[list[Any], dict[str, list[Any]]]:
-    """Results of the unchanged reference and of each mutant, for ``markers``."""
+    """Results of the unchanged reference and of each mutant, for ``markers``.
+    ``baseline_results`` are those of the unchanged reference when the caller
+    has run it already (global mode's ``run_evaluation`` of the submission):
+    it does not run again for the markers it has results of. A marker of
+    ``required`` (default ``markers``: those the task has a check of) with no
+    result there runs on the unchanged reference now, since a check with no
+    result would count as passed without anything having run."""
     from pythonarchtesting.principles import rule_marker
-    from pythonarchtesting.runner import run_projects
 
+    given = None
+    missing = set(markers)
+    if baseline_results is not None:
+        given = [r for r in baseline_results if rule_marker(str(r.rule_id)) in markers]
+        found = {rule_marker(str(r.rule_id)) for r in given}
+        missing = (markers if required is None else required & markers) - found
+        if not mutants and not missing:
+            return given, {}
     reference = Path(task.reference)
     ignore = shutil.ignore_patterns("__pycache__", ".*")
     with tempfile.TemporaryDirectory(prefix="pat-task-") as tmp:
         baseline = Path(tmp) / "reference" / reference.name
-        shutil.copytree(reference, baseline, ignore=ignore)
+        if missing:
+            shutil.copytree(reference, baseline, ignore=ignore)
         paths: dict[str, Path] = {}
         for mutant in mutants:
             copy = Path(tmp) / mutant.id / reference.name
@@ -479,19 +550,44 @@ def _run_mutants(
             for other, text in mutant.also:
                 (copy / other).write_text(text, encoding="utf-8")
             paths[mutant.id] = copy
-        _, states = run_projects(
-            config=loaded,
-            source_path=str(task.path),
-            targets=[str(baseline), *(str(path) for path in paths.values())],
-            load_config_first=False,
-            dynamic=True,
-            sandbox=policy,
-            rule_filter=lambda rule: rule_marker(str(rule.rule_id)) in markers,
+        by_path = _run_copies(
+            task, loaded, markers, policy, [baseline] if missing else [], paths
         )
-        by_path = {Path(s.target_path).resolve(): list(s.rule_results) for s in states}
-        return by_path[baseline.resolve()], {
+        base = list(given or [])
+        if missing:
+            base += [
+                r
+                for r in by_path[baseline.resolve()]
+                if rule_marker(str(r.rule_id)) in missing
+            ]
+        return base, {
             mutant_id: by_path[path.resolve()] for mutant_id, path in paths.items()
         }
+
+
+def _run_copies(
+    task: Any,
+    loaded: Any,
+    markers: set[str],
+    policy: Any,
+    baseline: list[Path],
+    paths: dict[str, Path],
+) -> dict[Path, list[Any]]:
+    """The results for ``markers`` of each copy (``baseline``, if any, and the
+    mutants' ``paths``) by its resolved path."""
+    from pythonarchtesting.principles import rule_marker
+    from pythonarchtesting.runner import run_projects
+
+    _, states = run_projects(
+        config=loaded,
+        source_path=str(task.path),
+        targets=[*(str(path) for path in baseline), *(str(p) for p in paths.values())],
+        load_config_first=False,
+        dynamic=True,
+        sandbox=policy,
+        rule_filter=lambda rule: rule_marker(str(rule.rule_id)) in markers,
+    )
+    return {Path(s.target_path).resolve(): list(s.rule_results) for s in states}
 
 
 def _error_entry(
@@ -500,30 +596,46 @@ def _error_entry(
     chosen: Optional[list[Any]],
     results: dict,
     reference_fails: bool = False,
+    dropped: int = 0,
+    max_mutants: Optional[int] = None,
 ) -> dict[str, Any]:
+    """The verdict on ``error`` from its ``chosen`` mutants (those
+    ``max_mutants`` kept; ``dropped`` is how many of its mutants it left
+    out)."""
     entry: dict[str, Any] = {
         "error": error.id,
         "detected_by": error.detected_by,
         "operator": error.operator,
     }
-    if not chosen:
-        entry["status"] = "no_mutants"
-        entry["why"] = (
-            f"{error.operator} found nothing to change in the entities "
-            f"{error.detected_by} is on"
-        )
-        return entry
     if reference_fails:
         # The unchanged reference fails the check already (see problems): a
         # mutant it fails proves nothing about the error.
         entry["status"] = "reference_fails"
-        entry["mutants"] = len(chosen)
+        entry["mutants"] = len(chosen or [])
         entry["killed"] = 0
         entry["killed_other"] = 0
         entry["signature_matched"] = False
         entry["why"] = (
             f"the unchanged reference fails {error.detected_by} already (see "
             "problems), so no mutant can show that it catches this error"
+        )
+        return entry
+    if not chosen and dropped:
+        # Other errors' mutants used up max_mutants: the error has mutants,
+        # but none of them ran.
+        entry["status"] = "truncated"
+        entry["mutants"] = 0
+        entry["why"] = (
+            f"{error.operator} made {dropped} mutant(s) in the entities "
+            f"{error.detected_by} is on, but max_mutants ({max_mutants}) was "
+            "used up by the other errors' mutants; raise max_mutants"
+        )
+        return entry
+    if not chosen:
+        entry["status"] = "no_mutants"
+        entry["why"] = (
+            f"{error.operator} found nothing to change in the entities "
+            f"{error.detected_by} is on"
         )
         return entry
     outcomes = {m.id: _judge(results[m.id], str(error.detected_by))[0] for m in chosen}
@@ -560,6 +672,7 @@ def _verify_errors(
     entities: dict[str, Any],
     max_mutants: int,
     policy: Any,
+    baseline: Optional[list[Any]] = None,
 ) -> dict[str, Any]:
     from pythonarchtesting.mutation.operators import generate_mutants
 
@@ -575,6 +688,9 @@ def _verify_errors(
             for module in _targets(e, checks)
         }
     )
+    # A file the operators cannot read (it does not decode or parse) gets no
+    # mutant: an error that finds nothing to seed says so (``_left_out``).
+    skipped: list[tuple[str, str]] = []
     every = (
         generate_mutants(
             Path(task.reference),
@@ -582,6 +698,7 @@ def _verify_errors(
             parameter_classes=parameter_classes(checks, entities),
             instantiable=instantiable,
             spied=spied(checks, entities),
+            skipped=skipped,
         )
         if operators
         else []
@@ -592,13 +709,30 @@ def _verify_errors(
         for e in seeded
         if (found := candidates[e.id])
     }
-    unique = {m.id: m for found in chosen.values() for m in found}
+    unique = {m.id for found in chosen.values() for m in found}
     truncated = len(unique) > max_mutants
-    mutants = sorted(unique.values(), key=lambda m: m.id)[:max_mutants]
+    # In turn from each error, so that max_mutants leaves none without a
+    # mutant while there are no more errors than mutants.
+    mutants = _in_turn(
+        [sorted(found, key=lambda m: m.id) for found in chosen.values()],
+        max_mutants,
+    )
     kept = {m.id for m in mutants}
-    markers = {str(e.detected_by) for e in seeded}
+    # The unchanged reference runs every check, also with no mutant at all
+    # and for a marker no error seeds: a check it fails rejects the task.
+    markers = {str(e.detected_by) for e in seeded} | {str(c.marker) for c in checks}
     base, results = (
-        _run_mutants(task, loaded, mutants, markers, policy) if mutants else ([], {})
+        _run_mutants(
+            task,
+            loaded,
+            mutants,
+            markers,
+            policy,
+            baseline,
+            required={str(c.marker) for c in checks},
+        )
+        if markers
+        else ([], {})
     )
     reference_passes = all(_judge(base, marker)[0] == "survived" for marker in markers)
     failing = {marker for marker in markers if _judge(base, marker)[0] != "survived"}
@@ -635,6 +769,16 @@ def _verify_errors(
                     "why": _unseedable(error, checks),
                 }
             )
+        elif str(error.detected_by) in failing:
+            report.append(
+                _error_entry(
+                    principle,
+                    error,
+                    [m for m in chosen.get(error.id, []) if m.id in kept],
+                    results,
+                    reference_fails=True,
+                )
+            )
         elif not candidates[error.id]:
             site = _SITES.get(str(error.operator), "place to seed the error")
             private = getattr(error.signature, "private", None)
@@ -649,26 +793,40 @@ def _verify_errors(
                     "status": "not_applicable",
                     "why": (
                         f"the reference contains no {site}; the error was not "
-                        "verified by a mutant"
+                        "verified by a mutant" + _left_out(skipped)
                     ),
                 }
             )
         else:
-            report.append(
-                _error_entry(
-                    principle,
-                    error,
-                    [m for m in chosen[error.id] if m.id in kept],
-                    results,
-                    reference_fails=str(error.detected_by) in failing,
-                )
+            mine = chosen.get(error.id, [])
+            ran = [m for m in mine if m.id in kept]
+            entry = _error_entry(
+                principle,
+                error,
+                ran,
+                results,
+                dropped=len(mine) - len(ran),
+                max_mutants=max_mutants,
             )
+            if entry["status"] == "no_mutants":
+                entry["why"] += _left_out(skipped)
+            report.append(entry)
     return {
         "reference_passes": reference_passes,
         "truncated": truncated,
         "errors": report,
         "reference_problems": _reference_problems(base, markers),
     }
+
+
+def _left_out(skipped: list[tuple[str, str]]) -> str:
+    """Why an error may have found nothing to seed: the files of the
+    reference the operators could not read, which get no mutant (empty when
+    every file was read)."""
+    if not skipped:
+        return ""
+    files = "; ".join(f"{file} ({why})" for file, why in skipped)
+    return f"; no mutant was made in files that do not decode or parse: {files}"
 
 
 def _unseedable(error: Any, checks: list[Any]) -> str:
@@ -757,11 +915,21 @@ def prepare_task(
     sandbox: Optional[str] = None,
     sandbox_memory_mb: int = DEFAULT_SANDBOX_MEMORY_MB,
     config: Optional[str] = None,
+    *,
+    scanned: Any = None,
+    baseline: Optional[list[Any]] = None,
 ) -> dict[str, Any]:
     """Validate the task at ``task_dir``, run its cases and verify by mutation
-    that its checks catch the principle's typical errors (module docstring)."""
+    that its checks catch the principle's typical errors (module docstring).
+
+    Global mode passes what it already has, so that nothing is done twice
+    (neither is a parameter of the MCP tool): ``scanned``, the reference's
+    entities (``runner.source_prep.Scan``; read again under another config),
+    and ``baseline``, the results of the unchanged reference run by the
+    task's checks (the target states' ``rule_results`` of ``run_evaluation``
+    over an unchanged copy), which the mutation check then does not run
+    again."""
     from pythonarchtesting.principles.task import is_task
-    from pythonarchtesting.runner.source_prep import prepare_source
 
     task_path = require_absolute(task_dir, "task_dir")
     if not is_task(task_path):
@@ -773,7 +941,7 @@ def prepare_task(
     policy = _sandbox_policy(True, sandbox, sandbox_memory_mb)
     try:
         loaded, applied = resolve_config(task_path, config)
-        task, checks, problems = _bind(task_path, loaded)
+        task, checks, problems, entities = _bind(task_path, loaded, applied, scanned)
         result: dict[str, Any] = {
             "task_dir": str(task_path),
             "principle": task.principle.id if task is not None else None,
@@ -785,15 +953,9 @@ def prepare_task(
         }
         if task is None or problems:
             return result
-        entities = {
-            e.canonical_id: e
-            for e in prepare_source(
-                config=loaded, source_path=task.reference
-            ).source_entities
-        }
         result["checks"] = _check_cases(task, checks, entities, min_coverage, policy)
         verified = _verify_errors(
-            task, loaded, checks, entities, int(max_mutants), policy
+            task, loaded, checks, entities, int(max_mutants), policy, baseline
         )
         result["problems"] = verified.pop("reference_problems") + _warnings(
             task, checks, entities
@@ -801,6 +963,8 @@ def prepare_task(
         result.update(verified)
     except (ConfigurationError, OSError) as exc:
         raise ToolInputError(str(exc)) from exc
+    except UnicodeDecodeError as exc:
+        raise ToolInputError(_not_utf8(task_path, exc)) from exc
     result["accepted"] = (
         all(check["accepted"] for check in result["checks"])
         and result["reference_passes"]

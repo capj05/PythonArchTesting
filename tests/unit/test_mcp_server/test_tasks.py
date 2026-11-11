@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional
+
+import pytest
 
 from pythonarchtesting.mcp_server.tasks import (
     _candidates,
     _mutants_for,
+    _not_utf8,
+    _run_mutants,
     parameter_classes,
 )
 
@@ -326,3 +331,128 @@ def test_spied_follows_a_constructor_inherited_from_a_project_base() -> None:
         ("pricing.py", "Calc.total"),
         ("pricing.py", "Base.__init__"),
     }
+
+
+def test_max_mutants_takes_the_mutants_in_turn_from_each_error() -> None:
+    """Audit K3: the mutants are taken in turn from each error (a mutant two
+    errors share is taken once), not the first ``max_mutants`` by id, which
+    left a whole error without any."""
+    from pythonarchtesting.mcp_server.authoring import _in_turn
+
+    def mutants(*ids: str) -> list[Any]:
+        return [SimpleNamespace(id=i) for i in ids]
+
+    groups = [mutants("a1", "a2", "a3"), mutants("a1", "b2"), mutants("c1")]
+
+    assert [m.id for m in _in_turn(groups, 3)] == ["a1", "b2", "c1"]
+    assert [m.id for m in _in_turn(groups, 4)] == ["a1", "b2", "c1", "a2"]
+    assert [m.id for m in _in_turn(groups, 10)] == ["a1", "b2", "c1", "a2", "a3"]
+
+
+def test_an_error_max_mutants_left_without_mutants_is_truncated() -> None:
+    """Audit K3: an error whose mutants max_mutants dropped is ``truncated``,
+    never ``no_mutants`` with "found nothing to change"."""
+    from pythonarchtesting.mcp_server.tasks import _error_entry
+
+    error = SimpleNamespace(
+        id="e", detected_by="forbid_runtime_calls", operator="add_io_call"
+    )
+
+    entry = _error_entry(None, error, [], {}, dropped=4, max_mutants=2)
+
+    assert entry["status"] == "truncated"
+    assert entry["mutants"] == 0
+    assert "max_mutants (2)" in entry["why"]
+    assert _error_entry(None, error, [], {})["status"] == "no_mutants"
+
+
+def _result(rule_id: str, status: str = "PASSED") -> Any:
+    return SimpleNamespace(rule_id=rule_id, status=status, details={})
+
+
+def _fake_run(monkeypatch: pytest.MonkeyPatch, status: str) -> list[list[str]]:
+    """``run_projects`` gives every target a result of each marker with
+    ``status``; the targets of each call are recorded."""
+    import pythonarchtesting.runner as runner
+
+    calls: list[list[str]] = []
+
+    def run_projects(*, targets: list[str], rule_filter: Any, **_: Any) -> Any:
+        calls.append(list(targets))
+        rules = [SimpleNamespace(rule_id=f"R{i}/{m}/v1") for i, m in enumerate("ab")]
+        kept = [r for r in rules if rule_filter(r)]
+        states = [
+            SimpleNamespace(
+                target_path=target,
+                rule_results=[_result(r.rule_id, status) for r in kept],
+            )
+            for target in targets
+        ]
+        return None, states
+
+    monkeypatch.setattr(runner, "run_projects", run_projects)
+    return calls
+
+
+def _task(tmp_path: Path) -> Any:
+    reference = tmp_path / "task" / "reference"
+    reference.mkdir(parents=True)
+    (reference / "app.py").write_text("x = 1\n", encoding="utf-8")
+    return SimpleNamespace(reference=reference, path=tmp_path / "task")
+
+
+def test_a_supplied_baseline_with_every_marker_does_not_run_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _fake_run(monkeypatch, "FAILED")
+    given = [_result("R0/a/v1"), _result("R1/b/v1")]
+
+    base, results = _run_mutants(_task(tmp_path), None, [], {"a", "b"}, None, given)
+
+    assert calls == []
+    assert base == given and results == {}
+
+
+def test_a_marker_missing_from_the_supplied_baseline_runs_on_the_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _fake_run(monkeypatch, "FAILED")
+    given = [_result("R0/a/v1")]
+
+    base, results = _run_mutants(_task(tmp_path), None, [], {"a", "b"}, None, given)
+
+    assert len(calls) == 1 and len(calls[0]) == 1
+    assert [(r.rule_id, r.status) for r in base] == [
+        ("R0/a/v1", "PASSED"),
+        ("R1/b/v1", "FAILED"),
+    ]
+    assert results == {}
+
+
+def test_only_a_required_marker_missing_from_the_baseline_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A marker the task has no check of (no rule to run) does not make the
+    unchanged reference run again."""
+    calls = _fake_run(monkeypatch, "FAILED")
+    given = [_result("R0/a/v1")]
+
+    base, _ = _run_mutants(
+        _task(tmp_path), None, [], {"a", "b"}, None, given, required={"a"}
+    )
+
+    assert calls == [] and base == given
+
+
+def test_not_utf8_does_not_look_into_a_virtual_environment(tmp_path: Path) -> None:
+    (tmp_path / "reference").mkdir()
+    (tmp_path / "reference" / "app.py").write_bytes(b"x = '\xe9'\n")
+    for skipped in ("venv", ".venv", "__pycache__", ".hidden"):
+        (tmp_path / skipped).mkdir()
+        (tmp_path / skipped / "lib.py").write_bytes(b"y = '\xe9'\n")
+    error = UnicodeDecodeError("utf-8", b"\xe9", 0, 1, "invalid continuation byte")
+
+    message = _not_utf8(tmp_path, error)
+
+    assert message.startswith("reference/app.py is not UTF-8")
+    assert "venv" not in message and "hidden" not in message

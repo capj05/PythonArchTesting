@@ -232,12 +232,24 @@ def _sample(mutants: list[Any], limit: int) -> list[Any]:
     by_operator: dict[str, list[Any]] = {}
     for mutant in mutants:
         by_operator.setdefault(mutant.operator, []).append(mutant)
-    queues = list(by_operator.values())
+    return _in_turn(list(by_operator.values()), limit)
+
+
+def _in_turn(groups: list[list[Any]], limit: int) -> list[Any]:
+    """Up to ``limit`` mutants, taken in turn from each of ``groups``; a
+    mutant in several groups (the same ``id``) is taken once, and the group
+    whose turn it is takes its next one instead."""
+    queues = [list(group) for group in groups]
     chosen: list[Any] = []
+    taken: set[str] = set()
     while len(chosen) < limit and any(queues):
         for queue in queues:
+            while queue and queue[0].id in taken:
+                queue.pop(0)
             if queue and len(chosen) < limit:
-                chosen.append(queue.pop(0))
+                mutant = queue.pop(0)
+                taken.add(mutant.id)
+                chosen.append(mutant)
     return chosen
 
 
@@ -503,11 +515,13 @@ def verify_marker(
             "call verify_marker with dynamic=True"
         )
     chosen_libraries = tuple(libraries or forbidden_libraries or DEFAULT_LIBRARIES)
+    skipped: list[tuple[str, str]] = []
     try:
         mutants = generate_mutants(
             source_path,
             operators,
             libraries=chosen_libraries,
+            skipped=skipped,
         )
     except ValueError as exc:
         raise ToolInputError(str(exc)) from exc
@@ -558,6 +572,7 @@ def verify_marker(
     if not mutants:
         raise ToolInputError(
             "no mutants: the operators found nothing to change in the files given"
+            + "".join(f"; {file} was not read ({why})" for file, why in skipped)
         )
     total_generated = len(mutants)
     mutants = _sample(mutants, int(max_mutants))
@@ -666,6 +681,12 @@ def verify_marker(
             ),
         },
         "by_operator": _by_operator(reported),
+        # Files the operators could not read (no mutant was made in them).
+        **(
+            {"skipped_files": [{"file": f, "why": w} for f, w in skipped]}
+            if skipped
+            else {}
+        ),
         "hints": _hints(reported, gaps),
         "case_gaps": [
             {"rule": gap["rule"], "file": gap["file"], "lines": _ranges(gap["lines"])}

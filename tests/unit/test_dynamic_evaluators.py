@@ -863,3 +863,37 @@ def test_a_write_to_an_object_a_global_holds_says_held_in() -> None:
         "actions:take changes what is held in Thing.where (held in world.SACK) "
         "at actions.py:7"
     )
+
+
+def test_a_forked_probe_of_the_rule_alone_is_taken_and_is_no_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``batch.prefetch`` may have run the rule's own probe forked from the
+    interpreter that served the target; the evaluator takes that outcome
+    instead of starting the same probe, and it still is no batch."""
+    from pythonarchtesting.dynamic import runner
+    from pythonarchtesting.dynamic.batch import observation, solo_key
+
+    def no_probe(**_: Any) -> ProbeOutcome:
+        raise AssertionError("the forked outcome was not taken")
+
+    monkeypatch.setattr(runner, "run_cases", no_probe)
+    rule, entity = _rule_and_entity("forbid_foreign_writes(cases=[{}])")
+    ctx = SimpleNamespace(target_root=Path("."), dynamic_cache={}, sandbox=None)
+    key = solo_key(
+        module_path=entity.module_path,
+        qualname=entity.qualname,
+        kind=entity.kind,
+        cases=[{}],
+        init=None,
+        timeout_s=5.0,
+        observe=observation(rule),
+    )
+    ctx.dynamic_cache[key] = _cases({"writes": []})
+    match = SimpleNamespace(status=MatchStatus.MATCHED, confidence=1.0)
+
+    result = RuntimeWritesEvaluator().evaluate(rule, entity, entity, match, ctx)
+
+    assert result.status == "OK"
+    assert result.details["batched"] is False
+    assert ctx.dynamic_cache == {}  # taken, not left for another rule

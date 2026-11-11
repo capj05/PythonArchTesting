@@ -338,6 +338,14 @@ def test_foreign_write_assigns_an_attribute_it_reads_of_another_object(
         tmp_path / "pkg",
         {
             "__init__.py": "",
+            "order.py": (
+                "class Order:\n"
+                "    def __init__(self):\n"
+                "        self.total = 0\n"
+                "        self.lines = []\n\n"
+                "    def add(self, price):\n"
+                "        self.total += price\n"
+            ),
             "service.py": (
                 "class Service:\n"
                 "    def place(self, order, prices):\n"
@@ -352,7 +360,7 @@ def test_foreign_write_assigns_an_attribute_it_reads_of_another_object(
         },
     )
 
-    mutants = _by(root, "foreign_write")
+    mutants = [m for m in _by(root, "foreign_write") if m.file == "service.py"]
 
     # Each object read through a name other than self, once per method: a data
     # attribute it reads (not ``add``, which it calls), written right after
@@ -376,6 +384,9 @@ def test_foreign_write_in_a_function_writes_only_to_its_parameters(
         tmp_path / "pkg",
         {
             "__init__.py": "",
+            "stock.py": (
+                "class Stock:\n" "    def __init__(self):\n" "        self.count = 0\n"
+            ),
             "shop.py": (
                 "import os\n\n\n"
                 "def sell(inventory, item):\n"
@@ -389,10 +400,11 @@ def test_foreign_write_in_a_function_writes_only_to_its_parameters(
         },
     )
 
-    mutants = _by(root, "foreign_write")
+    mutants = [m for m in _by(root, "foreign_write") if m.file == "shop.py"]
 
-    # Not ``os`` (imported) nor ``seen`` (its own list): the parameter. With
-    # no method call on it, the write follows the first statement reading it.
+    # Not ``os`` (imported) nor ``seen`` (its own list): the parameter, a
+    # ``Stock`` by the data attribute it reads. With no method call on it,
+    # the write follows the first statement reading it.
     assert [(m.description, m.function, m.owner) for m in mutants] == [
         ("shop: sell writes inventory.count (line 10)", "sell", ""),
     ]
@@ -443,10 +455,12 @@ def test_foreign_write_prefers_a_private_data_attribute_to_a_method(
     # annotation names has the data attributes _stock and log; the private one
     # wins. In clear_out the write goes after the call that changes the state,
     # inside its ``if``. ``tally`` and ``peek`` take an unannotated parameter
-    # and read no data attribute of it: nothing to write, no mutant.
+    # the methods called on it make an ``Inventory``; ``tally`` only returns
+    # their result, which leaves no simple statement to follow.
     assert [m.description for m in mutants] == [
         "shop: sell writes inventory._stock (line 6)",
         "shop: clear_out writes inventory._stock (line 12)",
+        "shop: peek writes stock._stock (line 22)",
     ]
     assert (
         "        inventory.remove(item)\n        inventory._stock = inventory._stock\n"
@@ -1515,3 +1529,300 @@ def test_foreign_write_and_private_read_reach_module_globals(tmp_path: Path) -> 
     # crash the mutant before the case could see the read.
     peek = reads[2].source.splitlines()
     assert peek.index("    _ = BAG._limit") == peek.index("    BAG.pop(words[0])") + 1
+
+
+_NESTED = {
+    "__init__.py": "",
+    "model.py": (
+        "class Item:\n"
+        "    def __init__(self, price):\n"
+        "        self._price = price\n"
+        "        self._tags = []\n\n"
+        "    def tag(self, t):\n"
+        "        self._tags.append(t)\n\n\n"
+        "class Cart:\n"
+        "    def __init__(self):\n"
+        "        self.items = []\n\n"
+        "    def total(self):\n"
+        "        def price_of(it):\n"
+        "            p = it.price_hint\n"
+        "            return p\n"
+        "        try:\n"
+        "            data = open('x.txt').read()\n"
+        "        except OSError as e:\n"
+        "            msg = e.args\n"
+        "        words = 'a b'.split()\n"
+        "        n = words.count\n"
+        "        return sum(price_of(i) for i in self.items)\n\n"
+        "    def stock(self, item):\n"
+        "        def later():\n"
+        "            item.tag('x')\n"
+        "        return later\n\n\n"
+        "def restock(item: Item, names):\n"
+        "    def one(n):\n"
+        "        item.tag(n)\n"
+        "    for n in names:\n"
+        "        one(n)\n"
+        "    return item\n"
+    ),
+}
+
+
+def test_object_operators_skip_nested_functions_and_objects_of_no_project_class(
+    tmp_path: Path,
+) -> None:
+    """A nested function's body runs only if something calls it, and an
+    object of no project class (``except ... as e``, a builtin-typed local)
+    has no state a marker guards: a write there, ``e.args = e.args``, can
+    never be killed (audit E2)."""
+    root = _write_tree(tmp_path / "pkg", _NESTED)
+
+    found = [
+        (m.operator, m.function, m.member)
+        for operator in (
+            "foreign_write",
+            "mutate_private_container",
+            "read_private_attribute",
+        )
+        for m in _by(root, operator)
+    ]
+
+    # Only the parameters ``item`` (an ``Item`` by its annotation, or by the
+    # ``tag`` called on it), read first thing; their one method call is in a
+    # nested function, so no write follows a call.
+    assert found == [
+        ("read_private_attribute", "Cart.stock", "_price"),
+        ("read_private_attribute", "restock", "_price"),
+    ]
+
+
+def test_a_virtual_environment_in_the_project_is_no_project_code(
+    tmp_path: Path,
+) -> None:
+    """A ``venv`` (or ``.venv``) a student hands in holds library code: no
+    module of it is mutated, as the static discovery skips it (audit E3)."""
+    root = _write_tree(
+        tmp_path / "pkg",
+        {
+            "main.py": "def f(x):\n    return x\n",
+            "venv/lib/pygments/util.py": "def g(x):\n    return x\n",
+            ".venv/lib/util.py": "def h(x):\n    return x\n",
+            "build/venv/tool.py": "def k(x):\n    return x\n",
+        },
+    )
+
+    assert {m.file for m in generate_mutants(root)} == {"main.py"}
+
+
+def test_a_file_saved_with_a_byte_order_mark_or_a_coding_line_is_mutated(
+    tmp_path: Path,
+) -> None:
+    """A file is read as Python reads it: UTF-8 with a BOM (Notepad), or in
+    the encoding its coding line names (audit E5)."""
+    root = tmp_path / "pkg"
+    root.mkdir()
+    (root / "bom.py").write_bytes(b"\xef\xbb\xbfdef f(x):\n    return x\n")
+    (root / "cp.py").write_bytes(
+        "# -*- coding: cp1250 -*-\n# hruška\ndef g(x):\n    return x\n".encode("cp1250")
+    )
+
+    mutants = _by(root, "add_io_call")
+
+    assert {(m.file, m.function) for m in mutants} == {("bom.py", "f"), ("cp.py", "g")}
+    bom = next(m for m in mutants if m.file == "bom.py")
+    assert bom.source.startswith("def f(x):\n")
+    # A mutant is a text written as UTF-8: its coding line says so.
+    cp = next(m for m in mutants if m.file == "cp.py")
+    assert cp.source.startswith("# -*- coding: utf-8 -*-\n# hruška\n")
+
+
+def test_an_undecodable_file_is_skipped_with_its_reason(tmp_path: Path) -> None:
+    """A file Python itself cannot decode (cp1250 without a coding line) is
+    no module to mutate: it is left out, and why is recorded, instead of a
+    ``UnicodeDecodeError`` ending the whole run (audit E5)."""
+    root = tmp_path / "pkg"
+    root.mkdir()
+    (root / "main.py").write_text("def f(x):\n    return x\n", encoding="utf-8")
+    (root / "cp.py").write_bytes("# hruška\ndef g(x):\n    return x\n".encode("cp1250"))
+    skipped: list[tuple[str, str]] = []
+
+    mutants = generate_mutants(root, ["add_io_call"], skipped=skipped)
+
+    assert {m.file for m in mutants} == {"main.py"}
+    assert [file for file, _ in skipped] == ["cp.py"]
+    assert "does not decode as UTF-8" in skipped[0][1]
+
+
+def test_stub_role_call_follows_imports_through_the_package_name(
+    tmp_path: Path,
+) -> None:
+    """``from game.grades import average`` and ``import game.grades as gg``
+    name the project module ``grades`` by the root package's own name; their
+    calls are stubbed as the relative import's are (audit E6)."""
+    root = _write_tree(
+        tmp_path / "game",
+        {
+            "__init__.py": "",
+            "grades.py": "def average(xs):\n    return sum(xs) / len(xs)\n",
+            "app.py": (
+                "from game.grades import average\n"
+                "from . import grades\n"
+                "import game.grades as gg\n\n\n"
+                "def main(xs):\n"
+                "    a = average(xs)\n"
+                "    b = grades.average(xs)\n"
+                "    c = gg.average(xs)\n"
+                "    return a, b, c\n"
+            ),
+        },
+    )
+
+    [mutant] = _by(root, "stub_role_call")
+
+    assert (mutant.file, mutant.function, mutant.member) == ("app.py", "main", "grades")
+    assert mutant.source.count("(lambda *a, **k: None)(xs)") == 3
+
+
+_STUBS = {
+    "__init__.py": "",
+    "other.py": "X = 1\n",
+    "shapes.py": (
+        "from abc import ABC, abstractmethod\n"
+        "from typing import Protocol\n\n\n"
+        "class Port(Protocol):\n"
+        "    def save(self, x):\n"
+        "        ...\n\n\n"
+        "class Shape(ABC):\n"
+        "    @abstractmethod\n"
+        "    def area(self):\n"
+        '        """Area."""\n\n'
+        "    def name(self):\n"
+        "        raise NotImplementedError\n\n"
+        "    def todo(self):\n"
+        '        """Later."""\n'
+        "        pass\n\n\n"
+        "class Square(Shape):\n"
+        "    def __init__(self, side=1):\n"
+        "        self._side = side\n\n"
+        "    def area(self):\n"
+        "        return self._side ** 2\n"
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "operator",
+    ["lazy_import", "dynamic_import", "add_io_call", "add_io_via_helper"],
+)
+def test_code_that_never_runs_gets_no_mutant(tmp_path: Path, operator: str) -> None:
+    """An abstract method, and a body that is only a docstring, ``...``,
+    ``pass`` or ``raise NotImplementedError``, never runs as a case calls
+    it: a mutant there could not be killed (audit E7)."""
+    root = _write_tree(tmp_path / "pkg", _STUBS)
+    original = _STUBS["shapes.py"].splitlines()
+
+    mutants = [m for m in _by(root, operator) if m.file == "shapes.py"]
+
+    assert mutants
+    for mutant in mutants:
+        lines = mutant.source.splitlines()
+        # The first line that differs is the inserted one; what follows it is
+        # the body of the method it went into.
+        at = next(i for i, (a, b) in enumerate(zip(original, lines)) if a != b)
+        assert original[at].strip() in (
+            "self._side = side",
+            "return self._side ** 2",
+        ), (mutant.description, lines[at])
+
+
+def _helpers_source() -> (
+    tuple[dict[str, list[ast.ClassDef]], dict[str, ast.FunctionDef]]
+):
+    tree = ast.parse(
+        "class Item:\n"
+        "    def tag(self):\n"
+        "        pass\n\n\n"
+        "class Box:\n"
+        "    def tag(self):\n"
+        "        pass\n\n\n"
+        "def none_first(flag):\n"
+        "    found = None\n"
+        "    if flag:\n"
+        "        found = Item()\n"
+        "    found.tag()\n\n\n"
+        "def zero_first(flag):\n"
+        "    found = 0\n"
+        "    found = Item()\n"
+        "    found.tag()\n\n\n"
+        "def two_classes(flag):\n"
+        "    found = None\n"
+        "    found = Item()\n"
+        "    found = Box()\n"
+        "    found.tag()\n\n\n"
+        "def only_none():\n"
+        "    found = None\n"
+        "    found.tag()\n\n\n"
+        "def shadowed(item):\n"
+        "    item.tag()\n\n"
+        "    def inner(item):\n"
+        "        item.zap()\n\n"
+        "    return [item.zip() for item in range(3)], lambda item: item.zop()\n\n\n"
+        "def decorated(item):\n"
+        "    @item.register\n"
+        "    def inner(x=item.size):\n"
+        "        return item.inside\n\n"
+        "    class Local(item.Base):\n"
+        "        pass\n"
+    )
+    classes: dict[str, list[ast.ClassDef]] = {}
+    functions: dict[str, ast.FunctionDef] = {}
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            classes.setdefault(node.name, []).append(node)
+        elif isinstance(node, ast.FunctionDef):
+            functions[node.name] = node
+    return classes, functions
+
+
+def test_a_local_first_set_to_none_holds_the_class_it_is_built_of() -> None:
+    """``found = None`` before ``found = Item()`` says no class: the local
+    holds an ``Item``; another builtin value (``0``) or a second class does
+    make it unknown."""
+    from pythonarchtesting.mutation.operators import _object_class
+
+    classes, functions = _helpers_source()
+
+    def of(name: str) -> object:
+        found = _object_class(classes, functions[name], "found", [])
+        return found.name if found is not None else None
+
+    assert of("none_first") == "Item"
+    assert of("zero_first") is None
+    assert of("two_classes") is None
+    assert of("only_none") is None
+
+
+def test_methods_called_on_a_name_are_those_the_function_itself_calls() -> None:
+    """A nested function, comprehension or lambda binds a name of its own:
+    ``item.zap()`` there is no call on the parameter ``item``."""
+    from pythonarchtesting.mutation.operators import _called_on
+
+    _, functions = _helpers_source()
+
+    assert _called_on(functions["shadowed"], "item") == {"tag"}
+
+
+def test_a_nested_definition_s_decorators_defaults_and_bases_run_in_the_function() -> (
+    None
+):
+    from pythonarchtesting.mutation.operators import _body_nodes
+
+    _, functions = _helpers_source()
+
+    read = {
+        ast.unparse(node)
+        for node in _body_nodes(functions["decorated"])
+        if isinstance(node, ast.Attribute)
+    }
+
+    assert read == {"item.register", "item.size", "item.Base"}

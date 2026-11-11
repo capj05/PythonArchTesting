@@ -274,10 +274,32 @@ def summarize_report(
     limit: int = 50,
     principle: Optional[str] = None,
 ) -> dict[str, Any]:
-    entry = resolve_principle(principle) if principle is not None else None
-    return summarize_payload(
-        load_report(report_path), report_path, offset, limit, entry
-    )
+    report = load_report(report_path)
+    entry = _given_principle(report, principle)
+    return summarize_payload(report, report_path, offset, limit, entry)
+
+
+def _recorded_principle(report: dict[str, Any], principle: Optional[str]) -> Any:
+    """``principle``, or without it the one the report records (a run whose
+    source was a task, ``run.principle``); a principle other than the
+    recorded one is a tool input error, as ``run_evaluation`` refuses one
+    other than the task's."""
+    recorded = (report.get("run") or {}).get("principle")
+    if principle is not None and recorded is not None and principle != recorded:
+        raise ToolInputError(
+            f"principle {principle!r} is not the principle the report records: "
+            f"the report records the principle {recorded!r} (its run's task); "
+            "leave principle out or give that one"
+        )
+    return principle or recorded
+
+
+def _given_principle(report: dict[str, Any], principle: Optional[str]) -> Any:
+    """The catalogue entry of ``principle`` when it is given (it must be the
+    one the report records, if any), else ``None``."""
+    if principle is None:
+        return None
+    return resolve_principle(str(_recorded_principle(report, principle)))
 
 
 def _details(result: dict[str, Any]) -> dict[str, Any]:
@@ -490,8 +512,8 @@ def explain_target(
     without a verdict (``not_judged``); the typical errors' title, why and fix
     once, in ``errors``; with ``include_passed``, the passed results of the
     principle's checks (``passed``)."""
-    entry = resolve_principle(principle) if principle is not None else None
     report = load_report(report_path)
+    entry = _given_principle(report, principle)
     offset, limit = _page(offset, limit)
     found = _find_target(report, target)
     if entry is not None:
@@ -618,7 +640,7 @@ def class_overview(
     Without ``principle``, the one the report records (a run whose source was
     a task, ``run.principle``)."""
     report = load_report(report_path)
-    principle = principle or (report.get("run") or {}).get("principle")
+    principle = _recorded_principle(report, principle)
     if principle is None:
         raise ToolInputError(
             "give principle: the report records none (its source was no task)"

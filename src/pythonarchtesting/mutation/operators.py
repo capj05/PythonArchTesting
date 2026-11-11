@@ -72,11 +72,14 @@ from __future__ import annotations
 
 import ast
 import io
+import os
+import re
 import tokenize
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Collection, Iterable, Iterator, Mapping, Optional, Sequence
 
+from pythonarchtesting.constants import FileConstants
 from pythonarchtesting.execution.import_edges import (
     _resolve_relative_module,
     collect_import_references_from_node,
@@ -178,27 +181,160 @@ class _Module:
     is_package: bool
 
 
-def _modules(root: Path) -> list[_Module]:
+# A coding line (PEP 263), in one of the first two lines of a file.
+_CODING = re.compile(r"^([ \t\f]*#.*?coding[:=][ \t]*)([-\w.]+)", re.MULTILINE)
+
+
+def _source_text(data: bytes) -> str:
+    """The text of a Python file as Python reads it: UTF-8 (a BOM dropped)
+    or the encoding its coding line names. A mutant is written as UTF-8, so
+    a coding line naming another encoding says ``utf-8`` in the text.
+    Raises ``SyntaxError`` when the bytes do not decode."""
+    try:
+        encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
+        text = data.decode(encoding)
+    except (SyntaxError, LookupError, UnicodeDecodeError) as error:
+        raise SyntaxError(
+            f"does not decode as UTF-8 or the encoding its coding line names "
+            f"({error})"
+        ) from error
+    if encoding not in ("utf-8", "utf-8-sig"):
+        head, newline, rest = text.partition("\n")
+        second, newline2, rest = rest.partition("\n")
+        lines = _CODING.sub(r"\1utf-8", head + newline + second, count=1)
+        text = lines + newline2 + rest
+    return text
+
+
+def _skipped_directory(part: str) -> bool:
+    """A directory no project module is in: a hidden one, ``__pycache__`` or
+    a virtual environment (``FileConstants.EXCLUDED_DIRS``, as the static
+    discovery skips)."""
+    return part.startswith(".") or part in FileConstants.EXCLUDED_DIRS
+
+
+def _python_files(root: Path) -> list[Path]:
+    """The ``.py`` files under ``root``, sorted, none in a skipped directory
+    (``_skipped_directory``) nor hidden."""
+    found: list[Path] = []
+    for directory, subdirectories, files in os.walk(root):
+        subdirectories[:] = [d for d in subdirectories if not _skipped_directory(d)]
+        found += [
+            Path(directory) / name
+            for name in files
+            if name.endswith(".py") and not name.startswith(".")
+        ]
+    return sorted(found)
+
+
+def _modules(
+    root: Path, skipped: Optional[list[tuple[str, str]]] = None
+) -> list[_Module]:
+    """The project's modules under ``root``. A file that does not decode or
+    parse is none; with ``skipped``, it is listed there as ``(file, why)``."""
     modules = []
-    for path in sorted(root.rglob("*.py")):
+    for path in _python_files(root):
         relative = path.relative_to(root)
-        if any(
-            part.startswith(".") or part == "__pycache__" for part in relative.parts
-        ):
-            continue
         parts = list(relative.with_suffix("").parts)
         is_package = parts[-1] == "__init__"
         if is_package:
             parts = parts[:-1]
-        text = path.read_text(encoding="utf-8")
         try:
+            text = _source_text(path.read_bytes())
             tree = ast.parse(text)
-        except SyntaxError:
+        except (SyntaxError, ValueError, OSError) as error:
+            if skipped is not None:
+                skipped.append((relative.as_posix(), str(error)))
             continue
         modules.append(
             _Module(".".join(parts), relative.as_posix(), text, tree, is_package)
         )
     return modules
+
+
+# A line as Python's tokenizer counts lines: ``str.splitlines`` also breaks at
+# ``\f``, ``\v``, ``\x1c``-``\x1e``, ``\x85``, `` `` and `` ``.
+_LINE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+\Z")
+# The one ``__future__`` import that changes how later statements parse:
+# ``<>`` for ``!=``. A text that names it is always parsed whole.
+_PARSER_FUTURE = "barry_as_FLUFL"
+
+
+def _parses(text: str) -> bool:
+    try:
+        ast.parse(text)
+    except SyntaxError:
+        return False
+    return True
+
+
+class _Syntax:
+    """Whether a changed text of a module parses, parsing only the top-level
+    statements the change touched.
+
+    Between two top-level statements, each starting a line of its own at the
+    left margin, the tokenizer holds nothing over: no open bracket or string,
+    no indentation. A text that keeps the module's statements up to such a
+    boundary and from another one on, and has between them a part that
+    parses on its own and ends a line, parses whole: its statements are the
+    kept ones and the part's, in turn. The part is parsed alone; when it does
+    not parse so, or the change does not fit that shape, the whole text is
+    (``ast.parse``), so the answer is always the whole text's. A mutant
+    changes one place, so the part is a statement or two, not the file.
+    """
+
+    def __init__(self, module: _Module) -> None:
+        text = module.text
+        self._text = text
+        self._whole = _PARSER_FUTURE in text
+        offsets = [0, *(match.end() for match in _LINE.finditer(text))]
+        bounds = {0, len(text)}
+        previous_end = 0
+        for statement in module.tree.body:
+            decorators = getattr(statement, "decorator_list", None) or []
+            first = min([statement.lineno, *(d.lineno for d in decorators)])
+            start = offsets[first - 1] if first - 1 < len(offsets) else None
+            if (
+                first > previous_end
+                and start is not None
+                and text[start : start + 1] not in ("", " ", "\t", "\f")
+                and (start == 0 or text[start - 1] == "\n")
+            ):
+                bounds.add(start)
+            previous_end = max(previous_end, int(statement.end_lineno or first))
+        self._bounds = sorted(bounds)
+
+    def parses(self, new: str) -> bool:
+        """Whether ``new``, the module's text after a change, parses."""
+        text, bounds = self._text, self._bounds
+        if self._whole or _PARSER_FUTURE in new:
+            return _parses(new)
+        # The last boundary up to which ``new`` keeps the text: bounds[0] = 0
+        # always holds.
+        low, high = 0, len(bounds) - 1
+        while low < high:
+            middle = (low + high + 1) // 2
+            if new.startswith(text[: bounds[middle]]):
+                low = middle
+            else:
+                high = middle - 1
+        start = bounds[low]
+        room = len(new) - start
+        # The first boundary from which on ``new`` keeps the text, after
+        # ``start``: the end of the text always holds (an empty rest).
+        high = len(bounds) - 1
+        while low < high:
+            middle = (low + high) // 2
+            kept = len(text) - bounds[middle]
+            if kept <= room and new.endswith(text[bounds[middle] :]):
+                high = middle
+            else:
+                low = middle + 1
+        end = bounds[low]
+        part = new[start : len(new) - (len(text) - end)]
+        if end < len(text) and part and not part.endswith("\n"):
+            return _parses(new)  # the part runs on into the kept rest
+        return _parses(part) or _parses(new)
 
 
 def _imports(module: _Module, names: set[str]) -> set[str]:
@@ -268,12 +404,43 @@ def _alone(text: str, node: ast.stmt) -> bool:
     return not before.strip() and (not after or after.startswith("#"))
 
 
+def _never_runs(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Whether ``function``'s code never runs as a case calls it: an abstract
+    method (``ABSTRACT_DECORATORS``), or a stub whose body is only a
+    docstring, ``...``, ``pass`` or ``raise NotImplementedError``. A mutant
+    there could not be killed."""
+    if any(ast.unparse(d) in ABSTRACT_DECORATORS for d in function.decorator_list):
+        return True
+    body = function.body[1:] if _is_docstring(function.body[0]) else function.body
+    return all(_stub_statement(statement) for statement in body)
+
+
+def _stub_statement(statement: ast.stmt) -> bool:
+    """``pass``, ``...`` or ``raise NotImplementedError`` (called or not)."""
+    if isinstance(statement, ast.Pass):
+        return True
+    if isinstance(statement, ast.Expr):
+        return (
+            isinstance(statement.value, ast.Constant)
+            and statement.value.value is Ellipsis
+        )
+    if isinstance(statement, ast.Raise) and statement.exc is not None:
+        raised = statement.exc
+        if isinstance(raised, ast.Call):
+            raised = raised.func
+        return isinstance(raised, ast.Name) and raised.id == "NotImplementedError"
+    return False
+
+
 def _first_function(
     tree: ast.Module, text: str
 ) -> Optional[ast.FunctionDef | ast.AsyncFunctionDef]:
-    """The first function whose body starts on a line of its own."""
+    """The first function whose body starts on a line of its own and runs
+    (``_never_runs``)."""
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if _never_runs(node):
+                continue
             body = node.body
             first = body[1] if _is_docstring(body[0]) and len(body) > 1 else body[0]
             if first.lineno > node.lineno and _alone(text, first):
@@ -851,7 +1018,7 @@ def _uses(
     in a simple statement (where a write can follow); their data attributes
     are those it reads anywhere in its body (an ``if`` test too) without
     calling them."""
-    everywhere = [node for item in function.body for node in _outside_scopes(item)]
+    everywhere = list(_body_nodes(function))
     called_anywhere = {id(n.func) for n in everywhere if isinstance(n, ast.Call)}
     data: dict[str, list[str]] = {}
     for node in sorted(
@@ -870,7 +1037,7 @@ def _uses(
             attrs.append(node.attr)
     uses: dict[str, _Use] = {}
     statements = sorted(
-        (node for node in ast.walk(function) if isinstance(node, _SIMPLE)),
+        (node for node in everywhere if isinstance(node, _SIMPLE)),
         key=lambda node: (node.lineno, node.col_offset),
     )
     for statement in statements:
@@ -935,27 +1102,18 @@ def _foreign_write(
             for name, function in _functions(module.tree)
         ]
         for name, function, self_name, only in callables:
-            arguments = function.args
             hinted = None if hints is None else hints.get((module.file, name))
-            annotated = {
-                a.arg: (
-                    hinted.get(a.arg)
-                    if hinted is not None
-                    else _annotated_class(a.annotation)
-                )
-                for a in arguments.posonlyargs + arguments.args + arguments.kwonlyargs
-            }
             uses = _uses(module, function, {*skip, *([self_name] if self_name else [])})
             for obj, use in uses.items():
                 if only is not None and obj not in only:
                     continue
-                owner_class = annotated.get(obj)
+                cls = _object_class(classes, function, obj, use.reads, hinted)
+                if cls is None:
+                    continue  # no object of a project class: no state to guard
                 # A name-mangled ``__x`` of the class is ``_Owner__x`` outside it.
-                named = classes.get(owner_class or "", [])
-                bases = _family(named[0], classes) if len(named) == 1 else []
                 candidates = use.reads + [
-                    mangled(owner_class or "", a)
-                    for a in _data_attributes(named, bases)
+                    mangled(cls.name, a)
+                    for a in _data_attributes([cls], _family(cls, classes))
                     if a not in use.reads
                 ]
                 if not candidates:
@@ -1039,8 +1197,8 @@ def _add_io_call(
     for module in modules:
         callables = list(_methods(module.tree)) + list(_functions(module.tree))
         for name, function in sorted(callables, key=lambda item: item[1].lineno):
-            if function.body[0].lineno == function.lineno:
-                continue  # a one-line function has no room for it
+            if function.body[0].lineno == function.lineno or _never_runs(function):
+                continue  # a one-line function has no room for it, a stub no run
             at, indent = _function_insert(function)
             for member, lines in calls.items():
                 yield _Change(
@@ -1198,14 +1356,43 @@ def _method_names(cls: ast.ClassDef) -> set[str]:
 
 
 def _called_on(function: ast.FunctionDef | ast.AsyncFunctionDef, obj: str) -> set[str]:
-    """The methods ``function`` calls on the name ``obj`` (``obj.m(...)``)."""
+    """The methods ``function`` calls on the name ``obj`` (``obj.m(...)``),
+    in a closure too, but not in a nested function, class, comprehension or
+    lambda that binds a name ``obj`` of its own (``def inner(obj)``,
+    ``[obj.m() for obj in ...]``): that is another object."""
+    found: set[str] = set()
+    stack = [part for item in function.body for part in _same_name(item, obj)]
+    while stack:
+        node = stack.pop()
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and _dotted(node.func.value) == obj
+        ):
+            found.add(node.func.attr)
+        for child in ast.iter_child_nodes(node):
+            stack.extend(_same_name(child, obj))
+    return found
+
+
+def _same_name(node: ast.AST, obj: str) -> list[ast.AST]:
+    """``node``, or when it is a scope binding a name ``obj`` of its own,
+    what of it runs outside that scope."""
+    if not isinstance(node, (*_SCOPES, *_NESTED)) or obj not in _bound_in(node):
+        return [node]
+    if isinstance(node, (*_NESTED, ast.Lambda)):
+        return list(_where_defined(node))
+    return [node.generators[0].iter]
+
+
+def _bound_in(scope: ast.AST) -> set[str]:
+    """The names a nested scope binds anywhere in it: parameters, and names
+    assigned, deleted or used as a loop or comprehension target."""
     return {
-        node.func.attr
-        for item in function.body
-        for node in ast.walk(item)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and _dotted(node.func.value) == obj
+        node.arg if isinstance(node, ast.arg) else node.id
+        for node in ast.walk(scope)
+        if isinstance(node, ast.arg)
+        or (isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)))
     }
 
 
@@ -1216,11 +1403,11 @@ def _first_method_call(
     calls a method of ``obj`` (a name, or a module global: ``world.BAG``): a
     statement after it runs under the same condition as that call."""
     statements = sorted(
-        (node for item in function.body for node in ast.walk(item)),
-        key=lambda node: (getattr(node, "lineno", 0), getattr(node, "col_offset", 0)),
+        (node for node in _body_nodes(function) if isinstance(node, _SIMPLE)),
+        key=lambda node: (node.lineno, node.col_offset),
     )
     for statement in statements:
-        if not isinstance(statement, _SIMPLE) or not _alone(module.text, statement):
+        if not _alone(module.text, statement):
             continue
         if statement.lineno == function.lineno:
             continue  # a one-line function
@@ -1368,8 +1555,7 @@ def _owners_in(
     nodes = sorted(
         (
             node
-            for item in function.body
-            for node in _outside_scopes(item)
+            for node in _body_nodes(function)
             if isinstance(node, (ast.Name, ast.Attribute))
             and isinstance(node.ctx, ast.Load)
         ),
@@ -1392,11 +1578,11 @@ def _first_use(
     if called is not None:
         return called
     statements = sorted(
-        (node for item in function.body for node in ast.walk(item)),
-        key=lambda node: (getattr(node, "lineno", 0), getattr(node, "col_offset", 0)),
+        (node for node in _body_nodes(function) if isinstance(node, _SIMPLE)),
+        key=lambda node: (node.lineno, node.col_offset),
     )
     for statement in statements:
-        if not isinstance(statement, _SIMPLE) or not _alone(module.text, statement):
+        if not _alone(module.text, statement):
             continue
         if statement.lineno != function.lineno and any(
             isinstance(node, (ast.Name, ast.Attribute))
@@ -1437,6 +1623,110 @@ def _owner_class(
         if called <= _method_names(cls)
     ]
     return fitting[0] if len(fitting) == 1 else None
+
+
+# Values that are no object of a project class: literals, displays,
+# comprehensions and computed results.
+_BUILTIN_VALUES = (
+    ast.Constant,
+    ast.JoinedStr,
+    ast.List,
+    ast.Tuple,
+    ast.Dict,
+    ast.Set,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.BoolOp,
+    ast.Compare,
+    ast.Lambda,
+)
+
+
+def _object_class(
+    classes: dict[str, list[ast.ClassDef]],
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+    obj: str,
+    reads: Sequence[str],
+    hints: Optional[Mapping[str, str]] = None,
+) -> Optional[ast.ClassDef]:
+    """The project class of the object a name in ``function`` holds: of a
+    parameter as ``_owner_class`` finds it; of a local, the class its
+    annotation names or every assignment to it builds (``x = Item(...)``),
+    none when one assigns it a literal or a computed value (``_BUILTIN_VALUES``)
+    other than ``None``: a ``found = None`` before ``found = Item()`` is
+    left out when the other assignments agree on one class.
+    Else (and without ``hints``), the one project class that has
+    every method called on it and every attribute ``reads`` reads of it (a
+    data attribute a builtin container lacks: with one, methods such as
+    ``add`` tell a project class too). ``None`` for anything else: an
+    exception caught (``except ... as e``), a builtin value, an object of an
+    unknown class."""
+    arguments = function.args
+    parameters = {
+        a.arg: a for a in arguments.posonlyargs + arguments.args + arguments.kwonlyargs
+    }
+    called = _called_on(function, obj)
+    annotation: Optional[ast.expr] = None
+    if obj in parameters:
+        if hints is not None:
+            return _owner_class(classes, None, called, hints, obj)
+        annotation = parameters[obj].annotation
+        if _annotated_class(annotation) in ("Any", "object"):
+            annotation = None  # says no more than no annotation
+        found = _owner_class(classes, annotation, called)
+        if found is not None or annotation is not None:
+            return found
+    else:
+        values: list[ast.expr] = []
+        for node in _body_nodes(function):
+            if (
+                isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and node.target.id == obj
+            ):
+                annotation = node.annotation
+            elif isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == obj for t in node.targets
+            ):
+                values.append(node.value)
+        if annotation is not None:
+            named = classes.get(_annotated_class(annotation) or "", [])
+            return named[0] if len(named) == 1 else None
+        values = [v for v in values if not _is_none(v)] or values
+        if any(isinstance(value, _BUILTIN_VALUES) for value in values):
+            return None  # a literal, a display, a computed value: no object
+        built = {
+            named[0].name: named[0]
+            for value in values
+            if isinstance(value, ast.Call)
+            for named in [classes.get(_call_name(value.func) or "", [])]
+            if len(named) == 1
+        }
+        if len(built) > 1:
+            return None  # given objects of two classes
+        if built and all(
+            isinstance(v, ast.Call) and _call_name(v.func) in built for v in values
+        ):
+            return next(iter(built.values()))
+    if not reads and (not called or called <= _BUILTIN_METHODS):
+        return None  # a builtin container's methods tell no project class
+    fitting = [
+        cls
+        for found in classes.values()
+        for cls in found
+        if called <= _method_names(cls)
+        and set(reads)
+        <= set(_data_attributes([cls], _family(cls, classes))) | _method_names(cls)
+    ]
+    return fitting[0] if len(fitting) == 1 else None
+
+
+def _is_none(value: ast.expr) -> bool:
+    return isinstance(value, ast.Constant) and value.value is None
 
 
 def _mutate_container(
@@ -1483,7 +1773,7 @@ def _mutate_container(
                     function, owners.get(module.file, {})
                 ).items()
             ]
-            for obj, cls, held in found:
+            for obj, cls, _ in found:
                 if self_name is not None and cls.name == name.split(".")[0]:
                     continue
                 attributes = [
@@ -1516,12 +1806,15 @@ def _top_functions(module: _Module) -> set[str]:
 
 
 def _project_callables(
-    module: _Module, by_name: dict[str, _Module]
+    module: _Module, by_name: dict[str, _Module], package: str = ""
 ) -> tuple[dict[str, str], dict[str, str]]:
     """What names in ``module`` stand for: ``name -> project module`` of the
     top-level functions it defines or imports (``from .grades import *``
     imports the public ones), and of the project modules it imports
-    (``from . import tools``, ``import tools as t``)."""
+    (``from . import tools``, ``import tools as t``), also under the root
+    package's own name (``from game.grades import average``,
+    ``import game.grades as gg``; ``_project_module``)."""
+    names = set(by_name)
     functions = {name: module.name for name in _top_functions(module)}
     aliases: dict[str, str] = {}
     for node in ast.walk(module.tree):
@@ -1534,8 +1827,10 @@ def _project_callables(
                     module=node.module,
                 )
                 if node.level
-                else node.module or ""
+                else _project_module(node.module or "", names, package)
             )
+            if base is None:
+                continue  # no project module
             for alias in node.names:
                 if alias.name == "*":
                     # ``from .grades import *``: its public top-level functions.
@@ -1552,8 +1847,10 @@ def _project_callables(
                     functions[bound] = base
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name in by_name and (alias.asname or "." not in alias.name):
-                    aliases[alias.asname or alias.name] = alias.name
+                target = _project_module(alias.name, names, package)
+                # ``import a.b`` binds ``a``: only ``as`` binds the module.
+                if target is not None and (alias.asname or "." not in alias.name):
+                    aliases[alias.asname or alias.name] = target
     return functions, aliases
 
 
@@ -1571,14 +1868,14 @@ def _replace_spans(text: str, nodes: list[ast.expr], new: str) -> str:
 STUB = "(lambda *a, **k: None)"
 
 
-def _stub_role_call(modules: list[_Module]) -> Iterator[_Change]:
+def _stub_role_call(modules: list[_Module], package: str = "") -> Iterator[_Change]:
     """A function or method calls no function of one project module any
     more: each such call's function becomes ``(lambda *a, **k: None)``, its
     arguments still evaluated. One mutant per function and module
     (``member``); ``prepare_task`` keeps those of a module the check names."""
     by_name = {module.name: module for module in modules}
     for module in modules:
-        functions, aliases = _project_callables(module, by_name)
+        functions, aliases = _project_callables(module, by_name, package)
         callables = list(_methods(module.tree)) + list(_functions(module.tree))
         for name, function in sorted(callables, key=lambda item: item[1].lineno):
             calls: dict[str, list[ast.expr]] = {}
@@ -1630,8 +1927,8 @@ def _add_io_via_helper(modules: list[_Module]) -> Iterator[_Change]:
         spelled = _relative(module, HELPER_MODULE) if "" in names else HELPER_MODULE
         callables = list(_methods(module.tree)) + list(_functions(module.tree))
         for name, function in sorted(callables, key=lambda item: item[1].lineno):
-            if function.body[0].lineno == function.lineno:
-                continue  # a one-line function has no room for it
+            if function.body[0].lineno == function.lineno or _never_runs(function):
+                continue  # a one-line function has no room for it, a stub no run
             if any(
                 isinstance(node, ast.Name) and node.id == "say"
                 for node in ast.walk(function)
@@ -1675,9 +1972,13 @@ def _read_private_attribute(
             (name, method, _self_name(method)) for name, method in _methods(module.tree)
         ] + [(name, function, None) for name, function in _functions(module.tree)]
         for name, function, self_name in sorted(callables, key=lambda c: c[1].lineno):
-            if function.body[0].lineno == function.lineno or any(
-                isinstance(node, ast.Name) and node.id == "_"
-                for node in ast.walk(function)
+            if (
+                function.body[0].lineno == function.lineno
+                or _never_runs(function)
+                or any(
+                    isinstance(node, ast.Name) and node.id == "_"
+                    for node in ast.walk(function)
+                )
             ):
                 continue
             arguments = function.args
@@ -2126,20 +2427,49 @@ def _hardcode_collaborator(
 
 
 _SCOPES = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, ast.Lambda)
+# Code defined in a function that runs only when something calls it (or, for
+# a class, has a ``self`` of its own): no place for a mutant of the function.
+_NESTED = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
 
 def _outside_scopes(node: ast.AST) -> Iterator[ast.AST]:
-    """``ast.walk`` that does not enter comprehensions and lambdas: their
-    variables do not exist after the statement."""
+    """``ast.walk`` that does not enter comprehensions and lambdas (their
+    variables do not exist after the statement) nor nested functions and
+    classes (their code does not run where they are defined), except what
+    of a nested definition runs where it stands (``_where_defined``)."""
     stack = [node]
     while stack:
         current = stack.pop()
         yield current
-        stack.extend(
-            child
-            for child in ast.iter_child_nodes(current)
-            if not isinstance(child, _SCOPES)
-        )
+        for child in ast.iter_child_nodes(current):
+            if isinstance(child, _NESTED):
+                stack.extend(_where_defined(child))
+            elif not isinstance(child, _SCOPES):
+                stack.append(child)
+
+
+def _where_defined(node: ast.AST) -> list[ast.expr]:
+    """What of a nested function, lambda or class runs where it is defined:
+    its decorators, a function's or lambda's default values, a class's bases and keywords
+    (annotations may never be evaluated, so they are left out)."""
+    parts: list[ast.expr] = list(getattr(node, "decorator_list", []))
+    if isinstance(node, ast.ClassDef):
+        parts += node.bases + [keyword.value for keyword in node.keywords]
+    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        parts += node.args.defaults + [d for d in node.args.kw_defaults if d]
+    return [part for part in parts if not isinstance(part, _SCOPES)]
+
+
+def _body_nodes(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> Iterator[ast.AST]:
+    """Every node of ``function``'s body that runs as the function runs:
+    ``_outside_scopes`` of each statement, nested functions and classes
+    left out but for what of them runs where they stand (``_where_defined``)."""
+    for item in function.body:
+        parts = _where_defined(item) if isinstance(item, _NESTED) else [item]
+        for part in parts:
+            yield from _outside_scopes(part)
 
 
 def generate_mutants(
@@ -2151,6 +2481,7 @@ def generate_mutants(
     parameter_classes: Optional[ParameterClasses] = None,
     instantiable: Optional[Sequence[str]] = None,
     spied: Optional[Spied] = None,
+    skipped: Optional[list[tuple[str, str]]] = None,
 ) -> list[Mutant]:
     """Every mutant the ``operators`` (all by default) make of the project at ``root``.
 
@@ -2162,6 +2493,8 @@ def generate_mutants(
     ``hardcode_collaborator`` may build; every project module by default.
     ``spied`` limits ``hardcode_collaborator`` to the constructor parameters
     a task gives a spy (``Spied``); every kept parameter by default.
+    ``skipped``, when given, gets ``(file, why)`` for each file left out
+    because it does not decode or parse.
     """
     chosen = list(OPERATORS if operators is None else operators)
     unknown = sorted(set(chosen) - set(OPERATORS))
@@ -2169,9 +2502,12 @@ def generate_mutants(
         raise ValueError(
             f"unknown operator(s) {', '.join(unknown)}; use {', '.join(OPERATORS)}"
         )
-    modules = _modules(root)
+    modules = _modules(root, skipped)
     # The name absolute imports reach the project by (``game.world``).
     package = Path(root).name if (Path(root) / "__init__.py").is_file() else ""
+    if limit is not None and limit == 0:
+        return []
+    syntax = {module.file: _Syntax(module) for module in modules}
     produced: list[Mutant] = []
     for operator in OPERATORS:
         if operator not in chosen:
@@ -2201,7 +2537,7 @@ def generate_mutants(
         elif operator == "mutate_public_container":
             found = _mutate_container(modules, False, parameter_classes, package)
         elif operator == "stub_role_call":
-            found = _stub_role_call(modules)
+            found = _stub_role_call(modules, package)
         elif operator == "add_io_via_helper":
             found = _add_io_via_helper(modules)
         elif operator == "read_private_attribute":
@@ -2215,11 +2551,12 @@ def generate_mutants(
         else:
             found = _hardcode_collaborator(modules, instantiable, spied)
         for change in found:
-            try:
-                for text in (change.source, *(text for _, text in change.also)):
-                    ast.parse(text)
-            except SyntaxError:
-                continue  # an operator never hands out code that does not parse
+            # An operator never hands out code that does not parse.
+            if not all(
+                _parses(text) if file not in syntax else syntax[file].parses(text)
+                for file, text in ((change.file, change.source), *change.also)
+            ):
+                continue
             produced.append(
                 Mutant(
                     id=f"{operator}-{len(produced) + 1:03d}",
@@ -2237,6 +2574,8 @@ def generate_mutants(
                     function=change.function,
                 )
             )
+            if limit is not None and len(produced) >= limit >= 0:
+                return produced  # the first ``limit``: none after them counts
     return produced[:limit] if limit is not None else produced
 
 

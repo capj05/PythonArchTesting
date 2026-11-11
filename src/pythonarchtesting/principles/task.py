@@ -188,7 +188,13 @@ def load_task(task_dir: Path) -> Task:
     task_dir = Path(task_dir)
     path = task_dir / TASK_FILENAME
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        # TOML is UTF-8; a byte order mark (Notepad's UTF-8) is dropped.
+        data = tomllib.loads(path.read_bytes().decode("utf-8-sig"))
+    except UnicodeDecodeError as error:
+        raise TaskError(
+            path,
+            [f"not UTF-8 ({error.reason} at byte {error.start}): save it as UTF-8"],
+        ) from error
     except tomllib.TOMLDecodeError as error:
         raise TaskError(path, [f"not valid TOML: {error}"]) from error
     problems: list[str] = [
@@ -428,7 +434,8 @@ def _implementations(interface: Entity, entities: Sequence[Entity]) -> list[Enti
             and not _interface(cls)
             and wanted <= _methods_of(cls)
         ]
-    return [e for e in found if not _interface(_class_node(e) or node)]
+    node_of = {id(entity): cls for entity, cls in classes}
+    return [e for e in found if not _interface(node_of[id(e)])]
 
 
 def _targets(
@@ -549,7 +556,8 @@ def bind_task(
                 if role in class_roles:
                     problem += f"; {class_roles[role]}: bind classes (module.Class)"
                 problems.append(f"[roles] {role!r}: {problem}")
-            if found and found[0].kind != "module" and _entity_name(found[0]) != name:
+            # _resolve gives no module entity: a module stands for its functions.
+            if found and _entity_name(found[0]) != name:
                 covering.setdefault(role, set()).update(e.canonical_id for e in found)
             bound[role].extend(e for e in found if e not in bound[role])
     _not_classes(task, bound, problems)

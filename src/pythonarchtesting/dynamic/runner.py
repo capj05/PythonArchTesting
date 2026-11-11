@@ -12,7 +12,9 @@ from __future__ import annotations
 import ast
 import copy
 import json
+import math
 import os
+import select
 import signal
 import subprocess  # nosec B404 - executing the target is the purpose of this module
 import sys
@@ -20,6 +22,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
+
+from pythonarchtesting.constants import FileConstants
 
 from .sandbox import SandboxPolicy, interpreter_paths
 
@@ -46,6 +50,39 @@ class ProbeOutcome:
     stderr: str = ""
 
 
+# ``path -> ((mtime, size), deepest level)`` of the files ``_imports_relatively``
+# has read: a file is parsed again only when it changes.
+_RELATIVE_LEVELS: dict[str, tuple[tuple[int, int], int]] = {}
+_RELATIVE_LEVELS_KEPT = 4096
+
+
+def _relative_level(path: Path) -> int:
+    """The deepest level of a relative import in the file at ``path`` (``0``
+    for none, or a file that does not decode or parse)."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return 0
+    key, stamp = str(path), (stat.st_mtime_ns, stat.st_size)
+    known = _RELATIVE_LEVELS.get(key)
+    if known is not None and known[0] == stamp:
+        return known[1]
+    try:
+        # From bytes, as Python reads a module: a BOM or a coding line holds.
+        tree = ast.parse(path.read_bytes())
+    except (SyntaxError, ValueError, OSError):
+        level = 0
+    else:
+        level = max(
+            (n.level for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)),
+            default=0,
+        )
+    if len(_RELATIVE_LEVELS) >= _RELATIVE_LEVELS_KEPT:
+        _RELATIVE_LEVELS.clear()
+    _RELATIVE_LEVELS[key] = (stamp, level)
+    return level
+
+
 def _imports_relatively(root: Path) -> bool:
     """Whether a module under ``root`` imports relatively up to ``root``.
 
@@ -53,28 +90,20 @@ def _imports_relatively(root: Path) -> bool:
     such a module only runs inside a package, so a beginner who left out the
     ``__init__.py`` still meant the directory as one. A relative import that
     stays inside a subpackage (``from .x`` in ``domain/``) needs only the
-    subpackage. Hidden directories and ``__pycache__`` are not looked into;
-    a file that does not parse says nothing either way.
+    subpackage. Hidden directories, ``__pycache__`` and virtual environments
+    (``FileConstants.EXCLUDED_DIRS``) are not looked into; a file that does
+    not parse says nothing either way. What a file imports is remembered
+    while it stays unchanged, as each run of a task asks again.
     """
     for directory, subdirectories, files in os.walk(root):
         subdirectories[:] = sorted(
             name
             for name in subdirectories
-            if not name.startswith(".") and name != "__pycache__"
+            if not name.startswith(".") and name not in FileConstants.EXCLUDED_DIRS
         )
         depth = len(Path(directory).relative_to(root).parts)
         for name in sorted(files):
-            if not name.endswith(".py"):
-                continue
-            path = Path(directory) / name
-            try:
-                tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
-            except (SyntaxError, ValueError, OSError):
-                continue
-            if any(
-                isinstance(node, ast.ImportFrom) and node.level > depth
-                for node in ast.walk(tree)
-            ):
+            if name.endswith(".py") and _relative_level(Path(directory) / name) > depth:
                 return True
     return False
 
@@ -158,6 +187,35 @@ def _child_environment(policy: SandboxPolicy, home: Path) -> dict[str, str]:
     return environment
 
 
+def _outlives(process: subprocess.Popen[bytes], timeout_s: float) -> bool:
+    """Wait until ``process`` ends; ``True`` when it still runs after ``timeout_s``.
+
+    ``Popen.wait`` with a timeout polls, sleeping up to 50 ms between looks,
+    so a probe that ends after 70 ms is noticed only after about 110 ms.
+    Where Linux offers a descriptor for the process (``pidfd_open``), the
+    wait ends as the process does; elsewhere ``Popen.wait`` waits. The
+    process is not reaped here.
+    """
+    pidfd_open = getattr(os, "pidfd_open", None)
+    if pidfd_open is not None:
+        try:
+            descriptor = pidfd_open(process.pid)
+        except OSError:
+            descriptor = None
+        if descriptor is not None:
+            try:
+                poller = select.poll()
+                poller.register(descriptor, select.POLLIN)
+                return not poller.poll(max(0, math.ceil(timeout_s * 1000)))
+            finally:
+                os.close(descriptor)
+    try:
+        process.wait(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return True
+    return False
+
+
 def _exchange(
     command: list[str],
     *,
@@ -192,11 +250,8 @@ def _exchange(
             preexec_fn=policy.preexec(timeout_s),  # noqa: PLW1509
             start_new_session=hasattr(os, "setsid"),
         )
-        timed_out = False
         try:
-            process.wait(timeout=timeout_s)
-        except subprocess.TimeoutExpired:
-            timed_out = True
+            timed_out = _outlives(process, timeout_s)
         finally:
             # The probe and whatever is left in its process group go together.
             _kill_group(process)
@@ -232,6 +287,11 @@ def _run_probe(
             home=Path(home),
             timeout_s=timeout_s,
         )
+    return _outcome(exchange, timeout_s)
+
+
+def _outcome(exchange: _Exchange, timeout_s: float) -> ProbeOutcome:
+    """What a probe run that took ``timeout_s`` at most reported back."""
     stderr = exchange.stderr
     if exchange.timed_out:
         return ProbeOutcome(
@@ -277,14 +337,14 @@ def run_cases(
     owning class, and ``{"instances": True}`` the project classes that
     project code instantiated.
     """
-    request = {
-        "module_path": module_path,
-        "qualname": qualname,
-        "kind": kind,
-        "cases": cases,
-        "init": init,
-        "observe": observe or {},
-    }
+    request = cases_request(
+        module_path=module_path,
+        qualname=qualname,
+        kind=kind,
+        cases=cases,
+        init=init,
+        observe=observe,
+    )
     return _run_probe(
         request, target_root=target_root, timeout_s=timeout_s, sandbox=sandbox
     )
@@ -332,11 +392,123 @@ def run_case_batch(
     batch is additionally bounded by the sum of the job timeouts.
     ``ProbeOutcome.jobs`` maps each job id to ``{"status", "cases", "error"}``.
     """
-    timeout_s = _BATCH_STARTUP_S + sum(float(job["timeout_s"]) for job in jobs)
-    request = {"module_path": module_path, "jobs": jobs, "cases": []}
+    timeout_s = batch_timeout(jobs)
+    request = batch_request(module_path, jobs)
     return _run_probe(
         request, target_root=target_root, timeout_s=timeout_s, sandbox=sandbox
     )
+
+
+def batch_timeout(jobs: list[dict[str, Any]]) -> float:
+    """The time ``run_case_batch`` gives a batch of ``jobs`` as a whole."""
+    return _BATCH_STARTUP_S + sum(float(job["timeout_s"]) for job in jobs)
+
+
+def batch_request(module_path: str, jobs: list[dict[str, Any]]) -> dict[str, Any]:
+    """The request ``run_case_batch`` sends the probe."""
+    return {"module_path": module_path, "jobs": jobs, "cases": []}
+
+
+def cases_request(
+    *,
+    module_path: str,
+    qualname: str,
+    kind: str,
+    cases: list[dict[str, Any]],
+    init: dict[str, Any] | None,
+    observe: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The request ``run_cases`` sends the probe."""
+    return {
+        "module_path": module_path,
+        "qualname": qualname,
+        "kind": kind,
+        "cases": cases,
+        "init": init,
+        "observe": observe or {},
+    }
+
+
+def can_fork(sandbox: SandboxPolicy | None) -> bool:
+    """Whether ``run_forked`` can run requests here under ``sandbox``.
+
+    It needs ``fork``, ``memfd_create`` and an interval timer (Linux), and
+    is not used inside ``bwrap``: each probe there gets a file system of its
+    own (an empty ``/tmp``), which the forks of one interpreter would share.
+    """
+    policy = sandbox or _NO_SANDBOX
+    return (
+        policy.mode != "bwrap"
+        and hasattr(os, "fork")
+        and hasattr(os, "memfd_create")
+        and hasattr(signal, "setitimer")
+    )
+
+
+# Head-room for the start-up of the interpreter that forks the requests.
+_FORK_STARTUP_S = 5.0
+
+
+def run_forked(
+    *,
+    target_root: Path,
+    requests: list[tuple[dict[str, Any], float]],
+    sandbox: SandboxPolicy | None = None,
+) -> list[ProbeOutcome | None]:
+    """Run several probe requests on one target from a single interpreter.
+
+    Each ``(request, timeout_s)`` is what ``_run_probe`` would be given for
+    a probe of its own (``batch_request``, ``cases_request``). The probe
+    starts once, imports nothing of the target, and forks a child per
+    request; the child takes its own standard streams, session, CPU limit
+    and, under ``limits``, an empty ``HOME`` of its own, then answers the
+    request as a probe of its own would, so it sees the target as freshly
+    imported, and it is killed with whatever it started when it overruns
+    ``timeout_s``. Each outcome is the one ``_run_probe`` makes of that
+    child's output. ``None`` in place of an outcome means the request got no
+    answer here (``can_fork`` false, or the forking interpreter itself
+    failed): its caller runs it on its own.
+    """
+    if not requests or not can_fork(sandbox):
+        return [None] * len(requests)
+    policy = sandbox or _NO_SANDBOX
+    root, package = import_target_spec(target_root)
+    entries = [
+        {
+            "request": {**request, "target_root": str(root), "package": package},
+            "timeout_s": float(timeout_s),
+            # As ``SandboxPolicy.preexec`` sets it for a probe of its own.
+            "cpu_s": math.ceil(timeout_s) + 1 if policy.confined else None,
+        }
+        for request, timeout_s in requests
+    ]
+    total = _FORK_STARTUP_S + sum(float(timeout_s) for _, timeout_s in requests)
+    served = _run_probe(
+        {
+            "mode": "fork",
+            "module_path": "",
+            "requests": entries,
+            "own_home": policy.confined,
+            "cases": [],
+        },
+        target_root=target_root,
+        timeout_s=total,
+        sandbox=sandbox,
+    )
+    outcomes: list[ProbeOutcome | None] = []
+    for index, (_, timeout_s) in enumerate(requests):
+        answer = served.jobs.get(str(index)) if served.status == "completed" else None
+        if not isinstance(answer, dict) or answer.get("retry"):
+            outcomes.append(None)
+            continue
+        exchange = _Exchange(
+            stdout=str(answer.get("stdout", "")),
+            stderr=str(answer.get("stderr", "")),
+            timed_out=bool(answer.get("timed_out")),
+            returncode=int(answer.get("returncode", 0)),
+        )
+        outcomes.append(_outcome(exchange, float(timeout_s)))
+    return outcomes
 
 
 def run_import_check(
@@ -368,9 +540,14 @@ def run_import_check(
 __all__ = [
     "PROBE_PATH",
     "ProbeOutcome",
+    "batch_request",
+    "batch_timeout",
+    "can_fork",
+    "cases_request",
     "import_target_spec",
     "run_cases",
     "run_case_batch",
+    "run_forked",
     "run_import_check",
     "run_reference_cases",
 ]

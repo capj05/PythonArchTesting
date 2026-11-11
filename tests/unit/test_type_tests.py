@@ -194,3 +194,68 @@ def test_no_type_test_after_the_n5_review(
     lineno = client.splitlines().index(f"    {line.splitlines()[0]}") + 1
 
     assert tests.is_type_test(f"builtins:{callee}", "report.py", lineno) is kept
+
+
+def test_a_file_saved_with_a_byte_order_mark_is_read(tmp_path: Path) -> None:
+    """Notepad saves UTF-8 with a BOM: the file is read as Python reads it,
+    not skipped as unreadable (audit E5)."""
+    (tmp_path / "shapes.py").write_bytes(b"\xef\xbb\xbf" + _SHAPES.encode("utf-8"))
+    client = _function("shape", "if not isinstance(shape, list):")
+    (tmp_path / "report.py").write_bytes(b"\xef\xbb\xbf" + client.encode("utf-8"))
+    tests = TypeTests(tmp_path)
+
+    assert tests.project_classes() == frozenset({"Shape", "Circle"})
+    assert tests.is_type_test("builtins:isinstance", "report.py", 2) is False
+
+
+def test_a_virtual_environment_holds_no_project_class(tmp_path: Path) -> None:
+    (tmp_path / "shapes.py").write_text(_SHAPES, encoding="utf-8")
+    library = tmp_path / "venv" / "lib"
+    library.mkdir(parents=True)
+    (library / "lexer.py").write_text("class Lexer:\n    pass\n", encoding="utf-8")
+
+    assert TypeTests(tmp_path).project_classes() == frozenset({"Shape", "Circle"})
+
+
+def test_a_file_is_read_once_for_all_its_calls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The calls and parents of a file are found once, and a call asked
+    about again is answered from memory (audit P3)."""
+    from pythonarchtesting.execution.evaluators import type_tests
+
+    client = (
+        "def f(shape, x):\n"
+        "    if isinstance(shape, Circle):\n"
+        "        pass\n"
+        "    if type(x) == int:\n"
+        "        pass\n"
+        "    print(type(x))\n"
+    )
+    tests = _tests(tmp_path, client)
+    walked: list[object] = []
+    original = type_tests.ast.walk
+
+    def counting(node: ast.AST):  # type: ignore[no-untyped-def]
+        walked.append(node)
+        return original(node)
+
+    monkeypatch.setattr(type_tests.ast, "walk", counting)
+    assert tests.is_type_test("builtins:isinstance", "report.py", 2) is True
+    assert tests.is_type_test("builtins:type", "report.py", 4) is True
+    walks = len(walked)
+    # Another call of the file: its parents and calls are known already.
+    assert tests.is_type_test("builtins:type", "report.py", 6) is False
+    assert len(walked) == walks
+
+    answers = [
+        tests.is_type_test(callee, "report.py", line)
+        for callee, line in [
+            ("builtins:isinstance", 2),
+            ("builtins:type", 4),
+            ("builtins:type", 6),
+        ]
+    ]
+
+    assert answers == [True, True, False]
+    assert len(walked) == walks

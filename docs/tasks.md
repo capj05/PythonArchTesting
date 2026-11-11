@@ -132,6 +132,7 @@ runtime check.
   that is not a table, an unknown key (such as `expected`), and a `nan` or
   `inf` anywhere in them;
 - an unknown key, an unknown principle, a missing reference directory;
+- a `task.toml` that is not UTF-8 (a byte order mark is accepted);
 - a reference that carries markers of its own. A task's reference must be
   unannotated, so that what is checked is exactly what `task.toml` says;
   evaluate a reference with markers without `task.toml`.
@@ -190,13 +191,26 @@ returns them as a tool error.
   with `why`, and does not keep the task from being accepted: the error was
   not verified by a mutant. An operator that finds something to change, but
   nothing in the entities of the detecting check, gives `no_mutants`, which
-  does: the role is bound to other code than the one the error lives in. An
+  does: the role is bound to other code than the one the error lives in. A
+  reference file the operators cannot read (it does not decode or parse)
+  gets no mutant; the `why` of a `not_applicable` or `no_mutants` error then
+  names each such file and the reason. An
   error whose operator cannot make the call its signature names (`add_io_via_helper`
   only prints), or without a callee none of the calls its check names, is
-  `not_verifiable_by_mutation`, with `why` naming them. A check that fails on
-  the unchanged reference, or does not run on it (a case that cannot be set
-  up), is a line of `problems` with its reason, and its errors are
-  `reference_fails`.
+  `not_verifiable_by_mutation`, with `why` naming them. The unchanged
+  reference runs every check of the task, also when no operator finds
+  anything to change and for a check no error seeds: a check that fails on
+  it, or does not run on it (a case that cannot be set up), is a line of
+  `problems` with its reason, `reference_passes` is `false`, the task is not
+  accepted, and the errors the check detects are `reference_fails` (also
+  those whose operator found nothing to change).
+  At most `max_mutants` mutants run (default 100), taken in turn from each
+  error, so an error loses all of its mutants only when there are more
+  errors than `max_mutants`. Whenever mutants are left out, `truncated` is
+  `true` and the task is not accepted; an error left with none is
+  `truncated`, with `why` (never `no_mutants`): raise `max_mutants`.
+  A reference file a step cannot read as UTF-8 is a tool input error that
+  names the files of the task which are not UTF-8.
   A mutant that changes a constructor (`hardcode_collaborator`) counts for
   a check on any method of its class: the method's cases build the object
   first. When the unchanged reference already fails the detecting check (its
@@ -207,7 +221,9 @@ returns them as a tool error.
   constructor is not seen, and its mutant may fail in another way.
   `run_evaluation(source=<task>)` implies the task's principle,
   runs dynamically and records the principle in the report (`run.principle`),
-  so `class_overview(report_path)` needs no `principle`.
+  so `class_overview(report_path)` needs no `principle`; `class_overview`,
+  `explain_target` and `summarize_report` refuse a principle other than the
+  recorded one, as `run_evaluation` refuses one other than the task's.
 - `check_cases` takes the task's reference directory; `verify_marker` takes
   no task (`prepare_task` verifies one).
 

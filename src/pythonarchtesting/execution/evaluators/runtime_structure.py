@@ -340,7 +340,7 @@ class _ObservingEvaluator:
                 rule, source, target, match, "FAILED", details, ()
             )
 
-        from pythonarchtesting.dynamic.batch import cache_key, observation
+        from pythonarchtesting.dynamic.batch import cache_key, observation, solo_key
         from pythonarchtesting.dynamic.runner import run_cases
 
         self._names = NameTranslation.from_context(ctx)
@@ -357,16 +357,21 @@ class _ObservingEvaluator:
         self._target_module = str(target.module_path)
         batched = ctx.dynamic_cache.get(cache_key(rule, target))
         details["batched"] = batched is not None
-        outcome = batched or run_cases(
-            target_root=ctx.target_root,
-            module_path=target.module_path,
-            qualname=target.qualname,
-            kind=target.kind,
-            cases=self._names.cases(cases, source, target),
-            init=self._names.value(rule.params.get("init"), source, target),
-            timeout_s=float(rule.params.get("timeout_s", 5.0)),
-            sandbox=ctx.sandbox,
-            observe=self._names.observation(observation(rule), source, target),
+        request: dict[str, Any] = {
+            "module_path": target.module_path,
+            "qualname": target.qualname,
+            "kind": target.kind,
+            "cases": self._names.cases(cases, source, target),
+            "init": self._names.value(rule.params.get("init"), source, target),
+            "timeout_s": float(rule.params.get("timeout_s", 5.0)),
+            "observe": self._names.observation(observation(rule), source, target),
+        }
+        # The probe of this rule alone may have run already, forked from the
+        # interpreter that served the target's batches (``batch.prefetch``).
+        outcome = (
+            batched
+            or ctx.dynamic_cache.pop(solo_key(**request), None)
+            or run_cases(target_root=ctx.target_root, sandbox=ctx.sandbox, **request)
         )
         details["probe_status"] = outcome.status
         details["cases"] = outcome.cases
