@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from pythonarchtesting.report.ir.normalize import report_dict_to_ir
+from pythonarchtesting.report.ir.models import (
+    AggregateSummary,
+    MatchingSection,
+    ReportDocument,
+    RunMeta,
+    TargetReport,
+)
+from pythonarchtesting.report.ir.normalize import matching_summary, results_summary
 from pythonarchtesting.report.renderers.markdown_bundle import render_markdown_bundle
 from pythonarchtesting.report.renderers.matching_debug import (
     build_matching_debug_blocks_for_target,
@@ -222,64 +229,66 @@ def test_module_distance_is_inverted_for_debug_display():
     assert module_distances[2] == pytest.approx(1.0 / 3.0, rel=1e-6)
 
 
+def _target(target_id: str, name: str, matched: str) -> TargetReport:
+    """A passing target whose one match pairs the reference's ``s1`` with
+    ``matched``."""
+    matches = (
+        {
+            "source_entity_id": "s1",
+            "status": "matched",
+            "target_entity_id": matched,
+            "confidence": 1.0,
+            "candidates": [],
+        },
+    )
+    return TargetReport(
+        target_id=target_id,
+        display_name=name,
+        source_root="/src",
+        target_path=f"/targets/{target_id}",
+        tags=(),
+        mode="static-only",
+        matching=MatchingSection(
+            matches=matches, matching_config={}, summary=matching_summary(matches)
+        ),
+        results=(),
+        summary=results_summary({}),
+        artifacts=(),
+        exit_code=0,
+    )
+
+
+def _two_target_document() -> ReportDocument:
+    """A run report of two passing targets, ``A Project`` and ``B Project``."""
+    run = RunMeta(
+        generated_at="2026-02-22T00:00:00Z",
+        target_path=None,
+        source_path="/src",
+        reference_modules=(),
+        config_snapshot=None,
+        config_fingerprint=None,
+        tool_version="test",
+        mode="static-only",
+    )
+    return ReportDocument(
+        schema_version="2",
+        framework_version="test",
+        generated_at=run.generated_at,
+        run=run,
+        targets=(_target("a", "A Project", "ta"), _target("b", "B Project", "tb")),
+        summary=AggregateSummary(
+            targets_total=2,
+            targets_failed=0,
+            targets_passed=2,
+            results=results_summary({}),
+        ),
+        exit_code=0,
+        kind="run",
+    )
+
+
 def test_markdown_bundle_matching_debug_isolated_per_target(tmp_path: Path):
-    report = {
-        "generated_at": "2026-02-22T00:00:00Z",
-        "framework_version": "test",
-        "exit_code": 0,
-        "run": {"source_path": "/src"},
-        "summary": {"targets_total": 2, "targets_passed": 2, "targets_failed": 0},
-        "targets": [
-            {
-                "target_id": "a",
-                "display_name": "A Project",
-                "target_path": "/targets/a",
-                "exit_code": 0,
-                "summary": {
-                    "results_total": 0,
-                    "status_counts": {},
-                    "severity_counts": {},
-                    "category_counts": {},
-                },
-                "matching": {
-                    "matches": [
-                        {
-                            "source_entity_id": "s1",
-                            "status": "matched",
-                            "target_entity_id": "ta",
-                            "confidence": 1.0,
-                            "candidates": [],
-                        }
-                    ]
-                },
-                "results": [],
-            },
-            {
-                "target_id": "b",
-                "display_name": "B Project",
-                "target_path": "/targets/b",
-                "exit_code": 0,
-                "summary": {
-                    "results_total": 0,
-                    "status_counts": {},
-                    "severity_counts": {},
-                    "category_counts": {},
-                },
-                "matching": {
-                    "matches": [
-                        {
-                            "source_entity_id": "s1",
-                            "status": "matched",
-                            "target_entity_id": "tb",
-                            "confidence": 1.0,
-                            "candidates": [],
-                        }
-                    ]
-                },
-                "results": [],
-            },
-        ],
-    }
+    report = _two_target_document()
     ctx = {
         "kind": "run",
         "targets": {
@@ -324,7 +333,7 @@ def test_markdown_bundle_matching_debug_isolated_per_target(tmp_path: Path):
 
     md_root = tmp_path / "md"
     render_markdown_bundle(
-        report_dict_to_ir(report, kind="run"),
+        report,
         md_root,
         matching_debug_context=ctx,
         detail="debug",

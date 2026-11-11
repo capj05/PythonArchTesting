@@ -1,26 +1,18 @@
-"""Normalize legacy schema-v2 report dictionaries into typed IR."""
+"""Convert the parts of a serialized schema-v2 report (results, evidence,
+entity references, summaries) into typed IR."""
 
 from __future__ import annotations
 
-import hashlib
-import json
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 from .models import (
-    AggregateSummary,
     EntityRef,
     EvidenceItem,
-    MatchingSection,
     MatchingSummary,
-    ReportDocument,
     ResultItem,
     ResultsSummary,
-    RunMeta,
-    TargetReport,
 )
-from .order import SEV_RANK, STAT_RANK, sort_matches, sort_results, sort_targets
-from .summary import build_results_summary
-from .target_ids import normalize_target_ids, slugify_target_id
+from .order import SEV_RANK, STAT_RANK
 
 
 def split_qualname(qualname: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
@@ -93,18 +85,6 @@ def _ordering_key(item: Dict[str, Any]) -> Tuple[Any, ...]:
         -1 if target.get("line") is None else int(target.get("line") or 0),
         str(item.get("result_id") or ""),
     )
-
-
-def _config_fingerprint(config_snapshot: Optional[Dict[str, Any]]) -> Optional[str]:
-    if not config_snapshot:
-        return None
-    try:
-        payload = json.dumps(config_snapshot, sort_keys=True, separators=(",", ":"))
-    except TypeError:
-        payload = json.dumps(
-            config_snapshot, sort_keys=True, default=str, separators=(",", ":")
-        )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def result_item(item: Dict[str, Any]) -> ResultItem:
@@ -218,113 +198,4 @@ def results_summary(payload: Optional[Dict[str, Any]]) -> ResultsSummary:
         ),
         timings=(dict(data["timings"]) if data.get("timings") is not None else None),
         unverified_total=int(data.get("unverified_total", 0)),
-    )
-
-
-def report_dict_to_ir(report: Dict[str, Any], kind: str) -> ReportDocument:
-    """Convert a schema-v2 legacy dict into a typed report document."""
-    if kind != "run":
-        raise ValueError(f"Unsupported report kind: {kind}")
-
-    run_payload = dict(report.get("run") or {})
-    generated_at = str(
-        report.get("generated_at") or run_payload.get("generated_at") or ""
-    )
-    schema_version = str(report.get("schema_version") or "2")
-    framework_version = str(report.get("framework_version") or "unknown")
-
-    run_meta = RunMeta(
-        generated_at=generated_at,
-        target_path=(
-            str(run_payload["target_path"])
-            if run_payload.get("target_path") is not None
-            else None
-        ),
-        source_path=(
-            str(run_payload["source_path"])
-            if run_payload.get("source_path") is not None
-            else None
-        ),
-        reference_modules=tuple(
-            str(v) for v in (run_payload.get("reference_modules") or [])
-        ),
-        config_snapshot=(
-            dict(run_payload["config_snapshot"])
-            if run_payload.get("config_snapshot") is not None
-            else None
-        ),
-        config_fingerprint=_config_fingerprint(run_payload.get("config_snapshot")),
-        tool_version=framework_version,
-        mode=str(run_payload.get("mode") or "static-only"),
-        principle=(
-            str(run_payload["principle"])
-            if run_payload.get("principle") is not None
-            else None
-        ),
-    )
-
-    target_payloads = [dict(payload or {}) for payload in (report.get("targets") or [])]
-    normalized_ids = normalize_target_ids(target_payloads)
-    targets: List[TargetReport] = []
-    for target_payload in target_payloads:
-        results_payload = [dict(v) for v in (target_payload.get("results") or [])]
-        results_ir = sort_results([result_item(item) for item in results_payload])
-        matching_payload = dict(target_payload.get("matching") or {})
-        matches = tuple(
-            sort_matches(dict(v) for v in (matching_payload.get("matches") or []))
-        )
-        summary_payload = dict(target_payload.get("summary") or {})
-        if not summary_payload and results_payload:
-            summary_payload = build_results_summary(results_payload)
-        original_target_id = str(target_payload.get("target_id") or "")
-        display_name_override = str(
-            target_payload.get("display_name") or original_target_id
-        )
-        target_path = str(target_payload.get("target_path") or "")
-        canonical_target_id, display_name = normalized_ids.get(
-            (original_target_id, target_path),
-            (slugify_target_id(original_target_id), display_name_override),
-        )
-        display_name = display_name_override or display_name
-        targets.append(
-            TargetReport(
-                target_id=canonical_target_id,
-                display_name=display_name,
-                source_root=run_meta.source_path,
-                target_path=target_path,
-                tags=tuple(str(v) for v in (target_payload.get("tags") or [])),
-                mode=str(target_payload.get("mode") or run_meta.mode),
-                matching=MatchingSection(
-                    matches=matches,
-                    matching_config=dict(matching_payload.get("matching_config") or {}),
-                    summary=matching_summary(matches),
-                ),
-                results=tuple(results_ir),
-                summary=results_summary(summary_payload),
-                artifacts=tuple(
-                    dict(v) for v in (target_payload.get("artifacts") or [])
-                ),
-                exit_code=int(target_payload.get("exit_code", 0)),
-            )
-        )
-    targets = sort_targets(targets)
-
-    summary_payload = dict(report.get("summary") or {})
-    results_summary_payload = dict(summary_payload.get("results") or {})
-    aggregate = AggregateSummary(
-        targets_total=int(summary_payload.get("targets_total", len(targets))),
-        targets_failed=int(summary_payload.get("targets_failed", 0)),
-        targets_passed=int(summary_payload.get("targets_passed", 0)),
-        results=results_summary(results_summary_payload),
-    )
-
-    return ReportDocument(
-        schema_version=schema_version,
-        framework_version=framework_version,
-        generated_at=generated_at,
-        run=run_meta,
-        targets=tuple(targets),
-        summary=aggregate,
-        exit_code=int(report.get("exit_code", 0)),
-        kind="run",
     )
