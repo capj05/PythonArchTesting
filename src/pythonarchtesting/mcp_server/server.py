@@ -16,6 +16,7 @@ from mcp.types import ToolAnnotations
 from pythonarchtesting.mcp_server import (
     authoring,
     evaluation,
+    global_tools,
     markers,
     principles,
     reports,
@@ -35,6 +36,7 @@ edits files. 1. Pick the principle: list_principles, describe_principle.
    propose_mapping, then mapping=.
 4. A rule that fails almost every submission suggests a wrong task, not wrong students.
 5. All paths must be absolute; dynamic runs code under bwrap by default.
+6. No reference (global mode): discover_roles, prepare_global_task, run_global_evaluation.
 """
 
 mcp = MCPServer("pythonarchtesting", instructions=INSTRUCTIONS)
@@ -406,15 +408,29 @@ async def prepare_task(
     the case language of the runtime markers: describe_marker of a check's marker)
     and optional ``[init]`` per method ("mod.Class.meth" = {args = [...]}). TOML: an
     inline table stays on one line; quote keys such as "$new". ``problems``: what is
-    wrong in
-    task.toml (an unbound role, an unknown entity, missing cases); nothing runs then.
-    ``checks``: per generated check its role, entity, marker, whether its cases ran
-    and their coverage. ``errors``: per typical error ``killed`` (the error's mutation
-    operator seeded it into copies of the reference and its check failed on every
-    one), ``survived``, ``not_verifiable_by_mutation`` or ``gap``;
-    ``signature_matched`` tells whether a mutant was also classified as that error.
-    ``accepted`` when there are no problems, every check's cases are accepted, the
-    reference passes and every error with an operator is killed. Writes nothing."""
+    wrong in task.toml (an unbound role, an unknown entity, missing cases; nothing
+    runs then), and each check the unchanged reference fails or does not run on
+    ("<marker> fails on the reference: <why>"). ``checks``: per check with cases its
+    role, entity, marker, whether its cases ran, their coverage and ``accepted``
+    (a check with nothing to check in the task is ``not_applicable``).
+    ``reference_passes``: the reference passes every check. ``errors``: per typical
+    error, its operator seeds it into copies of the reference, in the entities of
+    the check that detects it; status ``killed`` (the check failed on every mutant
+    and at least one failure was classified as this error: ``signature_matched``),
+    ``killed_other`` (every failure classified as another error), ``survived`` (a
+    mutant passed; ``survivors``), ``not_run`` (the check did not run on a mutant),
+    ``no_mutants`` (the operator changes something, but nothing where the check
+    looks: the role is bound to other code), ``truncated`` (max_mutants was used up
+    by other errors' mutants), ``reference_fails`` (the reference fails the check
+    already), ``not_applicable`` (nothing in the reference to seed, or the check has
+    nothing to check; ``why``), ``not_verifiable_by_mutation`` (no operator, or it
+    cannot make the call the signature names) or ``gap`` (a known limit).
+    ``truncated``: there were more mutants than ``max_mutants`` (taken in turn from
+    each error). ``accepted`` when task.toml has no problems (a ``WARNING:`` line
+    rejects nothing), every check is accepted,
+    the reference passes, nothing was truncated and every error is ``killed``,
+    ``not_applicable``, ``not_verifiable_by_mutation`` or ``gap``. Writes
+    nothing."""
 
     def run() -> dict[str, Any]:
         return tasks.prepare_task(
@@ -424,6 +440,86 @@ async def prepare_task(
             sandbox=sandbox,
             sandbox_memory_mb=sandbox_memory_mb,
             config=config,
+        )
+
+    with _tool_errors():
+        return await anyio.to_thread.run_sync(run)
+
+
+@mcp.tool(annotations=READONLY)
+def discover_roles(
+    submission: str, principles: list[str], assignment: Optional[str] = None
+) -> dict[str, Any]:
+    """Global mode, step 1 of 3: no reference, the student's project
+    (``submission``, absolute) is its own. Per principle (catalogue ids with a
+    discovery: io_separation, encapsulation, polymorphism) the entities that
+    play its roles, found by code (``source`` "code", ``why``), ``conflicts``
+    and ``not_applied`` (a role the principle needs has no candidate: nothing
+    to check). ``cases_needed``: every entity a check runs ("mod.func",
+    "mod.Class.meth"; a module bound as a whole stands for its public
+    functions), its role, ``kind`` and what its cases must exercise; write
+    them as for prepare_task, in JSON. An entry of kind: "method" needs the
+    arguments of its object's constructor in each case: "init": {"args": [...]}.
+    ``syntax_errors``: files that do not parse; every principle is then
+    unverified. ``assignment`` (the task text) is only echoed back."""
+    with _tool_errors():
+        return global_tools.discover_roles(submission, principles, assignment)
+
+
+@mcp.tool(annotations=EVALUATE)
+def prepare_global_task(
+    submission: str,
+    principle: str,
+    cases: dict[str, Any],
+    out_dir: str,
+    overrides: Optional[list[dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    """Global mode, step 2 of 3: write the self-task of one ``principle`` for
+    ``submission`` into ``out_dir`` (absolute; the task's reference is the
+    submission itself). ``cases``: entity -> list of cases, for the
+    ``cases_needed`` of discover_roles. ``overrides`` may only correct the
+    discovery: {"entity", "role", "action": "add" | "dispute" | "move",
+    "why", "to_role"}; add an entity the code missed, dispute a candidate (it
+    stays bound, its findings are flagged ``role_disputed``), move a game
+    action that reads the keyboard from io to logic. One that breaks the rules
+    is listed in ``conflicts``. Returns ``task_dirs`` and ``parts``, one task
+    each (several polymorphism bases: one per base; with one part its keys
+    are repeated at the top), with ``roles``, ``dropped`` (entities
+    without cases: unverified), ``ignored_cases`` (cases no check runs, with
+    the reason) and ``problems`` (what keeps the task from running). Runs
+    nothing."""
+    with _tool_errors():
+        return global_tools.prepare_global_task(
+            submission, principle, cases, out_dir, overrides
+        )
+
+
+@mcp.tool(annotations=EVALUATE)
+async def run_global_evaluation(
+    submission: str,
+    task_dirs: list[str],
+    output_dir: str,
+    sandbox: Optional[str] = None,
+) -> dict[str, Any]:
+    """Global mode, step 3 of 3: judge ``submission`` by the ``task_dirs`` of
+    prepare_global_task (all paths absolute) and write
+    ``output_dir/global-report.json``. Runs the code sandboxed (``bwrap`` by
+    default). Per principle a ``status``: ``violated`` (a typical error was
+    found: ``findings``), ``ok`` (none, the cases cover the code and every
+    typical error seeded by a mutant is caught), ``unverified`` (none, but
+    that is not proven: ``unverified`` says why, e.g. low coverage, a case
+    that timed out, a syntax error, an entity without cases, an io entity
+    that called the logic in some cases only) or ``not_applied``.
+    ``unexercised`` lists per entity the lines no case ran, whatever the
+    status. ``findings`` lists each finding once, with the ``principles`` it
+    violates; ``counts`` per status. The roles are those of each task's
+    ``discovery.json``: after the submission changes, run
+    prepare_global_task again. The code decides; word the feedback for the
+    student from ``what``, ``why`` and ``fix``."""
+
+    def run() -> dict[str, Any]:
+        return global_tools.run_global_evaluation(
+            submission, task_dirs, output_dir, sandbox
         )
 
     with _tool_errors():

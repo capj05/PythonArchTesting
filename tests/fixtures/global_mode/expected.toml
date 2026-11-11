@@ -1,0 +1,94 @@
+[space_a.io_separation]
+status = "violated"
+errors = ["print_instead_of_return"]
+roles.io = ["ui.main"]
+roles.logic = ["actions"]
+
+[space_a.polymorphism]
+status = "ok"
+roles.base = ["ship.Module"]
+
+[space_a.encapsulation]
+status = "violated"
+errors = ["bypass_method"]
+roles.owner = ["ship.Cargo"]
+
+[detective_b.io_separation]
+status = "ok"
+roles.io = ["console.run"]
+roles.logic = ["commands"]
+
+[detective_b.polymorphism]
+status = "not_applied"
+
+[detective_b.encapsulation]
+status = "ok"
+roles.owner = ["case.Pocket"]
+
+[garden_c.io_separation]
+status = "ok"
+roles.io = ["main.main", "ui.play"]
+roles.logic = ["actions", "ui.parse"]
+
+[rooms_d.io_separation]
+status = "ok"
+roles.io = ["ui.main"]
+roles.logic = ["game"]
+
+[lantern_e.io_separation]
+status = "ok"
+roles.io = ["ui.main"]
+roles.logic = ["game"]
+
+[tavern_f.io_separation]
+status = "ok"
+roles.io = ["game.Game.run"]
+roles.logic = ["game.Game.execute", "game.Game.health", "game.Game.use"]
+
+# goods.buy reads the keyboard alone among the goods (input_in_logic): it
+# stays io and disputed, so the principle is unverified until the AI moves
+# it to logic, and then violated with input_in_logic.
+[market_g.io_separation]
+status = "unverified"
+roles.io = ["goods.buy", "stall.run"]
+roles.logic = ["goods.prices"]
+
+[harbor_h.io_separation]
+status = "ok"
+roles.io = ["dock.main"]
+roles.logic = ["boats"]
+
+# Cabin.run reaches its logic by self.handle(...), which the run does not
+# record: its missing call is no evidence.
+[cabin_i.io_separation]
+status = "unverified"
+roles.io = ["cabin.Cabin.run"]
+roles.logic = ["cabin.Cabin.handle"]
+
+[forge_j.io_separation]
+status = "ok"
+roles.io = ["smithy.main"]
+roles.logic = ["anvil"]
+
+# oven.sell prints instead of returning and changes the shop through the
+# aliases shelf and sold: an action, so print_instead_of_return is found.
+[bakery_l.io_separation]
+status = "violated"
+errors = ["print_instead_of_return"]
+roles.io = ["counter.main"]
+roles.logic = ["oven"]
+
+# Lot.fix prints and changes the lot: logic. Panel.show only prints: UI.
+[garage_m.io_separation]
+status = "violated"
+errors = ["print_instead_of_return"]
+roles.io = ["workshop.Workshop.run"]
+roles.logic = ["cars.Lot.fix", "cars.Lot.summary"]
+
+# pick prints and changes the module's trees and crate: logic, beside the
+# game loop in one file.
+[orchard_n.io_separation]
+status = "violated"
+errors = ["print_instead_of_return"]
+roles.io = ["orchard.main"]
+roles.logic = ["orchard.count", "orchard.pick"]

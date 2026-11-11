@@ -29,6 +29,9 @@ TOOL_NAMES = {
     "describe_principle",
     "class_overview",
     "prepare_task",
+    "discover_roles",
+    "prepare_global_task",
+    "run_global_evaluation",
 }
 # Tools that run reference or target code; every other tool only reads.
 RUNNING = {
@@ -39,6 +42,9 @@ RUNNING = {
     "check_architecture",
     # Runs the reference's cases in mode="full".
     "describe_architecture",
+    # Global mode: writes the self-task; runs the submission.
+    "prepare_global_task",
+    "run_global_evaluation",
 }
 
 
