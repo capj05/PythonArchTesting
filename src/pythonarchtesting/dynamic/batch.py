@@ -2,11 +2,10 @@
 
 Starting a fresh interpreter per rule costs start-up and a full import of the
 target each time. Before a target's rules are evaluated, ``prefetch`` groups
-the matched ``forbid_runtime_calls``, ``require_runtime_calls``,
-``forbid_foreign_writes`` and ``forbid_runtime_instantiation`` rules by target
-module, runs each group as one
-batch, and leaves the outcomes in ``EvalContext.dynamic_cache``; the evaluator
-then reads its outcome from there.
+the matched rules of the types in ``_BATCHED_RULE_TYPES`` (runtime calls,
+writes, instances, members, class kinds, protocols and patterns) by target
+module, runs each group as one batch, and leaves the outcomes in
+``EvalContext.dynamic_cache``; the evaluator then reads its outcome from there.
 
 Rules of one module share the module's state in the batch, just as the cases
 of one rule always have. When a batch as a whole times out or crashes, its

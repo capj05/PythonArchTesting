@@ -153,8 +153,8 @@ class SandboxPolicy:
                 command += ["--symlink", os.readlink(link), link]
             elif os.path.isdir(link):
                 command += ["--ro-bind", link, link]
-        for path in _unique_existing(visible):
-            command += ["--ro-bind", str(path), str(path)]
+        for source, dest in _bind_pairs(visible):
+            command += ["--ro-bind", source, dest]
         command += ["--chdir", str(cwd), "--"]
         return command + argv
 
@@ -178,19 +178,31 @@ def _user_task_count() -> int | None:
     return count
 
 
-def _unique_existing(paths: list[Path]) -> list[Path]:
-    """Resolved, existing paths, outermost first, without paths already covered."""
-    resolved = sorted(
-        {Path(os.path.realpath(path)) for path in paths if os.path.exists(path)},
-        key=lambda p: len(p.parts),
-    )
-    kept: list[Path] = []
-    for path in resolved:
-        if any(path == parent or parent in path.parents for parent in kept):
+def _bind_pairs(paths: list[Path]) -> list[tuple[str, str]]:
+    """The read-only binds that make existing ``paths`` visible, as
+    ``(source, destination)``, outermost destination first, without one
+    already covered by another or by a system directory.
+
+    Each path's real directory is bound where it really is and, when the path
+    reaches it through a symlink, also under the path as named: a venv behind
+    a symlinked directory is started by its unresolved ``sys.executable``.
+    """
+    pairs: dict[Path, Path] = {}
+    for path in paths:
+        if not os.path.exists(path):
             continue
-        if any(str(path).startswith(system + os.sep) for system in _SYSTEM_DIRS):
+        real = Path(os.path.realpath(path))
+        pairs.setdefault(real, real)
+        pairs.setdefault(Path(os.path.abspath(path)), real)
+    kept: list[tuple[str, str]] = []
+    covered: list[Path] = []
+    for dest in sorted(pairs, key=lambda p: len(p.parts)):
+        if any(dest == parent or parent in dest.parents for parent in covered):
             continue
-        kept.append(path)
+        if any(str(dest).startswith(system + os.sep) for system in _SYSTEM_DIRS):
+            continue
+        covered.append(dest)
+        kept.append((str(pairs[dest]), str(dest)))
     return kept
 
 

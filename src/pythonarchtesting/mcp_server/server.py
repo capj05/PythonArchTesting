@@ -41,8 +41,10 @@ edits files. 1. Pick the principle: list_principles, describe_principle.
 
 mcp = MCPServer("pythonarchtesting", instructions=INSTRUCTIONS)
 
-# Tools that run reference or target code (run_evaluation, check_cases,
-# verify_marker, check_architecture) are EVALUATE; every other tool only reads.
+# Tools that run reference or target code or write files (run_evaluation,
+# check_cases, verify_marker, check_architecture, describe_architecture,
+# prepare_task, prepare_global_task, run_global_evaluation) are EVALUATE;
+# every other tool only reads.
 # openWorldHint=False marks the inputs as local.
 READONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 EVALUATE = ToolAnnotations(
