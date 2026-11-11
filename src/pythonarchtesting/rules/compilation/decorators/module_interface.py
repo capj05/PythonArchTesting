@@ -98,7 +98,14 @@ def compile_module_interface(
     entities = list(source_entities or [])
     params = without_none(declaration.params, ("ignore_type_checking",))
     if source_entity.kind != "module":
-        return invalid_target(source_entity, declaration, MARKER, ["module"])
+        return invalid_target(
+            source_entity,
+            declaration,
+            MARKER,
+            ["module"],
+            rule_id_prefix=_INVALID_PREFIX,
+            rule_id_suffix=rule_id_suffix,
+        )
     problem: tuple[str, str] | InvalidParam | None = _problem(
         source_entity, params, entities
     )

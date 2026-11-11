@@ -17,6 +17,7 @@ from ..common import (
     options_problem,
     reject_invalid_param,
     reject_invalid_severity,
+    reject_misplaced,
     with_rule_id_suffix,
     without_none,
 )
@@ -262,15 +263,20 @@ def compile_required_method(
     pattern = params_kwargs.get("pattern")
 
     if source_entity.kind != "method":
-        compiler_evidence.append(
+        return reject_misplaced(
+            source_entity,
             invalid_target_evidence(
                 source_entity,
                 declaration,
                 decorator="required_method",
                 expected_kind="method",
-            )
+            ),
+            marker="required_method",
+            rule_id_prefix="API002/required_method/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+            valid=["method"],
+            compiler_evidence=compiler_evidence,
         )
-        return [], compiler_evidence, []
 
     rejected = reject_invalid_param(
         source_entity,

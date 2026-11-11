@@ -93,7 +93,10 @@ from pythonarchtesting.rules import enforce_reference_calls
 __archtest__: Annotated[None, enforce_reference_calls(cases=[{}])]
 """)
 
-    assert rules == []
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [(rule.rule_type, rule.params["param"]) for rule in rules] == [
+        ("compiler_invalid_param", "target_kind")
+    ]
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
 
 

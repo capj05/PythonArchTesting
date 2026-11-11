@@ -10,6 +10,7 @@ from ..common import (
     invalid_target_evidence,
     marker_severity,
     reject_invalid_severity,
+    reject_misplaced,
     with_rule_id_suffix,
 )
 
@@ -24,14 +25,15 @@ def compile_is_enum(
     _ = cfg
     params_kwargs = dict(declaration.params)
     if source_entity.kind != "class":
-        return (
-            [],
-            [
-                invalid_target_evidence(
-                    source_entity, declaration, decorator="is_enum", key="declaration"
-                )
-            ],
-            [],
+        return reject_misplaced(
+            source_entity,
+            invalid_target_evidence(
+                source_entity, declaration, decorator="is_enum", key="declaration"
+            ),
+            marker="is_enum",
+            rule_id_prefix="ENUM001/is_enum/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+            valid=["class"],
         )
 
     rejected = reject_invalid_severity(

@@ -141,8 +141,17 @@ def _compile_module_structure(
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     static_id, static_type, runtime_id, runtime_type = _RULES[marker]
     params = without_none(declaration.params, ("ignore_type_checking",))
-    if source_entity.kind != "module":
-        return invalid_target(source_entity, declaration, marker, ["module"])
+    # Declared once, on the root module, as architecture_entry is.
+    if source_entity.kind != "module" or source_entity.module_path:
+        return invalid_target(
+            source_entity,
+            declaration,
+            marker,
+            ["root module"],
+            rule_id_prefix=f"{static_id.split('/')[0]}/{marker}/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+            reason=f"{marker} must be declared on the root module (__init__.py)",
+        )
 
     problem: tuple[str, str] | InvalidParam | None = _structure_problem(
         marker, params, source_entities

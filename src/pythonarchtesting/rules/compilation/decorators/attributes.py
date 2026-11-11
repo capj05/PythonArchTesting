@@ -15,6 +15,7 @@ from ..common import (
     options_problem,
     reject_invalid_param,
     reject_invalid_severity,
+    reject_misplaced,
     with_rule_id_suffix,
     without_none,
 )
@@ -99,15 +100,20 @@ def compile_required_attribute(
     }
 
     if source_entity.kind != "class":
-        compiler_evidence.append(
+        return reject_misplaced(
+            source_entity,
             invalid_target_evidence(
                 source_entity,
                 declaration,
                 decorator="required_attribute",
                 key="declaration",
-            )
+            ),
+            marker="required_attribute",
+            rule_id_prefix=drop["rule_id_prefix"],
+            rule_id_suffix=rule_id_suffix,
+            valid=["class"],
+            compiler_evidence=compiler_evidence,
         )
-        return [], compiler_evidence, []
 
     if declaration.surface != "body":
         payload = {
@@ -116,15 +122,23 @@ def compile_required_attribute(
             "expected_surface": "body",
             "found_surface": declaration.surface,
         }
-        compiler_evidence.append(
+        return reject_misplaced(
+            source_entity,
             declaration_evidence(
                 source_entity,
                 declaration,
                 evidence_type="compiler_invalid_attribute_declaration",
                 payload=payload,
-            )
+            ),
+            marker="required_attribute",
+            rule_id_prefix=drop["rule_id_prefix"],
+            rule_id_suffix=rule_id_suffix,
+            param="declaration_surface",
+            value=declaration.surface,
+            valid=["body"],
+            reason="required_attribute must be declared on a class body",
+            compiler_evidence=compiler_evidence,
         )
-        return [], compiler_evidence, []
 
     name = params_kwargs.get("name")
     if not isinstance(name, str) or not name.strip():

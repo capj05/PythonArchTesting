@@ -18,6 +18,7 @@ from ..common import (
     options_problem,
     reject_invalid_param,
     reject_invalid_severity,
+    reject_misplaced,
     with_rule_id_suffix,
     without_none,
 )
@@ -45,10 +46,15 @@ def compile_required_constructor(
     compiler_evidence: List[Evidence] = []
 
     if source_entity.kind != "class":
-        compiler_evidence.append(
-            invalid_target_evidence(source_entity, declaration, decorator=_DECORATOR)
+        return reject_misplaced(
+            source_entity,
+            invalid_target_evidence(source_entity, declaration, decorator=_DECORATOR),
+            marker=_DECORATOR,
+            rule_id_prefix="API003/required_constructor/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+            valid=["class"],
+            compiler_evidence=compiler_evidence,
         )
-        return [], compiler_evidence, []
 
     drop: dict[str, Any] = {
         "marker": _DECORATOR,

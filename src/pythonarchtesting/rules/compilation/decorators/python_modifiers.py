@@ -10,6 +10,7 @@ from ..common import (
     invalid_target_evidence,
     marker_severity,
     reject_invalid_severity,
+    reject_misplaced,
     with_rule_id_suffix,
 )
 
@@ -30,17 +31,20 @@ def _compile_python_modifier_rule(
     _ = cfg
     params_kwargs = dict(declaration.params)
     if source_entity.kind != expected_kind:
-        return (
-            [],
-            [
-                invalid_target_evidence(
-                    source_entity,
-                    declaration,
-                    decorator=declaration_name,
-                    expected_kind=expected_kind,
-                )
-            ],
-            [],
+        return reject_misplaced(
+            source_entity,
+            invalid_target_evidence(
+                source_entity,
+                declaration,
+                decorator=declaration_name,
+                expected_kind=expected_kind,
+            ),
+            marker=declaration_name,
+            rule_id_prefix=(
+                f"{rule_id.split('/')[0]}/{declaration_name}/invalid_declaration"
+            ),
+            rule_id_suffix=rule_id_suffix,
+            valid=[expected_kind],
         )
 
     rejected = reject_invalid_severity(

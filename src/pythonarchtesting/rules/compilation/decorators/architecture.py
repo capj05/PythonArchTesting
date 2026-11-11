@@ -124,7 +124,15 @@ def compile_architecture_entry(
     entities = list(source_entities or [])
     params = without_none(declaration.params, ("policy", *_BOOLS))
     if source_entity.kind != "module" or source_entity.module_path:
-        return invalid_target(source_entity, declaration, MARKER, ["root module"])
+        return invalid_target(
+            source_entity,
+            declaration,
+            MARKER,
+            ["root module"],
+            rule_id_prefix=_INVALID_PREFIX,
+            rule_id_suffix=rule_id_suffix,
+            reason=f"{MARKER} must be declared on the root module (__init__.py)",
+        )
 
     problem: tuple[str, str] | InvalidParam | None = _problem(params, entities)
     entry_entity: Entity | None = None

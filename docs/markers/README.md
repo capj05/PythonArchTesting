@@ -61,11 +61,21 @@ combine (`required_attribute(allow_property=True, storage="class")`), a
 compiler evidence keeps the issue it always had (`invalid_storage`,
 `compiler_invalid_protocol_reference`, `ambiguous_variable`, …).
 
-A declaration dropped for where it stands rather than for an argument value —
-a marker on the wrong kind of entity, an `enforce_flow` in a function without
-`flow` markers, a `required_constructor` on a class that declares no
-constructor — is reported by its compiler evidence (`--validate-declarations`
-shows it).
+A marker declared where it checks nothing is reported the same way, with a
+sentinel for the argument `target_kind` (its value is the kind of the entity
+the marker stands on, `valid` the kinds it checks): `is_enum` on a function,
+`required_method` on a class, `enforce_layers` or `forbid_cycles` outside the
+root module (`__init__.py`), as `architecture_entry`. Two more places count
+as such: a `required_factory` on a plain instance method (argument
+`method_kind`) and a `required_attribute` outside the class body (argument
+`declaration_surface`). The compiler evidence is the one reported before
+(`compiler_invalid_target`, `compiler_invalid_source_method`,
+`compiler_invalid_surface`).
+
+A declaration the reference code cannot back — an `enforce_flow` in a
+function without `flow` markers, a `required_constructor` on a class that
+declares no constructor — is reported by its compiler evidence only
+(`--validate-declarations` shows it).
 
 ## Unknown Keywords
 

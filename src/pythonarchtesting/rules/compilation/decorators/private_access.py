@@ -55,7 +55,12 @@ def compile_forbid_private_access(
     params = dict(declaration.params)
     if source_entity.kind not in _SUPPORTED_KINDS:
         return invalid_target(
-            source_entity, declaration, MARKER, list(_SUPPORTED_KINDS)
+            source_entity,
+            declaration,
+            MARKER,
+            list(_SUPPORTED_KINDS),
+            rule_id_prefix=_INVALID_PREFIX,
+            rule_id_suffix=rule_id_suffix,
         )
     problem = _problem(params, declaration.raw)
     rejected = rejected_declaration(

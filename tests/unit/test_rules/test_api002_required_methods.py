@@ -660,7 +660,10 @@ def run(data: int) -> int:
     source_entity = _extract_entity(source, role="source", kind="function", name="run")
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [(rule.rule_type, rule.params["param"]) for rule in rules] == [
+        ("compiler_invalid_param", "target_kind")
+    ]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
 

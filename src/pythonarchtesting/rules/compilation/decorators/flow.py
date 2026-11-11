@@ -11,6 +11,7 @@ from ..common import (
     drop_with_sentinel,
     marker_severity,
     reject_invalid_severity,
+    reject_misplaced,
     with_rule_id_suffix,
 )
 from ..declarations import (
@@ -59,21 +60,6 @@ def compile_enforce_flow(
         key: value for key, value in declaration.params.items() if value is not None
     }
 
-    if source_entity.kind not in {"function", "method"}:
-        compiler_evidence.append(
-            _evidence(
-                source_entity,
-                declaration,
-                payload={
-                    "declaration": "enforce_flow",
-                    "issue": "compiler_invalid_target",
-                    "expected_kind": "function_or_method",
-                    "found_kind": source_entity.kind,
-                },
-            )
-        )
-        return [], compiler_evidence, []
-
     runtime = "cases" in params_kwargs
     drop: dict[str, Any] = {
         "marker": "enforce_flow",
@@ -84,6 +70,23 @@ def compile_enforce_flow(
         ),
         "rule_id_suffix": rule_id_suffix,
     }
+    if source_entity.kind not in {"function", "method"}:
+        return reject_misplaced(
+            source_entity,
+            _evidence(
+                source_entity,
+                declaration,
+                payload={
+                    "declaration": "enforce_flow",
+                    "issue": "compiler_invalid_target",
+                    "expected_kind": "function_or_method",
+                    "found_kind": source_entity.kind,
+                },
+            ),
+            **drop,
+            valid=["function", "method"],
+            compiler_evidence=compiler_evidence,
+        )
     stages_raw = params_kwargs.get("stages", [])
     stages = (
         [str(item) for item in stages_raw if isinstance(item, str)]

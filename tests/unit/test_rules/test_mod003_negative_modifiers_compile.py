@@ -136,7 +136,10 @@ class Contract:
     rules, evidence, errors = _compile_source(source)
 
     assert errors == []
-    assert rules == []
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [(rule.rule_type, rule.params["param"]) for rule in rules] == [
+        ("compiler_invalid_param", "target_kind")
+    ]
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
     assert evidence[0].payload["expected_kind"] == "class"
     assert evidence[0].payload["found_kind"] == "method"
@@ -154,7 +157,10 @@ class Contract:
     rules, evidence, errors = _compile_source(source)
 
     assert errors == []
-    assert rules == []
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [(rule.rule_type, rule.params["param"]) for rule in rules] == [
+        ("compiler_invalid_param", "target_kind")
+    ]
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
     assert evidence[0].payload["expected_kind"] == "method"
     assert evidence[0].payload["found_kind"] == "class"
@@ -172,7 +178,10 @@ def helper() -> None:
     rules, evidence, errors = _compile_source(source)
 
     assert errors == []
-    assert rules == []
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [(rule.rule_type, rule.params["param"]) for rule in rules] == [
+        ("compiler_invalid_param", "target_kind")
+    ]
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
     assert evidence[0].payload["expected_kind"] == "method"
     assert evidence[0].payload["found_kind"] == "function"

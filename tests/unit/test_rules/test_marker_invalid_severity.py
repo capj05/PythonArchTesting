@@ -31,9 +31,14 @@ _REASON = "severity must be one of: error, warning, info"
 _INIT = """
 from typing import Annotated
 
-from pythonarchtesting.rules import architecture_entry
+from pythonarchtesting.rules import architecture_entry, enforce_layers, forbid_cycles
 
-__archtest__: Annotated[None, architecture_entry(severity=SEV)]
+__archtest__: Annotated[
+    None,
+    architecture_entry(severity=SEV),
+    enforce_layers("app", "models", severity=SEV),
+    forbid_cycles(severity=SEV),
+]
 """
 
 _MODELS = """
@@ -50,12 +55,10 @@ from typing import Annotated, Protocol, final
 from pythonarchtesting.rules import (
     does_not_have,
     enforce_flow,
-    enforce_layers,
     enforce_reference_calls,
     enforce_runtime_observer,
     exact_type,
     flow,
-    forbid_cycles,
     forbid_foreign_writes,
     forbid_imports,
     forbid_private_access,
@@ -96,8 +99,6 @@ from pythonarchtesting.rules import (
 __archtest__: Annotated[
     None,
     forbid_imports("requests", severity=SEV),
-    enforce_layers("app", "models", severity=SEV),
-    forbid_cycles(severity=SEV),
     module_interface("Service", severity=SEV),
     forbid_runtime_imports("sqlite3", severity=SEV),
 ]

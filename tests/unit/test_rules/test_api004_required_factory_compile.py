@@ -62,7 +62,10 @@ class MyClass:
     class_entity = next(entity for entity in source_entities if entity.kind == "class")
     rules, evidence, compiler_results = compile_rules([class_entity], Mock())
 
-    assert rules == []
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [(rule.rule_type, rule.params["param"]) for rule in rules] == [
+        ("compiler_invalid_param", "target_kind")
+    ]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_target"]
 
@@ -84,7 +87,10 @@ class MyClass:
     )
     rules, evidence, compiler_results = compile_rules([source_entity], Mock())
 
-    assert rules == []
+    # The misplaced marker is a FAILED sentinel, not missing from the report.
+    assert [(rule.rule_type, rule.params["param"]) for rule in rules] == [
+        ("compiler_invalid_param", "method_kind")
+    ]
     assert compiler_results == []
     assert [item.type for item in evidence] == ["compiler_invalid_source_method"]
 

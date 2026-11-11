@@ -15,6 +15,7 @@ from ..common import (
     options_problem,
     reject_invalid_param,
     reject_invalid_severity,
+    reject_misplaced,
     with_rule_id_suffix,
     without_none,
 )
@@ -88,15 +89,20 @@ def compile_required_factory(
     compiler_evidence: List[Evidence] = []
 
     if source_entity.kind != "method":
-        compiler_evidence.append(
+        return reject_misplaced(
+            source_entity,
             invalid_target_evidence(
                 source_entity,
                 declaration,
                 decorator="required_factory",
                 expected_kind="method",
-            )
+            ),
+            marker="required_factory",
+            rule_id_prefix=_INVALID_PREFIX,
+            rule_id_suffix=rule_id_suffix,
+            valid=["method"],
+            compiler_evidence=compiler_evidence,
         )
-        return [], compiler_evidence, []
 
     if not _is_factory_capable_method(source_entity):
         payload = {
@@ -105,15 +111,23 @@ def compile_required_factory(
             "reason": "plain instance methods are not valid factory sources in v1",
             "entity_name": source_entity.name,
         }
-        compiler_evidence.append(
+        return reject_misplaced(
+            source_entity,
             declaration_evidence(
                 source_entity,
                 declaration,
                 evidence_type="compiler_invalid_source_method",
                 payload=payload,
-            )
+            ),
+            marker="required_factory",
+            rule_id_prefix=_INVALID_PREFIX,
+            rule_id_suffix=rule_id_suffix,
+            param="method_kind",
+            value=source_entity.surface_meta.get("method_kind"),
+            valid=["class", "static"],
+            reason=payload["reason"],
+            compiler_evidence=compiler_evidence,
         )
-        return [], compiler_evidence, []
 
     signature_mode = str(params_kwargs.get("signature_mode", "compatible")).lower()
     if signature_mode not in _VALID_SIGNATURE_MODES:

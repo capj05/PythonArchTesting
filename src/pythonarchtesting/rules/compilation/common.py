@@ -275,6 +275,38 @@ def drop_with_sentinel(
     return [sentinel], compiler_evidence, []
 
 
+def reject_misplaced(
+    source_entity: Entity,
+    evidence: Evidence,
+    *,
+    marker: str,
+    rule_id_prefix: str,
+    rule_id_suffix: str,
+    valid: Iterable[str],
+    reason: str | None = None,
+    param: str = "target_kind",
+    value: Any = None,
+    compiler_evidence: List[Evidence] | None = None,
+) -> Tuple[List[Any], List[Any], List[Any]]:
+    """The declaration dropped for where it is declared: on an entity of
+    another kind (``param`` ``target_kind``, the entity's kind as its value)
+    or another place the marker does not check. A ``compiler_invalid_param``
+    sentinel under the marker's ``rule_id_prefix`` makes the mistake show as
+    FAILED; ``evidence`` reports it as before, after ``compiler_evidence``."""
+    valid = list(valid)
+    return drop_with_sentinel(
+        source_entity,
+        [*(compiler_evidence or []), evidence],
+        marker=marker,
+        rule_id_prefix=rule_id_prefix,
+        rule_id_suffix=rule_id_suffix,
+        param=param,
+        value=source_entity.kind if value is None else value,
+        valid=valid,
+        reason=reason or f"{marker} must target a " + " or ".join(valid),
+    )
+
+
 SEVERITIES = ("error", "warning", "info")
 INVALID_SEVERITY_ISSUE = "invalid_severity"
 
@@ -429,6 +461,7 @@ __all__ = [
     "canonicalize_payload",
     "declaration_evidence",
     "drop_with_sentinel",
+    "reject_misplaced",
     "evidence_id",
     "invalid_declaration_evidence",
     "invalid_param_payload",

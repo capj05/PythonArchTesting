@@ -362,9 +362,9 @@ def _reject_unknown_params(
 
     A misspelt keyword would otherwise leave the option it meant at its
     default without a word. Only a declaration that compiled to rules of its
-    own is dropped: one its compiler already refused keeps that report, and
-    one that compiles to no rule (``flow``, a misplaced marker) has no result
-    to replace. The sentinel takes the marker's prefix for invalid
+    own is dropped: one its compiler already refused (a misplaced marker
+    included) keeps that report, and one that compiles to no rule (``flow``)
+    has no result to replace. The sentinel takes the marker's prefix for invalid
     declarations from the rule it replaces.
     """
     kind = declaration.kind

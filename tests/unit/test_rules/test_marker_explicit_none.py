@@ -36,13 +36,13 @@ _SPELT_OUT = {
 }
 
 
-def _compile(tmp_path: Path, app: str) -> tuple[list[Any], list[Any]]:
+def _compile(tmp_path: Path, sources: dict[str, str]) -> tuple[list[Any], list[Any]]:
     root = tmp_path / "pkg"
     root.mkdir(parents=True)
     for name, text in (
-        ("__init__.py", package._INIT),
+        ("__init__.py", sources["init"]),
         ("models.py", package._MODELS),
-        ("app.py", app),
+        ("app.py", sources["app"]),
     ):
         (root / name).write_text(text.replace("SEV", '"error"'), encoding="utf-8")
     config = load_config()
@@ -64,12 +64,13 @@ def test_an_explicit_none_compiles_as_the_left_out_argument(
     tmp_path: Path, marker: str
 ) -> None:
     written, spelt_out = _SPELT_OUT[marker]
-    assert written in package._APP
+    module = "init" if written in package._INIT else "app"
+    sources = {"init": package._INIT, "app": package._APP}
+    assert written in sources[module]
 
-    left_out, _ = _compile(tmp_path / "left_out", package._APP)
-    rules, evidence = _compile(
-        tmp_path / "spelt_out", package._APP.replace(written, spelt_out, 1)
-    )
+    left_out, _ = _compile(tmp_path / "left_out", sources)
+    sources[module] = sources[module].replace(written, spelt_out, 1)
+    rules, evidence = _compile(tmp_path / "spelt_out", sources)
 
     assert _summary(rules, marker) == _summary(left_out, marker)
     assert "compiler_invalid_param" not in {rule.rule_type for rule in rules}

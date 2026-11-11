@@ -17,6 +17,7 @@ from ..common import (
     options_problem,
     reject_invalid_param,
     reject_invalid_severity,
+    reject_misplaced,
     with_rule_id_suffix,
     without_none,
 )
@@ -194,20 +195,32 @@ def _module_names(value: Any) -> list[str] | None:
 
 
 def invalid_target(
-    source_entity: Entity, declaration: DeclarationEntry, marker: str, expected: Any
+    source_entity: Entity,
+    declaration: DeclarationEntry,
+    marker: str,
+    expected: Any,
+    *,
+    rule_id_prefix: str,
+    rule_id_suffix: str,
+    reason: str | None = None,
 ) -> Tuple[List[Any], List[Any], List[Any]]:
-    return (
-        [],
-        [
-            invalid_target_evidence(
-                source_entity,
-                declaration,
-                decorator=marker,
-                expected_kind=expected,
-                key="declaration",
-            )
-        ],
-        [],
+    """The declaration of ``marker`` dropped for its place: on an entity that
+    is not of the ``expected`` kind (one kind or a list of them)."""
+    evidence = invalid_target_evidence(
+        source_entity,
+        declaration,
+        decorator=marker,
+        expected_kind=expected,
+        key="declaration",
+    )
+    return reject_misplaced(
+        source_entity,
+        evidence,
+        marker=marker,
+        rule_id_prefix=rule_id_prefix,
+        rule_id_suffix=rule_id_suffix,
+        valid=[expected] if isinstance(expected, str) else expected,
+        reason=reason,
     )
 
 
@@ -340,7 +353,12 @@ def _compile_module_list(
     params_kwargs = without_none(declaration.params, ("transitive", "cover_module"))
     if source_entity.kind not in _SUPPORTED_KINDS:
         return invalid_target(
-            source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
+            source_entity,
+            declaration,
+            marker,
+            sorted(_SUPPORTED_KINDS),
+            rule_id_prefix=f"{rule_id.rsplit('/', 1)[0]}/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
         )
 
     modules = _module_names(params_kwargs.get("modules", []))
@@ -447,7 +465,12 @@ def compile_enforce_reference_calls(
     params_kwargs = without_none(declaration.params, bools)
     if source_entity.kind not in _SUPPORTED_KINDS:
         return invalid_target(
-            source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
+            source_entity,
+            declaration,
+            marker,
+            sorted(_SUPPORTED_KINDS),
+            rule_id_prefix="DYN001/enforce_reference_calls/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
         )
     require_all = bool_param(params_kwargs, "require_all", default=False)
     allow_new_modules = bool_param(params_kwargs, "allow_new_modules", default=False)
@@ -548,7 +571,14 @@ def _compile_runtime_members(
     mode, hint = _MEMBER_MARKERS[marker]
     params_kwargs = dict(declaration.params)
     if source_entity.kind != "class":
-        return invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(
+            source_entity,
+            declaration,
+            marker,
+            "class",
+            rule_id_prefix=f"DYN005/{marker}/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+        )
     names = _module_names(params_kwargs.get("names", []))
     types = params_kwargs.get("types")
     problem: tuple[str, str] | None = None
@@ -642,7 +672,14 @@ def compile_is_runtime_concrete_class(
     marker = "is_runtime_concrete_class"
     params_kwargs = dict(declaration.params)
     if source_entity.kind != "class":
-        return invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(
+            source_entity,
+            declaration,
+            marker,
+            "class",
+            rule_id_prefix=f"DYN006/{marker}/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+        )
     problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     rejected = rejected_declaration(
         source_entity,
@@ -681,7 +718,14 @@ def compile_is_runtime_abstract_class(
     marker = "is_runtime_abstract_class"
     params_kwargs = dict(declaration.params)
     if source_entity.kind != "class":
-        return invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(
+            source_entity,
+            declaration,
+            marker,
+            "class",
+            rule_id_prefix=f"DYN006/{marker}/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+        )
     problem = _timeout_problem(params_kwargs)
     if "cases" in params_kwargs:
         problem = ("cases", f"{marker} takes no cases: nothing is instantiated")
@@ -747,7 +791,14 @@ def compile_implements_runtime_protocol(
     marker = "implements_runtime_protocol"
     params_kwargs = dict(declaration.params)
     if source_entity.kind != "class":
-        return invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(
+            source_entity,
+            declaration,
+            marker,
+            "class",
+            rule_id_prefix=f"DYN007/{marker}/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+        )
     protocol_entity, protocol_ref, evidence = resolve_protocol_entity(
         source_entity, declaration, source_entities=source_entities
     )
@@ -876,7 +927,14 @@ def compile_is_runtime_singleton(
     _ = cfg
     marker = "is_runtime_singleton"
     if source_entity.kind != "class":
-        return invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(
+            source_entity,
+            declaration,
+            marker,
+            "class",
+            rule_id_prefix=f"DYN008/{marker}/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+        )
     params_kwargs = dict(declaration.params)
     return _pattern_rule(
         source_entity,
@@ -903,7 +961,14 @@ def compile_enforce_runtime_observer(
     _ = cfg
     marker = "enforce_runtime_observer"
     if source_entity.kind != "class":
-        return invalid_target(source_entity, declaration, marker, "class")
+        return invalid_target(
+            source_entity,
+            declaration,
+            marker,
+            "class",
+            rule_id_prefix=f"DYN008/{marker}/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
+        )
     params_kwargs = dict(declaration.params)
     problem = (
         _identifier_problem(params_kwargs, "subscribe", required=True)
@@ -959,7 +1024,12 @@ def compile_require_runtime_delegation(
     marker = "require_runtime_delegation"
     if source_entity.kind not in _SUPPORTED_KINDS:
         return invalid_target(
-            source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
+            source_entity,
+            declaration,
+            marker,
+            sorted(_SUPPORTED_KINDS),
+            rule_id_prefix=f"DYN008/{marker}/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
         )
     params_kwargs = dict(declaration.params)
     spy = params_kwargs.get("spy")
@@ -1008,7 +1078,12 @@ def compile_forbid_foreign_writes(
     params_kwargs = dict(declaration.params)
     if source_entity.kind not in _SUPPORTED_KINDS:
         return invalid_target(
-            source_entity, declaration, marker, sorted(_SUPPORTED_KINDS)
+            source_entity,
+            declaration,
+            marker,
+            sorted(_SUPPORTED_KINDS),
+            rule_id_prefix="DYN003/forbid_foreign_writes/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
         )
     problem = runtime_cases_problem(params_kwargs, source_entity.kind, marker)
     rejected = rejected_declaration(
@@ -1059,7 +1134,12 @@ def compile_forbid_runtime_imports(
 
     if source_entity.kind != "module":
         return invalid_target(
-            source_entity, declaration, "forbid_runtime_imports", "module"
+            source_entity,
+            declaration,
+            "forbid_runtime_imports",
+            "module",
+            rule_id_prefix="DYN002/forbid_runtime_imports/invalid_declaration",
+            rule_id_suffix=rule_id_suffix,
         )
 
     forbidden = _module_names(params_kwargs.get("forbidden", []))

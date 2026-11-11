@@ -33,7 +33,7 @@ from pythonarchtesting.runner.source_prep import prepare_source
 _INIT = """
 from typing import Annotated
 
-from pythonarchtesting.rules import architecture_entry
+from pythonarchtesting.rules import architecture_entry, enforce_layers, forbid_cycles
 
 INIT
 """
@@ -92,9 +92,9 @@ _CASES = '[{"args": [1]}]'
 _DECLARED: dict[str, tuple[str, str]] = {
     "architecture_entry": ("INIT", f'entry="app.handler", cases={_CASES}'),
     "does_not_have": ("CLASS", '"secret"'),
-    "enforce_layers": ("MODULE", '"app", "models"'),
+    "enforce_layers": ("INIT", '"app", "models"'),
     "enforce_reference_calls": ("FUNCTION", f"cases={_CASES}"),
-    "forbid_cycles": ("MODULE", ""),
+    "forbid_cycles": ("INIT", ""),
     "forbid_imports": ("MODULE", '"requests"'),
     "forbid_runtime_calls": ("FUNCTION", f'"models", cases={_CASES}'),
     "forbid_runtime_instantiation": ("FUNCTION", f'"models", cases={_CASES}'),

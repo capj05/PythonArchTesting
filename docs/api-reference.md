@@ -740,7 +740,7 @@ Notes:
 - If `constructor_kind="auto"` and the source class has neither a declared
   constructor nor a dataclass-generated `__init__`, the rule is not emitted and
   a compiler evidence item is produced.
-- Placement is class-level only; a non-class placement emits `compiler_invalid_target` evidence.
+- Placement is class-level only; a non-class placement makes the declaration invalid: a `compiler_invalid_param` sentinel for `target_kind` and `compiler_invalid_target` evidence (see [markers/README.md § Other Invalid Argument Values](markers/README.md#other-invalid-argument-values)).
 
 Example — reference with a constructor contract:
 

@@ -18,6 +18,7 @@ from ..common import (
     options_problem,
     reject_invalid_param,
     reject_invalid_severity,
+    reject_misplaced,
     with_rule_id_suffix,
     without_none,
 )
@@ -152,16 +153,23 @@ def _target_kind_error(
     declaration: DeclarationEntry,
     *,
     payload: dict[str, Any],
+    rule_id: str,
+    rule_id_suffix: str,
+    valid: list[str],
 ) -> tuple[list[Any], list[Evidence], list[Any]]:
-    compiler_evidence = [
+    return reject_misplaced(
+        source_entity,
         declaration_evidence(
             source_entity,
             declaration,
             evidence_type="compiler_invalid_target",
             payload=payload,
-        )
-    ]
-    return [], compiler_evidence, []
+        ),
+        marker=declaration.kind or "implements_protocol",
+        rule_id_prefix=f"{rule_id.rsplit('/', 1)[0]}/invalid_declaration",
+        rule_id_suffix=rule_id_suffix,
+        valid=valid,
+    )
 
 
 def _protocol_rule_metadata(
@@ -228,6 +236,9 @@ def _compile_protocol_rule(
             source_entity,
             declaration,
             payload=payload,
+            rule_id=rule_id,
+            rule_id_suffix=rule_id_suffix,
+            valid=["class"],
         )
     if expected_kind == "function_or_method" and source_entity.kind not in {
         "function",
@@ -244,6 +255,9 @@ def _compile_protocol_rule(
             source_entity,
             declaration,
             payload=payload,
+            rule_id=rule_id,
+            rule_id_suffix=rule_id_suffix,
+            valid=["function", "method"],
         )
 
     compiler_evidence: List[Evidence] = []
