@@ -1,0 +1,1 @@
+[{"id": "marp15_marek", "violates": false, "reason": "Report functions call only shape.area() and shape.describe() and shapes implement the abstract interface via inheritance, with no isinstance or type checks.", "explanation": ""}]

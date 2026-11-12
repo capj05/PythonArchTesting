@@ -1,0 +1,8 @@
+[
+  {
+    "id": "benz20_benesova",
+    "violates": false,
+    "reason": "PriceCalculator receives the discount in its constructor and only calls self.discount.apply(), with no type checks or internal creation of discounts; the choice of discount is made in checkout, as the assignment requires.",
+    "explanation": ""
+  }
+]

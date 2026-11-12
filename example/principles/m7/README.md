@@ -22,7 +22,9 @@ No script here runs an agent; the leader does, with the prompts below.
 Per principle: 3 models (haiku, sonnet, opus) x 2 variants x 2 runs = 12
 solutions, each by a fresh agent with prompt N (role `solver-novice`):
 
-- `plain`: the pilot's `assignment.md` unchanged;
+- `plain`: the principle's `assignment.md` unchanged: the pilot's
+  (`../pilot/<p>/assignment.md`) when it exists, else the catalogue's
+  (`../<p>/assignment.md`; `harness.assignment`, nothing is copied);
 - `no-principle`: the same without the principle's section. `stage.py` cuts
   it (`harness.without_principle`): the one level-2 section `## Princip…` /
   `## Principle…` up to the next heading of level 1 or 2, and every other
@@ -34,10 +36,19 @@ solutions, each by a fresh agent with prompt N (role `solver-novice`):
 The packages are named `<ident>_<surname>` as students submit them, from a
 fixed list (`harness.NAMES`): one student per (model, variant, run), the
 same twelve for every principle (a class solves every task), none of them a
-name of the demo or of M6. Stage 1 is `encapsulation` and `io_separation`
-(24 solutions, 72 judge runs); any principle with `../<p>/principle.toml`,
-`../<p>/task.toml` and a pilot assignment (`../pilot/<p>/assignment.md`) can
-be added the same way (`stage.py plan <p>`).
+name of the demo or of M6. The stages (`harness.STAGES`):
+
+- **stage 1**: `encapsulation` and `io_separation`, with the pilot's
+  assignments (24 solutions, 72 judge runs);
+- **stage 2** (only after the decision of 2026-11-10 12:00):
+  `polymorphism` and `strategy`, with the catalogue's assignments
+  (`../polymorphism/assignment.md`, `../strategy/assignment.md`; the pilot
+  never had them), the same 12 students per principle (24 solutions, 72
+  judge runs).
+
+Any principle with `../<p>/principle.toml`, `../<p>/task.toml` and an
+assignment (the pilot's or `../<p>/assignment.md`) can be added the same
+way: list it in a stage of `harness.STAGES`, then `stage.py plan <p>`.
 
 ## Layout
 
@@ -74,8 +85,8 @@ for is kept beside it in `<stage>.stage.json`. Stages go under
 
 | Role | `<stage>` holds | The agent writes | `collect` puts it to |
 |---|---|---|---|
-| `solver-novice <p> --model M --variant V --run N` | `assignment.md` (`plain`: the pilot's; `no-principle`: cut), `submission.txt` (M6's: the package `S/` with `__init__.py`) | `S/` | `results/code/<p>/S/` (files that parse) + `results/meta/<p>/S.json` |
-| `judge <p> S --run <model>-<n>` | `assignment.md` (the pilot's, whole), `whole/S.md` (the solution, every file) | `verdicts.json` | `results/judgments/<run>/<p>/S.json` (one valid entry, id `S`) |
+| `solver-novice <p> --model M --variant V --run N` | `assignment.md` (`plain`: the principle's, see Design; `no-principle`: cut), `submission.txt` (M6's: the package `S/` with `__init__.py`) | `S/` | `results/code/<p>/S/` (files that parse) + `results/meta/<p>/S.json` |
+| `judge <p> S --run <model>-<n>` | `assignment.md` (the principle's, whole), `whole/S.md` (the solution, every file) | `verdicts.json` | `results/judgments/<run>/<p>/S.json` (one valid entry, id `S`) |
 
 `S` is the fixed student of (M, V, N). `collect` replaces an existing
 destination only with `--force`. Every `collect` is appended to
@@ -92,18 +103,25 @@ once. Every agent step is: run the row's "Stage it" command, give a fresh
 agent of the row's model the prompt below with `<stage>` the printed path,
 then `.venv/bin/python example/principles/m7/stage.py collect <stage>`.
 
-1. **Solvers** S1-S24 (prompt N), in any order.
-2. **Judges** J1-J72 (prompt J); a judge's row needs its solution collected.
+1. **Solvers** S1-S24 of the stage's dispatch list (prompt N), in any
+   order.
+2. **Judges** J1-J72 of the stage's dispatch list (prompt J, «name» as the
+   list says); a judge's row needs its solution collected.
    Do the runs one after another (`sonnet-1` for all, then `sonnet-2`, then
    `haiku-1`); a judge never sees another judge's verdict.
 3. **Forms** (2026-11-10): `.venv/bin/python example/principles/m7/forms.py
    review` writes `review.md`, the sample: every solution that **any**
    decider flags (the tool, computed then, or any judge run), every one on
    which they do not all agree (or the tool gives no verdict), and 6 drawn
-   with seed 11 from the rest (no one flags, all agree), over all
-   principles; `forms.py review --all` puts every solution in the form
-   instead. The form is **blind**: per solution only its path, the
-   assignment's path and the fields `violates:` / `note:`; neither the
+   with seed 11 from the rest (no one flags, all agree) **per stage**: each
+   stage draws from its own rest, so stage 2 gets a random check of its own
+   and stage 1's draw is the same with or without stage 2's solutions;
+   `forms.py review --all` puts every solution in the form instead. When
+   stage 2 is collected after `review.md` was generated, regenerate it
+   (`--force`, keep a copy first): the stage-1 items stay the same as long
+   as the tool's and the judges' verdicts on them do, so the owner's
+   answers can be copied over. The form is **blind**: per solution only its
+   path, the assignment's path and the fields `violates:` / `note:`; neither the
    tool's nor the judges' verdicts, nor error ids, nor why a solution is in
    the sample. Its first line, an HTML comment the owner must not edit, holds
    (base64 JSON) the item set, the tool's verdicts at generation time and
@@ -150,8 +168,8 @@ here from the top of `results.md`):
 
 1. **Sample-based ground truth, enriched.** The owner decides only the
    solutions of `review.md`: every one a decider flags or the deciders
-   dispute, plus 6 drawn from the rest. Detection and FP are therefore
-   **counts on that sample**, not rates on all solutions; they are reported
+   dispute, plus 6 drawn from the rest of each stage. Detection and FP are
+   therefore **counts on that sample**, not rates on all solutions; they are reported
    as counts (`detects 1/1`), never as percentages, and the clean rest
    outside the sample is assumed clean, not checked. `forms.py review --all`
    removes this threat at the cost of the owner's time.
@@ -174,7 +192,16 @@ here from the top of `results.md`):
    principle asks for. Especially `io_separation`: `format_summary` returns a
    string and `main()` is the user interface, so even the `no-principle`
    solvers are led to separate logic from I/O, and few natural violations
-   are to be expected there.
+   are to be expected there. In stage 2 the cut leaves the skeleton in the
+   assignment: `polymorphism` still shows `class Shape(ABC)` with
+   `@abstractmethod` and `class Circle(Shape)` (and `Shape()` raising
+   `TypeError` among the error cases), `strategy` still has
+   `PriceCalculator(discount)` keep the discount it gets and `checkout`
+   pick it by the code. So the errors `not_a_subclass` and `concrete_base`
+   (polymorphism) can occur naturally only rarely, even under
+   `no-principle`, and by the same reasoning (not measured) so can
+   `hardcoded_strategy` (strategy); their absence is not a detection
+   result. The assignments are not changed for E2.
 7. **The owner is the tool's author and the rater.** The ground truth and
    the VO5 ratings come from the person who built the tool; the blind form
    (no verdicts, no reason for the sample) reduces, but does not remove, the
@@ -196,6 +223,15 @@ here from the top of `results.md`):
 11. **VO5 ceiling.** The M6 rater (Opus) gave all 6 explanations 2, 2, 2;
     owner x rater agreement can only show whether the owner also gives the
     maximum, not whether the rater discriminates.
+12. **The ground truth was made with Claude's recommendation.** On
+    2026-11-11 the owner filled both forms item by item with Claude (Opus),
+    which showed each solution and explanation and recommended a verdict with
+    its reasons; the owner accepted every recommendation (15/15 solutions,
+    6/6 explanations). The judges, the M6 rater and the advisor are one model
+    family (threat 3), so agreement of the judges with this ground truth is
+    in part agreement of Claude with Claude. Items 2, 3 and 6 of `review.md`
+    were no longer blind: the owner knew that a decider had flagged them. Each
+    answer's `note:` says so.
 
 ## Prompts
 
@@ -233,7 +269,15 @@ student's package name as the id, as in M6; Sonnet for `sonnet-*`, Haiku for
 > "done".
 
 «name» is the principle's `name` from `describe_principle`
-(`.venv/bin/python example/principles/m6/tools.py describe <p>`).
+(`.venv/bin/python example/principles/m6/tools.py describe <p>`). The
+dispatch list of each stage prints it per principle; as of 2026-11-07:
+
+| Principle | Stage | «name» |
+|---|---|---|
+| `encapsulation` | 1 | Encapsulation |
+| `io_separation` | 1 | Logic apart from input and output |
+| `polymorphism` | 2 | Inheritance and polymorphism instead of branching on the type |
+| `strategy` | 2 | Interchangeable behaviour passed in from outside |
 
 ## Dispatch list, stage 1
 
@@ -273,6 +317,8 @@ Solvers: 24 runs (prompt N, the model of the row).
 | S24 | `io_separation` | opus | no-principle | 2 | sedo22_sedlacek | `.venv/bin/python example/principles/m7/stage.py solver-novice io_separation --model opus --variant no-principle --run 2` | `results/code/io_separation/sedo22_sedlacek/` |
 
 Judges: 72 runs (prompt J; `sonnet-*` Sonnet, `haiku-*` Haiku), each after the row's solution is collected.
+
+«name» in prompt J: `encapsulation`: Encapsulation; `io_separation`: Logic apart from input and output.
 
 | # | Principle | Judge run | Student | Stage it | `collect` puts it to |
 |---|---|---|---|---|---|
@@ -349,3 +395,121 @@ Judges: 72 runs (prompt J; `sonnet-*` Sonnet, `haiku-*` Haiku), each after the r
 | J71 | `io_separation` | haiku-1 | fial21_fiala | `.venv/bin/python example/principles/m7/stage.py judge io_separation fial21_fiala --run haiku-1` | `results/judgments/haiku-1/io_separation/fial21_fiala.json` |
 | J72 | `io_separation` | haiku-1 | sedo22_sedlacek | `.venv/bin/python example/principles/m7/stage.py judge io_separation sedo22_sedlacek --run haiku-1` | `results/judgments/haiku-1/io_separation/sedo22_sedlacek.json` |
 <!-- plan:end -->
+
+## Dispatch list, stage 2
+
+Only after the decision of 2026-11-10 12:00 (both tasks `accepted: true`).
+The output of `.venv/bin/python example/principles/m7/stage.py plan
+polymorphism strategy` (the self-test checks that it is the same). The
+students are the same twelve as in stage 1; the row numbers start again at
+S1 and J1, so name a row by stage and number ("stage 2, S5").
+
+<!-- plan2:start -->
+Solvers: 24 runs (prompt N, the model of the row).
+
+| # | Principle | Model | Variant | Run | Student | Stage it | `collect` puts it to |
+|---|---|---|---|---|---|---|---|
+| S1 | `polymorphism` | haiku | plain | 1 | proa11_prochazka | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model haiku --variant plain --run 1` | `results/code/polymorphism/proa11_prochazka/` |
+| S2 | `polymorphism` | haiku | plain | 2 | kucm12_kucera | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model haiku --variant plain --run 2` | `results/code/polymorphism/kucm12_kucera/` |
+| S3 | `polymorphism` | haiku | no-principle | 1 | cerl13_cerna | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model haiku --variant no-principle --run 1` | `results/code/polymorphism/cerl13_cerna/` |
+| S4 | `polymorphism` | haiku | no-principle | 2 | pokt14_pokorny | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model haiku --variant no-principle --run 2` | `results/code/polymorphism/pokt14_pokorny/` |
+| S5 | `polymorphism` | sonnet | plain | 1 | marp15_marek | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model sonnet --variant plain --run 1` | `results/code/polymorphism/marp15_marek/` |
+| S6 | `polymorphism` | sonnet | plain | 2 | posk16_pospisilova | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model sonnet --variant plain --run 2` | `results/code/polymorphism/posk16_pospisilova/` |
+| S7 | `polymorphism` | sonnet | no-principle | 1 | hajd17_hajek | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model sonnet --variant no-principle --run 1` | `results/code/polymorphism/hajd17_hajek/` |
+| S8 | `polymorphism` | sonnet | no-principle | 2 | jele18_jelinek | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model sonnet --variant no-principle --run 2` | `results/code/polymorphism/jele18_jelinek/` |
+| S9 | `polymorphism` | opus | plain | 1 | ruzv19_ruzicka | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model opus --variant plain --run 1` | `results/code/polymorphism/ruzv19_ruzicka/` |
+| S10 | `polymorphism` | opus | plain | 2 | benz20_benesova | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model opus --variant plain --run 2` | `results/code/polymorphism/benz20_benesova/` |
+| S11 | `polymorphism` | opus | no-principle | 1 | fial21_fiala | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model opus --variant no-principle --run 1` | `results/code/polymorphism/fial21_fiala/` |
+| S12 | `polymorphism` | opus | no-principle | 2 | sedo22_sedlacek | `.venv/bin/python example/principles/m7/stage.py solver-novice polymorphism --model opus --variant no-principle --run 2` | `results/code/polymorphism/sedo22_sedlacek/` |
+| S13 | `strategy` | haiku | plain | 1 | proa11_prochazka | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model haiku --variant plain --run 1` | `results/code/strategy/proa11_prochazka/` |
+| S14 | `strategy` | haiku | plain | 2 | kucm12_kucera | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model haiku --variant plain --run 2` | `results/code/strategy/kucm12_kucera/` |
+| S15 | `strategy` | haiku | no-principle | 1 | cerl13_cerna | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model haiku --variant no-principle --run 1` | `results/code/strategy/cerl13_cerna/` |
+| S16 | `strategy` | haiku | no-principle | 2 | pokt14_pokorny | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model haiku --variant no-principle --run 2` | `results/code/strategy/pokt14_pokorny/` |
+| S17 | `strategy` | sonnet | plain | 1 | marp15_marek | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model sonnet --variant plain --run 1` | `results/code/strategy/marp15_marek/` |
+| S18 | `strategy` | sonnet | plain | 2 | posk16_pospisilova | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model sonnet --variant plain --run 2` | `results/code/strategy/posk16_pospisilova/` |
+| S19 | `strategy` | sonnet | no-principle | 1 | hajd17_hajek | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model sonnet --variant no-principle --run 1` | `results/code/strategy/hajd17_hajek/` |
+| S20 | `strategy` | sonnet | no-principle | 2 | jele18_jelinek | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model sonnet --variant no-principle --run 2` | `results/code/strategy/jele18_jelinek/` |
+| S21 | `strategy` | opus | plain | 1 | ruzv19_ruzicka | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model opus --variant plain --run 1` | `results/code/strategy/ruzv19_ruzicka/` |
+| S22 | `strategy` | opus | plain | 2 | benz20_benesova | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model opus --variant plain --run 2` | `results/code/strategy/benz20_benesova/` |
+| S23 | `strategy` | opus | no-principle | 1 | fial21_fiala | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model opus --variant no-principle --run 1` | `results/code/strategy/fial21_fiala/` |
+| S24 | `strategy` | opus | no-principle | 2 | sedo22_sedlacek | `.venv/bin/python example/principles/m7/stage.py solver-novice strategy --model opus --variant no-principle --run 2` | `results/code/strategy/sedo22_sedlacek/` |
+
+Judges: 72 runs (prompt J; `sonnet-*` Sonnet, `haiku-*` Haiku), each after the row's solution is collected.
+
+«name» in prompt J: `polymorphism`: Inheritance and polymorphism instead of branching on the type; `strategy`: Interchangeable behaviour passed in from outside.
+
+| # | Principle | Judge run | Student | Stage it | `collect` puts it to |
+|---|---|---|---|---|---|
+| J1 | `polymorphism` | sonnet-1 | proa11_prochazka | `.venv/bin/python example/principles/m7/stage.py judge polymorphism proa11_prochazka --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/proa11_prochazka.json` |
+| J2 | `polymorphism` | sonnet-1 | kucm12_kucera | `.venv/bin/python example/principles/m7/stage.py judge polymorphism kucm12_kucera --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/kucm12_kucera.json` |
+| J3 | `polymorphism` | sonnet-1 | cerl13_cerna | `.venv/bin/python example/principles/m7/stage.py judge polymorphism cerl13_cerna --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/cerl13_cerna.json` |
+| J4 | `polymorphism` | sonnet-1 | pokt14_pokorny | `.venv/bin/python example/principles/m7/stage.py judge polymorphism pokt14_pokorny --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/pokt14_pokorny.json` |
+| J5 | `polymorphism` | sonnet-1 | marp15_marek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism marp15_marek --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/marp15_marek.json` |
+| J6 | `polymorphism` | sonnet-1 | posk16_pospisilova | `.venv/bin/python example/principles/m7/stage.py judge polymorphism posk16_pospisilova --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/posk16_pospisilova.json` |
+| J7 | `polymorphism` | sonnet-1 | hajd17_hajek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism hajd17_hajek --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/hajd17_hajek.json` |
+| J8 | `polymorphism` | sonnet-1 | jele18_jelinek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism jele18_jelinek --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/jele18_jelinek.json` |
+| J9 | `polymorphism` | sonnet-1 | ruzv19_ruzicka | `.venv/bin/python example/principles/m7/stage.py judge polymorphism ruzv19_ruzicka --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/ruzv19_ruzicka.json` |
+| J10 | `polymorphism` | sonnet-1 | benz20_benesova | `.venv/bin/python example/principles/m7/stage.py judge polymorphism benz20_benesova --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/benz20_benesova.json` |
+| J11 | `polymorphism` | sonnet-1 | fial21_fiala | `.venv/bin/python example/principles/m7/stage.py judge polymorphism fial21_fiala --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/fial21_fiala.json` |
+| J12 | `polymorphism` | sonnet-1 | sedo22_sedlacek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism sedo22_sedlacek --run sonnet-1` | `results/judgments/sonnet-1/polymorphism/sedo22_sedlacek.json` |
+| J13 | `strategy` | sonnet-1 | proa11_prochazka | `.venv/bin/python example/principles/m7/stage.py judge strategy proa11_prochazka --run sonnet-1` | `results/judgments/sonnet-1/strategy/proa11_prochazka.json` |
+| J14 | `strategy` | sonnet-1 | kucm12_kucera | `.venv/bin/python example/principles/m7/stage.py judge strategy kucm12_kucera --run sonnet-1` | `results/judgments/sonnet-1/strategy/kucm12_kucera.json` |
+| J15 | `strategy` | sonnet-1 | cerl13_cerna | `.venv/bin/python example/principles/m7/stage.py judge strategy cerl13_cerna --run sonnet-1` | `results/judgments/sonnet-1/strategy/cerl13_cerna.json` |
+| J16 | `strategy` | sonnet-1 | pokt14_pokorny | `.venv/bin/python example/principles/m7/stage.py judge strategy pokt14_pokorny --run sonnet-1` | `results/judgments/sonnet-1/strategy/pokt14_pokorny.json` |
+| J17 | `strategy` | sonnet-1 | marp15_marek | `.venv/bin/python example/principles/m7/stage.py judge strategy marp15_marek --run sonnet-1` | `results/judgments/sonnet-1/strategy/marp15_marek.json` |
+| J18 | `strategy` | sonnet-1 | posk16_pospisilova | `.venv/bin/python example/principles/m7/stage.py judge strategy posk16_pospisilova --run sonnet-1` | `results/judgments/sonnet-1/strategy/posk16_pospisilova.json` |
+| J19 | `strategy` | sonnet-1 | hajd17_hajek | `.venv/bin/python example/principles/m7/stage.py judge strategy hajd17_hajek --run sonnet-1` | `results/judgments/sonnet-1/strategy/hajd17_hajek.json` |
+| J20 | `strategy` | sonnet-1 | jele18_jelinek | `.venv/bin/python example/principles/m7/stage.py judge strategy jele18_jelinek --run sonnet-1` | `results/judgments/sonnet-1/strategy/jele18_jelinek.json` |
+| J21 | `strategy` | sonnet-1 | ruzv19_ruzicka | `.venv/bin/python example/principles/m7/stage.py judge strategy ruzv19_ruzicka --run sonnet-1` | `results/judgments/sonnet-1/strategy/ruzv19_ruzicka.json` |
+| J22 | `strategy` | sonnet-1 | benz20_benesova | `.venv/bin/python example/principles/m7/stage.py judge strategy benz20_benesova --run sonnet-1` | `results/judgments/sonnet-1/strategy/benz20_benesova.json` |
+| J23 | `strategy` | sonnet-1 | fial21_fiala | `.venv/bin/python example/principles/m7/stage.py judge strategy fial21_fiala --run sonnet-1` | `results/judgments/sonnet-1/strategy/fial21_fiala.json` |
+| J24 | `strategy` | sonnet-1 | sedo22_sedlacek | `.venv/bin/python example/principles/m7/stage.py judge strategy sedo22_sedlacek --run sonnet-1` | `results/judgments/sonnet-1/strategy/sedo22_sedlacek.json` |
+| J25 | `polymorphism` | sonnet-2 | proa11_prochazka | `.venv/bin/python example/principles/m7/stage.py judge polymorphism proa11_prochazka --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/proa11_prochazka.json` |
+| J26 | `polymorphism` | sonnet-2 | kucm12_kucera | `.venv/bin/python example/principles/m7/stage.py judge polymorphism kucm12_kucera --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/kucm12_kucera.json` |
+| J27 | `polymorphism` | sonnet-2 | cerl13_cerna | `.venv/bin/python example/principles/m7/stage.py judge polymorphism cerl13_cerna --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/cerl13_cerna.json` |
+| J28 | `polymorphism` | sonnet-2 | pokt14_pokorny | `.venv/bin/python example/principles/m7/stage.py judge polymorphism pokt14_pokorny --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/pokt14_pokorny.json` |
+| J29 | `polymorphism` | sonnet-2 | marp15_marek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism marp15_marek --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/marp15_marek.json` |
+| J30 | `polymorphism` | sonnet-2 | posk16_pospisilova | `.venv/bin/python example/principles/m7/stage.py judge polymorphism posk16_pospisilova --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/posk16_pospisilova.json` |
+| J31 | `polymorphism` | sonnet-2 | hajd17_hajek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism hajd17_hajek --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/hajd17_hajek.json` |
+| J32 | `polymorphism` | sonnet-2 | jele18_jelinek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism jele18_jelinek --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/jele18_jelinek.json` |
+| J33 | `polymorphism` | sonnet-2 | ruzv19_ruzicka | `.venv/bin/python example/principles/m7/stage.py judge polymorphism ruzv19_ruzicka --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/ruzv19_ruzicka.json` |
+| J34 | `polymorphism` | sonnet-2 | benz20_benesova | `.venv/bin/python example/principles/m7/stage.py judge polymorphism benz20_benesova --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/benz20_benesova.json` |
+| J35 | `polymorphism` | sonnet-2 | fial21_fiala | `.venv/bin/python example/principles/m7/stage.py judge polymorphism fial21_fiala --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/fial21_fiala.json` |
+| J36 | `polymorphism` | sonnet-2 | sedo22_sedlacek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism sedo22_sedlacek --run sonnet-2` | `results/judgments/sonnet-2/polymorphism/sedo22_sedlacek.json` |
+| J37 | `strategy` | sonnet-2 | proa11_prochazka | `.venv/bin/python example/principles/m7/stage.py judge strategy proa11_prochazka --run sonnet-2` | `results/judgments/sonnet-2/strategy/proa11_prochazka.json` |
+| J38 | `strategy` | sonnet-2 | kucm12_kucera | `.venv/bin/python example/principles/m7/stage.py judge strategy kucm12_kucera --run sonnet-2` | `results/judgments/sonnet-2/strategy/kucm12_kucera.json` |
+| J39 | `strategy` | sonnet-2 | cerl13_cerna | `.venv/bin/python example/principles/m7/stage.py judge strategy cerl13_cerna --run sonnet-2` | `results/judgments/sonnet-2/strategy/cerl13_cerna.json` |
+| J40 | `strategy` | sonnet-2 | pokt14_pokorny | `.venv/bin/python example/principles/m7/stage.py judge strategy pokt14_pokorny --run sonnet-2` | `results/judgments/sonnet-2/strategy/pokt14_pokorny.json` |
+| J41 | `strategy` | sonnet-2 | marp15_marek | `.venv/bin/python example/principles/m7/stage.py judge strategy marp15_marek --run sonnet-2` | `results/judgments/sonnet-2/strategy/marp15_marek.json` |
+| J42 | `strategy` | sonnet-2 | posk16_pospisilova | `.venv/bin/python example/principles/m7/stage.py judge strategy posk16_pospisilova --run sonnet-2` | `results/judgments/sonnet-2/strategy/posk16_pospisilova.json` |
+| J43 | `strategy` | sonnet-2 | hajd17_hajek | `.venv/bin/python example/principles/m7/stage.py judge strategy hajd17_hajek --run sonnet-2` | `results/judgments/sonnet-2/strategy/hajd17_hajek.json` |
+| J44 | `strategy` | sonnet-2 | jele18_jelinek | `.venv/bin/python example/principles/m7/stage.py judge strategy jele18_jelinek --run sonnet-2` | `results/judgments/sonnet-2/strategy/jele18_jelinek.json` |
+| J45 | `strategy` | sonnet-2 | ruzv19_ruzicka | `.venv/bin/python example/principles/m7/stage.py judge strategy ruzv19_ruzicka --run sonnet-2` | `results/judgments/sonnet-2/strategy/ruzv19_ruzicka.json` |
+| J46 | `strategy` | sonnet-2 | benz20_benesova | `.venv/bin/python example/principles/m7/stage.py judge strategy benz20_benesova --run sonnet-2` | `results/judgments/sonnet-2/strategy/benz20_benesova.json` |
+| J47 | `strategy` | sonnet-2 | fial21_fiala | `.venv/bin/python example/principles/m7/stage.py judge strategy fial21_fiala --run sonnet-2` | `results/judgments/sonnet-2/strategy/fial21_fiala.json` |
+| J48 | `strategy` | sonnet-2 | sedo22_sedlacek | `.venv/bin/python example/principles/m7/stage.py judge strategy sedo22_sedlacek --run sonnet-2` | `results/judgments/sonnet-2/strategy/sedo22_sedlacek.json` |
+| J49 | `polymorphism` | haiku-1 | proa11_prochazka | `.venv/bin/python example/principles/m7/stage.py judge polymorphism proa11_prochazka --run haiku-1` | `results/judgments/haiku-1/polymorphism/proa11_prochazka.json` |
+| J50 | `polymorphism` | haiku-1 | kucm12_kucera | `.venv/bin/python example/principles/m7/stage.py judge polymorphism kucm12_kucera --run haiku-1` | `results/judgments/haiku-1/polymorphism/kucm12_kucera.json` |
+| J51 | `polymorphism` | haiku-1 | cerl13_cerna | `.venv/bin/python example/principles/m7/stage.py judge polymorphism cerl13_cerna --run haiku-1` | `results/judgments/haiku-1/polymorphism/cerl13_cerna.json` |
+| J52 | `polymorphism` | haiku-1 | pokt14_pokorny | `.venv/bin/python example/principles/m7/stage.py judge polymorphism pokt14_pokorny --run haiku-1` | `results/judgments/haiku-1/polymorphism/pokt14_pokorny.json` |
+| J53 | `polymorphism` | haiku-1 | marp15_marek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism marp15_marek --run haiku-1` | `results/judgments/haiku-1/polymorphism/marp15_marek.json` |
+| J54 | `polymorphism` | haiku-1 | posk16_pospisilova | `.venv/bin/python example/principles/m7/stage.py judge polymorphism posk16_pospisilova --run haiku-1` | `results/judgments/haiku-1/polymorphism/posk16_pospisilova.json` |
+| J55 | `polymorphism` | haiku-1 | hajd17_hajek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism hajd17_hajek --run haiku-1` | `results/judgments/haiku-1/polymorphism/hajd17_hajek.json` |
+| J56 | `polymorphism` | haiku-1 | jele18_jelinek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism jele18_jelinek --run haiku-1` | `results/judgments/haiku-1/polymorphism/jele18_jelinek.json` |
+| J57 | `polymorphism` | haiku-1 | ruzv19_ruzicka | `.venv/bin/python example/principles/m7/stage.py judge polymorphism ruzv19_ruzicka --run haiku-1` | `results/judgments/haiku-1/polymorphism/ruzv19_ruzicka.json` |
+| J58 | `polymorphism` | haiku-1 | benz20_benesova | `.venv/bin/python example/principles/m7/stage.py judge polymorphism benz20_benesova --run haiku-1` | `results/judgments/haiku-1/polymorphism/benz20_benesova.json` |
+| J59 | `polymorphism` | haiku-1 | fial21_fiala | `.venv/bin/python example/principles/m7/stage.py judge polymorphism fial21_fiala --run haiku-1` | `results/judgments/haiku-1/polymorphism/fial21_fiala.json` |
+| J60 | `polymorphism` | haiku-1 | sedo22_sedlacek | `.venv/bin/python example/principles/m7/stage.py judge polymorphism sedo22_sedlacek --run haiku-1` | `results/judgments/haiku-1/polymorphism/sedo22_sedlacek.json` |
+| J61 | `strategy` | haiku-1 | proa11_prochazka | `.venv/bin/python example/principles/m7/stage.py judge strategy proa11_prochazka --run haiku-1` | `results/judgments/haiku-1/strategy/proa11_prochazka.json` |
+| J62 | `strategy` | haiku-1 | kucm12_kucera | `.venv/bin/python example/principles/m7/stage.py judge strategy kucm12_kucera --run haiku-1` | `results/judgments/haiku-1/strategy/kucm12_kucera.json` |
+| J63 | `strategy` | haiku-1 | cerl13_cerna | `.venv/bin/python example/principles/m7/stage.py judge strategy cerl13_cerna --run haiku-1` | `results/judgments/haiku-1/strategy/cerl13_cerna.json` |
+| J64 | `strategy` | haiku-1 | pokt14_pokorny | `.venv/bin/python example/principles/m7/stage.py judge strategy pokt14_pokorny --run haiku-1` | `results/judgments/haiku-1/strategy/pokt14_pokorny.json` |
+| J65 | `strategy` | haiku-1 | marp15_marek | `.venv/bin/python example/principles/m7/stage.py judge strategy marp15_marek --run haiku-1` | `results/judgments/haiku-1/strategy/marp15_marek.json` |
+| J66 | `strategy` | haiku-1 | posk16_pospisilova | `.venv/bin/python example/principles/m7/stage.py judge strategy posk16_pospisilova --run haiku-1` | `results/judgments/haiku-1/strategy/posk16_pospisilova.json` |
+| J67 | `strategy` | haiku-1 | hajd17_hajek | `.venv/bin/python example/principles/m7/stage.py judge strategy hajd17_hajek --run haiku-1` | `results/judgments/haiku-1/strategy/hajd17_hajek.json` |
+| J68 | `strategy` | haiku-1 | jele18_jelinek | `.venv/bin/python example/principles/m7/stage.py judge strategy jele18_jelinek --run haiku-1` | `results/judgments/haiku-1/strategy/jele18_jelinek.json` |
+| J69 | `strategy` | haiku-1 | ruzv19_ruzicka | `.venv/bin/python example/principles/m7/stage.py judge strategy ruzv19_ruzicka --run haiku-1` | `results/judgments/haiku-1/strategy/ruzv19_ruzicka.json` |
+| J70 | `strategy` | haiku-1 | benz20_benesova | `.venv/bin/python example/principles/m7/stage.py judge strategy benz20_benesova --run haiku-1` | `results/judgments/haiku-1/strategy/benz20_benesova.json` |
+| J71 | `strategy` | haiku-1 | fial21_fiala | `.venv/bin/python example/principles/m7/stage.py judge strategy fial21_fiala --run haiku-1` | `results/judgments/haiku-1/strategy/fial21_fiala.json` |
+| J72 | `strategy` | haiku-1 | sedo22_sedlacek | `.venv/bin/python example/principles/m7/stage.py judge strategy sedo22_sedlacek --run haiku-1` | `results/judgments/haiku-1/strategy/sedo22_sedlacek.json` |
+<!-- plan2:end -->

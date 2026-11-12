@@ -1,0 +1,8 @@
+[
+  {
+    "id": "posk16_pospisilova",
+    "violates": false,
+    "reason": "report.py calls only s.area() and s.describe() with no isinstance or type checks, and each Shape subclass implements its own area and describe, so the principle is respected.",
+    "explanation": ""
+  }
+]

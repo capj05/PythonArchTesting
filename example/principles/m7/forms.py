@@ -4,8 +4,11 @@
   sample of the solutions: every solution that any decider flags (the tool,
   computed now with the current tool, or any judge run of ``--judges``),
   every one on which they do not all agree (or the tool gives no verdict),
-  and ``--drawn`` (6) of the rest, drawn with the seed ``harness.REVIEW_SEED``
-  from all principles; ``--all`` puts every solution in the form. The form
+  and ``--drawn`` (6) of the rest **per stage** (``harness.STAGES``), drawn
+  with the seed ``harness.REVIEW_SEED`` from the stage's principles, so that
+  stage 1's draw stays the same when stage 2's solutions are added, and
+  stage 2 gets a random check of its own; ``--all`` puts every solution in
+  the form. The form
   is blind: per solution only its path, the assignment's path and the fields
   ``violates:`` (``yes`` / ``no``) and ``note:``. Every judge run must have
   judged every solution (else exit 1).
@@ -39,6 +42,7 @@ import argparse
 import base64
 import binascii
 import json
+import os
 import random
 import re
 import sys
@@ -154,6 +158,24 @@ def _fields(path: Path, name: str, block: str, keys: tuple[str, ...]) -> dict[st
     return seen
 
 
+def _link(path: Path, start: Path) -> str:
+    """A Markdown link to ``path``, relative to the form's directory ``start``."""
+    target = Path(os.path.relpath(path.resolve(), start.resolve())).as_posix()
+    return f"[{path.name}]({target.replace(' ', '%20')})"
+
+
+def _file_links(directory: Path, start: Path) -> list[str]:
+    """One indented list line with a link per source file under ``directory``."""
+    files = sorted(
+        p
+        for p in directory.rglob("*")
+        if p.is_file()
+        and "__pycache__" not in p.parts
+        and p.suffix in (".py", ".md", ".txt", ".toml")
+    )
+    return [f"  - {_link(p, start)}" for p in files]
+
+
 def disagree(tool: str, judges: dict[str, bool]) -> bool:
     """Whether the tool and the judges do not all say the same (a tool
     without a verdict always counts as a disagreement)."""
@@ -210,18 +232,26 @@ def sample(
 ) -> dict[str, str]:
     """``<p>/<student>`` -> why it is in the sample: ``flagged`` (by any
     decider), ``disagreement`` (no one flags, the tool gives no verdict),
-    ``drawn`` (``drawn`` of the rest, seed ``harness.REVIEW_SEED``) or, with
-    ``everything``, ``all``."""
+    ``drawn`` (``drawn`` of the rest of each stage, seed
+    ``harness.REVIEW_SEED``) or, with ``everything``, ``all``. Each stage
+    draws from its own rest, sorted and shuffled alone, so a stage's draw does
+    not depend on the solutions of another stage."""
     why: dict[str, str] = {}
     for name, (tool, ruled) in found.items():
         if flagged(tool["verdict"], ruled):
             why[name] = "flagged"
         elif disagree(tool["verdict"], ruled):
             why[name] = "disagreement"
-    rest = sorted(name for name in found if name not in why)
-    random.Random(harness.REVIEW_SEED).shuffle(rest)
-    for name in rest[:drawn]:
-        why[name] = "drawn"
+    stages = sorted({harness.stage_of(name.split("/", 1)[0]) for name in found})
+    for stage in stages:
+        rest = sorted(
+            name
+            for name in found
+            if name not in why and harness.stage_of(name.split("/", 1)[0]) == stage
+        )
+        random.Random(harness.REVIEW_SEED).shuffle(rest)
+        for name in rest[:drawn]:
+            why[name] = "drawn"
     if everything:
         for name in found:
             why.setdefault(name, "all")
@@ -250,7 +280,7 @@ def review(
             f"{len(chosen)} of the {len(found)} solutions: every one that the tool or a"
             " judge run flags or on which they disagree"
             f" ({count['flagged'] + count['disagreement']}), and {count['drawn']} drawn"
-            f" from the other {rest} (seed {harness.REVIEW_SEED})."
+            f" from the other {rest} ({drawn} per stage, seed {harness.REVIEW_SEED})."
         )
     payload = {
         "items": list(chosen),
@@ -281,7 +311,8 @@ def review(
             f"## {index}. `{name}`",
             "",
             f"- solution: `{harness.shown(harness.code_dir(base, principle) / student)}/`",
-            f"- assignment: `{harness.shown(harness.assignment(pilot, principle))}`",
+            *_file_links(harness.code_dir(base, principle) / student, base),
+            f"- assignment: {_link(harness.assignment(pilot, principle), base)}",
             "",
             "violates:",
             "note:",
@@ -337,7 +368,7 @@ def vo5_items(m6_base: Path, wanted: int) -> list[str]:
     return items
 
 
-def vo5(m6_base: Path, pilot: Path, wanted: int) -> str:
+def vo5(m6_base: Path, pilot: Path, wanted: int, at: Path | None = None) -> str:
     """The text of ``owner_vo5.md``."""
     from pythonarchtesting.mcp_server import principles
 
@@ -385,7 +416,8 @@ def vo5(m6_base: Path, pilot: Path, wanted: int) -> str:
             f"## {index}. `{name}`",
             "",
             f"- code: `{harness.shown(code)}/`",
-            f"- explanation: `{harness.shown(explanation)}`",
+            *_file_links(code, at or Path(__file__).resolve().parent),
+            f"- explanation: {_link(explanation, at or Path(__file__).resolve().parent)}",
             f"- the principle: {entry['name']}: {' '.join(entry['summary'].split())}",
             "",
             *(f"> {line}".rstrip() for line in text.splitlines()),
@@ -454,7 +486,8 @@ def main(argv: list[str] | None = None) -> int:
                 "--drawn",
                 type=int,
                 default=6,
-                help="how many of the solutions no decider flags and all agree on",
+                help="how many of the solutions no decider flags and all agree on,"
+                " per stage",
             )
             sub.add_argument(
                 "--all", action="store_true", help="put every solution in the form"
@@ -471,7 +504,7 @@ def main(argv: list[str] | None = None) -> int:
         text = review(base, pilot, judges, args.drawn, args.all)
         _write(base / REVIEW, text, args.force)
     else:
-        _write(base / VO5, vo5(args.m6.resolve(), pilot, args.items), args.force)
+        _write(base / VO5, vo5(args.m6.resolve(), pilot, args.items, base), args.force)
     return 0
 
 

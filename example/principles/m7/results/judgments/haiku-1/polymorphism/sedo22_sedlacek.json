@@ -1,0 +1,8 @@
+[
+  {
+    "id": "sedo22_sedlacek",
+    "violates": false,
+    "reason": "Shape is an ABC with abstract area and describe, each subclass implements its own, and report.py calls shape.area() and shape.describe() without any isinstance or type checks.",
+    "explanation": ""
+  }
+]

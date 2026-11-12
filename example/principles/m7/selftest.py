@@ -1,8 +1,9 @@
 """Self-test of the M7 harness on fake agent outputs, in a temporary directory.
 
 It builds a fake pilot as the pilot's self-test does (the catalogue's
-variants as injected errors; the pilot's real ``assignment.md``, or a made-up
-one with a principle's section for a principle the pilot lacks) and a fake
+variants as injected errors; the pilot's real ``assignment.md`` for the
+stage-1 principles, none for the stage-2 ones, whose assignment is then the
+catalogue's real ``../<p>/assignment.md``) and a fake
 M6 (``results-vo3-vo5.md`` listing 6 explanations for the owner, with fake
 explanations and ratings by ``opus``). Then, for every principle, it stages
 all 12 solvers (``stage.py solver-novice``) and writes what each would: the
@@ -15,14 +16,17 @@ review`` and ``vo5``, fake answers of the owner in part of both forms, and
 ``score.py`` again. It checks that
 
 1. each stage holds exactly its inputs; the ``no-principle`` assignment is
-   the pilot's without the principle's section and mentions no principle,
-   the ``plain`` one is the pilot's unchanged; the student is the fixed one;
+   the principle's without the principle's section and mentions no
+   principle, the ``plain`` one is the principle's unchanged: the pilot's
+   for stage 1, the catalogue's for stage 2 (``harness.assignment``, which
+   fails loudly when neither exists); the student is the fixed one;
 2. ``collect`` puts each output where ``score.py`` reads it, and refuses a
    solution that does not parse, a judge's verdict on another id and an
    existing destination without ``--force``; every collect, refusals and
    the ``--force`` replacement included, is a line of ``collect.log``;
 3. ``review.md`` holds every flagged solution (slots 1-3 of each principle,
-   slot 1 flagged by all) and 6 drawn from the rest, and is blind (no
+   slot 1 flagged by all) and 6 drawn from the rest of each stage (names a
+   stage-2 assignment by its catalogue path), and is blind (no
    verdict, no judge run, no error id, no reason for the sample outside its
    header comment); ``--all`` puts every solution in it; ``owner_vo5.md``
    the 6 explanations and the rater's rubric; neither form is overwritten
@@ -42,8 +46,13 @@ review`` and ``vo5``, fake answers of the owner in part of both forms, and
    with no sampled solution reads ``none in the sample`` once the owner has
    answered everything, and a reviewed solution without a tool verdict
    shows ``1 no verdict``;
-6. the README's dispatch list is ``stage.py plan encapsulation
-   io_separation``;
+5b. the draw is per stage: on made-up decisions, each stage gets 6 drawn,
+   and stage 1's draw is the same with and without stage 2's solutions; a
+   principle in no stage fails loudly;
+6. the README's dispatch lists are ``stage.py plan`` of each stage of
+   ``harness.STAGES`` (24 solver and 72 judge runs each, the «name» of prompt
+   J per principle from ``describe_principle``), and its table of «name»s
+   is ``harness.principle_name``;
 7. the repository is left unchanged (``git status`` and every file's mtime).
 
 Exits 0 when all hold. Usage, from the repository root::
@@ -72,7 +81,6 @@ import harness  # noqa: E402
 
 CATALOGUE = harness.CATALOGUE
 ROOT = harness.REPO
-STAGE_ONE = ("encapsulation", "io_separation")
 FLAGS = {"sonnet-1": {0, 1, 2}, "sonnet-2": {0}, "haiku-1": {0, 1}}
 ERRORS = {0, 1}
 
@@ -172,14 +180,41 @@ class Harness:
 
 
 def _fake_pilot(h: Harness, principle: str) -> None:
+    """The injected errors, and the pilot's real assignment where the pilot
+    has one (stage 1); a stage-2 principle gets none, so that staging takes
+    the catalogue's ``../<p>/assignment.md``."""
     pilot_selftest._fake_submissions(CATALOGUE / principle, h.pilot / principle)
     real = harness.PILOT / principle / "assignment.md"
-    text = (
-        real.read_text(encoding="utf-8")
-        if real.is_file()
-        else "# Zadání\n\nNapište program.\n\n## Princip: Něco\n\nPopis principu.\n"
-    )
-    (h.pilot / principle / "assignment.md").write_text(text, encoding="utf-8")
+    if real.is_file():
+        (h.pilot / principle / "assignment.md").write_text(
+            real.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    else:
+        (h.pilot / principle / "assignment.md").unlink(missing_ok=True)
+
+
+def _assignments(h: Harness) -> None:
+    """Stage 1 from the (fake) pilot, stage 2 from the catalogue, and a
+    loud failure when there is neither."""
+    for number, names in enumerate(harness.STAGES, start=1):
+        for principle in names:
+            found = harness.assignment(h.pilot, principle)
+            expected = (
+                h.pilot / principle / "assignment.md"
+                if number == 1
+                else CATALOGUE / principle / "assignment.md"
+            )
+            if found != expected:
+                h.failures.append(
+                    f"the assignment of {principle} is {found}, not {expected}"
+                )
+    try:
+        harness.assignment(h.pilot, "no_such_principle")
+    except SystemExit as error:
+        if "no_such_principle" not in str(error):
+            h.failures.append(f"a missing assignment fails with {error}")
+    else:
+        h.failures.append("a principle without an assignment does not fail")
 
 
 def _fake_m6(h: Harness, principles: list[str]) -> list[str]:
@@ -220,7 +255,7 @@ def _fake_m6(h: Harness, principles: list[str]) -> list[str]:
 def _solvers(h: Harness, principle: str) -> None:
     entry = pilot_selftest.load_entry(CATALOGUE / principle)
     error = next(e["example"] for e in entry.get("errors", []) if "gap" not in e)
-    pilot_text = (h.pilot / principle / "assignment.md").read_text(encoding="utf-8")
+    pilot_text = harness.assignment(h.pilot, principle).read_text(encoding="utf-8")
     for index, (model, variant, run) in enumerate(harness.SLOTS):
         student = harness.NAMES[index]
         out = h.stage(
@@ -338,8 +373,20 @@ def _forms(h: Harness, principles: list[str], items: list[str]) -> None:
     wrong = {f"{p}/{harness.NAMES[i]}" for p in principles for i in (0, 1, 2)} - set(
         listed
     )
-    if len(listed) != 3 * len(principles) + 6 or wrong:
+    stages = {harness.stage_of(p) for p in principles}
+    if len(listed) != 3 * len(principles) + 6 * len(stages) or wrong:
         h.failures.append(f"review.md lists {listed}; missing flagged {sorted(wrong)}")
+    for p in principles:
+        if harness.stage_of(p) > 1 and (
+            re.search(
+                rf"- assignment: \[assignment\.md\]\([^)]*principles/{p}/assignment\.md\)",
+                text,
+            )
+            is None
+        ):
+            h.failures.append(
+                f"review.md does not name the catalogue assignment of {p}"
+            )
     _blind(h, text, principles)
     if _run("forms.py", "review", *common).returncode == 0:
         h.failures.append("forms.py review overwrote review.md without --force")
@@ -646,20 +693,65 @@ def _cells(h: Harness) -> None:
         h.failures.append("an unfinished form does not read pending owner review")
 
 
+def _draw(h: Harness) -> None:
+    """The review sample draws per stage, on decisions made up here (no
+    tool run): every solution passes and no judge flags, but slot 1."""
+    forms = _module("m7_forms", HERE / "forms.py")
+    flagged = {"sonnet-1": True, "sonnet-2": False, "haiku-1": False}
+    clean = {run: False for run in harness.JUDGE_RUNS}
+    every = {
+        f"{p}/{name}": (
+            {"verdict": harness.TOOL_PASSES, "errors": []},
+            flagged if index == 0 else clean,
+        )
+        for names in harness.STAGES
+        for p in names
+        for index, name in enumerate(harness.NAMES)
+    }
+    first = {k: v for k, v in every.items() if k.split("/")[0] in harness.STAGES[0]}
+    both, alone = forms.sample(every, 6, False), forms.sample(first, 6, False)
+    for number in range(1, len(harness.STAGES) + 1):
+        drawn = [
+            k
+            for k, why in both.items()
+            if why == "drawn" and harness.stage_of(k.split("/")[0]) == number
+        ]
+        if len(drawn) != 6:
+            h.failures.append(f"stage {number} has {len(drawn)} drawn, not 6")
+    one = {k: why for k, why in both.items() if k in first}
+    if one != alone:
+        h.failures.append("stage 1's sample changes when stage 2 is collected")
+    try:
+        harness.stage_of("no_such_principle")
+    except SystemExit:
+        pass
+    else:
+        h.failures.append("a principle in no stage does not fail")
+
+
 def _readme(h: Harness) -> None:
-    done = _run("stage.py", "plan", *STAGE_ONE)
     readme = (HERE / "README.md").read_text(encoding="utf-8")
     if "\n## Validity threats\n" not in readme:
         h.failures.append("the README has no section Validity threats")
-    if done.returncode != 0 or done.stdout.strip() not in readme:
-        h.failures.append(
-            "the README's dispatch list is not `stage.py plan` of stage 1"
-        )
-    if (
-        len(re.findall(r"(?m)^\| S\d+ ", done.stdout)) != 24
-        or len(re.findall(r"(?m)^\| J\d+ ", done.stdout)) != 72
-    ):
-        h.failures.append("stage.py plan of stage 1 is not 24 solver and 72 judge runs")
+    for number, names in enumerate(harness.STAGES, start=1):
+        done = _run("stage.py", "plan", *names)
+        if done.returncode != 0 or done.stdout.strip() not in readme:
+            h.failures.append(
+                f"the README's dispatch list is not `stage.py plan` of stage {number}"
+            )
+        if (
+            len(re.findall(r"(?m)^\| S\d+ ", done.stdout)) != 24
+            or len(re.findall(r"(?m)^\| J\d+ ", done.stdout)) != 72
+        ):
+            h.failures.append(
+                f"stage.py plan of stage {number} is not 24 solver and 72 judge runs"
+            )
+        for p in names:
+            name = harness.principle_name(p)
+            if f"`{p}`: {name}" not in done.stdout:
+                h.failures.append(f"stage.py plan does not give the name of {p}")
+            if f"| `{p}` | {number} | {name} |" not in readme:
+                h.failures.append(f"the README's table of names lacks {p}: {name}")
 
 
 def main() -> int:
@@ -672,6 +764,7 @@ def main() -> int:
         h = Harness(Path(tmp))
         for principle in principles:
             _fake_pilot(h, principle)
+        _assignments(h)
         items = _fake_m6(h, principles)
         for principle in principles:
             _solvers(h, principle)
@@ -709,6 +802,7 @@ def main() -> int:
         entry = pilot_selftest.load_entry(CATALOGUE / first)
         _stale(h, first, next(e["example"] for e in entry["errors"] if "gap" not in e))
         _cells(h)
+        _draw(h)
         _readme(h)
         failures = h.failures
     if pilot_selftest._snapshot() != snapshot or pilot_selftest._git_status() != status:

@@ -1,0 +1,1 @@
+[{"id": "cerl13_cerna", "violates": false, "reason": "PriceCalculator dostává slevu v konstruktoru, v total ji volá přes self.discount.apply a nevětví podle typu slevy; výběr slevy dělá jen checkout v app.py.", "explanation": ""}]

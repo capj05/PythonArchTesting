@@ -1,0 +1,1 @@
+[{"id":"ruzv19_ruzicka","violates":false,"reason":"PriceCalculator receives the discount in its constructor and only calls self.discount.apply, with no type branching, and checkout alone chooses the discount.","explanation":""}]

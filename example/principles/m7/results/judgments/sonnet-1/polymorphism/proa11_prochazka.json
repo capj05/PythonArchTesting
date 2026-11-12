@@ -1,0 +1,1 @@
+[{"id": "proa11_prochazka", "violates": false, "reason": "report.py only calls shape.area() and shape.describe(), with no isinstance/type checks, and each concrete shape implements both methods of the abstract Shape.", "explanation": ""}]

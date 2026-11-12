@@ -1,0 +1,1 @@
+[{"id": "fial21_fiala", "violates": false, "reason": "PriceCalculator dostává slevu zvenku v konstruktoru a volá jen self.discount.apply, takže princip je dodržen.", "explanation": ""}]

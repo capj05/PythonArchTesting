@@ -1,0 +1,1 @@
+[{"id": "jele18_jelinek", "violates": false, "reason": "PriceCalculator dostává slevu zvenku v konstruktoru a v total volá jen self.discount.apply, takže princip splňuje.", "explanation": ""}]

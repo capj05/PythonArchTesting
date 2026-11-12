@@ -1,0 +1,8 @@
+{
+ "student": "proa11_prochazka",
+ "model": "haiku",
+ "variant": "plain",
+ "run": 1,
+ "pilot": "/home/jirka/git/PythonArchTesting/.worktrees/principle-catalogue/example/principles/pilot",
+ "init": true
+}

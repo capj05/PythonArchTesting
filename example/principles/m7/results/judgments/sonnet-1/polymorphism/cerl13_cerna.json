@@ -1,0 +1,1 @@
+[{"id":"cerl13_cerna","violates":false,"reason":"report.py only calls shape.area() and shape.describe() on the abstract Shape, with no type checks, and each concrete shape implements its own methods.","explanation":""}]

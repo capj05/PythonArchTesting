@@ -1,0 +1,1 @@
+[{"id":"ruzv19_ruzicka","violates":false,"reason":"report.py only calls shape.area() and shape.describe() on an abstract Shape base, with no isinstance/type checks or access to dimensions.","explanation":""}]

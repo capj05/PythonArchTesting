@@ -1,0 +1,1 @@
+[{"id": "jele18_jelinek", "violates": false, "reason": "report.py only calls s.area() and s.describe() with no isinstance or type checks, and each shape implements its own methods via the Shape ABC.", "explanation": ""}]

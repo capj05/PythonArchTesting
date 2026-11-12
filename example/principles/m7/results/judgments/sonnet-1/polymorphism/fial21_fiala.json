@@ -1,0 +1,1 @@
+[{"id": "fial21_fiala", "violates": false, "reason": "Shape is an ABC with abstract area/describe, each subclass implements them, and report.py only calls shape.area() and shape.describe() with no type checks.", "explanation": ""}]
