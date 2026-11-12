@@ -2,8 +2,8 @@ section,principle,item,measure,value
 VO3,encapsulation,example,accepted,yes
 VO3,encapsulation,example,problems,0
 VO3,encapsulation,example,copied example,n/a
-VO3,encapsulation,example,errors flagged,9/12
-VO3,encapsulation,example,as the injected error,6/12
+VO3,encapsulation,example,errors flagged,12/12
+VO3,encapsulation,example,as the injected error,9/12
 VO3,encapsulation,example,defects flagged (FP),0/12
 VO3,encapsulation,example,carriers flagged,0/3
 VO3,encapsulation,example,unmatched,0/27
@@ -20,8 +20,8 @@ VO3,encapsulation,run-1,not judged,0/27
 VO3,encapsulation,run-2,accepted,yes
 VO3,encapsulation,run-2,problems,0
 VO3,encapsulation,run-2,copied example,no
-VO3,encapsulation,run-2,errors flagged,9/12
-VO3,encapsulation,run-2,as the injected error,6/12
+VO3,encapsulation,run-2,errors flagged,12/12
+VO3,encapsulation,run-2,as the injected error,9/12
 VO3,encapsulation,run-2,defects flagged (FP),0/12
 VO3,encapsulation,run-2,carriers flagged,0/3
 VO3,encapsulation,run-2,unmatched,0/27
@@ -29,8 +29,8 @@ VO3,encapsulation,run-2,not judged,0/27
 VO3,encapsulation,run-3,accepted,yes
 VO3,encapsulation,run-3,problems,0
 VO3,encapsulation,run-3,copied example,no
-VO3,encapsulation,run-3,errors flagged,9/12
-VO3,encapsulation,run-3,as the injected error,6/12
+VO3,encapsulation,run-3,errors flagged,12/12
+VO3,encapsulation,run-3,as the injected error,9/12
 VO3,encapsulation,run-3,defects flagged (FP),0/12
 VO3,encapsulation,run-3,carriers flagged,0/3
 VO3,encapsulation,run-3,unmatched,0/27

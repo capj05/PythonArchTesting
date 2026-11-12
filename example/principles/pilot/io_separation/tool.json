@@ -26,7 +26,7 @@
    "DYN001/forbid_runtime_calls/v1"
   ],
   "explanations": [
-   "**Co:** Funkce `format_summary` (grades.py:30) vypisuje na obrazovku: na řádku 31 souboru `grades.py` volá `print()`.\n\n**Proč:** Funkce má výsledek vrátit (`return`), ne vypsat. Kdo ji zavolá, pak sám rozhodne, co s výsledkem udělá; vypsaný text už program dál použít nemůže.\n\n**Jak opravit:** Nahraď `print(...)` příkazem `return ...` a vypiš výsledek až v `main`."
+   "**What:** Function `format_summary` (grades.py:30) prints to the screen: on line 31 of `grades.py` it calls `print()`.\n\n**Why:** A function should return its result (`return`), not print it. Whoever calls it then decides what to do with the result; printed text can no longer be used by the program.\n\n**Fix:** Replace `print(...)` with `return ...` and print the result in `main`."
   ],
   "not_run": [],
   "sha256": "813685ed151c1f6ff3c8ae9574de49a64dfc36d56ce657b6070f338284dec522"
@@ -51,7 +51,7 @@
    "DYN001/forbid_runtime_calls/v1"
   ],
   "explanations": [
-   "**Co:** Funkce `parse_grades` (grades.py:19) čte z klávesnice: na řádku 21 souboru `grades.py` volá `input()`.\n\n**Proč:** Funkce dostává data parametrem, a přesto se ptá uživatele. Nedá se tak zavolat s jinými daty (ze souboru, v testu) a parametr ztrácí smysl.\n\n**Jak opravit:** Čti vstup v `main` a funkci ho předej parametrem."
+   "**What:** Function `parse_grades` (grades.py:19) reads from the keyboard: on line 21 of `grades.py` it calls `input()`.\n\n**Why:** The function gets its data as a parameter and still asks the user. It cannot be called with other data (from a file, in a test), and the parameter loses its point.\n\n**Fix:** Read the input in `main` and pass it to the function as a parameter."
   ],
   "not_run": [],
   "sha256": "577423d573494b6133fc1aba5ba82d837b6f953dbdfecbdb0742b3b993aac59f"
@@ -69,7 +69,7 @@
    "DYN001/forbid_runtime_calls/v1"
   ],
   "explanations": [
-   "**Co:** Funkce `format_summary` (grades.py:27) vypisuje na obrazovku: na řádku 28 souboru `grades.py` volá `print()`.\n\n**Proč:** Funkce má výsledek vrátit (`return`), ne vypsat. Kdo ji zavolá, pak sám rozhodne, co s výsledkem udělá; vypsaný text už program dál použít nemůže.\n\n**Jak opravit:** Nahraď `print(...)` příkazem `return ...` a vypiš výsledek až v `main`."
+   "**What:** Function `format_summary` (grades.py:27) prints to the screen: on line 28 of `grades.py` it calls `print()`.\n\n**Why:** A function should return its result (`return`), not print it. Whoever calls it then decides what to do with the result; printed text can no longer be used by the program.\n\n**Fix:** Replace `print(...)` with `return ...` and print the result in `main`."
   ],
   "not_run": [],
   "sha256": "fa984f5fd054867d83dd71485e92e6fbd5b6c3b30d977d2f58fc486cc9c17409"
@@ -87,7 +87,7 @@
    "DYN001/forbid_runtime_calls/v1"
   ],
   "explanations": [
-   "**Co:** Funkce `format_summary` (grades.py:32) vypisuje na obrazovku: na řádku 33 souboru `grades.py` volá `print()`.\n\n**Proč:** Funkce má výsledek vrátit (`return`), ne vypsat. Kdo ji zavolá, pak sám rozhodne, co s výsledkem udělá; vypsaný text už program dál použít nemůže.\n\n**Jak opravit:** Nahraď `print(...)` příkazem `return ...` a vypiš výsledek až v `main`."
+   "**What:** Function `format_summary` (grades.py:32) prints to the screen: on line 33 of `grades.py` it calls `print()`.\n\n**Why:** A function should return its result (`return`), not print it. Whoever calls it then decides what to do with the result; printed text can no longer be used by the program.\n\n**Fix:** Replace `print(...)` with `return ...` and print the result in `main`."
   ],
   "not_run": [],
   "sha256": "47d995aa3d19b8af531ea8d647655691b8bab2793510c99d22e4c3f5cfcd7ccc"
@@ -140,7 +140,7 @@
    "DYN001/forbid_runtime_calls/v1"
   ],
   "explanations": [
-   "**Co:** Funkce `parse_grades` (grades.py:8) čte z klávesnice: na řádku 9 souboru `grades.py` volá `input()`.\n\n**Proč:** Funkce dostává data parametrem, a přesto se ptá uživatele. Nedá se tak zavolat s jinými daty (ze souboru, v testu) a parametr ztrácí smysl.\n\n**Jak opravit:** Čti vstup v `main` a funkci ho předej parametrem."
+   "**What:** Function `parse_grades` (grades.py:8) reads from the keyboard: on line 9 of `grades.py` it calls `input()`.\n\n**Why:** The function gets its data as a parameter and still asks the user. It cannot be called with other data (from a file, in a test), and the parameter loses its point.\n\n**Fix:** Read the input in `main` and pass it to the function as a parameter."
   ],
   "not_run": [],
   "sha256": "163ff4b03013fa526509ceb70f7b2d00f3f5d38744d8f1080e79355a88c678e9"
@@ -200,7 +200,7 @@
    "DYN001/forbid_runtime_calls/v1"
   ],
   "explanations": [
-   "**Co:** Funkce `parse_grades` (grades.py:8) čte z klávesnice: na řádku 9 souboru `grades.py` volá `input()`.\n\n**Proč:** Funkce dostává data parametrem, a přesto se ptá uživatele. Nedá se tak zavolat s jinými daty (ze souboru, v testu) a parametr ztrácí smysl.\n\n**Jak opravit:** Čti vstup v `main` a funkci ho předej parametrem."
+   "**What:** Function `parse_grades` (grades.py:8) reads from the keyboard: on line 9 of `grades.py` it calls `input()`.\n\n**Why:** The function gets its data as a parameter and still asks the user. It cannot be called with other data (from a file, in a test), and the parameter loses its point.\n\n**Fix:** Read the input in `main` and pass it to the function as a parameter."
   ],
   "not_run": [],
   "sha256": "a7c86e2ba5dd7651a1f4743346a5d534db5ff8d6cd05e036b32ebf3d44e5d56b"

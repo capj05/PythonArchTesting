@@ -5,16 +5,16 @@ encapsulation,w003,solution,text/opus-1,,PASS,,0,0,0
 encapsulation,w004,neutral,style_noise,skeleton/sonnet-1,PASS,,0,0,0
 encapsulation,w005,neutral,style_noise,skeleton/opus-1,PASS,,0,0,0
 encapsulation,w006,solution,skeleton/opus-2,,PASS,,0,0,0
-encapsulation,w007,err,read_private,skeleton/opus-1,PASS,,0,1,1
+encapsulation,w007,err,read_private,skeleton/opus-1,FAIL,ENC001/forbid_private_access/v1,0,1,1
 encapsulation,w008,neutral,extra_method,skeleton/sonnet-1,PASS,,0,0,0
 encapsulation,w009,solution,skeleton/haiku-1,,PASS,,0,0,0
 encapsulation,w010,err,mutate_container,skeleton/haiku-1,FAIL,DYN003/forbid_foreign_writes/v1,0,1,1
-encapsulation,w011,err,mutate_container,skeleton/sonnet-1,FAIL,DYN003/forbid_foreign_writes/v1,0,1,1
+encapsulation,w011,err,mutate_container,skeleton/sonnet-1,FAIL,DYN003/forbid_foreign_writes/v1 ENC001/forbid_private_access/v1,0,1,1
 encapsulation,w012,err,mutate_container,skeleton/opus-1,FAIL,DYN003/forbid_foreign_writes/v1,0,1,1
 encapsulation,w013,err,replace_attribute,skeleton/opus-1,FAIL,DYN003/forbid_foreign_writes/v1,0,1,1
 encapsulation,w014,neutral,input_handling,skeleton/opus-1,PASS,,0,0,1
-encapsulation,w015,err,read_private,skeleton/haiku-1,PASS,,0,1,1
-encapsulation,w016,err,bypass_method,skeleton/opus-1,FAIL,DYN003/forbid_foreign_writes/v1,0,1,1
+encapsulation,w015,err,read_private,skeleton/haiku-1,FAIL,ENC001/forbid_private_access/v1,0,1,1
+encapsulation,w016,err,bypass_method,skeleton/opus-1,FAIL,DYN003/forbid_foreign_writes/v1 ENC001/forbid_private_access/v1,0,1,1
 encapsulation,w017,neutral,input_handling,skeleton/haiku-1,PASS,,0,1,1
 encapsulation,w018,neutral,input_handling,skeleton/sonnet-1,PASS,,0,0,1
 encapsulation,w019,neutral,extra_method,skeleton/haiku-1,PASS,,0,0,0
@@ -33,7 +33,7 @@ encapsulation,w031,neutral,wrong_math,skeleton/sonnet-1,PASS,,0,1,0
 encapsulation,w032,neutral,style_noise,skeleton/haiku-1,PASS,,0,0,0
 encapsulation,w033,solution,text/haiku-2,,PASS,,0,1,0
 encapsulation,w034,neutral,extra_method,skeleton/opus-1,PASS,,0,0,0
-encapsulation,w035,err,read_private,skeleton/sonnet-1,PASS,,0,1,1
+encapsulation,w035,err,read_private,skeleton/sonnet-1,FAIL,ENC001/forbid_private_access/v1,0,1,1
 encapsulation,w036,solution,text/sonnet-2,,PASS,,0,0,0
 io_separation,w001,neutral,different_ui,skeleton/opus-1,PASS,,0,0,0
 io_separation,w002,neutral,input_handling,skeleton/opus-1,PASS,,0,0,0

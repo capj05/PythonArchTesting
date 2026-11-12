@@ -6,12 +6,12 @@ Vygenerováno skriptem `score.py`; neupravovat ručně. Označeno = nástroj `FA
 
 | Míra | nástroj | soudce haiku-1 | soudce sonnet-1 |
 |---|---|---|---|
-| vložené chyby označené | 9/12 | 12/12 | 12/12 |
+| vložené chyby označené | 12/12 | 12/12 | 12/12 |
 | rušivé vady označené (FP) | 0/12 | 3/12 | 4/12 |
 | čistá řešení označená | 0/12 | 2/12 | 1/12 |
 | nespárovaná | 0/36 | 0/36 | 0/36 |
 | nespuštěno | 0/36 | 0/36 | 0/36 |
-| vložené chyby označené, nosič čistý | 9/12 | 8/8 | 8/8 |
+| vložené chyby označené, nosič čistý | 12/12 | 8/8 | 8/8 |
 | rušivé vady označené (FP), nosič čistý | 0/12 | 2/8 | 3/8 |
 
 Nástroj: odevzdání, na kterých některé pravidlo kód nespustilo (`not_run`, řádek „nespuštěno“), nejsou v čitatelích ani jmenovatelích nástroje. Řádky „nosič čistý“ počítají jen vložené varianty, jejichž nosič daný rozhodující považuje za čistý (nástroj `PASS`, soudce `violates: false`); jmenovatel je za lomítkem.

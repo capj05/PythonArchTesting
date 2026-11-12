@@ -34,7 +34,8 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 CATALOGUE = HERE.parent
 PILOT = CATALOGUE / "pilot"
-PRINCIPLES = tuple(sorted(path.parent.name for path in CATALOGUE.glob("*/task.toml")))
+# The principles M6 measured; principles added to the catalogue later have no M6 runs.
+PRINCIPLES = ("encapsulation", "io_separation")
 STUDENT = re.compile(r"^[a-z]{4}\d{2}_[a-z]+$")
 IGNORE = shutil.ignore_patterns("__pycache__")
 
