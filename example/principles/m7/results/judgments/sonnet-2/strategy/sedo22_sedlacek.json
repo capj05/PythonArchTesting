@@ -1,0 +1,1 @@
+[{"id": "sedo22_sedlacek", "violates": false, "reason": "PriceCalculator receives the discount in its constructor, only calls self.discount.apply, and the discount is chosen in checkout.", "explanation": ""}]

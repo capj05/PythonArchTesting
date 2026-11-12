@@ -1,0 +1,1 @@
+[{"id": "proa11_prochazka", "violates": false, "reason": "PriceCalculator dostává slevu v konstruktoru a volá pouze self.discount.apply, bez větvení podle typu slevy.", "explanation": ""}]

@@ -1,0 +1,1 @@
+[{"id":"hajd17_hajek","violates":false,"reason":"report.py only calls s.area() and s.describe(); each concrete shape implements both methods itself, with no isinstance/type checks.","explanation":""}]

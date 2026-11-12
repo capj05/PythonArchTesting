@@ -1,0 +1,1 @@
+[{"id": "posk16_pospisilova", "violates": false, "reason": "PriceCalculator receives the discount object from outside in its constructor and calls only self.discount.apply, while the choice of discount is made in app.checkout, which is the code that assembles the calculator.", "explanation": ""}]

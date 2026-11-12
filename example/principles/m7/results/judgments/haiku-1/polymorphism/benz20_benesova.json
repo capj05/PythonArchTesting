@@ -1,0 +1,1 @@
+[{"id": "benz20_benesova", "violates": false, "reason": "The code has no type checks or type-based branching; report.py calls shape.area() and shape.describe() polymorphically on the Shape base class.", "explanation": ""}]

@@ -1,0 +1,1 @@
+[{"id":"hajd17_hajek","violates":false,"reason":"PriceCalculator receives the discount in its constructor and only calls self.discount.apply, with no type branching; checkout selects the discount.","explanation":""}]

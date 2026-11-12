@@ -1,0 +1,8 @@
+[
+  {
+    "id": "hajd17_hajek",
+    "violates": false,
+    "reason": "PriceCalculator dostává slevu v konstruktoru, uloží ji a v total ji volá přes self.discount.apply bez větvení podle typu a bez vlastního výpočtu procent; výběr slevy je jen v checkout, jak zadání dovoluje.",
+    "explanation": ""
+  }
+]

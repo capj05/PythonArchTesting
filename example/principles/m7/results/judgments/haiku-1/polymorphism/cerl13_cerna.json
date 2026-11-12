@@ -1,0 +1,8 @@
+[
+  {
+    "id": "cerl13_cerna",
+    "violates": false,
+    "reason": "The report functions call only shape.area() and shape.describe() with no isinstance or type checks, and each shape class implements its own area and describe.",
+    "explanation": ""
+  }
+]

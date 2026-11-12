@@ -1,0 +1,3 @@
+[
+  {"id": "hajd17_hajek", "violates": false, "reason": "Report functions call only s.area() and s.describe() on the Shape abstraction, with no isinstance or type checks, and each shape implements its own area and describe.", "explanation": ""}
+]

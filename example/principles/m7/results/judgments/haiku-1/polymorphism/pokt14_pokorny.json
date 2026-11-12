@@ -1,0 +1,8 @@
+[
+  {
+    "id": "pokt14_pokorny",
+    "violates": false,
+    "reason": "The report functions call only shape.area() and shape.describe() on the abstract Shape type, with no isinstance or type checks, and each concrete class implements its own area and describe.",
+    "explanation": ""
+  }
+]

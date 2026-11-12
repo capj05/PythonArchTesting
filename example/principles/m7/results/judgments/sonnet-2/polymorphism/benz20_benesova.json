@@ -1,0 +1,1 @@
+[{"id":"benz20_benesova","violates":false,"reason":"Shape is an abstract base, each shape implements area and describe, and report.py only calls these methods without isinstance/type checks.","explanation":""}]

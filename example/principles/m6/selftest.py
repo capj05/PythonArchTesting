@@ -58,6 +58,9 @@ CATALOGUE = HERE.parent
 PILOT = CATALOGUE / "pilot"
 ROOT = CATALOGUE.parent.parent
 
+sys.path.insert(0, str(HERE))
+from harness import PRINCIPLES  # noqa: E402
+
 
 def _pilot_selftest() -> Any:
     spec = importlib.util.spec_from_file_location("pilot_selftest", PILOT / "selftest.py")
@@ -270,7 +273,7 @@ def _breakages(h: Harness) -> None:
 
 def main() -> int:
     snapshot, status = pilot_selftest._snapshot(), pilot_selftest._git_status()
-    principles = sorted(path.parent.name for path in CATALOGUE.glob("*/task.toml"))
+    principles = list(PRINCIPLES)
     students = {principle: f"test{index:02d}_novak" for index, principle in enumerate(principles, start=1)}
     with tempfile.TemporaryDirectory() as tmp:
         h = Harness(Path(tmp))

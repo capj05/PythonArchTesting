@@ -4,8 +4,10 @@ M7 is the second evaluation round (E2): natural violations in solutions that
 "first-semester students" (agents, role ``solver-novice``) write, decided by
 the tool, by LLM judges and, on a sample, by the owner.
 
-This module holds the design (models, variants, runs and the fixed student
-names), the M7 layout, the cut of the principle's section from an assignment,
+This module holds the design (models, variants, runs, the fixed student
+names and the stages), the M7 layout, where a principle's assignment comes
+from (the pilot's, else the catalogue's), the cut of the principle's section
+from an assignment, the principle's name for the judges' prompt,
 and the one way the tool's verdicts are computed: always afresh, with the
 current tool, over the stored solutions (they are never stored as data). It
 reuses the M6 harness (``../m6/harness.py``, loaded as ``m6_harness``) and the
@@ -107,6 +109,14 @@ NAMES = (
     "fial21_fiala",
     "sedo22_sedlacek",
 )
+# The stages of E2 (``docs/dev_notes``, "Revize 2026-11-07, etapy"): stage 1
+# before the call, stage 2 after the decision of 2026-11-10. The review
+# sample draws its ``--drawn`` undisputed solutions per stage, so stage 1's
+# draw does not change when stage 2's solutions are collected.
+STAGES: tuple[tuple[str, ...], ...] = (
+    ("encapsulation", "io_separation"),
+    ("polymorphism", "strategy"),
+)
 SLOTS: tuple[tuple[str, str, int], ...] = tuple(
     (model, variant, run) for model in MODELS for variant in VARIANTS for run in RUNS
 )
@@ -123,6 +133,25 @@ def principles() -> tuple[str, ...]:
             if (path.parent / "task.toml").is_file()
         )
     )
+
+
+def stage_of(principle: str) -> int:
+    """The stage (1, 2, ...) of a principle in ``STAGES``; fails loudly for a
+    principle no stage lists (add it to ``STAGES`` first)."""
+    for number, names in enumerate(STAGES, start=1):
+        if principle in names:
+            return number
+    raise SystemExit(
+        f"the principle {principle!r} is in no stage of harness.STAGES {STAGES}"
+    )
+
+
+def principle_name(principle: str) -> str:
+    """The principle's ``name`` from ``describe_principle``: the «name» of
+    the judges' prompt J."""
+    from pythonarchtesting.mcp_server import principles as catalogue
+
+    return str(catalogue.describe_principle(principle)["name"])
 
 
 def slot(student: str) -> tuple[str, str, int]:
@@ -152,14 +181,20 @@ def students(base: Path, principle: str) -> list[str]:
 
 
 def assignment(pilot: Path, principle: str) -> Path:
-    """The assignment of a principle: the pilot's ``assignment.md``."""
-    path = pilot / principle / "assignment.md"
-    if not path.is_file():
-        raise SystemExit(
-            f"{path} is missing: the principle {principle} has no assignment"
-            " (write it as the pilot's author does, then stage again)"
-        )
-    return path
+    """The assignment of a principle: the pilot's ``<pilot>/<p>/assignment.md``
+    when it exists (stage 1), else the catalogue's ``../<p>/assignment.md``
+    (stage 2: the pilot never had these principles). Nothing is copied."""
+    candidates = (
+        pilot / principle / "assignment.md",
+        CATALOGUE / principle / "assignment.md",
+    )
+    for path in candidates:
+        if path.is_file():
+            return path
+    raise SystemExit(
+        f"{candidates[0]} and {candidates[1]} are missing: the principle"
+        f" {principle} has no assignment (write it, then stage again)"
+    )
 
 
 _SECTION = re.compile(r"^##[ \t]+(?:Princip|Principle)\b[^\n]*$", re.M | re.I)

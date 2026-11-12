@@ -1,0 +1,1 @@
+[{"id": "pokt14_pokorny", "violates": false, "reason": "PriceCalculator receives the Discount in its constructor and only calls self.discount.apply, while the choice of discount is made outside it in checkout.", "explanation": ""}]

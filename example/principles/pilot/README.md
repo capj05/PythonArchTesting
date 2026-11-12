@@ -116,10 +116,11 @@ printed path, then `stage.py collect <stage>`.
    explanation of each failure, composed from the catalogue by the same code
    as `verify.py` (`../explain.py`), and the `sha256` of the code it checked.
    The source is the principle's task (`../<p>/`: `task.toml` beside the
-   unannotated reference, `docs/tasks.md`). The recorded `tool.json` was made
-   from the reference with markers; rerun from the task, every submission
-   keeps its verdict and its failed rules (2026-11-06; only the explanations'
-   language differs, the catalogue being English now).
+   unannotated reference, `docs/tasks.md`). The recorded `tool.json` was
+   rerun on 2026-11-11 with the tool that checks reads of private attributes
+   (`forbid_private_access`, ENC001): the 3 injected `read_private` errors
+   now fail and one `mutate_container` error fails on ENC001 too; every other
+   submission keeps its verdict and its failed rules.
 8. **Judges.** One agent per batch (role `judge`, prompt J); runs `sonnet-1`,
    `haiku-1`.
 9. **Score.** `python example/principles/pilot/score.py` writes `results.md`

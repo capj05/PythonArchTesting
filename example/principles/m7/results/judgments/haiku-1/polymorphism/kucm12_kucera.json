@@ -1,0 +1,8 @@
+[
+  {
+    "id": "kucm12_kucera",
+    "violates": false,
+    "reason": "The report functions call shape.area() and shape.describe() without any isinstance or type checks, and each shape class implements its own methods via inheritance from Shape.",
+    "explanation": ""
+  }
+]

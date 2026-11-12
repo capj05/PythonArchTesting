@@ -13,16 +13,21 @@ What the stage is for is kept beside it in ``<stage>.stage.json``:
 ============== ================================================ ================
 role           inputs in the stage directory                     the agent writes
 ============== ================================================ ================
-solver-novice  ``assignment.md`` (the pilot's; with ``--variant  ``<student>/``
-               no-principle`` without the principle's section),
-               ``submission.txt`` (as M6's, a package)
-judge          ``assignment.md`` (the pilot's, whole),           ``verdicts.json``
+solver-novice  ``assignment.md`` (the principle's; with          ``<student>/``
+               ``--variant no-principle`` without the
+               principle's section), ``submission.txt`` (as
+               M6's, a package)
+judge          ``assignment.md`` (the principle's, whole),       ``verdicts.json``
                ``whole/<student>.md`` (one solution)
 ============== ================================================ ================
 
-``solver-novice <p> --model M --variant V --run N``: the student is the fixed
-name of (M, V, N) in ``harness.NAMES``. ``judge <p> <student> --run
-<model>-<n>``: one judge run on one collected solution.
+The principle's assignment is the pilot's (``<pilot>/<p>/assignment.md``)
+when it exists, else the catalogue's (``../<p>/assignment.md``;
+``harness.assignment``); nothing is copied into the pilot.
+``solver-novice <p> --model M --variant V --run N``: the student is the
+fixed name of (M, V, N) in ``harness.NAMES``, the same twelve for every
+principle. ``judge <p> <student> --run <model>-<n>``: one judge run on one
+collected solution.
 
 ``stage.py collect <stage> [--force]`` copies the output to
 
@@ -38,7 +43,8 @@ refusals and ``--force`` replacements included, is appended to
 
 ``stage.py plan [<p> ...]`` prints the dispatch list (Markdown) of the given
 principles (default: every principle): the solver runs, then the judge runs,
-each with the command that stages it and where ``collect`` puts its output.
+each with the command that stages it and where ``collect`` puts its output,
+and the «name» of prompt J per principle (``harness.principle_name``).
 
 Usage, from the repository root::
 
@@ -93,6 +99,7 @@ def stage(args: argparse.Namespace) -> Path:
         "principle": principle,
         "base": str(base),
         "pilot": str(pilot),
+        "assignment": str(source),
     }
     texts: dict[str, str] = {}
     if args.role == "solver-novice":
@@ -253,6 +260,9 @@ def plan(names: list[str]) -> str:
                     f" | `{COMMAND} judge {principle} {student} --run {judge}`"
                     f" | `results/judgments/{judge}/{principle}/{student}.json` |"
                 )
+    named = "; ".join(
+        f"`{principle}`: {harness.principle_name(principle)}" for principle in names
+    )
     return "\n".join(
         [
             f"Solvers: {len(solvers) - 2} runs (prompt N, the model of the row).",
@@ -261,6 +271,8 @@ def plan(names: list[str]) -> str:
             "",
             f"Judges: {len(judges) - 2} runs (prompt J; `sonnet-*` Sonnet, `haiku-*`"
             " Haiku), each after the row's solution is collected.",
+            "",
+            f"«name» in prompt J: {named}.",
             "",
             *judges,
         ]
